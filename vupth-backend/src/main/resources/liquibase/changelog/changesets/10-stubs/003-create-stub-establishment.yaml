@@ -1,0 +1,45 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-stub-establishment
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: establishment
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: url_image
+                  type: TEXT
+              - column:
+                  name: status
+                  type: VARCHAR(50)
+                  defaultValue: ACTIVE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: current_open_status
+                  type: VARCHAR(50)
+                  defaultValue: CLOSED
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    defaultValueComputed: CURRENT_TIMESTAMP
+                    nullable: false
+              - column:
+                  name: last_status_change
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: owner_id
+                  type: UUID

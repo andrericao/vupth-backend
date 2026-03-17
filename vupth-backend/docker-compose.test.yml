@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vupth_postgres_test
+    environment:
+      POSTGRES_DB: vupth_db_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: vupth_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - vupth_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      #start_period: 10s
+
+  backend:
+    image: maven:3.9.9-eclipse-temurin-21
+    container_name: vupth_backend_test
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - maven_cache:/root/.m2
+    command: mvn spring-boot:run
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: test
+      DATABASE_URL: jdbc:postgresql://postgres:5432/vupth_db_test
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: vupth_test
+    restart: on-failure
+    networks:
+      - vupth_net
+
+  opencode:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: vupth_opencode_test
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - maven_cache:/root/.m2
+    depends_on:
+      - backend
+        #condition: service_healthy
+    tty: true
+    stdin_open: true
+    networks:
+      - vupth_net
+    environment:
+      BACKEND_URL: http://backend:8080
+
+volumes:
+  postgres_data:
+  maven_cache:
+
+networks:
+  vupth_net:

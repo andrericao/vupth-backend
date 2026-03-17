@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-fk-refresh_token-add-base_user
+      author: andrericao
+      changes:
+        - addForeignKeyConstraints:
+            baseTableName: refresh_tokens
+            baseColumnNames: user_id
+            constraintName: fk-refresh_token-add_user_role
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+            onUpdate: CASCADE

@@ -1,0 +1,25 @@
+databaseChangeLog:
+
+  # ========================================
+  # 00-FOUNDATION (sempre roda)
+  # ========================================
+
+  #- include:
+  #    file: ../changesets/00-foundation/001-create-address.yaml
+  #    relativeToChangeLogFile: true
+
+  # ========================================
+  # 00-ADDRESS
+  # ========================================
+
+  - include:
+      file: ../changesets/30-address/001-create-user_address.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/30-address/002-fk-user_address-add-base_user.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/30-address/003-fk-user_address-add-address.yaml
+      relativeToChangeLogFile: true

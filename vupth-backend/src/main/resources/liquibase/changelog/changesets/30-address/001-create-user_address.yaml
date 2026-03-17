@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-user_address
+      author: andrericao
+      #context: test, dev, prod
+      changes:
+        - addColumn:
+            tableName: user_addresses
+
+            columns:
+
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: address_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: is_main
+                  type: BOOLEAN
+
+              - column:
+                  name: address_type
+                  type: VARCHAR(50)

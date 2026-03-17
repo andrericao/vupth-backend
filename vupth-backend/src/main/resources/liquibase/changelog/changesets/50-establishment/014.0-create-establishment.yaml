@@ -1,0 +1,53 @@
+databaseChangeLog:
+  - changeSet:
+      id: 014-create-establishment
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: establishment
+
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: name
+                  type: VARCHAR(150)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: url_image
+                  type: TEXT
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: open_status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: last_status_change
+                  type: TIMESTAMP
+
+              - column:
+                  name: owner_id
+                  type: UUID
+                  constraints:
+                    nullable: false

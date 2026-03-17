@@ -1,0 +1,13 @@
+FROM maven:3.9.9-eclipse-temurin-21
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y git curl wget ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# instalar opencode via bash
+RUN curl -fsSL https://opencode.ai/install | bash
+
+# adicionar opencode ao PATH
+ENV PATH="/root/.opencode/bin:${PATH}"
+
+CMD ["bash"]

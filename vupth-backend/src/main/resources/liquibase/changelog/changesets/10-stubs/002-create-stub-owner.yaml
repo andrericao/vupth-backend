@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-stub-owner
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: owner
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+              #- column:
+              #    name: client_since
+               #   type: TIMESTAMP

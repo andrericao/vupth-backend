@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-stub-establishment-services
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: establishment_services
+            columns:
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: service
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false

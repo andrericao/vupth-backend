@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-indexes
+      author: andrericao
+      changes:
+
+        - createIndex:
+            tableName: refresh_token
+            indexName: idx_refresh_token_token
+            columns:
+              - column:
+                  name: token
+
+        - createIndex:
+            tableName: refresh_token
+            indexName: idx_refresh_token_user
+            columns:
+              - column:
+                  name: base_user_id

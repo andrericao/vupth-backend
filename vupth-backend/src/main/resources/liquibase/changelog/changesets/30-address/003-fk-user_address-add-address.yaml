@@ -1,0 +1,12 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-fk-user_address-add-address
+      author: andrericao
+      #context: test, dev, prod
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: user_addresses
+            baseColumnNames: address_id
+            referencedTableName: addresses
+            referencedColumnNames: id
+            constraintName: fk_user_address-address

@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 015-add-fk-establishment-owner
+      author: andrericao
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: establishment
+            baseColumnNames: owner_id
+            referencedTableName: owner
+            referencedColumnNames: id
+            constraintName: fk_establishment_owner

@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-address
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: addresses
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: street
+                  type: VARCHAR(200)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: number
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: complement
+                  type: VARCHAR(255)
+              - column:
+                  name: neighborhood
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: city
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: state
+                  type: VARCHAR(2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: zip_code
+                  type: VARCHAR(11)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: reference
+                  type: VARCHAR(255)
+              - column:
+                  name: latitude
+                  type: DOUBLE PRECISION
+              - column:
+                  name: longitude
+                  type: DOUBLE PRECISION
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false

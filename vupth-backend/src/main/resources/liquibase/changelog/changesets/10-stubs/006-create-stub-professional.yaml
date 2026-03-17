@@ -1,0 +1,25 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-create-stub-professional
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: professional
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: specialty
+                  type: VARCHAR(100)
+              - column:
+                  name: is_available
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID

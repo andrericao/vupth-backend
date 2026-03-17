@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: 007-create-stub-client
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: client
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+              - column:
+                  name: client_since
+                  type: TIMESTAMP

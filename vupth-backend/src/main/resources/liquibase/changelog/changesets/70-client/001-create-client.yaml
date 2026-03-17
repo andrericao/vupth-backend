@@ -1,0 +1,25 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-create-client
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: client
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: base_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: client_since
+                  type: DATE
+                  defaultValueComputed: CURRENT_DATE
+                  constraints:
+                    nullable: false

@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-add-pk-establishment-services
+      author: andrericao
+      changes:
+        - addPrimaryKey:
+            tableName: establishment_services
+            columnNames: establishment_id, service
+            constraintName: pk_establishment_services

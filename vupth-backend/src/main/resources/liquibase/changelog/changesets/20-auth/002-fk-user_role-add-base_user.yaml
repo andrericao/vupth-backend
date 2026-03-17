@@ -1,0 +1,15 @@
+databaseChangeLog:
+  # FK: UserRole → BaseUser
+  - changeSet:
+      id: 002-fk-user_role-add-base_user
+      author: andrericao
+      #context: test, dev, prod
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: user_roles
+            baseColumnNames: base_user_id
+            constraintName: fk-user_role-add-base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+            onUpdate: CASCADE

@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-add-fk-attendance-professional
+      author: andrericao
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance
+            baseColumnNames: professional_id
+            constraintTableName: fk_attendance_professional
+            referencedTableName: professional
+            referencedColumnNames: id
