@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to Railway
-        run: npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_HOMOLOG }}
+        run: npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }}
         working-directory: vupth-backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
