@@ -2,7 +2,7 @@ databaseChangeLog:
 
   # ── seed: base_user for the owner ──────────────────────────────────
   - changeSet:
-      id: 012-seed-base-user-owner-v2
+      id: 012-seed-base-user-owner-v3
       author: vupth-seed
       preConditions:
         - onFail: MARK_RAN
@@ -21,11 +21,11 @@ databaseChangeLog:
               - column: { name: email,       value: "seed-owner@vupth.local" }
               - column: { name: password,    value: "$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" }
               - column: { name: is_active,   valueBoolean: true }
-              - column: { name: created_at,  valueDate: "2026-03-20T00:00:00Z" }
+              - column: { name: created_at,  valueDate: "2026-03-20 00:00:00" }
 
   # ── seed: owner row ────────────────────────────────────────────────
   - changeSet:
-      id: 012-seed-owner-v2
+      id: 012-seed-owner-v3
       author: vupth-seed
       preConditions:
         - onFail: MARK_RAN
@@ -41,7 +41,7 @@ databaseChangeLog:
 
   # ── seed: establishments ───────────────────────────────────────────
   - changeSet:
-      id: 012-seed-establishments-v2
+      id: 012-seed-establishments-v3
       author: vupth-seed
       changes:
         - insert:
@@ -53,7 +53,7 @@ databaseChangeLog:
               - column: { name: status,              value: "ACTIVE" }
               - column: { name: current_open_status, value: "OPEN" }
               - column: { name: owner_id,            value: "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
-              - column: { name: created_at,          valueDate: "2026-03-20T00:00:00" }
+              - column: { name: created_at,          valueDate: "2026-03-20 00:00:00" }
 
         - insert:
             tableName: establishment
@@ -64,7 +64,7 @@ databaseChangeLog:
               - column: { name: status,              value: "ACTIVE" }
               - column: { name: current_open_status, value: "OPEN" }
               - column: { name: owner_id,            value: "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
-              - column: { name: created_at,          valueDate: "2026-03-20T00:00:00" }
+              - column: { name: created_at,          valueDate: "2026-03-20 00:00:00" }
 
         - insert:
             tableName: establishment
@@ -75,7 +75,7 @@ databaseChangeLog:
               - column: { name: status,              value: "ACTIVE" }
               - column: { name: current_open_status, value: "CLOSED" }
               - column: { name: owner_id,            value: "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
-              - column: { name: created_at,          valueDate: "2026-03-20T00:00:00" }
+              - column: { name: created_at,          valueDate: "2026-03-20 00:00:00" }
 
         - insert:
             tableName: establishment
@@ -86,7 +86,7 @@ databaseChangeLog:
               - column: { name: status,              value: "ACTIVE" }
               - column: { name: current_open_status, value: "OPEN" }
               - column: { name: owner_id,            value: "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
-              - column: { name: created_at,          valueDate: "2026-03-20T00:00:00" }
+              - column: { name: created_at,          valueDate: "2026-03-20 00:00:00" }
 
         - insert:
             tableName: establishment
@@ -97,11 +97,11 @@ databaseChangeLog:
               - column: { name: status,              value: "ACTIVE" }
               - column: { name: current_open_status, value: "OPEN" }
               - column: { name: owner_id,            value: "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa" }
-              - column: { name: created_at,          valueDate: "2026-03-20T00:00:00" }
+              - column: { name: created_at,          valueDate: "2026-03-20 00:00:00" }
 
   # ── seed: establishment_services (service types) ───────────────────
   - changeSet:
-      id: 012-seed-establishment-services-v2
+      id: 012-seed-establishment-services-v3
       author: vupth-seed
       changes:
         # Barbearia do Ze -> BARBER
