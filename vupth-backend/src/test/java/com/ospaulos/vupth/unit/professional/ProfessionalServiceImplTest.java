@@ -19,6 +19,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundExce
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
+import com.ospaulos.vupth.domain.queue.service.QueueEventPublisher;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
@@ -69,6 +70,7 @@ import static org.mockito.Mockito.*;
 class ProfessionalServiceImplTest {
 
     @Mock QueueService queueService;
+    @Mock QueueEventPublisher queueEventPublisher;
     @Mock AttendanceService attendanceService;
     @Mock ServiceItemService serviceItemService;
     @Mock EstablishmentService establishmentService;

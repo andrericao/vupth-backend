@@ -70,6 +70,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
 
+                        // WebSocket STOMP endpoint (SockJS uses GET + upgrade)
+                        .requestMatchers("/ws/**").permitAll()
+
+                        // Actuator health check
+                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+
                         // Guest joins the queue without authentication (MVP)
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
 

@@ -22,6 +22,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundExce
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.queue.service.QueueEventPublisher;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
@@ -41,6 +42,7 @@ import java.util.UUID;
 public class ProfessionalServiceImpl implements ProfessionalService {
 
     private final QueueService queueService;
+    private final QueueEventPublisher queueEventPublisher;
     private final AttendanceService attendanceService;
     private final ServiceItemService serviceItemService;
     private final EstablishmentService establishmentService;
@@ -73,7 +75,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         Attendance attendance = attendanceService.createGuestAttendance(request, professional, establishment);
         log.info("[Professional] createAndAddGuestAttendanceInQueue — guest added attendanceId={}", attendance.getId());
 
-        return queueService.enqueueGuestAttendance(attendance, professional);
+        QueueResponse response = queueService.enqueueGuestAttendance(attendance, professional);
+        queueEventPublisher.publishQueueUpdate(professional.getId(), response);
+        queueEventPublisher.publishEstablishmentUpdate(establishment.getId(), response);
+        return response;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -131,7 +136,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         queueService.updateQueueEstimates(professional);
 
         log.info("[Professional] startAttendance — attendance={} iniciado", attendanceId);
-        return queueService.getQueueOverview(professional, establishment);
+        QueueResponse response = queueService.getQueueOverview(professional, establishment);
+        queueEventPublisher.publishQueueUpdate(professional.getId(), response);
+        queueEventPublisher.publishEstablishmentUpdate(establishment.getId(), response);
+        return response;
     }
 
     @Override
@@ -154,6 +162,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         attendanceService.finishAttendance(attendance);
         log.info("[Professional] finishAttendance — attendance={} finalizado (FINISHED)", attendanceId);
+
+        QueueResponse queueUpdate = queueService.getQueueOverview(professional, establishment);
+        queueEventPublisher.publishQueueUpdate(professional.getId(), queueUpdate);
+        queueEventPublisher.publishEstablishmentUpdate(establishment.getId(), queueUpdate);
 
         return attendanceService.getNextAttendance(professional, establishment);
     }
@@ -179,7 +191,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         attendanceService.cancelAttendance(attendance);
         log.info("[Professional] cancelAttendance — attendance={} cancelado", attendanceId);
 
-        return queueService.getQueueOverview(professional, establishment);
+        QueueResponse response = queueService.getQueueOverview(professional, establishment);
+        queueEventPublisher.publishQueueUpdate(professional.getId(), response);
+        queueEventPublisher.publishEstablishmentUpdate(establishment.getId(), response);
+        return response;
     }
 
     @Override
@@ -204,7 +219,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         attendanceService.pauseAttendance(attendance);
         log.info("[Professional] pauseAttendance — attendance={} pausado", attendanceId);
 
-        return queueService.getQueueOverview(professional, establishment);
+        QueueResponse response = queueService.getQueueOverview(professional, establishment);
+        queueEventPublisher.publishQueueUpdate(professional.getId(), response);
+        queueEventPublisher.publishEstablishmentUpdate(establishment.getId(), response);
+        return response;
     }
 
     @Override
@@ -229,7 +247,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         attendanceService.resumeAttendance(attendance);
         log.info("[Professional] resumeAttendance — attendance={} retomado", attendanceId);
 
-        return queueService.getQueueOverview(professional, establishment);
+        QueueResponse response = queueService.getQueueOverview(professional, establishment);
+        queueEventPublisher.publishQueueUpdate(professional.getId(), response);
+        queueEventPublisher.publishEstablishmentUpdate(establishment.getId(), response);
+        return response;
     }
 
     // ─────────────────────────────────────────────────────────────
