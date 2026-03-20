@@ -132,7 +132,4 @@ databaseChangeLog:
             referencedColumnNames: id
             onDelete: CASCADE
 
-  # Seed test data (establishments with varied service types)
-  - include:
-      file: changesets/10-stubs/012-seed-test-establishments.yaml
-      relativeToChangeLogFile: true
+  # Seed data moved to DataSeeder.java (CommandLineRunner)
