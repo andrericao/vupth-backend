@@ -51,14 +51,14 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
     @Override
     public List<EstablishmentResponse> findAll() {
-        return establishmentRepository.findAll().stream()
+        return establishmentRepository.findAllWithServices().stream()
                 .map(EstablishmentResponse::fromEntity)
                 .toList();
     }
 
     @Override
     public EstablishmentResponse findById(UUID id){
-         Establishment establishment = establishmentRepository.findById(id)
+         Establishment establishment = establishmentRepository.findByIdWithServices(id)
                 .orElseThrow(() -> new EstablishmentNotFoundException(id));
 
          return EstablishmentResponse.fromEntity(establishment);
