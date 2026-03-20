@@ -36,8 +36,8 @@ jobs:
       - name: Restore JWT keys
         run: |
           mkdir -p src/main/resources/keys
-          echo "${{ secrets.JWT_PRIVATE_KEY_B64 }}" | base64 -d > src/main/resources/keys/private.key
-          echo "${{ secrets.JWT_PUBLIC_KEY_B64 }}"  | base64 -d > src/main/resources/keys/public.key
+          echo -n "${{ secrets.JWT_PRIVATE_KEY_B64 }}" | base64 -d > src/main/resources/keys/private.key
+          echo -n "${{ secrets.JWT_PUBLIC_KEY_B64 }}"  | base64 -d > src/main/resources/keys/public.key
         working-directory: vupth-backend
 
       - name: Run tests
