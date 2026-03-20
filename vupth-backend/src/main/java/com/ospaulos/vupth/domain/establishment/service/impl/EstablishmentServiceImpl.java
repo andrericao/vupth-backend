@@ -6,6 +6,7 @@ import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
@@ -52,6 +53,13 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     @Override
     public List<EstablishmentResponse> findAll() {
         return establishmentRepository.findAllWithServices().stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
+    public List<EstablishmentResponse> findByServiceType(ServiceType serviceType) {
+        return establishmentRepository.findByServiceType(serviceType).stream()
                 .map(EstablishmentResponse::fromEntity)
                 .toList();
     }

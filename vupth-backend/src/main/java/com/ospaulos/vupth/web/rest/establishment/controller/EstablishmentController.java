@@ -2,12 +2,15 @@ package com.ospaulos.vupth.web.rest.establishment.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
+import com.ospaulos.vupth.api.establishment.dto.request.UpdateOpenStatusRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentWithProfessionalsResponse;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
@@ -40,6 +43,7 @@ public class EstablishmentController {
     private final EstablishmentServiceImpl service;
     private final GetEstablishmentWithQueueUseCase getWithQueueUseCase;
     private final ProfessionalServiceImpl professionalService;
+    private final EstablishmentOpenStatusService establishmentOpenStatusService;
 
     @PostMapping("/create")
     public ResponseEntity<EstablishmentResponse> createEstablishment(
@@ -54,8 +58,11 @@ public class EstablishmentController {
      * Public endpoint — lists all establishments (client-app browse).
      */
     @GetMapping
-    public ResponseEntity<?> findAll() {
-        log.info("[Establishment] findAll");
+    public ResponseEntity<?> findAll(@RequestParam(required = false) String serviceType) {
+        log.info("[Establishment] findAll — serviceType={}", serviceType);
+        if (serviceType != null && !serviceType.isEmpty()) {
+            return ResponseEntity.ok(service.findByServiceType(ServiceType.valueOf(serviceType)));
+        }
         return ResponseEntity.ok(service.findAll());
     }
 
@@ -101,5 +108,20 @@ public class EstablishmentController {
 
         ServiceItemResponse response = professionalService.createServiceItem(user.getUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * PATCH /establishment/{id}/status
+     * Toggles the open/closed status of an establishment.
+     * Requires ROLE_OWNER.
+     */
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Void> updateOpenStatus(
+            @PathVariable UUID id,
+            @RequestBody @Valid UpdateOpenStatusRequest request) {
+
+        log.info("[Establishment] updateOpenStatus — id={} newStatus={}", id, request.openStatus());
+        establishmentOpenStatusService.updateEstablishmentOpenStatus(id, request.openStatus());
+        return ResponseEntity.ok().build();
     }
 }

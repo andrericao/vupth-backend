@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.establishment.service;
 
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 
 import java.util.List;
@@ -14,6 +15,8 @@ public interface EstablishmentService {
     EstablishmentResponse findById(UUID id);
 
     List<EstablishmentResponse> findAll();
+
+    List<EstablishmentResponse> findByServiceType(ServiceType serviceType);
 
     public List<ServiceItem> getServicesItemByEstablishment(UUID establishmentId);
 }
