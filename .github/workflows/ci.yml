@@ -34,10 +34,15 @@ jobs:
           cache: maven
 
       - name: Restore JWT keys
+        env:
+          PRIVATE_KEY_B64: ${{ secrets.JWT_PRIVATE_KEY_B64 }}
+          PUBLIC_KEY_B64: ${{ secrets.JWT_PUBLIC_KEY_B64 }}
         run: |
           mkdir -p src/main/resources/keys
-          echo -n "${{ secrets.JWT_PRIVATE_KEY_B64 }}" | base64 -d > src/main/resources/keys/private.key
-          echo -n "${{ secrets.JWT_PUBLIC_KEY_B64 }}"  | base64 -d > src/main/resources/keys/public.key
+          printf '%s' "$PRIVATE_KEY_B64" | tr -d '[:space:]' | base64 -d > src/main/resources/keys/private.key
+          printf '%s' "$PUBLIC_KEY_B64"  | tr -d '[:space:]' | base64 -d > src/main/resources/keys/public.key
+          echo "Private key size: $(wc -c < src/main/resources/keys/private.key) bytes"
+          echo "Public key size: $(wc -c < src/main/resources/keys/public.key) bytes"
         working-directory: vupth-backend
 
       - name: Run tests
