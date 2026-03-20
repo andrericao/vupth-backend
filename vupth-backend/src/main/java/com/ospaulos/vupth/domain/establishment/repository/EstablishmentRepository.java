@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.domain.establishment.repository;
 
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +20,9 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
 
     @Query("SELECT e FROM Establishment e LEFT JOIN FETCH e.addresses WHERE e.id = :id")
     Optional<Establishment> findByIdWithAddresses(@Param("id") UUID id);
+
+    @Query("SELECT DISTINCT e FROM Establishment e LEFT JOIN FETCH e.services WHERE :serviceType MEMBER OF e.services")
+    List<Establishment> findByServiceType(@Param("serviceType") ServiceType serviceType);
 
     @Query("""
     SELECT e

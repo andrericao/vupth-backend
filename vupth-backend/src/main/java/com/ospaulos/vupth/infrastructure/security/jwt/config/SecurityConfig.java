@@ -27,8 +27,13 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.List;
 
 @Slf4j
 @Configuration
@@ -52,6 +57,7 @@ public class SecurityConfig {
         log.info("SECURITY CONFIG!");
 
         return httpSecurity
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authorize -> authorize
 
                         // ── Public (no authentication required) ─────────────────────────
@@ -104,6 +110,7 @@ public class SecurityConfig {
                         // Criar e gerenciar service items do establishment
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/status").hasRole("OWNER")
 
                         // ── Fallback: qualquer autenticado ────────────────────────────────
                         .anyRequest().authenticated())
@@ -139,5 +146,25 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder(){
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOrigins(List.of(
+                "https://vupth-frontend.vercel.app",
+                "http://localhost:8081",
+                "http://localhost:3001",
+                "http://localhost:3000",
+                "http://localhost:4200"
+        ));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }
