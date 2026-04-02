@@ -80,7 +80,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
-        return saved;
+        return attendanceRepository.findByIdEager(saved.getId()).orElse(saved);
     }
 
     @Override
@@ -120,7 +120,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
-        return saved;
+        return attendanceRepository.findByIdEager(saved.getId()).orElse(saved);
     }
 
     @Override
@@ -153,7 +153,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
-        return saved;
+        return attendanceRepository.findByIdEager(saved.getId()).orElse(saved);
     }
 
     // ─────────────────────────────────────────────────────────────
