@@ -47,7 +47,7 @@ public class GetEstablishmentWithQueueUseCase {
                         "Establishment not found: " + establishmentId));
 
         List<Professional> professionals = professionalRepository
-                .findByEstablishmentId(establishmentId);
+                .findByEstablishmentIdEager(establishmentId);
 
         List<ProfessionalWithQueueResponse> professionalDtos = professionals.stream()
                 .map(prof -> buildProfessionalSnapshot(prof, establishmentId))
