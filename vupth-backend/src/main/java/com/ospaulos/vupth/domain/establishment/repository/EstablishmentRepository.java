@@ -22,4 +22,11 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
     """)
     Optional<Establishment> findByIdAndOwnerId(UUID establishmentId, UUID ownerId);
 
+    @Query("""
+    SELECT e FROM Establishment e
+    LEFT JOIN FETCH e.services
+    LEFT JOIN FETCH e.owner
+    WHERE e.id = :id
+""")
+    Optional<Establishment> findByIdEager(@Param("id") UUID id);
 }

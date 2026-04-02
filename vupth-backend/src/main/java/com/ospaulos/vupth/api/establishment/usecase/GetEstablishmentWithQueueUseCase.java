@@ -42,7 +42,7 @@ public class GetEstablishmentWithQueueUseCase {
 
         log.info("GetEstablishmentWithQueueUseCase — establishmentId={}", establishmentId);
 
-        Establishment establishment = establishmentRepository.findById(establishmentId)
+        Establishment establishment = establishmentRepository.findByIdEager(establishmentId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Establishment not found: " + establishmentId));
 
