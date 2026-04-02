@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-add-constraint-user_role-and-base_user
+      author: andrericao
+      #context: test, dev, prod
+      changes:
+        - addUniqueConstraint:
+            tableName: user_roles
+            columnNames: base_user_id, role_type
+            constraintName: uq_user_role_per_user

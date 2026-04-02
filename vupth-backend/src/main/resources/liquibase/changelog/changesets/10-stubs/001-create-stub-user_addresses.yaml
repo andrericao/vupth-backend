@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-stub-user_address
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: user_addresses
+
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false

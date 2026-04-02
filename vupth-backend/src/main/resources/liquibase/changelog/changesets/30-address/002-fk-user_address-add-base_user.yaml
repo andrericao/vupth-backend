@@ -1,0 +1,15 @@
+databaseChangeLog:
+    # FK: UserAddress -> BaseUser
+    - changeSet:
+          id: 005-fk-user_address-add-base_user
+          author: andrericao
+          #context: test, dev, prod
+          changes:
+              - addForeignKeyConstraint:
+                    baseTableName: user_addresses
+                    baseColumnNames: user_id
+                    constraintName: fk_user_address-add-base_user
+                    referencedTableName: base_user
+                    referencedColumnNames: id
+                    onDelete: CASCADE
+                    onUpdate: CASCADE

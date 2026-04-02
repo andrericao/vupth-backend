@@ -1,0 +1,13 @@
+databaseChangeLog:
+# FK: Client → BaseUser
+  - changeSet:
+      id: 011-add-fk-client-base_user
+      author: andrericao
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: client
+            baseColumnNames: base_user_id
+            constraintName: fk_client_base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE

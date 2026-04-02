@@ -1,0 +1,15 @@
+Executar: docker compose -f docker-compose.dev.yml up --build
+Entrar no terminal do container: docker compose exec <nome do servi ce> bash
+Sair: exit
+
+Instalar: curl -fsSL https://opencode.ai/install | bash
+procurar opencode; find / -name opencode 2>/dev/null
+RODAR OPENCODE: /root/.opencode/bin/opencode
+
+RESET terminal: reset
+
+Derrubar todos os containers:
+
+docker compose -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.dev.yml down -v --remove-orphans
+docker volume prune -f

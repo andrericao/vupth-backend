@@ -1,0 +1,13 @@
+databaseChangeLog:
+    - changeSet:
+# FK: Professional → BaseUser
+      id: 013-add-fk-professional-base_user
+      author: andrericao
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: professional
+            baseColumnNames: base_user_id
+            constraintName: fk_professional_base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE

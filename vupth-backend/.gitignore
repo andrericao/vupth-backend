@@ -1,0 +1,50 @@
+# ==============================
+# SEGREDOS — NUNCA SUBIR
+# ==============================
+src/main/resources/keys/
+src/main/resources/config/application-local.properties
+src/main/resources/liquibase/liquibase.properties
+
+# ==============================
+# BUILD
+# ==============================
+target/
+*.jar
+*.war
+*.class
+
+# ==============================
+# IDE
+# ==============================
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.factorypath
+.settings/
+*.iws
+*.ipr
+
+# ==============================
+# OS
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# LOGS
+# ==============================
+*.log
+test-results.log
+logs/
+
+# ==============================
+# MAVEN WRAPPER
+# ==============================
+.mvn/
+
+# ==============================
+# DOCKER
+# ==============================
+.env

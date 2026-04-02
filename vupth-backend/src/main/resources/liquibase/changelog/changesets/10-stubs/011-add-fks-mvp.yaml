@@ -1,0 +1,112 @@
+databaseChangeLog:
+
+  # FK: professional -> base_user (MapsId)
+  - changeSet:
+      id: 011-fk-professional-base_user
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: professional
+            baseColumnNames: id
+            constraintName: fk_professional_base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # FK: establishment -> owner
+  - changeSet:
+      id: 012-fk-establishment-owner
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: establishment
+            baseColumnNames: owner_id
+            constraintName: fk_establishment_owner
+            referencedTableName: owner
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+  # FK: establishment_services -> establishment
+  - changeSet:
+      id: 013-fk-establishment-services
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: establishment_services
+            baseColumnNames: establishment_id
+            constraintName: fk_estab_services_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # FK: professional -> establishment
+  - changeSet:
+      id: 014-fk-professional-establishment
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: professional
+            baseColumnNames: establishment_id
+            constraintName: fk_professional_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+  # FK: client -> base_user
+  - changeSet:
+      id: 015-fk-client-base_user
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: client
+            baseColumnNames: id
+            constraintName: fk_client_base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # FK: owner -> base_user
+  - changeSet:
+      id: 016-fk-owner-base_user
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: owner
+            baseColumnNames: id
+            constraintName: fk_owner_base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # FK: user_roles -> base_user
+  - changeSet:
+      id: 017-fk-user_roles-base_user
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: user_roles
+            baseColumnNames: base_user_id
+            constraintName: fk_user_roles_base_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # unique constraint user_roles
+  - changeSet:
+      id: 018-unique-user_roles
+      author: vupth-mvp
+      changes:
+        - addUniqueConstraint:
+            tableName: user_roles
+            columnNames: base_user_id, role_type
+            constraintName: uq_user_roles_user_role
+
+  # client_since column for client table
+  - changeSet:
+      id: 019-client-client_since-default
+      author: vupth-mvp
+      changes:
+        - addDefaultValue:
+            tableName: client
+            columnName: client_since
+            defaultValueComputed: CURRENT_TIMESTAMP

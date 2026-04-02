@@ -1,0 +1,5 @@
+- column:
+    name: name
+    type: VARCHAR(255)
+    constraints:
+      nullable: false

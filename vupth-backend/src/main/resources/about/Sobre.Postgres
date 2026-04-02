@@ -1,0 +1,18 @@
+1 - postgres://<usuario>:<senha>@<host>:<porta>/<database>
+2 - postgres://meu_usuario:minha_senha@localhost:5432/vupth-test
+
+
+psql postgres://postgres:admin@localhost:5432/vupth_test
+
+Alterar senha:
+sudo -u postgres psql
+ALTER USER 'user_name' WITH PASSWORD 'admin_test';
+
+Criar Usuário:
+CREATE USER 'user_owner_name' WITH PASSWORD 'user_password';
+
+Setar usuário como proprietário de um NOVO banco de dados:
+CREATE DATABASE 'database_name' OWNER 'user_owner_name';
+
+Setar usuário como proprietário de um banco de dados JÁ EXISTENTE:
+GRANT CONNECT ON DATABASE vupth_test TO novo_usuario;

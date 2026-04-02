@@ -1,0 +1,41 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-stub-establishment_address
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: establishment_addresses
+
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: true
+
+              - column:
+                  name: address_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: is_main
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+
+              - column:
+                  name: business_hours
+                  type: VARCHAR(255)

@@ -1,0 +1,140 @@
+package com.ospaulos.vupth.domain.professional.service.impl;
+
+import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
+import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
+import com.ospaulos.vupth.domain.events.CreateRecurringIntervalCommand;
+import com.ospaulos.vupth.domain.events.CreateUnexpectedIntervalCommand;
+import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
+import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
+import com.ospaulos.vupth.domain.events.IntervalCreatedEvent;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.UUID;
+
+@Slf4j
+@Service
+@Transactional
+@AllArgsConstructor
+public class ProfessionalIntervalService {
+
+    private final ApplicationEventPublisher eventPublisher;
+    private final ProfessionalRepository professionalRepository;
+    private final ProfessionalIntervalRepository intervalRepository;
+
+    public ProfessionalInterval createRecurringInterval(@Valid CreateRecurringIntervalCommand command) {
+
+        Professional professional = professionalRepository.findById(command.professionalId())
+                .orElseThrow(() -> new ProfessionalNotFoundException(command.professionalId()));
+
+        validateRecurringIntervalCreation(professional, command);
+
+        ProfessionalInterval interval = ProfessionalInterval.createRecurring(
+                professional,
+                command.durationMinutes(),
+                command.fixedStartTime(),
+                command.recurrencePattern(),
+                command.description()
+        );
+
+        ProfessionalInterval saved = intervalRepository.save(interval);
+
+        // Publish event (for auditing, notifications, etc.)
+        eventPublisher.publishEvent(new IntervalCreatedEvent(saved, IntervalType.RECURRENT));
+
+        return saved;
+    }
+
+    public ProfessionalInterval createUnexpectedInterval(@Valid CreateUnexpectedIntervalCommand command) {
+
+        Professional professional = professionalRepository.findById(command.professionalId())
+                .orElseThrow(() -> new ProfessionalNotFoundException(command.professionalId()));
+
+        validateUnexpectedIntervalCreation(professional, command);
+
+        ProfessionalInterval interval = ProfessionalInterval.createUnexpected(
+                professional,
+                command.durationMinutes(),
+                command.startTime(),
+                command.description()
+        );
+
+        ProfessionalInterval saved = intervalRepository.save(interval);
+        eventPublisher.publishEvent(new IntervalCreatedEvent(saved, IntervalType.UNEXPECTED));
+
+        return saved;
+    }
+
+    @Transactional
+    public List<ProfessionalInterval> getActiveIntervalsForProfessional(UUID professionalId, LocalDate date) {
+        //return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, date);
+
+        log.info("SERVICE PROFESSIONALINTERVAL - GETACTIVEINTERVALS()");
+
+        OffsetDateTime startOfDay = date.atStartOfDay().atOffset(ZoneOffset.UTC);
+        OffsetDateTime startOfNextDay = date.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC);
+        return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, startOfDay, startOfNextDay);
+    }
+
+    @Transactional
+    public boolean isProfessionalInInterval(UUID professionalId, OffsetDateTime dateTime) {
+        return intervalRepository.existsActiveIntervalAt(professionalId, dateTime);
+    }
+
+    private void validateRecurringIntervalCreation(Professional professional, CreateRecurringIntervalCommand command) {
+        // Check if an interval already exists at the same time
+        boolean hasConflict = intervalRepository.existsRecurringIntervalConflict(
+                professional.getId(), command.fixedStartTime(), command.durationMinutes());
+
+        if (hasConflict) {
+            throw new IntervalConflictException("There is already a break at this time!");
+        }
+    }
+
+    // Claude
+    private void validateUnexpectedIntervalCreation(Professional professional, CreateUnexpectedIntervalCommand command) {
+        if (command.startTime().isBefore(OffsetDateTime.now())) {
+            throw new InvalidIntervalTimeException("Cannot create range in past!");
+        }
+
+        OffsetDateTime endTime = command.startTime().plusMinutes(command.durationMinutes());
+
+        boolean hasConflict = intervalRepository.existsUnexpectedIntervalConflict(
+                professional.getId(), command.startTime(), endTime);
+
+        if (hasConflict) {
+            throw new IntervalConflictException("There is already a break at this time!");
+        }
+    }
+/*
+    private void validateUnexpectedIntervalCreation(Professional professional, CreateUnexpectedIntervalCommand command) {
+        // Check that the interval is not in the past
+        if (command.startTime().isBefore(OffsetDateTime.now())) {
+            throw new InvalidIntervalTimeException("Cannot create range in past!");
+        }
+
+        // Verificar conflitos com outros intervalos
+        boolean hasConflict = intervalRepository.existsUnexpectedIntervalConflict(
+                professional.getId(), command.startTime().toOffsetTime(), command.durationMinutes());
+
+        if (hasConflict) {
+            throw new IntervalConflictException("There is already a break at this time!");
+        }*/
+
+    
+    // TODO: Validate ProfessionalInterval start time vs end time
+    // TODO: poder adicionar mais 5 minutos (inclusive ter um campo para isso
+    // TODO: Add action to serve next attendance, finishing the interval
+}

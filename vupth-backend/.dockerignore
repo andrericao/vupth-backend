@@ -1,0 +1,39 @@
+# ==============================
+# NUNCA ENTRAR NA IMAGEM DOCKER
+# ==============================
+
+# Build local — o Dockerfile compila dentro do container
+target/
+
+# Arquivos de IDE e OS
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.factorypath
+.settings/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docs e arquivos desnecessários
+*.md
+*.docx
+*.log
+test-results.log
+README-DOCKER
+TEST_COVERAGE_ANALYSIS.md
+
+# Docker compose (não precisa dentro da imagem)
+docker-compose*.yml
+Dockerfile.test
+
+# Dependências locais soltas (não devem estar aqui)
+*.jar
+
+# Env local
+.env

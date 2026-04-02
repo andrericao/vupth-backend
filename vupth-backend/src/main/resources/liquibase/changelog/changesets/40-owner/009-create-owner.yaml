@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+    id: 009-create-owner
+    author: andrericao
+    changes:
+      - createTable:
+          tableName: owner
+          columns:
+            - column:
+                name: id
+                type: UUID
+                constraints:
+                  primaryKey: true
+                  nullable: false
+            - column:
+                name: base_user_id
+                type: UUID
+                constraints:
+                  nullable: false

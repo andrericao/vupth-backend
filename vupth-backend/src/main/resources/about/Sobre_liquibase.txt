@@ -1,0 +1,6 @@
+1 - Compile changes made to Java entities ("models" folder)
+2 - Run the diff command in Liquibase
+3 - Include the file in the changelog-master.xml
+4 - Run te application
+
+PS: Case error run liquibase.update

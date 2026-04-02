@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-fk-attendance-establishment
+      author: andrericao
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance
+            baseColumnsNames: establishment_id
+            constraintTableName: fk_attendance_client
+            referencedTableName: establishment
+            referencedColumnNames: id

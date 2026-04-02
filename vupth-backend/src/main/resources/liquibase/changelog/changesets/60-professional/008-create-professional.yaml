@@ -1,0 +1,37 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-create-professional
+      author: andrericao
+
+      changes:
+        - createTable:
+          tableName: professional
+
+          columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: base_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: specialty
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_available
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false

@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-user_roles
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: user_roles
+
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: base_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: role_type
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

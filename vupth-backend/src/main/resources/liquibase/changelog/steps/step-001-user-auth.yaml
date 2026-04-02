@@ -1,0 +1,59 @@
+databaseChangeLog:
+
+  # ========================================
+  # 00-FOUNDATION (sempre roda)
+  # ========================================
+
+  - include:
+      file: ../changesets/00-foundation/001-create-address.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/00-foundation/002-create-base_user.yaml
+      relativeToChangeLogFile: true
+
+  # ========================================
+  # 10-STUBS (sempre roda)
+  # ========================================
+
+  - include:
+      file: ../changesets/10-stubs/001-create-stub-user_addresses.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/10-stubs/002-create-stub-owner.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/10-stubs/003-create-stub-establishment.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/10-stubs/004-create-stub-establishment-services.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/10-stubs/005-create-stub-establishment_addresses.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/10-stubs/006-create-stub-professional.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: ../changesets/10-stubs/007-create-stub-client.yaml
+      relativeToChangeLogFile: true
+
+  #- include:
+   #   file: ../changesets/10-stubs/009-create-stub-attendance.yaml
+    #  relativeToChangeLogFile: true
+
+  # 20-AUTH (sempre roda)
+
+  - include:
+      file: ../changesets/20-auth/001-create-user_roles.yaml
+      relativeToChangeLogFile: true
+
+  - includeAll:
+      path: ../changesets/90-refresh_token
+      relativeToChangeLogFile: true

@@ -1,0 +1,13 @@
+databaseChangeLog:
+# FK: Owner → BaseUser
+- changeSet:
+    id: 012-add-fk-owner-base_user
+    author: andrericao
+    changes:
+      - addForeignKeyConstraint:
+          baseTableName: owner
+          baseColumnNames: base_user_id
+          constraintName: fk_owner_base_user
+          referencedTableName: base_user
+          referencedColumnNumbers: id
+          onDelete: CASCADE

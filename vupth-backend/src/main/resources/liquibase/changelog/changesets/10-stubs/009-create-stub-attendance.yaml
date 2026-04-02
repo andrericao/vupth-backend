@@ -1,0 +1,230 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-create-stub-attendance
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: attendance
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: client_id
+                  type: UUID
+
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: guest_name
+                  type: VARCHAR(255)
+
+              - column:
+                  name: status
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: scheduled_time
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: estimated_minutes
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: total_value
+                  type: DECIMAL(10,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: start_time
+                  type: TIMESTAMPTZ
+
+              - column:
+                  name: end_time
+                  type: TIMESTAMPTZ
+
+              - column:
+                  name: duration_minutes
+                  type: INTEGER
+
+              - column:
+                  name: paused_duration_minutes
+                  type: INTEGER
+                  defaultValueNumeric: 0
+
+              - column:
+                  name: is_timer_active
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+
+              - column:
+                  name: last_pause_time
+                  type: TIMESTAMPTZ
+
+  - changeSet:
+      id: 009b-create-service-item
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: service_item
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: service_item_type
+                  type: VARCHAR(100)
+
+              - column:
+                  name: custom_name
+                  type: VARCHAR(255)
+
+              - column:
+                  name: price
+                  type: DECIMAL(10,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: estimated_minutes
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+                  defaultValueNumeric: 30
+
+              - column:
+                  name: weekly_average_duration_in_minutes
+                  type: INTEGER
+
+  - changeSet:
+      id: 009c-create-attendance-service-item
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: attendance_service_item
+            columns:
+              - column:
+                  name: attendance_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: service_item_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 009d-create-professional-intervals
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: professional_intervals
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: duration_minutes
+                  type: INTEGER
+                  constraints:
+                    nullable: false
+              - column:
+                  name: start_time
+                  type: TIMESTAMPTZ
+              - column:
+                  name: fixed_start_time
+                  type: TIME
+              - column:
+                  name: recurrence_pattern
+                  type: VARCHAR(255)
+              - column:
+                  name: description
+                  type: VARCHAR(500)
+              - column:
+                  name: interval_type
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: actual_start_time
+                  type: TIMESTAMPTZ
+              - column:
+                  name: actual_end_time
+                  type: TIMESTAMPTZ
+              - column:
+                  name: planned_end_time
+                  type: TIMESTAMPTZ
+              - column:
+                  name: extended_minutes
+                  type: INTEGER
+                  defaultValueNumeric: 0
+              - column:
+                  name: max_extension_minutes
+                  type: INTEGER
+                  defaultValueNumeric: 30
+              - column:
+                  name: is_active
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: finished_early
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: auto_finish_reason
+                  type: VARCHAR(255)
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMPTZ

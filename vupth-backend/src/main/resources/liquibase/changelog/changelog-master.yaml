@@ -1,0 +1,133 @@
+databaseChangeLog:
+
+  # Foundation + Auth + Address
+  - include:
+      file: steps/step-001-user-auth.yaml
+      relativeToChangeLogFile: true
+
+  - include:
+      file: steps/step-003-user-fill-address.yaml
+      relativeToChangeLogFile: true
+
+  # Core domain tables (attendance, service_item, professional_intervals)
+  - include:
+      file: changesets/10-stubs/009-create-stub-attendance.yaml
+      relativeToChangeLogFile: true
+
+  # MVP foreign keys (professional, establishment, client, owner, user_roles FKs)
+  - include:
+      file: changesets/10-stubs/011-add-fks-mvp.yaml
+      relativeToChangeLogFile: true
+
+  # Attendance FKs
+  - changeSet:
+      id: master-fk-attendance-client
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance
+            baseColumnNames: client_id
+            constraintName: fk_attendance_client
+            referencedTableName: client
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+  - changeSet:
+      id: master-fk-attendance-establishment
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance
+            baseColumnNames: establishment_id
+            constraintName: fk_attendance_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  - changeSet:
+      id: master-fk-attendance-professional
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance
+            baseColumnNames: professional_id
+            constraintName: fk_attendance_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # service_item FKs
+  - changeSet:
+      id: master-fk-service-item-professional
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: service_item
+            baseColumnNames: professional_id
+            constraintName: fk_service_item_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # attendance_service_item FKs
+  - changeSet:
+      id: master-fk-attendance-service-item-attendance
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance_service_item
+            baseColumnNames: attendance_id
+            constraintName: fk_asi_attendance
+            referencedTableName: attendance
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  - changeSet:
+      id: master-fk-attendance-service-item-service
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: attendance_service_item
+            baseColumnNames: service_item_id
+            constraintName: fk_asi_service_item
+            referencedTableName: service_item
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # establishment_addresses FKs
+  - changeSet:
+      id: master-fk-establishment-addresses-establishment
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: establishment_addresses
+            baseColumnNames: establishment_id
+            constraintName: fk_estab_addresses_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  - changeSet:
+      id: master-fk-establishment-addresses-address
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: establishment_addresses
+            baseColumnNames: address_id
+            constraintName: fk_estab_addresses_address
+            referencedTableName: addresses
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # professional_intervals FK
+  - changeSet:
+      id: master-fk-professional-intervals
+      author: vupth-mvp
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: professional_intervals
+            baseColumnNames: professional_id
+            constraintName: fk_professional_intervals_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
