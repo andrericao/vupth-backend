@@ -324,7 +324,7 @@ class AttendanceServiceImplTest {
         @Test
         @DisplayName("status CANCELED → throws AttendanceInvalidStatusException")
         void start_canceled_throws() {
-            attendance.setStatus(AttendanceStatus.CANCELED);
+            attendance.setStatus(AttendanceStatus.CANCELLED);
 
             assertThatThrownBy(() -> attendanceService.startAttendance(attendance, professional))
                     .isInstanceOf(AttendanceInvalidStatusException.class);
@@ -410,13 +410,13 @@ class AttendanceServiceImplTest {
         @DisplayName("sucesso: status → CANCELED")
         void cancel_success() {
             attendance.setStatus(AttendanceStatus.SCHEDULED);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(attendanceRepository.save(any())).thenReturn(attendance);
 
             AttendanceInQueueResponse result =
                     attendanceService.cancelAttendance(attendanceId, clientId);
 
-            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.CANCELED);
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
             verify(attendanceRepository).save(attendance);
         }
 
@@ -424,7 +424,7 @@ class AttendanceServiceImplTest {
         @DisplayName("attendance not found → throws AttendanceNotFoundException")
         void cancel_notFound_throws() {
             UUID inexistente = UUID.randomUUID();
-            when(attendanceRepository.findById(inexistente)).thenReturn(Optional.empty());
+            when(attendanceRepository.findByIdEager(inexistente)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() ->
                     attendanceService.cancelAttendance(inexistente, clientId))

@@ -6,6 +6,8 @@ import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressRespon
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendancePausedResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
@@ -221,10 +223,28 @@ public class AttendanceServiceImpl implements AttendanceService {
     public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId) {
         log.info("[Attendance] cancelAttendance — attendanceId={} clientId={}", attendanceId, clientId);
 
-        com.ospaulos.vupth.domain.attendance.model.Attendance attendance = attendanceRepository.findById(attendanceId)
+        com.ospaulos.vupth.domain.attendance.model.Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
-        attendance.setStatus(AttendanceStatus.CANCELED);
+        // Guard: already cancelled — inform the caller instead of silently overwriting
+        if (attendance.getStatus() == AttendanceStatus.CANCELLED) {
+            log.warn("[Attendance] cancelAttendance — attendance={} is already CANCELLED", attendanceId);
+            throw new AttendanceAlreadyCancelledException(attendanceId);
+        }
+
+        if (attendance.getStatus() == AttendanceStatus.FINISHED) {
+            log.warn("[Attendance] cancelAttendance — attendance={} is already FINISHED", attendanceId);
+            throw new AttendanceInvalidStatusException(
+                    "Attendance '" + attendanceId + "' is already FINISHED and cannot be cancelled.");
+        }
+
+        // Guard: client cannot cancel an IN_PROGRESS attendance — only the professional can
+        if (attendance.getStatus() == AttendanceStatus.IN_PROGRESS) {
+            log.warn("[Attendance] cancelAttendance — client={} attempted to cancel IN_PROGRESS attendance={}", clientId, attendanceId);
+            throw new AttendanceCancelNotAllowedException(attendanceId);
+        }
+
+        attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
 
         String clientName = attendance.getClient() != null
@@ -240,7 +260,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     public AttendanceInQueueResponse cancelAttendance(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
         log.info("[Attendance] cancelAttendance(entity) — attendanceId={}", attendance.getId());
 
-        attendance.setStatus(AttendanceStatus.CANCELED);
+        attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
 
         String clientName = attendance.getClient() != null
@@ -255,7 +275,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId) {
         log.info("[Attendance] leaveQueue — attendanceId={} clientId={}", attendanceId, clientId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
@@ -267,7 +287,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
 
-        attendance.setStatus(AttendanceStatus.CANCELED);
+        attendance.setStatus(AttendanceStatus.CANCELLED);
         Attendance saved = attendanceRepository.save(attendance);
 
         log.info("[Attendance] leaveQueue — client='{}' left the queue voluntarily",
@@ -280,7 +300,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     public AttendanceInQueueResponse removeFromQueue(UUID attendanceId, UUID professionalId) {
         log.info("[Attendance] removeFromQueue — attendanceId={} professionalId={}", attendanceId, professionalId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         if (!attendance.getProfessional().getId().equals(professionalId)) {
@@ -292,7 +312,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
 
-        attendance.setStatus(AttendanceStatus.CANCELED);
+        attendance.setStatus(AttendanceStatus.CANCELLED);
         Attendance saved = attendanceRepository.save(attendance);
 
         String clientName = attendance.getClient() != null
@@ -450,6 +470,54 @@ public class AttendanceServiceImpl implements AttendanceService {
                 attendance.getStatus(),
                 attendance.getTotalValue(),
                 isPaused,
+                startTime,
+                elapsedOnlyServiceMinutes,
+                pausedMinutes,
+                totalElapsedMinutes,
+                remainingMinutes);
+    }
+
+    @Override
+    public AttendanceInProgressResponse buildFinishedAttendanceResponse(Attendance attendance) {
+
+        OffsetDateTime startTime = attendance.getStartTime() != null
+                ? attendance.getStartTime()
+                : attendance.getScheduledTime();
+
+        OffsetDateTime endTime = attendance.getEndTime() != null
+                ? attendance.getEndTime()
+                : OffsetDateTime.now();
+
+        int totalElapsedMinutes = (int) Duration.between(startTime, endTime).toMinutes();
+        int pausedMinutes = attendance.getPausedDurationInMinutes() != null
+                ? attendance.getPausedDurationInMinutes() : 0;
+        int elapsedOnlyServiceMinutes = Math.max(0, totalElapsedMinutes - pausedMinutes);
+        int estimatedMinutes = attendance.getEstimatedTotalMinutes();
+        int remainingMinutes = 0; // finished — no time remaining
+
+        List<AttendanceInQueueResponse.ServiceItemSummary> services = attendance.getServiceItems()
+                .stream()
+                .map(AttendanceInQueueResponse.ServiceItemSummary::fromEntity)
+                .collect(Collectors.toList());
+
+        UUID clientId = attendance.getClient() != null ? attendance.getClient().getId() : null;
+        String clientName = attendance.getClient() != null
+                ? attendance.getClient().getFirstName()
+                : (attendance.getGuestName() != null ? attendance.getGuestName() : "anonymous");
+
+        return new AttendanceInProgressResponse(
+                attendance.getId(),
+                attendance.getEstablishment().getId(),
+                attendance.getEstablishment().getName(),
+                attendance.getProfessional().getId(),
+                attendance.getProfessional().getName(),
+                clientId,
+                clientName,
+                services,
+                attendance.getScheduledTime(),
+                attendance.getStatus(),   // FINISHED
+                attendance.getTotalValue(),
+                false,                    // not paused
                 startTime,
                 elapsedOnlyServiceMinutes,
                 pausedMinutes,

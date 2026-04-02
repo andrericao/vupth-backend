@@ -12,7 +12,10 @@ public enum ServiceItemType {
 
     PEDICURE("Pedicure", Set.of(ServiceType.MANICURE)),
     CORTE_MAQUINA("Corte à máquina", Set.of(ServiceType.BARBER)),
+    NAVALHA("Barba Completa", Set.of(ServiceType.BARBER)),
+    CORTE_TESOURA("Corte com tesoura", Set.of(ServiceType.BARBER)),
     RECORTE_PONTAS("Recorte das pontas", Set.of(ServiceType.SALON_BEAUTY)),
+    PROCEDIMENTO("Recorte das pontas", Set.of(ServiceType.SALON_BEAUTY)),
     PINTURA("Pintura", Set.of(ServiceType.BARBER, ServiceType.SALON_BEAUTY)),
     MANICURE("Manicure", Set.of(ServiceType.MANICURE));
 

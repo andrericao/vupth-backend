@@ -126,17 +126,22 @@ public class BaseUser implements Serializable {
         this.createdAt = OffsetDateTime.now();
     }
 
-    public void updateIfPresent(UserProfileGeneralInfosRequest request) {
+    public List<String> updateIfPresent(UserProfileGeneralInfosRequest request) {
+        List<String> modified = new ArrayList<>();
+
         if (request.firstName() != null && !request.firstName().isBlank()) {
             this.firstName = request.firstName();
+            modified.add("first_name");
         }
 
         if (request.lastName() != null && !request.lastName().isBlank()) {
             this.lastName = request.lastName();
+            modified.add("last_name");
         }
 
         if (request.phone() != null && !request.phone().isBlank()) {
             this.phone = request.phone();
+            modified.add("phone");
         }
 
         if (request.birthDate() != null) {
@@ -149,15 +154,20 @@ public class BaseUser implements Serializable {
                 throw new InvalidBirthDateException(bd, age);
             }
             this.birthDate = bd;
+            modified.add("birth_date");
         }
 
         if (request.gender() != null) {
             this.gender = request.gender();
+            modified.add("gender");
         }
 
-        if (request.profileImageUrl() != null && !request.profileImageUrl().isBlank() ) {
+        if (request.profileImageUrl() != null && !request.profileImageUrl().isBlank()) {
             this.profileImageUrl = request.profileImageUrl();
+            modified.add("profile_image_url");
         }
+
+        return modified;
     }
 
     public UserAddress addAddress(Address address) {

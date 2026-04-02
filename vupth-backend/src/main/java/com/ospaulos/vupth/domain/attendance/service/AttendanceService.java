@@ -56,6 +56,12 @@ public interface AttendanceService {
 
     public AttendanceInProgressResponse buildAttendanceInProgressResponse(Attendance attendance);
 
+    /**
+     * Builds a response for a FINISHED attendance, populating the status and duration fields.
+     * Used by finishAttendance to return the completed attendance in the QueueResponse.inAttendance field.
+     */
+    public AttendanceInProgressResponse buildFinishedAttendanceResponse(Attendance attendance);
+
     public AttendancePausedResponse buildPausedAttendance(Attendance attendance);
 
     public AttendanceInQueueResponse buildAttendanceInQueueResponse(Attendance attendance);

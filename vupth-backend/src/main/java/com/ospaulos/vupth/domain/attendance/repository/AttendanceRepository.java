@@ -15,6 +15,24 @@ import java.util.UUID;
 
 public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
+    /**
+     * Eager load of all LAZY associations needed for serialization.
+     * Use this instead of findById() whenever the result will be serialized to JSON
+     * (i.e. in controllers/services that return DTOs built from the entity).
+     * Without JOIN FETCH, Jackson triggers LazyInitializationException after the session closes.
+     */
+    @Query("""
+        SELECT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.id = :id
+    """)
+    Optional<Attendance> findByIdEager(@Param("id") UUID id);
+
     // Finds attendances with a given service item, status and creation date after a threshold
     List<Attendance> findByServiceItems_IdAndStatusAndCreatedAtAfter(
             UUID serviceItemId, AttendanceStatus status, LocalDateTime date
@@ -75,10 +93,17 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
 
     /**
-     * Find apenas attendances em espera (SCHEDULED) para formar a fila
+     * Find apenas attendances em espera (SCHEDULED) para formar a fila.
+     * JOIN FETCH evita LazyInitializationException ao serializar client/professional/serviceItems.
      */
     @Query("""
-        SELECT a FROM Attendance a
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
         WHERE a.professional.id = :professionalId
           AND a.establishment.id = :establishmentId
           AND a.status = 'SCHEDULED'
@@ -90,11 +115,16 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
-     * Find o attendance atualmente em progresso
-     * Uses Optional<Attendance> since there should be at most one per professional/establishment
+     * Find o attendance atualmente em progresso — JOIN FETCH para serialização segura.
      */
     @Query("""
         SELECT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
         WHERE a.professional.id = :professionalId
           AND a.status = :status
     """)

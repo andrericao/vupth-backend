@@ -19,6 +19,11 @@ databaseChangeLog:
       file: changesets/10-stubs/011-add-fks-mvp.yaml
       relativeToChangeLogFile: true
 
+  # Seed data — dev / test / staging only (context: "!prod")
+  - include:
+      file: changesets/10-stubs/012-seed-data.yaml
+      relativeToChangeLogFile: true
+
   # Attendance FKs
   - changeSet:
       id: master-fk-attendance-client

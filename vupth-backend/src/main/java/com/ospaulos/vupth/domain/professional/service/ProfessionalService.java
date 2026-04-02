@@ -2,10 +2,10 @@ package com.ospaulos.vupth.domain.professional.service;
 
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface ProfessionalService {
@@ -16,7 +16,7 @@ public interface ProfessionalService {
 
     public QueueResponse startAttendance(UUID professionalId, UUID attendanceId);
 
-    public AttendanceInQueueResponse finishAttendance(UUID professionalId, UUID attendanceId);
+    public QueueResponse finishAttendance(UUID professionalId, UUID attendanceId);
 
     public QueueResponse cancelAttendance(UUID professionalId, UUID attendanceId);
 

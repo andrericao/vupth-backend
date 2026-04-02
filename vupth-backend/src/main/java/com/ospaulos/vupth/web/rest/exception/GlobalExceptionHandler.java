@@ -1,5 +1,7 @@
 package com.ospaulos.vupth.web.rest.exception;
 
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
@@ -271,6 +273,20 @@ public class GlobalExceptionHandler {
             AttendanceAlreadyInProgressException ex, HttpServletRequest req) {
         log.warn("[409] AttendanceAlreadyInProgress | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "ATTENDANCE_ALREADY_IN_PROGRESS");
+    }
+
+    @ExceptionHandler(AttendanceAlreadyCancelledException.class)
+    public ResponseEntity<ErrorResponse> handleAlreadyCancelled(
+            AttendanceAlreadyCancelledException ex, HttpServletRequest req) {
+        log.warn("[409] AttendanceAlreadyCancelled | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ATTENDANCE_ALREADY_CANCELLED");
+    }
+
+    @ExceptionHandler(AttendanceCancelNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleCancelNotAllowed(
+            AttendanceCancelNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[403] AttendanceCancelNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), "ATTENDANCE_CANCEL_NOT_ALLOWED");
     }
 
     @ExceptionHandler(ServiceItemAlreadyExistsException.class)

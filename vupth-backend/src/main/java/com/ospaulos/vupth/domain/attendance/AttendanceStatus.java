@@ -4,6 +4,6 @@ public enum AttendanceStatus {
     SCHEDULED,
     IN_PROGRESS,
     FINISHED,
-    CANCELED,
+    CANCELLED,
     PAUSED
 }

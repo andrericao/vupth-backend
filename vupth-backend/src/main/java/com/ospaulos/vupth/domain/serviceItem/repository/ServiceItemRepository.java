@@ -17,4 +17,12 @@ public interface ServiceItemRepository extends JpaRepository<ServiceItem, UUID> 
         WHERE s.professional.establishment.id = :establishmentId
         """)
     List<ServiceItem> findAllByEstablishmentId(@Param("establishmentId") UUID establishmentId);
+
+    @Query("""
+        SELECT s FROM ServiceItem s
+        JOIN FETCH s.professional p
+        JOIN FETCH p.establishment
+        WHERE p.id = :professionalId
+        """)
+    List<ServiceItem> findByProfessionalId(@Param("professionalId") UUID professionalId);
 }

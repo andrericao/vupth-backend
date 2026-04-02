@@ -164,9 +164,9 @@ class AttendanceStatusTransitionTest {
             attendance.setStatus(AttendanceStatus.SCHEDULED);
             
             // Cancel from SCHEDULED
-            attendance.setStatus(AttendanceStatus.CANCELED);
+            attendance.setStatus(AttendanceStatus.CANCELLED);
             
-            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.CANCELED);
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
         }
 
         @Test
@@ -177,9 +177,9 @@ class AttendanceStatusTransitionTest {
             
             // Cancel from IN_PROGRESS
             attendance.setEndTime(OffsetDateTime.now());
-            attendance.setStatus(AttendanceStatus.CANCELED);
+            attendance.setStatus(AttendanceStatus.CANCELLED);
             
-            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.CANCELED);
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
             assertThat(attendance.getEndTime()).isNotNull();
         }
     }
@@ -243,7 +243,7 @@ class AttendanceStatusTransitionTest {
         @Test
         @DisplayName("CANCELED state should block status changes")
         void canceledState_blocksChanges() {
-            attendance.setStatus(AttendanceStatus.CANCELED);
+            attendance.setStatus(AttendanceStatus.CANCELLED);
             
             // Model allows changing status, but service should prevent
             attendance.setStatus(AttendanceStatus.IN_PROGRESS);

@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.domain.professional.service.impl;
 
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
+import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
@@ -109,7 +110,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         log.info("[Professional] startAttendance — professional={} attendance={}",
                 professionalId, attendanceId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         Establishment establishment = attendance.getEstablishment();
@@ -135,11 +136,11 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     }
 
     @Override
-    public AttendanceInQueueResponse finishAttendance(UUID professionalId, UUID attendanceId) {
+    public QueueResponse finishAttendance(UUID professionalId, UUID attendanceId) {
         log.info("[Professional] finishAttendance — professional={} attendance={}",
                 professionalId, attendanceId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         Establishment establishment = attendance.getEstablishment();
@@ -155,7 +156,27 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         attendanceService.finishAttendance(attendance);
         log.info("[Professional] finishAttendance — attendance={} finalizado (FINISHED)", attendanceId);
 
-        return attendanceService.getNextAttendance(professional, establishment);
+        // Reload after save to reflect FINISHED status and computed duration
+        Attendance finished = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        // Build snapshot with FINISHED status for inAttendance field
+        AttendanceInProgressResponse finishedSnapshot = attendanceService.buildFinishedAttendanceResponse(finished);
+
+        QueueResponse nextQueue = queueService.getQueueOverview(professional, establishment);
+
+        return new QueueResponse(
+                nextQueue.professionalId(),
+                nextQueue.professionalName(),
+                nextQueue.establishmentId(),
+                nextQueue.establishmentName(),
+                nextQueue.size(),
+                nextQueue.attendancesInQueue(),
+                nextQueue.totalEstimatedMinutes(),
+                nextQueue.totalElapsedMinutes(),
+                nextQueue.totalRemainingMinutes(),
+                finishedSnapshot
+        );
     }
 
     @Override
@@ -163,7 +184,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         log.info("[Professional] cancelAttendance — professional={} attendance={}",
                 professionalId, attendanceId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         Establishment establishment = attendance.getEstablishment();
@@ -187,7 +208,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         log.info("[Professional] pauseAttendance — professional={} attendance={}",
                 professionalId, attendanceId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         Establishment establishment = attendance.getEstablishment();
@@ -212,7 +233,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         log.info("[Professional] resumeAttendance — professional={} attendance={}",
                 professionalId, attendanceId);
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
         Establishment establishment = attendance.getEstablishment();

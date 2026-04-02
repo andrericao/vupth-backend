@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -35,14 +36,18 @@ public class UpdateProfileGeneralInfosUseCase {
                 () -> new UserNotFoundException(id)
         );
 
-        user.updateIfPresent(request);
+        List<String> modifiedFields = user.updateIfPresent(request);
 
-        log.info(user.toString());
+        if (modifiedFields.isEmpty()) {
+            log.info("No recognized fields were updated for user id: {}", id);
+        } else {
+            log.info("Updated fields {} for user id: {}", modifiedFields, id);
+        }
 
         var userSaved = repository.save(user);
 
         log.info("Profile updated successfully!");
 
-        return mapper.toGeneralInfosUserResponse(userSaved);
+        return mapper.toGeneralInfosUserResponse(userSaved, modifiedFields);
     }
 }

@@ -75,7 +75,7 @@ public class ClientServiceImpl implements ClientService {
 
         log.info("CLIENT CONTROLLER GET WAITING TIME IN QUEUE");
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
 
         if (!attendance.getClient().getId().equals(clientId)) {
@@ -86,7 +86,7 @@ public class ClientServiceImpl implements ClientService {
             throw new IllegalStateException("Attendance is already completed");
         }
 
-        if (attendance.getStatus() == AttendanceStatus.CANCELED) {
+        if (attendance.getStatus() == AttendanceStatus.CANCELLED) {
             throw new IllegalStateException("Attendance is canceled");
         }
 
@@ -96,7 +96,7 @@ public class ClientServiceImpl implements ClientService {
     @Override
     public ClientInProgressResponse getClientInProgressWaitingTime(UUID attendanceId, UUID clientId){
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
 
         Client client = clientRepository.findById(clientId)
@@ -120,7 +120,7 @@ public class ClientServiceImpl implements ClientService {
     @Override
     public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId){
 
-        Attendance attendance = attendanceRepository.findById(attendanceId)
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
 
         Client client = clientRepository.findById(clientId)

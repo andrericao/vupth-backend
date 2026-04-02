@@ -1,0 +1,446 @@
+databaseChangeLog:
+
+  # ─────────────────────────────────────────────────────────────
+  # SEED DATA
+  # context: "!prod"  →  dev, test e staging.
+  #
+  # Como funciona:
+  #   prod  → spring.liquibase.contexts=prod → "!prod" NÃO bate → ignorado ✅
+  #   dev   → sem filtro ativo               → "!prod" é satisfeito → executa ✅
+  #   test  → sem filtro ativo               → "!prod" é satisfeito → executa ✅
+  #   staging → sem filtro ativo             → "!prod" é satisfeito → executa ✅
+  #
+  # Senha de todos os usuários seed: Senha@123
+  # Hash BCrypt (cost 10): $2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6
+  # ─────────────────────────────────────────────────────────────
+
+  # ── OWNER ─────────────────────────────────────────────────────
+  - changeSet:
+      id: seed-base_user-owner1
+      author: vupth-seed
+      context: "!prod"
+      changes:
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: first_name,  value:        "Ricardo" }
+              - column: { name: last_name,   value:        "Mendes" }
+              - column: { name: email,       value:        "ricardo.mendes@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: phone,       value:        "11999990001" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a1000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a1000001-0000-0000-0000-000000000002" }
+              - column: { name: base_user_id,  value:        "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: role_type,     value:        "OWNER" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: owner
+            columns:
+              - column: { name: id, value: "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+
+  # ── ESTABLISHMENTS ────────────────────────────────────────────
+  - changeSet:
+      id: seed-establishments
+      author: vupth-seed
+      context: "!prod"
+      changes:
+        - insert:
+            tableName: establishment
+            columns:
+              - column: { name: id,                 value:         "6908671e-aa13-7cfa-d99c-fea4a4102d66" }
+              - column: { name: name,               value:         "Barbearia do Ricardo" }
+              - column: { name: status,             value:         "ACTIVE" }
+              - column: { name: current_open_status,value:         "OPEN" }
+              - column: { name: owner_id,           value:         "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: created_at,         valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: last_status_change, valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: establishment
+            columns:
+              - column: { name: id,                 value:         "6c0e76f9-631b-1f6f-21c5-ddb8b9a21972" }
+              - column: { name: name,               value:         "Studio Beleza Total" }
+              - column: { name: status,             value:         "ACTIVE" }
+              - column: { name: current_open_status,value:         "OPEN" }
+              - column: { name: owner_id,           value:         "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: created_at,         valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: last_status_change, valueComputed: CURRENT_TIMESTAMP }
+
+  # ── PROFESSIONALS ─────────────────────────────────────────────
+  - changeSet:
+      id: seed-professional-users
+      author: vupth-seed
+      context: "!prod"
+      changes:
+        # Carlos — Barbearia do Ricardo
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
+              - column: { name: first_name,  value:        "Carlos" }
+              - column: { name: last_name,   value:        "Barbosa" }
+              - column: { name: email,       value:        "carlos.barbosa@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: phone,       value:        "11999990011" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a2000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a2000001-0000-0000-0000-000000000002" }
+              - column: { name: base_user_id,  value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
+              - column: { name: role_type,     value:        "PROFESSIONAL" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: professional
+            columns:
+              - column: { name: id,               value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
+              - column: { name: specialty,        value:        "Corte Masculino" }
+              - column: { name: is_available,     valueBoolean: true }
+              - column: { name: establishment_id, value:        "6908671e-aa13-7cfa-d99c-fea4a4102d66" }
+        # Fernanda — Studio Beleza Total
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
+              - column: { name: first_name,  value:        "Fernanda" }
+              - column: { name: last_name,   value:        "Lima" }
+              - column: { name: email,       value:        "fernanda.lima@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: phone,       value:        "11999990012" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a3000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a3000001-0000-0000-0000-000000000002" }
+              - column: { name: base_user_id,  value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
+              - column: { name: role_type,     value:        "PROFESSIONAL" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: professional
+            columns:
+              - column: { name: id,               value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
+              - column: { name: specialty,        value:        "Coloração e Mechas" }
+              - column: { name: is_available,     valueBoolean: true }
+              - column: { name: establishment_id, value:        "6c0e76f9-631b-1f6f-21c5-ddb8b9a21972" }
+        # Thiago — Barbearia do Ricardo
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
+              - column: { name: first_name,  value:        "Thiago" }
+              - column: { name: last_name,   value:        "Souza" }
+              - column: { name: email,       value:        "thiago.souza@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: phone,       value:        "11999990013" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a4000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a4000001-0000-0000-0000-000000000002" }
+              - column: { name: base_user_id,  value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
+              - column: { name: role_type,     value:        "PROFESSIONAL" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: professional
+            columns:
+              - column: { name: id,               value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
+              - column: { name: specialty,        value:        "Barba e Bigode" }
+              - column: { name: is_available,     valueBoolean: true }
+              - column: { name: establishment_id, value:        "6908671e-aa13-7cfa-d99c-fea4a4102d66" }
+
+  # ── SERVICE ITEMS ─────────────────────────────────────────────
+  - changeSet:
+      id: seed-service-items
+      author: vupth-seed
+      context: "!prod"
+      changes:
+        # Carlos: Corte Máquina
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "f209672a-3e01-4941-a8ff-550dfdf277a9" }
+              - column: { name: professional_id,   value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
+              - column: { name: service_item_type, value:        "CORTE_MAQUINA" }
+              - column: { name: custom_name,       value:        "Corte Máquina" }
+              - column: { name: price,             valueNumeric:  35.00 }
+              - column: { name: estimated_minutes, valueNumeric:  20 }
+        # Carlos: Corte Tesoura
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "090b1523-83f9-83de-02e8-68571ea8e49c" }
+              - column: { name: professional_id,   value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
+              - column: { name: service_item_type, value:        "CORTE_TESOURA" }
+              - column: { name: custom_name,       value:        "Corte Tesoura" }
+              - column: { name: price,             valueNumeric:  50.00 }
+              - column: { name: estimated_minutes, valueNumeric:  30 }
+        # Thiago: Barba Completa
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "f2321d31-3db4-f0e6-121f-8ba63ae32051" }
+              - column: { name: professional_id,   value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
+              - column: { name: service_item_type, value:        "NAVALHA" }
+              - column: { name: custom_name,       value:        "Barba Completa" }
+              - column: { name: price,             valueNumeric:  40.00 }
+              - column: { name: estimated_minutes, valueNumeric:  25 }
+        # Thiago: Combo Corte + Barba
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "bfc77150-4702-43b3-3fee-570c72fc74f9" }
+              - column: { name: professional_id,   value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
+              - column: { name: service_item_type, value:        "CORTE_MAQUINA" }
+              - column: { name: custom_name,       value:        "Combo Corte + Barba" }
+              - column: { name: price,             valueNumeric:  70.00 }
+              - column: { name: estimated_minutes, valueNumeric:  45 }
+        # Fernanda: Coloração Completa
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "f70a726c-30e0-cde3-aceb-d744676bdf3e" }
+              - column: { name: professional_id,   value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
+              - column: { name: service_item_type, value:        "PINTURA" }
+              - column: { name: custom_name,       value:        "Coloração Completa" }
+              - column: { name: price,             valueNumeric:  120.00 }
+              - column: { name: estimated_minutes, valueNumeric:  90 }
+        # Fernanda: Mechas Highlights
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "81ca5133-8335-9541-07cb-52aee873a3e7" }
+              - column: { name: professional_id,   value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
+              - column: { name: service_item_type, value:        "PROCEDIMENTO" }
+              - column: { name: custom_name,       value:        "Mechas Highlights" }
+              - column: { name: price,             valueNumeric:  180.00 }
+              - column: { name: estimated_minutes, valueNumeric:  120 }
+
+  # ── CLIENTS ───────────────────────────────────────────────────
+  - changeSet:
+      id: seed-clients
+      author: vupth-seed
+      context: "!prod"
+      changes:
+        # Ana Costa
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "a165dd3c-2e98-d5d6-0718-1d0b87a4c66b" }
+              - column: { name: first_name,  value:        "Ana" }
+              - column: { name: last_name,   value:        "Costa" }
+              - column: { name: email,       value:        "ana.costa@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b1000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "a165dd3c-2e98-d5d6-0718-1d0b87a4c66b" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "a165dd3c-2e98-d5d6-0718-1d0b87a4c66b" }
+        # Bruno Alves
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "2c66045d-4e4a-9081-4ce9-280272e510ec" }
+              - column: { name: first_name,  value:        "Bruno" }
+              - column: { name: last_name,   value:        "Alves" }
+              - column: { name: email,       value:        "bruno.alves@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b2000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "2c66045d-4e4a-9081-4ce9-280272e510ec" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "2c66045d-4e4a-9081-4ce9-280272e510ec" }
+        # Camila Ferreira
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "c27af3f6-460e-b109-79ad-b366fc7f6856" }
+              - column: { name: first_name,  value:        "Camila" }
+              - column: { name: last_name,   value:        "Ferreira" }
+              - column: { name: email,       value:        "camila.ferreira@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b3000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "c27af3f6-460e-b109-79ad-b366fc7f6856" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "c27af3f6-460e-b109-79ad-b366fc7f6856" }
+        # Diego Rocha
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "de285ec9-8e0f-8321-1da2-17a4e1c5923e" }
+              - column: { name: first_name,  value:        "Diego" }
+              - column: { name: last_name,   value:        "Rocha" }
+              - column: { name: email,       value:        "diego.rocha@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b4000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "de285ec9-8e0f-8321-1da2-17a4e1c5923e" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "de285ec9-8e0f-8321-1da2-17a4e1c5923e" }
+        # Elisa Nunes
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "7e8670fe-f6f8-1f37-7fe6-e162ea1077e5" }
+              - column: { name: first_name,  value:        "Elisa" }
+              - column: { name: last_name,   value:        "Nunes" }
+              - column: { name: email,       value:        "elisa.nunes@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b5000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "7e8670fe-f6f8-1f37-7fe6-e162ea1077e5" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "7e8670fe-f6f8-1f37-7fe6-e162ea1077e5" }
+        # Felipe Torres
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "9dc5beb3-0a97-d0e3-ad84-7db4774c6ac9" }
+              - column: { name: first_name,  value:        "Felipe" }
+              - column: { name: last_name,   value:        "Torres" }
+              - column: { name: email,       value:        "felipe.torres@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b6000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "9dc5beb3-0a97-d0e3-ad84-7db4774c6ac9" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "9dc5beb3-0a97-d0e3-ad84-7db4774c6ac9" }
+        # Gabriela Martins
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "ab5b1c50-2ce0-4b89-60af-53d4e05d651b" }
+              - column: { name: first_name,  value:        "Gabriela" }
+              - column: { name: last_name,   value:        "Martins" }
+              - column: { name: email,       value:        "gabriela.martins@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b7000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "ab5b1c50-2ce0-4b89-60af-53d4e05d651b" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "ab5b1c50-2ce0-4b89-60af-53d4e05d651b" }
+        # Henrique Dias
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "c2fe3d4e-c1bf-9ae2-8fca-65f73a7f324e" }
+              - column: { name: first_name,  value:        "Henrique" }
+              - column: { name: last_name,   value:        "Dias" }
+              - column: { name: email,       value:        "henrique.dias@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "b8000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "c2fe3d4e-c1bf-9ae2-8fca-65f73a7f324e" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: client
+            columns:
+              - column: { name: id, value: "c2fe3d4e-c1bf-9ae2-8fca-65f73a7f324e" }

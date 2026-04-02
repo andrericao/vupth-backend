@@ -190,11 +190,11 @@ class AttendanceIntegrationTest {
                         .content(mapper.writeValueAsString(new CancelAttendanceRequest(UUID.fromString(clientId)))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(attendanceId))
-                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andDo(print());
 
         Attendance updated = attendanceRepository.findById(UUID.fromString(attendanceId)).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELED);
+        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
         log.info("[Attendance] cancelAttendance_success — status={} confirmado no banco", updated.getStatus());
     }
 
@@ -514,11 +514,11 @@ class AttendanceIntegrationTest {
                         .header("Authorization", clientToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(leaveId))
-                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andDo(print());
 
         Attendance updated = attendanceRepository.findById(UUID.fromString(leaveId)).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELED);
+        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
         log.info("[Attendance] leaveQueue_success — status=CANCELED confirmado no banco");
     }
 
@@ -595,11 +595,11 @@ class AttendanceIntegrationTest {
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(removeId))
-                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andDo(print());
 
         Attendance updated = attendanceRepository.findById(UUID.fromString(removeId)).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELED);
+        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
         log.info("[Attendance] removeFromQueue_success — status=CANCELED confirmado no banco");
     }
 
@@ -640,7 +640,7 @@ class AttendanceIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andDo(print());
     }
 

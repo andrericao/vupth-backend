@@ -142,9 +142,10 @@ public class QueueServiceImpl implements QueueService {
 
     private QueueResponse getQueueForProfessional(Professional professional, Establishment establishment) {
 
-        List<Attendance> scheduledQueue = professional.getScheduledAttendances();
-
-        //professional.
+        // List<Attendance> scheduledQueue = professional.getScheduledAttendances();
+        List<Attendance> scheduledQueue = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(
+                        professional.getId(), establishment.getId());
 
         List<AttendanceInQueueResponse> itemInfos = new ArrayList<>();
 

@@ -2,6 +2,7 @@ package com.ospaulos.vupth.unit.professional;
 
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
+import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -126,7 +127,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("sucesso: SCHEDULED → IN_PROGRESS, fila atualizada")
         void start_success() {
             attendance.setStatus(AttendanceStatus.SCHEDULED);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
             when(queueService.getQueueOverview(any(), any())).thenReturn(null);
 
@@ -139,7 +140,7 @@ class ProfessionalServiceImplTest {
         @Test
         @DisplayName("attendance not found → throws AttendanceNotFoundException")
         void start_notFound_throws() {
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.empty());
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() ->
                     professionalService.startAttendance(professionalId, attendanceId))
@@ -150,7 +151,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("different professional → throws ProfessionalNotFoundException")
         void start_wrongProfessional_throws() {
             UUID outroProfId = UUID.randomUUID();
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
 
             assertThatThrownBy(() ->
                     professionalService.startAttendance(outroProfId, attendanceId))
@@ -166,7 +167,7 @@ class ProfessionalServiceImplTest {
             inProgress.setStatus(AttendanceStatus.IN_PROGRESS);
             professional.setAttendances(new ArrayList<>(List.of(inProgress)));
 
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             // professional.getCurrentAttendance() retorna o IN_PROGRESS
@@ -180,7 +181,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("status is not SCHEDULED → throws AttendanceInvalidStatusException")
         void start_invalidStatus_throws() {
             attendance.setStatus(AttendanceStatus.IN_PROGRESS);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             assertThatThrownBy(() ->
@@ -201,7 +202,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("sucesso: IN_PROGRESS → pausa chamada no service")
         void pause_success() {
             attendance.setStatus(AttendanceStatus.IN_PROGRESS);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
             when(queueService.getQueueOverview(any(), any())).thenReturn(null);
 
@@ -214,7 +215,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("status SCHEDULED → throws AttendanceInvalidStatusException (was the wrong behavior)")
         void pause_scheduledStatus_throws() {
             attendance.setStatus(AttendanceStatus.SCHEDULED);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             // Correct behavior after bug fix: SCHEDULED cannot be paused
@@ -226,7 +227,7 @@ class ProfessionalServiceImplTest {
         @Test
         @DisplayName("attendance not found → throws AttendanceNotFoundException")
         void pause_notFound_throws() {
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.empty());
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() ->
                     professionalService.pauseAttendance(attendanceId, professionalId))
@@ -246,7 +247,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("sucesso: PAUSED → resume chamado no service")
         void resume_success() {
             attendance.setStatus(AttendanceStatus.PAUSED);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
             when(queueService.getQueueOverview(any(), any())).thenReturn(null);
 
@@ -259,7 +260,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("status SCHEDULED → throws AttendanceInvalidStatusException")
         void resume_scheduledStatus_throws() {
             attendance.setStatus(AttendanceStatus.SCHEDULED);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             assertThatThrownBy(() ->
@@ -280,9 +281,10 @@ class ProfessionalServiceImplTest {
         @DisplayName("sucesso: IN_PROGRESS → finalizacao delegada ao service")
         void finish_success() {
             attendance.setStatus(AttendanceStatus.IN_PROGRESS);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
-            when(attendanceService.getNextAttendance(any(), any())).thenReturn(null);
+            when(queueService.getQueueOverview(any(), any())).thenReturn(mock(QueueResponse.class));
+            //when(attendanceService.getNextAttendance(any(), any())).thenReturn(null);
 
             professionalService.finishAttendance(professionalId, attendanceId);
 
@@ -293,7 +295,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("status SCHEDULED → throws AttendanceInvalidStatusException")
         void finish_wrongStatus_throws() {
             attendance.setStatus(AttendanceStatus.SCHEDULED);
-            when(attendanceRepository.findById(attendanceId)).thenReturn(Optional.of(attendance));
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             assertThatThrownBy(() ->

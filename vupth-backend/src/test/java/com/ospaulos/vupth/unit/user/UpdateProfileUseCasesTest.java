@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -68,7 +69,7 @@ class UpdateProfileUseCasesTest {
 
         fakeTokens = new RefreshTokenResponse("new_access", "new_refresh", 3600L);
         generalInfos = new UserProfileGeneralInfosResponse(
-                USER_ID, null, null, NEW_EMAIL, null, null, null, null, null, null);
+                USER_ID, null, null, NEW_EMAIL, null, null, null, null, null, null, Collections.emptyList());
     }
 
     // ─────────────────────────────────────────────

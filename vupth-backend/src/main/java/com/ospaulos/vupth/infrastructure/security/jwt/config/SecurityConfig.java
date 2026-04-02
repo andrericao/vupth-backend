@@ -64,6 +64,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
 
+                        // Public listing of services by professional (clients choose before booking)
+                        .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
+
                         // Guest joins the queue without authentication (MVP)
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
 
