@@ -7,8 +7,13 @@ on:
     branches: [ main ]
 
 jobs:
+
+  # =========================
+  # 🧪 TESTES LOCAIS (MAVEN)
+  # =========================
   test:
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:16
@@ -23,6 +28,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,23 +50,83 @@ jobs:
         run: mvn test
         working-directory: vupth-backend
 
+
+  # =========================
+  # 🚀 DEPLOY HOMOLOG (Render)
+  # =========================
   deploy-homolog:
     needs: test
     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to Railway
+
+      - name: Deploy to Render (HOMOLOG)
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+
+  # =========================
+  # 🧪 TESTE HOMOLOG (Newman)
+  # =========================
+  test-homolog:
+    needs: deploy-homolog
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      # ⚠️ Render demora pra subir
+      - name: Wait for Render (cold start)
+        run: sleep 60
+
+      - name: Run Postman (HOMOLOG)
+        run: |
+          newman run "Vupth backend local docker.postman_collection.json" \
+            --env-var "base_url=${{ secrets.HOMOLOG_URL }}" \
+            --reporters cli
+
+
+  # =========================
+  # 🚀 DEPLOY PROD (Railway)
+  # =========================
+  deploy-prod:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway (PROD)
         run: npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }}
         working-directory: vupth-backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-  deploy-prod:
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+  # =========================
+  # 🧪 TESTE PROD (Newman)
+  # =========================
+  test-prod:
+    needs: deploy-prod
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to Render
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      # Railway é rápido, mas dá uma folga
+      - name: Wait for Railway
+        run: sleep 15
+
+      - name: Run Postman (PROD)
+        run: |
+          newman run "Vupth backend local docker.postman_collection.json" \
+            --env-var "base_url=${{ secrets.PROD_URL }}" \
+            --reporters cli
