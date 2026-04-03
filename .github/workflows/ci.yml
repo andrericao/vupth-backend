@@ -88,6 +88,11 @@ jobs:
             sleep 5
           done
 
+      - name: Debug files
+        run: |
+          pwd
+          ls -R
+
       - name: Run Postman (HOMOLOG)
         run: |
           newman run postman/collection.json \
