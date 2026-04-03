@@ -108,10 +108,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
 
+                        .requestMatchers("/actuator/**").permitAll()
+
                         // ── Fallback: qualquer autenticado ────────────────────────────────
                         .anyRequest().authenticated())
                         .csrf(AbstractHttpConfigurer::disable)
-                .httpBasic(Customizer.withDefaults())
+                .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .jwt(jwt -> jwt
