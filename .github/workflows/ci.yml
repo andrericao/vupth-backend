@@ -80,18 +80,45 @@ jobs:
         run: npm install -g newman
 
       # 🔥 ALTERADO: antes era sleep 15
-      - name: Wait for Render (health check)
+      - name: Wait for Render (readiness check)
         run: |
-          for i in {1..12}; do
-            curl -f ${{ secrets.HOMOLOG_URL }}/actuator/health && break
-            echo "Waiting for Render app..."
-            sleep 5
+          for i in {1..20}; do
+            echo "Tentativa $i..."
+
+            RESPONSE=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health)
+
+            echo "Resposta: $RESPONSE"
+
+            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
+              echo "App respondeu UP"
+
+              # 🔥 valida readiness de verdade
+              READY=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness)
+
+              echo "Readiness: $READY"
+
+              if echo "$READY" | grep -q '"status":"UP"'; then
+                echo "App PRONTA!"
+                exit 0
+              fi
+            fi
+
+            echo "Ainda não está pronta..."
+            sleep 10
           done
+
+          echo "Timeout aguardando app"
+          exit 1
 
       - name: Debug files
         run: |
           pwd
           ls -R
+
+      - name: Debug API
+        run: |
+          curl -v ${{ secrets.HOMOLOG_URL }}/actuator/health
+          curl -v ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness
 
       - name: Run Postman (HOMOLOG)
         working-directory: vupth-backend
@@ -133,13 +160,35 @@ jobs:
         run: npm install -g newman
 
       # 🔥 ALTERADO: antes era sleep 15
-      - name: Wait for Railway (health check)
+      - name: Wait for Railway (readiness check)
         run: |
-          for i in {1..6}; do
-            curl -f ${{ secrets.PROD_URL }}/actuator/health && break
-            echo "Waiting for Railway app..."
-            sleep 5
+          for i in {1..20}; do
+            echo "Tentativa $i..."
+
+            RESPONSE=$(curl -s ${{ secrets.PROD_URL }}/actuator/health)
+
+            echo "Resposta: $RESPONSE"
+
+            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
+              echo "App respondeu UP"
+
+              # 🔥 valida readiness de verdade
+              READY=$(curl -s ${{ secrets.PROD_URL }}/actuator/health/readiness)
+
+              echo "Readiness: $READY"
+
+              if echo "$READY" | grep -q '"status":"UP"'; then
+                echo "App PRONTA!"
+                exit 0
+              fi
+            fi
+
+            echo "Ainda não está pronta..."
+            sleep 10
           done
+
+          echo "Timeout aguardando app"
+          exit 1
 
       - name: Run Postman (PROD)
         working-directory: vupth-backend
