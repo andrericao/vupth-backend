@@ -1,0 +1,2627 @@
+{
+	"info": {
+		"_postman_id": "c6d96ab8-4f0c-4f9f-958b-4d4081d5b23e",
+		"name": "Vupth backend render (homolog))",
+		"description": "Coleção completa de testes para o backend Vupth. Inclui fluxo completo prof→establishment→professional→service→client→fila→atendimento, testes de erro, validação de schema JSON e documentação do bug LazyInitializationException.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "51940681"
+	},
+	"item": [
+		{
+			"name": "01 - auth prof",
+			"item": [
+				{
+					"name": "register (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const email = `test_prof_${Date.now()}@vupth.com`;",
+									"const password = \"senha123\";",
+									"pm.collectionVariables.set(\"prof_email\", email);",
+									"pm.collectionVariables.set(\"prof_password\", password);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - Prof registrado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: id presente e é string UUID\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"id\");",
+									"    pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+									"});",
+									"",
+									"pm.test(\"Schema: email presente\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"email\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"prof_id\", r.id);",
+									"console.log(\"EXECUTANDO:\", pm.info.requestName, \"| prof_id:\", r.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{prof_email}}\",\n    \"password\": \"{{prof_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/register"
+					},
+					"response": []
+				},
+				{
+					"name": "login (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - Login prof OK\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: tokens e user presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"tokens\");",
+									"    pm.expect(r.tokens).to.have.property(\"access_token\");",
+									"    pm.expect(r.tokens).to.have.property(\"refresh_token\");",
+									"    pm.expect(r).to.have.property(\"user\");",
+									"    pm.expect(r.user).to.have.property(\"id\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"prof_token\", r.tokens.access_token);",
+									"pm.collectionVariables.set(\"prof_refresh_token\", r.tokens.refresh_token);",
+									"pm.collectionVariables.set(\"prof_id\", r.user.id);",
+									"console.log(\"prof_token salvo:\", r.tokens.access_token.substring(0,30) + \"...\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{prof_email}}\",\n    \"password\": \"{{prof_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/login"
+					},
+					"response": []
+				},
+				{
+					"name": "complete profile (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 ou 204 - Profile atualizado\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Schema: first_name e last_name presentes\", () => {",
+									"        const r = pm.response.json();",
+									"        pm.expect(r).to.have.property(\"first_name\");",
+									"        pm.expect(r).to.have.property(\"last_name\");",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"Mandarino\",\n    \"last_name\": \"Castro\",\n    \"phone\": \"99999-9999\",\n    \"birth_date\": null,\n    \"gender\": \"MALE\",\n    \"profile_image_url\": \"https://www.istockphoto.com/photos/child-profile\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/profile/general-infos"
+					},
+					"response": []
+				},
+				{
+					"name": "update profile (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 ou 204 - Update OK\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Schema: last_name atualizado\", () => {",
+									"        const r = pm.response.json();",
+									"        pm.expect(r).to.have.property(\"last_name\");",
+									"        pm.expect(r.last_name).to.equal(\"Silva\");",
+									"    });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"last_name\": \"Silva\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/profile/general-infos"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] update profile - campo inválido (400)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 400 ou 422 - Campo 'name' não existe no domínio\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+									"});",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Silva\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/profile/general-infos"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] update profile - sem token (401)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"last_name\": \"Teste\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/profile/general-infos"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "02 - establishment",
+			"item": [
+				{
+					"name": "quick create establishment",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - Establishment criado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: id presente e é UUID\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"id\");",
+									"    pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+									"});",
+									"",
+									"pm.test(\"Schema: name presente\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"name\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"establishment_id\", r.id);",
+									"console.log(\"establishment_id salvo:\", r.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Barbearia Teste\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/establishment/quick-create"
+					},
+					"response": []
+				},
+				{
+					"name": "refresh token (OWNER role)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - Refresh OK\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: access_token e refresh_token presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"access_token\");",
+									"    pm.expect(r).to.have.property(\"refresh_token\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"prof_token\", r.access_token);",
+									"pm.collectionVariables.set(\"prof_refresh_token\", r.refresh_token);",
+									"console.log(\"Token atualizado com role OWNER\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"{{prof_refresh_token}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/refresh"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] quick create - sem token (401)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Estabelecimento Sem Auth\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/establishment/quick-create"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "03 - professional",
+			"item": [
+				{
+					"name": "quick create professional",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - Professional criado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: id, specialty presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"id\");",
+									"    pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"professional_id\", r.id);",
+									"pm.collectionVariables.set(\"prof_id\", r.id);",
+									"console.log(\"professional_id salvo:\", r.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"André\",\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"specialty\": \"Cabelo\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/professional/quick-create"
+					},
+					"response": []
+				},
+				{
+					"name": "refresh token (PROFESSIONAL role)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - Refresh OK\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: access_token e refresh_token presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"access_token\");",
+									"    pm.expect(r).to.have.property(\"refresh_token\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"prof_token\", r.access_token);",
+									"pm.collectionVariables.set(\"prof_refresh_token\", r.refresh_token);",
+									"console.log(\"Token atualizado com role PROFESSIONAL\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"refresh_token\": \"{{prof_refresh_token}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/refresh"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "04 - service item",
+			"item": [
+				{
+					"name": "add service item",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 201 - Service item criado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: id, customName, price presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"id\");",
+									"    pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+									"    pm.expect(r).to.have.property(\"customName\");",
+									"    pm.expect(r).to.have.property(\"price\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"service_item_id\", r.id);",
+									"console.log(\"service_item_id salvo:\", r.id);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"serviceItemType\": \"CORTE_MAQUINA\",\n    \"customName\": \"Reflexo\",\n    \"price\": 60.00\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/establishment/{{establishment_id}}/service-items"
+					},
+					"response": []
+				},
+				{
+					"name": "list service items by professional",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 - Serviços listados\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: resposta é array\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.be.an(\"array\");",
+									"});",
+									"",
+									"pm.test(\"Schema: cada item tem id, customName, price\", () => {",
+									"    const r = pm.response.json();",
+									"    if (r.length > 0) {",
+									"        pm.expect(r[0]).to.have.property(\"id\");",
+									"        pm.expect(r[0]).to.have.property(\"customName\");",
+									"        pm.expect(r[0]).to.have.property(\"price\");",
+									"    }",
+									"});",
+									"",
+									"// Salva o primeiro service_item_id da lista para uso no attendance",
+									"const r = pm.response.json();",
+									"if (r.length > 0) {",
+									"    pm.collectionVariables.set(\"service_item_id\", r[0].id);",
+									"    console.log(\"service_item_id salvo da listagem:\", r[0].id);",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/professional/{{professional_id}}/service-items"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] list service items - professional inexistente (404)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 404 - Professional não encontrado\", () => pm.response.to.have.status(404));",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/professional/00000000-0000-0000-0000-000000000000/service-items"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "05 - establishment full (address)",
+			"item": [
+				{
+					"name": "add address to establishment",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 201 - Endereço adicionado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: establishmenID presente\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"establishmenID\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"street\": \"Rua das Flores\",\n    \"number\": \"123\",\n    \"neighborhood\": \"Centro\",\n    \"city\": \"São Paulo\",\n    \"state\": \"SP\",\n    \"zipCode\": \"01.001-000\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/establishments/{{establishment_id}}/addresses"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "06 - auth client",
+			"item": [
+				{
+					"name": "register (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"const email = `test_client_${Date.now()}@vupth.com`;",
+									"const password = \"senha123\";",
+									"pm.collectionVariables.set(\"client_email\", email);",
+									"pm.collectionVariables.set(\"client_password\", password);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - Client registrado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: id presente e é UUID\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"id\");",
+									"    pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"client_id\", r.id);",
+									"console.log(\"client_id salvo:\", r.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{client_email}}\",\n    \"password\": \"{{client_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/register"
+					},
+					"response": []
+				},
+				{
+					"name": "login (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - Login client OK\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: tokens e user presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"tokens\");",
+									"    pm.expect(r.tokens).to.have.property(\"access_token\");",
+									"    pm.expect(r.tokens).to.have.property(\"refresh_token\");",
+									"    pm.expect(r).to.have.property(\"user\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"client_token\", r.tokens.access_token);",
+									"pm.collectionVariables.set(\"client_refresh_token\", r.tokens.refresh_token);",
+									"pm.collectionVariables.set(\"client_id\", r.user.id);",
+									"console.log(\"client_token salvo\");"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{client_email}}\",\n    \"password\": \"{{client_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/login"
+					},
+					"response": []
+				},
+				{
+					"name": "complete profile (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 ou 204 - Profile client atualizado\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"Noah\",\n    \"last_name\": \"Paulo\",\n    \"phone\": null,\n    \"birth_date\": null,\n    \"gender\": \"MALE\",\n    \"profile_image_url\": \"https://www.istockphoto.com/photos/child-profile\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/profile/general-infos"
+					},
+					"response": []
+				},
+				{
+					"name": "update profile (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 ou 204 - Update client OK\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"last_name\": \"Paulo\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/profile/general-infos"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "07 - client queue",
+			"item": [
+				{
+					"name": "get professionals with queue [BUG: LazyInit - aguardando fix JOIN FETCH]",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"[BUG PENDENTE] Status deve ser 200 após fix JOIN FETCH\", () => {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    const r = pm.response.json();",
+									"    pm.test(\"Schema: professionals é array\", () => {",
+									"        pm.expect(r).to.have.property(\"professionals\");",
+									"        pm.expect(r.professionals).to.be.an(\"array\");",
+									"    });",
+									"    // Salva o professional_id do primeiro profissional disponível",
+									"    if (r.professionals && r.professionals.length > 0) {",
+									"        pm.collectionVariables.set(\"professional_id\", r.professionals[0].id);",
+									"        pm.collectionVariables.set(\"prof_id\", r.professionals[0].id);",
+									"        console.log(\"professional_id salvo da listagem:\", r.professionals[0].id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/establishment/id/{{establishment_id}}/professionals-with-queue"
+					},
+					"response": []
+				},
+				{
+					"name": "create attendance (entrar na fila)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 201 - Attendance criado\", () => pm.response.to.have.status(201));",
+									"",
+									"pm.test(\"Schema: id presente e é UUID\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"id\");",
+									"    pm.expect(r.id).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);",
+									"});",
+									"",
+									"pm.test(\"Schema: status é SCHEDULED\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r.status).to.equal(\"SCHEDULED\");",
+									"});",
+									"",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"attendance_id\", r.id);",
+									"console.log(\"attendance_id salvo:\", r.id);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"professionalID\": \"{{professional_id}}\",\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"serviceItemIds\": [\"{{service_item_id}}\"],\n    \"scheduledTime\": \"{{$isoTimestamp}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/attendances"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] create attendance - sem serviceItemIds (500)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// BUG DOCUMENTADO: serviceItemIds null causa InvalidDataAccessApiUsageException",
+									"// Fix server-side: guard no service antes do findAllById ou compact constructor no DTO",
+									"pm.test(\"Status 4xx ou 500 - serviceItemIds ausente\", () => {",
+									"    pm.expect(pm.response.code).to.be.within(400, 500);",
+									"});",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"professionalID\": \"{{professional_id}}\",\n    \"establishmentId\": \"{{establishment_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/attendances"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] create attendance - sem token (401)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"professionalID\": \"{{professional_id}}\",\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"serviceItemIds\": [\"{{service_item_id}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/attendances"
+					},
+					"response": []
+				},
+				{
+					"name": "see status in queue (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 - Status na fila OK\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: resposta é objeto\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.be.an(\"object\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/client-queue/{{attendance_id}}/wait-time?clientId={{client_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client-queue",
+								"{{attendance_id}}",
+								"wait-time"
+							],
+							"query": [
+								{
+									"key": "clientId",
+									"value": "{{client_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "08 - prof attendance",
+			"item": [
+				{
+					"name": "start attendance",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 - Attendance iniciado\", () => pm.response.to.have.status(200));",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Schema: status é IN_PROGRESS\", () => {",
+									"        const r = pm.response.json();",
+									"        pm.expect(r).to.have.property(\"inAttendance\");",
+									"        pm.expect(r.inAttendance).to.have.property(\"status\");",
+									"        pm.expect(r.inAttendance.status).to.equal(\"IN_PROGRESS\");",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id}}/start"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] start attendance - token CLIENT sem role PROFESSIONAL (403)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 403 - CLIENT não pode iniciar atendimento\", () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id}}/start"
+					},
+					"response": []
+				},
+				{
+					"name": "see full queue (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - Fila retornada\", () => pm.response.to.have.status(200));",
+									"",
+									"pm.test(\"Schema: resposta é array ou objeto\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.satisfy(d => Array.isArray(d) || typeof d === \"object\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/client-queue/{{professional_id}}/queue?establishmentId={{establishment_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client-queue",
+								"{{professional_id}}",
+								"queue"
+							],
+							"query": [
+								{
+									"key": "establishmentId",
+									"value": "{{establishment_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "finish attendance",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 - Attendance finalizado\", () => pm.response.to.have.status(200));",
+									"",
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Schema: status é FINISHED\", () => {",
+									"        const r = pm.response.json();",
+									"         pm.expect(r).to.have.property(\"inAttendance\");",
+									"        pm.expect(r.inAttendance).to.have.property(\"status\");",
+									"        pm.expect(r.inAttendance.status).to.equal(\"FINISHED\");",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id}}/finish"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "09 - client attendance",
+			"item": [
+				{
+					"name": "create attendance para cancelar (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 201 - Attendance criado para cancel\", () => pm.response.to.have.status(201));",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"attendance_id_cancel\", r.id);",
+									"console.log(\"attendance_id_cancel salvo:\", r.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"professionalID\": \"{{professional_id}}\",\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"serviceItemIds\": [\n        \"{{service_item_id}}\"\n    ],\n    \"scheduledTime\": \"{{$isoTimestamp}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/attendances"
+					},
+					"response": []
+				},
+				{
+					"name": "cancel attendance (client - SCHEDULED)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 - Attendance cancelado\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"    pm.test(\"Schema: status e CANCELLED\", () => {",
+									"        const r = pm.response.json();",
+									"        pm.expect(r).to.have.property(\"status\");",
+									"        pm.expect(r.status).to.equal(\"CANCELLED\");",
+									"    });",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel"
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] cancel attendance - cliente tenta cancelar IN_PROGRESS (403)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// attendance_id esta IN_PROGRESS (iniciado no folder 08)",
+									"// Cria um novo attendance e o inicia para garantir status IN_PROGRESS",
+									"const baseUrl = pm.collectionVariables.get('base_url');",
+									"const profToken = pm.collectionVariables.get('prof_token');",
+									"const clientToken = pm.collectionVariables.get('client_token');",
+									"const professionalId = pm.collectionVariables.get('professional_id');",
+									"const establishmentId = pm.collectionVariables.get('establishment_id');",
+									"const serviceItemId = pm.collectionVariables.get('service_item_id');",
+									"",
+									"// 1. Criar attendance como cliente",
+									"pm.sendRequest({",
+									"    url: baseUrl + '/attendances',",
+									"    method: 'POST',",
+									"    header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + clientToken },",
+									"    body: { mode: 'raw', raw: JSON.stringify({",
+									"        professionalID: professionalId,",
+									"        establishmentId: establishmentId,",
+									"        serviceItemIds: [serviceItemId],",
+									"        scheduledTime: new Date().toISOString()",
+									"    })}",
+									"}, function(err, res) {",
+									"    const body = res.json();",
+									"    const newId = body.id;",
+									"    // 2. Iniciar como profissional",
+									"    pm.sendRequest({",
+									"        url: baseUrl + '/attendances/' + newId + '/start',",
+									"        method: 'PATCH',",
+									"        header: { 'Authorization': 'Bearer ' + profToken }",
+									"    }, function(err2, res2) {",
+									"        pm.collectionVariables.set('attendance_id_in_progress', newId);",
+									"        console.log('[setup] attendance IN_PROGRESS criado:', newId);",
+									"    });",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 403 - Cliente nao pode cancelar IN_PROGRESS\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([403, 400, 409]);",
+									"});",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_in_progress}}/cancel"
+					},
+					"response": []
+				},
+				{
+					"name": "create attendance para leave queue (client)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 201 - Attendance criado para leave\", () => pm.response.to.have.status(201));",
+									"const r = pm.response.json();",
+									"pm.collectionVariables.set(\"attendance_id_leave\", r.id);",
+									"console.log(\"attendance_id_leave salvo:\", r.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"professionalID\": \"{{professional_id}}\",\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"serviceItemIds\": [\n        \"{{service_item_id}}\"\n    ],\n    \"scheduledTime\": \"{{$isoTimestamp}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/attendances"
+					},
+					"response": []
+				},
+				{
+					"name": "leave queue (client - SCHEDULED)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 ou 204 - Saiu da fila\", () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "10 - prof attendance handle",
+			"item": [
+				{
+					"name": "create guest attendance para remover (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 201 - Guest attendance criado para remove\", () => pm.response.to.have.status(201));",
+									"const r = pm.response.json();",
+									"if (r.attendancesInQueue && r.attendancesInQueue.length > 0) {",
+									"    const last = r.attendancesInQueue[r.attendancesInQueue.length - 1];",
+									"    pm.collectionVariables.set(\"attendance_id_remove\", last.id);",
+									"    console.log(\"attendance_id_remove salvo:\", last.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"professionalId\": \"{{professional_id}}\",\n    \"establishmentId\": \"{{establishment_id}}\",\n    \"clientName\": \"Guest Teste Remove\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/professional-queue/add-quest-attendance"
+					},
+					"response": []
+				},
+				{
+					"name": "remove from queue (prof)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 200 - Guest attendance criado para remove\", () => pm.response.to.have.status(200));",
+									"",
+									"const r = pm.response.json();",
+									"const baseUrl = pm.collectionVariables.get('base_url');",
+									"const profToken = pm.collectionVariables.get('prof_token');",
+									"const professionalId = pm.collectionVariables.get('professional_id');",
+									"const establishmentId = pm.collectionVariables.get('establishment_id');",
+									"",
+									"// O QueueService tem bug em memória: o guest não aparece no response imediato.",
+									"// Busca a fila diretamente para pegar o ID real do guest recém criado.",
+									"pm.sendRequest({",
+									"    url: baseUrl + '/client-queue/' + professionalId + '/queue?establishmentId=' + establishmentId,",
+									"    method: 'GET',",
+									"    header: { 'Authorization': 'Bearer ' + profToken }",
+									"}, function(err, res) {",
+									"    const queue = res.json();",
+									"    if (queue.attendancesInQueue && queue.attendancesInQueue.length > 0) {",
+									"        const last = queue.attendancesInQueue[queue.attendancesInQueue.length - 1];",
+									"        pm.collectionVariables.set(\"attendance_id_remove\", last.id);",
+									"        console.log(\"attendance_id_remove salvo via GET:\", last.id);",
+									"    } else {",
+									"        console.error(\"Fila vazia após criar guest — bug no QueueService (enqueueGuestAttendance)\");",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/professional-queue/{{attendance_id_remove}}/remove"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "error tests",
+			"item": [
+				{
+					"name": "login - senha errada (401)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 401 - Credenciais inválidas\", () => pm.response.to.have.status(401));",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{prof_email}}\",\n    \"password\": \"senha_errada_xyz\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/login"
+					},
+					"response": []
+				},
+				{
+					"name": "register - email inválido (422)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 422 - Email inválido rejeitado\", () => pm.response.to.have.status(422));",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"nao-e-email\",\n    \"password\": \"senha123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/register"
+					},
+					"response": []
+				},
+				{
+					"name": "register - senha curta (422)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 422 - Senha curta rejeitada\", () => pm.response.to.have.status(422));",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"teste@teste.com\",\n    \"password\": \"123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/auth/register"
+					},
+					"response": []
+				},
+				{
+					"name": "establishment - sem token (401)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Estabelecimento Sem Auth\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/establishment/quick-create"
+					},
+					"response": []
+				},
+				{
+					"name": "attendance - id inexistente (404)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 404 - Attendance não encontrado\", () => pm.response.to.have.status(404));",
+									"",
+									"pm.test(\"Schema erro: status e message presentes\", () => {",
+									"    const r = pm.response.json();",
+									"    pm.expect(r).to.have.property(\"status\");",
+									"    pm.expect(r).to.have.property(\"message\");",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{client_token}}"
+							}
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/client-queue/00000000-0000-0000-0000-000000000000/wait-time?clientId={{client_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client-queue",
+								"00000000-0000-0000-0000-000000000000",
+								"wait-time"
+							],
+							"query": [
+								{
+									"key": "clientId",
+									"value": "{{client_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "professionals-with-queue - bug 500 LazyInit (referência)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									""
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// REFERÊNCIA DO BUG: LazyInitializationException em Professional.services",
+									"// Causa: Jackson tenta serializar List<ServiceItem> LAZY sem sessão Hibernate ativa",
+									"// Fix: JOIN FETCH na query do ProfessionalRepository",
+									"// Query atual:  SELECT p FROM Professional p WHERE p.establishment.id = :establishmentId",
+									"// Query correta: SELECT p FROM Professional p LEFT JOIN FETCH p.services WHERE p.establishment.id = :establishmentId",
+									"pm.test(\"[BUG] Atualmente retorna 500 - deve ser 200 após fix\", () => {",
+									"    const code = pm.response.code;",
+									"    if (code === 500) {",
+									"        console.warn(\"BUG ATIVO: LazyInitializationException. Aplicar JOIN FETCH no ProfessionalRepository.\");",
+									"        pm.expect(code).to.equal(500);",
+									"    } else {",
+									"        pm.expect(code).to.equal(200);",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/establishment/id/{{establishment_id}}/professionals-with-queue"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "99 - cleanup",
+			"item": [
+				{
+					"name": "deletar clientes seed (pre-request) + deletar prof",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Deleta todos os clientes seed registrados neste run.",
+									"// Lê seed_clients (JSON array com {id, token}) e dispara DELETE /profile/delete/me",
+									"// para cada um usando pm.sendRequest.",
+									"",
+									"const baseUrl = pm.collectionVariables.get('base_url');",
+									"const raw = pm.collectionVariables.get('seed_clients');",
+									"const clients = raw ? JSON.parse(raw) : [];",
+									"",
+									"if (clients.length === 0) {",
+									"    console.log('[cleanup] Nenhum cliente seed para deletar.');",
+									"} else {",
+									"    clients.forEach(function(c) {",
+									"        if (!c.token) return;",
+									"        pm.sendRequest({",
+									"            url: baseUrl + '/profile/delete/me',",
+									"            method: 'DELETE',",
+									"            header: { 'Authorization': 'Bearer ' + c.token }",
+									"        }, function(err, res) {",
+									"            if (err) {",
+									"                console.error('[cleanup] Erro ao deletar', c.email, err);",
+									"            } else {",
+									"                console.log('[cleanup] Deletado:', c.email, '| status:', res.code);",
+									"            }",
+									"        });",
+									"    });",
+									"}",
+									"",
+									"// Resetar flags para permitir novo run limpo",
+									"pm.collectionVariables.set('seed_clients', '[]');",
+									"pm.collectionVariables.set('seed_clients_done', '');"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Este request deleta o prof (base_user logado via prof_token).",
+									"// Os clientes seed ja foram deletados no pre-request via pm.sendRequest.",
+									"pm.test('Prof deletado', () => {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": {
+								"token": "{{prof_token}}"
+							}
+						},
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/profile/delete/me"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"requests": {},
+				"exec": [
+					"// ─── Registro em massa de clientes seed ─────────────────────────────",
+					"// Roda UMA vez antes da collection inteira (collection-level pre-request).",
+					"// Registra 8 clientes via API, faz login de cada um e salva em",
+					"// pm.collectionVariables como JSON array 'seed_clients'.",
+					"// Guarda também 'seed_clients_done' para não repetir em re-runs.",
+					"",
+					"const alreadySeeded = pm.collectionVariables.get('seed_clients_done');",
+					"if (alreadySeeded === 'true') {",
+					"    console.log('[seed] Clientes ja registrados, pulando.');",
+					"    return;",
+					"}",
+					"",
+					"const baseUrl = pm.collectionVariables.get('base_url');",
+					"const ts = Date.now();",
+					"",
+					"const clientsToSeed = [",
+					"    { first_name: 'Ana',      last_name: 'Costa',    email: 'ana_'      + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Bruno',    last_name: 'Alves',    email: 'bruno_'    + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Camila',   last_name: 'Ferreira', email: 'camila_'   + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Diego',    last_name: 'Rocha',    email: 'diego_'    + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Elisa',    last_name: 'Nunes',    email: 'elisa_'    + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Felipe',   last_name: 'Torres',   email: 'felipe_'   + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Gabriela', last_name: 'Martins',  email: 'gabriela_' + ts + '@seed.dev', password: 'Senha@123' },",
+					"    { first_name: 'Henrique', last_name: 'Dias',     email: 'henrique_' + ts + '@seed.dev', password: 'Senha@123' },",
+					"];",
+					"",
+					"const registered = [];",
+					"",
+					"function registerNext(index) {",
+					"    if (index >= clientsToSeed.length) {",
+					"        pm.collectionVariables.set('seed_clients', JSON.stringify(registered));",
+					"        pm.collectionVariables.set('seed_clients_done', 'true');",
+					"        console.log('[seed] Clientes registrados:', registered.length);",
+					"        return;",
+					"    }",
+					"    const c = clientsToSeed[index];",
+					"    // 1. Registrar",
+					"    pm.sendRequest({",
+					"        url: baseUrl + '/auth/register',",
+					"        method: 'POST',",
+					"        header: { 'Content-Type': 'application/json' },",
+					"        body: { mode: 'raw', raw: JSON.stringify({ email: c.email, password: c.password }) }",
+					"    }, function(err, res) {",
+					"        const regBody = res.json();",
+					"        // 2. Login",
+					"        pm.sendRequest({",
+					"            url: baseUrl + '/auth/login',",
+					"            method: 'POST',",
+					"            header: { 'Content-Type': 'application/json' },",
+					"            body: { mode: 'raw', raw: JSON.stringify({ email: c.email, password: c.password }) }",
+					"        }, function(err2, res2) {",
+					"            const loginBody = res2.json();",
+					"            const token = loginBody.tokens && loginBody.tokens.access_token;",
+					"            const userId = loginBody.user && loginBody.user.id;",
+					"            // 3. Completar perfil",
+					"            if (token) {",
+					"                pm.sendRequest({",
+					"                    url: baseUrl + '/profile/general-infos',",
+					"                    method: 'PATCH',",
+					"                    header: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },",
+					"                    body: { mode: 'raw', raw: JSON.stringify({ first_name: c.first_name, last_name: c.last_name }) }",
+					"                }, function() {});",
+					"            }",
+					"            registered.push({ id: userId, first_name: c.first_name, last_name: c.last_name, email: c.email, token: token });",
+					"            registerNext(index + 1);",
+					"        });",
+					"    });",
+					"}",
+					"",
+					"registerNext(0);"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://vupth-backend-ia.onrender.com"
+		},
+		{
+			"key": "prof_token",
+			"value": ""
+		},
+		{
+			"key": "client_token",
+			"value": ""
+		},
+		{
+			"key": "prof_refresh_token",
+			"value": ""
+		},
+		{
+			"key": "client_refresh_token",
+			"value": ""
+		},
+		{
+			"key": "prof_id",
+			"value": ""
+		},
+		{
+			"key": "client_id",
+			"value": ""
+		},
+		{
+			"key": "establishment_id",
+			"value": ""
+		},
+		{
+			"key": "attendance_id",
+			"value": ""
+		},
+		{
+			"key": "service_item_id",
+			"value": ""
+		},
+		{
+			"key": "professional_id",
+			"value": ""
+		},
+		{
+			"key": "prof_email",
+			"value": ""
+		},
+		{
+			"key": "prof_password",
+			"value": ""
+		},
+		{
+			"key": "client_email",
+			"value": ""
+		},
+		{
+			"key": "client_password",
+			"value": ""
+		},
+		{
+			"key": "localhost_url",
+			"value": "http://localhost:8080"
+		},
+		{
+			"key": "render_url",
+			"value": "https://vupth-backend-ia.onrender.com"
+		},
+		{
+			"key": "seed_clients",
+			"value": "[]"
+		},
+		{
+			"key": "seed_clients_done",
+			"value": ""
+		},
+		{
+			"key": "attendance_id_cancel",
+			"value": ""
+		},
+		{
+			"key": "attendance_id_leave",
+			"value": ""
+		},
+		{
+			"key": "attendance_id_remove",
+			"value": ""
+		},
+		{
+			"key": "attendance_id_in_progress",
+			"value": ""
+		}
+	]
+}

@@ -7,8 +7,13 @@ on:
     branches: [ main ]
 
 jobs:
+
+  # =========================
+  # 🧪 TESTES LOCAIS (MAVEN)
+  # =========================
   test:
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:16
@@ -23,6 +28,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,23 +50,149 @@ jobs:
         run: mvn test
         working-directory: vupth-backend
 
+
+  # =========================
+  # 🚀 DEPLOY HOMOLOG (Render)
+  # =========================
   deploy-homolog:
     needs: test
     if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to Railway
+
+      - name: Deploy to Render (HOMOLOG)
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+
+  # =========================
+  # 🧪 TESTE HOMOLOG (Newman)
+  # =========================
+  test-homolog:
+    needs: deploy-homolog
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      # 🔥 ALTERADO: antes era sleep 15
+      - name: Wait for Render (readiness check)
+        run: |
+          for i in {1..20}; do
+            echo "Tentativa $i..."
+
+            RESPONSE=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health)
+
+            echo "Resposta: $RESPONSE"
+
+            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
+              echo "App respondeu UP"
+
+              # 🔥 valida readiness de verdade
+              READY=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness)
+
+              echo "Readiness: $READY"
+
+              if echo "$READY" | grep -q '"status":"UP"'; then
+                echo "App PRONTA!"
+                exit 0
+              fi
+            fi
+
+            echo "Ainda não está pronta..."
+            sleep 10
+          done
+
+          echo "Timeout aguardando app"
+          exit 1
+
+      - name: Debug files
+        run: |
+          pwd
+          ls -R
+
+      - name: Debug API
+        run: |
+          curl -v ${{ secrets.HOMOLOG_URL }}/actuator/health
+          curl -v ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness
+
+      - name: Run Postman (HOMOLOG)
+        working-directory: vupth-backend
+        run: |
+          newman run postman/collection.json \
+            --env-var "base_url=${{ secrets.HOMOLOG_URL }}" \
+            --reporters cli
+
+
+  # =========================
+  # 🚀 DEPLOY PROD (Railway)
+  # =========================
+  deploy-prod:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway (PROD)
         run: npx @railway/cli@latest up --service ${{ secrets.RAILWAY_SERVICE_ID }}
         working-directory: vupth-backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-  deploy-prod:
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+  # =========================
+  # 🧪 TESTE PROD (Newman)
+  # =========================
+  test-prod:
+    needs: deploy-prod
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to Render
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      # 🔥 ALTERADO: antes era sleep 15
+      - name: Wait for Railway (readiness check)
+        run: |
+          for i in {1..20}; do
+            echo "Tentativa $i..."
+
+            RESPONSE=$(curl -s ${{ secrets.PROD_URL }}/actuator/health)
+
+            echo "Resposta: $RESPONSE"
+
+            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
+              echo "App respondeu UP"
+
+              # 🔥 valida readiness de verdade
+              READY=$(curl -s ${{ secrets.PROD_URL }}/actuator/health/readiness)
+
+              echo "Readiness: $READY"
+
+              if echo "$READY" | grep -q '"status":"UP"'; then
+                echo "App PRONTA!"
+                exit 0
+              fi
+            fi
+
+            echo "Ainda não está pronta..."
+            sleep 10
+          done
+
+          echo "Timeout aguardando app"
+          exit 1
+
+      - name: Run Postman (PROD)
+        working-directory: vupth-backend
+        run: |
+          newman run postman/collection.json \
+            --env-var "base_url=${{ secrets.PROD_URL }}" \
+            --reporters cli
