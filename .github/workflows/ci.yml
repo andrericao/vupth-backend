@@ -11,7 +11,7 @@ jobs:
   # =========================
   # 🧪 TESTES LOCAIS (MAVEN)
   # =========================
-  mvn-test:
+  test:
     runs-on: ubuntu-latest
 
     services:
