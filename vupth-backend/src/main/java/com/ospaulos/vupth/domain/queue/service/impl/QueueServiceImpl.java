@@ -62,7 +62,7 @@ public class QueueServiceImpl implements QueueService {
         int totalRemaining = tempoRestanteAtendimentoAtual + tempoRestanteFila;
 
         int tempoEstimadoFila = QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, queue.size());
-        int totalEstimated = currentAttendance.get().getEstimatedTotalMinutes() + tempoEstimadoFila;
+        int totalEstimated = attendanceInProgressResponse.remainingMinutes() + tempoEstimadoFila;
 
         int totalElapsed = attendanceInProgressResponse.elapsedMinutes()
                 + (totalEstimated - totalRemaining);

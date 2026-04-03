@@ -81,7 +81,8 @@ public class Professional {
 
     public Optional<Attendance> getCurrentAttendance() {
         return attendances.stream()
-                .filter(a -> a.getStatus() == AttendanceStatus.IN_PROGRESS)
+                .filter(a -> a.getStatus() == AttendanceStatus.IN_PROGRESS
+                        || a.getStatus() == AttendanceStatus.PAUSED)
                 .findFirst();
     }
 
