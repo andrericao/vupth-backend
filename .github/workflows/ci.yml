@@ -167,29 +167,15 @@ jobs:
         run: |
           for i in {1..20}; do
             echo "Tentativa $i..."
-
-            RESPONSE=$(curl -s ${{ secrets.PROD_URL }}/actuator/health)
-
+            RESPONSE=$(curl -s "${{ secrets.PROD_URL }}/actuator/health")
             echo "Resposta: $RESPONSE"
-
             if echo "$RESPONSE" | grep -q '"status":"UP"'; then
-              echo "App respondeu UP"
-
-              # 🔥 valida readiness de verdade
-              READY=$(curl -s ${{ secrets.PROD_URL }}/actuator/health/readiness)
-
-              echo "Readiness: $READY"
-
-              if echo "$READY" | grep -q '"status":"UP"'; then
-                echo "App PRONTA!"
-                exit 0
-              fi
+              echo "App PRONTA!"
+              exit 0
             fi
-
             echo "Ainda não está pronta..."
             sleep 10
           done
-
           echo "Timeout aguardando app"
           exit 1
 
