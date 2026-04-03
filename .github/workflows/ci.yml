@@ -94,6 +94,7 @@ jobs:
           ls -R
 
       - name: Run Postman (HOMOLOG)
+        working-directory: vupth-backend
         run: |
           newman run postman/collection.json \
             --env-var "base_url=${{ secrets.HOMOLOG_URL }}" \
@@ -141,6 +142,7 @@ jobs:
           done
 
       - name: Run Postman (PROD)
+        working-directory: vupth-backend
         run: |
           newman run postman/collection.json \
             --env-var "base_url=${{ secrets.PROD_URL }}" \
