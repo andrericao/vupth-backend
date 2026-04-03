@@ -1,7 +1,7 @@
 {
 	"info": {
-		"_postman_id": "cc9fca8e-ff23-4c96-b66c-788ae18294a9",
-		"name": "Vupth backend local docker",
+		"_postman_id": "c6d96ab8-4f0c-4f9f-958b-4d4081d5b23e",
+		"name": "Vupth backend render (homolog))",
 		"description": "Coleção completa de testes para o backend Vupth. Inclui fluxo completo prof→establishment→professional→service→client→fila→atendimento, testes de erro, validação de schema JSON e documentação do bug LazyInitializationException.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
 		"_exporter_id": "51940681"
@@ -2533,7 +2533,7 @@
 	"variable": [
 		{
 			"key": "base_url",
-			"value": "http://localhost:8080"
+			"value": "https://vupth-backend-ia.onrender.com"
 		},
 		{
 			"key": "prof_token",
@@ -2621,8 +2621,7 @@
 		},
 		{
 			"key": "attendance_id_in_progress",
-			"value": "",
-			"type": "default"
+			"value": ""
 		}
 	]
 }
