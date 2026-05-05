@@ -33,7 +33,7 @@ import java.security.interfaces.RSAPublicKey;
 @Slf4j
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity           // enables @PreAuthorize on controllers when needed
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -46,80 +46,72 @@ public class SecurityConfig {
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity httpSecurity) throws Exception{
+    public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
 
         log.info("SECURITY CONFIG!");
 
         return httpSecurity
                 .authorizeHttpRequests(authorize -> authorize
 
-                        // ── Public (no authentication required) ─────────────────────────
-                        // Registro e login: qualquer um pode se registrar/autenticar
+                        // ── Public ───────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
 
-                        // Public listing of establishments (clients browse in the app)
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
-
-                        // Public listing of services by professional (clients choose before booking)
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
-
-                        // Guest joins the queue without authentication (MVP)
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
 
-                        // ── Requer ROLE_CLIENT ────────────────────────────────────────────
-                        // Every authenticated user already has CLIENT role (added at registration).
-                        // Therefore hasRole(CLIENT) = any normally logged-in user.
-
-                        // Entrar na fila como cliente autenticado
+                        // ── ROLE_CLIENT (qualquer autenticado) ────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
                         .requestMatchers(HttpMethod.POST, "/attendances").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PUT, "/attendances/*/cancel").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.DELETE, "/attendances/*/leave-queue").hasRole("CLIENT")
-
-                        // Consultar fila e tempo de espera (como cliente)
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
-                        // Criar establishment ou se filiar (qualquer autenticado = CLIENT)
                         .requestMatchers(HttpMethod.POST, "/establishment/quick-create").hasRole("CLIENT")
+
+                        // App parceiro — fluxo "sou profissional" (sem establishment)
+                        .requestMatchers(HttpMethod.POST, "/professional/register").hasRole("CLIENT")
+                        // App parceiro — fluxo "solo shop" (owner que também trabalha)
                         .requestMatchers(HttpMethod.POST, "/professional/quick-create").hasRole("CLIENT")
 
-                        // Perfil pessoal (qualquer autenticado = CLIENT)
                         .requestMatchers(HttpMethod.PATCH, "/profile/**").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.DELETE, "/profile/delete/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/auth/logout").hasRole("CLIENT")
 
-                        // ── Requer ROLE_PROFESSIONAL ──────────────────────────────────────
-                        // Iniciar, finalizar, pausar e retomar attendances
+                        // ── ROLE_PROFESSIONAL ─────────────────────────────────────────────
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/start").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/finish").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/pause").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/resume").hasRole("PROFESSIONAL")
 
-                        // Professional queue management
                         .requestMatchers(HttpMethod.POST, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional-queue/**").hasRole("PROFESSIONAL")
 
-                        // ── Requer ROLE_OWNER ─────────────────────────────────────────────
-                        // Criar e gerenciar service items do establishment
+                        // Profissional se afilia a um establishment usando o ID
+                        .requestMatchers(HttpMethod.POST, "/professional/affiliate").hasRole("PROFESSIONAL")
+
+                        // ── ROLE_OWNER ────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")
 
-                        .requestMatchers("/actuator/**").permitAll()
+                        // Owner adiciona profissional ao seu establishment
+                        .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
 
-                        // ── Fallback: qualquer autenticado ────────────────────────────────
+                        // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())
-                        .csrf(AbstractHttpConfigurer::disable)
-                .httpBasic(AbstractHttpConfigurer::disable)
+                .csrf(AbstractHttpConfigurer::disable)
+                .httpBasic(Customizer.withDefaults())
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .jwt(jwt -> jwt
                                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
-                        .sessionManagement(
-                                session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(
+                        session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
     }
 
@@ -130,19 +122,19 @@ public class SecurityConfig {
     }
 
     @Bean
-    public JwtEncoder jwtEncoder(){
+    public JwtEncoder jwtEncoder() {
         JWK jwk = new RSAKey.Builder(this.publicKey).privateKey(privateKey).build();
         var jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
         return new NimbusJwtEncoder(jwks);
     }
 
     @Bean
-    public JwtDecoder jwtDecoder(){
+    public JwtDecoder jwtDecoder() {
         return NimbusJwtDecoder.withPublicKey(publicKey).build();
     }
 
     @Bean
-    public PasswordEncoder passwordEncoder(){
+    public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 }

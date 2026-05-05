@@ -63,7 +63,7 @@ databaseChangeLog:
               - column: { name: id,                 value:         "6908671e-aa13-7cfa-d99c-fea4a4102d66" }
               - column: { name: name,               value:         "Barbearia do Ricardo" }
               - column: { name: status,             value:         "ACTIVE" }
-              - column: { name: current_open_status,value:         "OPEN" }
+              - column: { name: current_open_status,        value:         "OPEN" }
               - column: { name: owner_id,           value:         "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
               - column: { name: created_at,         valueComputed: CURRENT_TIMESTAMP }
               - column: { name: last_status_change, valueComputed: CURRENT_TIMESTAMP }
@@ -73,7 +73,7 @@ databaseChangeLog:
               - column: { name: id,                 value:         "6c0e76f9-631b-1f6f-21c5-ddb8b9a21972" }
               - column: { name: name,               value:         "Studio Beleza Total" }
               - column: { name: status,             value:         "ACTIVE" }
-              - column: { name: current_open_status,value:         "OPEN" }
+              - column: { name: current_open_status,        value:         "OPEN" }
               - column: { name: owner_id,           value:         "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
               - column: { name: created_at,         valueComputed: CURRENT_TIMESTAMP }
               - column: { name: last_status_change, valueComputed: CURRENT_TIMESTAMP }
@@ -209,7 +209,7 @@ databaseChangeLog:
             columns:
               - column: { name: id,                value:        "090b1523-83f9-83de-02e8-68571ea8e49c" }
               - column: { name: professional_id,   value:        "4f5fdb3d-e5aa-701e-ae29-61743a00c01c" }
-              - column: { name: service_item_type, value:        "CORTE_TESOURA" }
+              - column: { name: service_item_type, value:        "CORTE_MAQUINA" }
               - column: { name: custom_name,       value:        "Corte Tesoura" }
               - column: { name: price,             valueNumeric:  50.00 }
               - column: { name: estimated_minutes, valueNumeric:  30 }
@@ -219,7 +219,7 @@ databaseChangeLog:
             columns:
               - column: { name: id,                value:        "f2321d31-3db4-f0e6-121f-8ba63ae32051" }
               - column: { name: professional_id,   value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
-              - column: { name: service_item_type, value:        "NAVALHA" }
+              - column: { name: service_item_type, value:        "CORTE_MAQUINA" }
               - column: { name: custom_name,       value:        "Barba Completa" }
               - column: { name: price,             valueNumeric:  40.00 }
               - column: { name: estimated_minutes, valueNumeric:  25 }
@@ -229,7 +229,7 @@ databaseChangeLog:
             columns:
               - column: { name: id,                value:        "bfc77150-4702-43b3-3fee-570c72fc74f9" }
               - column: { name: professional_id,   value:        "1eff3c82-99b8-fa75-4815-d590badcf98f" }
-              - column: { name: service_item_type, value:        "CORTE_MAQUINA" }
+              - column: { name: service_item_type, value:        "PINTURA" }
               - column: { name: custom_name,       value:        "Combo Corte + Barba" }
               - column: { name: price,             valueNumeric:  70.00 }
               - column: { name: estimated_minutes, valueNumeric:  45 }
@@ -249,7 +249,7 @@ databaseChangeLog:
             columns:
               - column: { name: id,                value:        "81ca5133-8335-9541-07cb-52aee873a3e7" }
               - column: { name: professional_id,   value:        "c52a44b3-378c-9ef3-75b7-dadecd783921" }
-              - column: { name: service_item_type, value:        "PROCEDIMENTO" }
+              - column: { name: service_item_type, value:        "RECORTE_PONTAS" }
               - column: { name: custom_name,       value:        "Mechas Highlights" }
               - column: { name: price,             valueNumeric:  180.00 }
               - column: { name: estimated_minutes, valueNumeric:  120 }

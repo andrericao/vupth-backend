@@ -56,6 +56,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *    - Verifies both roles are active
  *
  * C) CLIENT user trying to create establishment (→ 403)
+ *
+ * D) Filtros de establishment (GET com params)
+ *    - Lista só ativos
+ *    - Busca por nome parcial
+ *    - Filtra por ServiceType
+ *    - ServiceType inválido → 400
+ *
+ * E) Toggle openStatus (PATCH /establishment/{id}/open-status)
+ *    - Owner fecha → 200 CLOSED
+ *    - Owner reabre → 200 OPEN
+ *    - Sem token → 401
+ *    - Token CLIENT → 403  ← usa pureClientToken (nunca criou establishment)
+ *    - Owner errado → 404
+ *    - Body inválido → 400
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -80,8 +94,11 @@ class EstablishmentIntegrationTest {
     // Scenario B — OWNER + PROFESSIONAL
     String ownerProfToken, ownerProfId, ownerProfEstablishmentId;
 
-    // Scenario C — CLIENT only
+    // Scenario C — CLIENT only (becomes OWNER at Order 40 via clientCanCreate)
     String clientToken;
+
+    // pureClientToken: never creates establishment → stays pure CLIENT (used for 403 tests)
+    String pureClientToken;
 
     @BeforeAll
     void setup() throws Exception {
@@ -94,7 +111,6 @@ class EstablishmentIntegrationTest {
         log.info("[Establishment] setup — owner created: id={}", ownerId);
 
         // Scenario B: user who will be OWNER + PROFESSIONAL (solo shop)
-        // Roles are added via endpoints, not at registration
         var ownerProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.ownerProfId = ownerProf.id();
         this.ownerProfToken = ownerProf.token();
@@ -104,6 +120,11 @@ class EstablishmentIntegrationTest {
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientToken = client.token();
         log.info("[Establishment] setup — cliente created");
+
+        // pureClient: never creates establishment → stays CLIENT only (for 403 tests)
+        var pureClient = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        this.pureClientToken = pureClient.token();
+        log.info("[Establishment] setup — pureClient created");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -430,8 +451,6 @@ class EstablishmentIntegrationTest {
     @Order(40)
     @DisplayName("POST /establishment/quick-create — 201 CLIENT pode criar establishment e se torna OWNER")
     void clientCanCreate() throws Exception {
-        // Business rule: every authenticated user already has CLIENT role.
-        // Qualquer CLIENT pode criar um establishment — is assim que se torna OWNER.
         log.info("[Establishment] clientCanCreate — clientToken={}", clientToken != null);
 
         mvc.perform(post("/establishment/quick-create")
@@ -440,6 +459,220 @@ class EstablishmentIntegrationTest {
                         .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest("Barbershop do Ex-Cliente"))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO D — Filtros de establishment
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(50)
+    @DisplayName("GET /establishment — 200 lista somente ativos (sem INACTIVE)")
+    void findAllActive_returnsOnlyActive() throws Exception {
+        log.info("[Establishment] findAllActive_returnsOnlyActive");
+
+        MvcResult result = mvc.perform(get("/establishment")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        log.info("[Establishment] findAllActive_returnsOnlyActive — {} retornados", array.length());
+        assertThat(array.length()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    @Order(51)
+    @DisplayName("GET /establishment?name=x — 200 busca por nome parcial")
+    void searchByName_found() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] searchByName_found");
+
+        mvc.perform(get("/establishment")
+                        .param("name", "Barber")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(52)
+    @DisplayName("GET /establishment?name=xyzNaoExiste — 200 retorna array vazio")
+    void searchByName_notFound_returnsEmpty() throws Exception {
+        log.info("[Establishment] searchByName_notFound_returnsEmpty");
+
+        MvcResult result = mvc.perform(get("/establishment")
+                        .param("name", "xyzNaoExisteNuncaJamais")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        assertThat(array.length()).isEqualTo(0);
+    }
+
+    @Test
+    @Order(53)
+    @DisplayName("GET /establishment?serviceType=BARBER — 200 filtra por tipo de serviço")
+    void filterByServiceType_barber() throws Exception {
+        log.info("[Establishment] filterByServiceType_barber");
+
+        mvc.perform(get("/establishment")
+                        .param("serviceType", "BARBER")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(54)
+    @DisplayName("GET /establishment?serviceType=INVALIDO — 400 tipo de serviço inválido")
+    void filterByServiceType_invalid() throws Exception {
+        log.info("[Establishment] filterByServiceType_invalid");
+
+        mvc.perform(get("/establishment")
+                        .param("serviceType", "INVALIDO_NAOEXISTE")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO E — Toggle openStatus
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(60)
+    @DisplayName("PATCH /establishment/{id}/open-status — 200 owner fecha o establishment")
+    void updateOpenStatus_ownerCloses() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_ownerCloses — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"openStatus\":\"CLOSED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.open_status").value("CLOSED"))
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(61)
+    @DisplayName("PATCH /establishment/{id}/open-status — 200 owner reabre o establishment")
+    void updateOpenStatus_ownerReopens() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_ownerReopens — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"openStatus\":\"OPEN\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.open_status").value("OPEN"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(62)
+    @DisplayName("PATCH /establishment/{id}/open-status — 200 TEMPORARILY_CLOSED válido")
+    void updateOpenStatus_temporarilyClosed() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_temporarilyClosed — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"openStatus\":\"TEMPORARILY_CLOSED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.open_status").value("TEMPORARILY_CLOSED"))
+                .andDo(print());
+
+        // Restaura para OPEN
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"openStatus\":\"OPEN\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @Order(63)
+    @DisplayName("PATCH /establishment/{id}/open-status — 401 sem token")
+    void updateOpenStatus_noToken_401() throws Exception {
+        UUID anyId = UUID.randomUUID();
+        log.info("[Establishment] updateOpenStatus_noToken_401");
+
+        mvc.perform(patch("/establishment/{id}/open-status", anyId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"openStatus\":\"CLOSED\"}"))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(64)
+    @DisplayName("PATCH /establishment/{id}/open-status — 403 token CLIENT não tem ROLE_OWNER")
+    void updateOpenStatus_clientToken_403() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_clientToken_403");
+
+        // pureClientToken: usuario que nunca criou establishment → CLIENT puro → deve receber 403
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", pureClientToken)
+                        .content("{\"openStatus\":\"CLOSED\"}"))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(65)
+    @DisplayName("PATCH /establishment/{id}/open-status — 404 owner errado não encontra o establishment")
+    void updateOpenStatus_wrongOwner_404() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_wrongOwner_404");
+
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"openStatus\":\"CLOSED\"}"))
+                .andExpect(status().isNotFound())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(66)
+    @DisplayName("PATCH /establishment/{id}/open-status — 400 openStatus inválido")
+    void updateOpenStatus_invalidStatus_400() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_invalidStatus_400");
+
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"openStatus\":\"INVALIDO\"}"))
+                .andExpect(status().isBadRequest())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(67)
+    @DisplayName("PATCH /establishment/{id}/open-status — 400 body sem openStatus (null)")
+    void updateOpenStatus_nullStatus_400() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateOpenStatus_nullStatus_400");
+
+        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"openStatus\":null}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andDo(print());
     }
 

@@ -25,6 +25,21 @@ public class AttendanceController {
     private final ProfessionalService professionalService;
 
     /**
+     * GET /attendances/{attendanceId}
+     *
+     * Busca um attendance pelo ID. Retorna 404 se não encontrado.
+     * Usado pelo Postman e pelo frontend para verificar o estado de um atendimento.
+     * Requer: autenticação (qualquer role).
+     */
+    @GetMapping("/{attendanceId}")
+    public ResponseEntity<AttendanceInQueueResponse> getById(
+            @PathVariable UUID attendanceId) {
+
+        log.info("ATTENDANCE CONTROLLER GET BY ID — attendanceId={}", attendanceId);
+        return ResponseEntity.ok(attendanceService.getById(attendanceId));
+    }
+
+    /**
      * POST /attendances
      *
      * Cliente autenticado entra na fila de um profissional.
@@ -130,10 +145,46 @@ public class AttendanceController {
 
         log.info("ATTENDANCE CONTROLLER FINISH {} by user={}", attendanceId, principal.getUserId());
 
-        // Pass principal.getUserId() directly — ProfessionalServiceImpl validates ownership.
-        // Avoids triggering a lazy proxy load on attendance.getProfessional() outside a TX.
         return ResponseEntity.ok(
                 professionalService.finishAttendance(principal.getUserId(), attendanceId)
+        );
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/pause
+     *
+     * Pausa um attendance IN_PROGRESS → PAUSED.
+     * O profissional logado deve ser o dono do attendance.
+     * Requer: Bearer token (PROFESSIONAL role).
+     */
+    @PatchMapping("/{attendanceId}/pause")
+    public ResponseEntity<?> pauseAttendance(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER PAUSE {} by user={}", attendanceId, principal.getUserId());
+
+        return ResponseEntity.ok(
+                professionalService.pauseAttendance(attendanceId, principal.getUserId())
+        );
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/resume
+     *
+     * Retoma um attendance PAUSED → IN_PROGRESS.
+     * O profissional logado deve ser o dono do attendance.
+     * Requer: Bearer token (PROFESSIONAL role).
+     */
+    @PatchMapping("/{attendanceId}/resume")
+    public ResponseEntity<?> resumeAttendance(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER RESUME {} by user={}", attendanceId, principal.getUserId());
+
+        return ResponseEntity.ok(
+                professionalService.resumeAttendance(attendanceId, principal.getUserId())
         );
     }
 }

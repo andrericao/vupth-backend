@@ -64,6 +64,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *    - Cancel non-existent attendance (→ 404)
  *    - Profissional diferente tentando iniciar attendance de outro (→ 403)
  *    - Start attendance already IN_PROGRESS (→ 400)
+ *
+ * E) leaveQueue (CLIENT voluntarily leaves)
+ *
+ * F) removeFromQueue (PROFESSIONAL removes from queue)
+ *
+ * G) Pause / Resume
+ *    IMPORTANT: Order(69) ensures profissional has NO IN_PROGRESS attendance
+ *    before the pause/resume flow starts. The fullFlow (Orders 30-33) finishes
+ *    the attendance, but we add an extra guard to be safe.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -183,7 +192,6 @@ class AttendanceIntegrationTest {
         Assumptions.assumeTrue(attendanceId != null, "Depende do createAttendance_success");
         log.info("[Attendance] cancelAttendance_success — attendanceId={}", attendanceId);
 
-        // Bug fix: era delete() — o correto is put()
         mvc.perform(put("/attendances/{id}/cancel", attendanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", clientToken)
@@ -268,7 +276,6 @@ class AttendanceIntegrationTest {
     void fullFlow_createAttendance() throws Exception {
         log.info("[Attendance] fullFlow_createAttendance");
 
-        // Precisa de um novo cliente para este attendance
         var flowClient = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
 
         AttendanceRequest request = new AttendanceRequest(
@@ -304,7 +311,7 @@ class AttendanceIntegrationTest {
         mvc.perform(patch("/attendances/{id}/start", fullFlowAttendanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
-                .andDo(print())   // print BEFORE assertion to capture 500 body
+                .andDo(print())
                 .andExpect(status().isOk());
 
         Attendance attendance = attendanceRepository.findById(
@@ -448,7 +455,6 @@ class AttendanceIntegrationTest {
         Assumptions.assumeTrue(attendanceId != null);
         log.info("[Attendance] startAttendance_wrongProfessional — attendanceId={}", attendanceId);
 
-        // Cria novo attendance (o attendanceId foi CANCELED no teste anterior)
         var newClient = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         AttendanceRequest request = new AttendanceRequest(
                 UUID.fromString(professionalId),
@@ -467,7 +473,6 @@ class AttendanceIntegrationTest {
                 .andReturn();
         String newAttendanceId = new JSONObject(created.getResponse().getContentAsString()).getString("id");
 
-        // Outro profissional tenta iniciar
         mvc.perform(patch("/attendances/{id}/start", newAttendanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", anotherProfToken))
@@ -475,7 +480,6 @@ class AttendanceIntegrationTest {
                         assertThat(result.getResponse().getStatus()).isIn(403, 404))
                 .andDo(print());
     }
-
 
     // ─────────────────────────────────────────────────────────────
     // SCENARIO E — leaveQueue (CLIENT voluntarily leaves)
@@ -487,7 +491,6 @@ class AttendanceIntegrationTest {
     void leaveQueue_success() throws Exception {
         log.info("[Attendance] leaveQueue_success — creating fresh attendance");
 
-        // Create a new attendance for this test
         AttendanceRequest request = new AttendanceRequest(
                 UUID.fromString(professionalId),
                 UUID.fromString(establishmentId),
@@ -508,7 +511,6 @@ class AttendanceIntegrationTest {
         String leaveId = new JSONObject(created.getResponse().getContentAsString()).getString("id");
         log.info("[Attendance] leaveQueue_success — leaveId={}", leaveId);
 
-        // Client leaves the queue voluntarily
         mvc.perform(delete("/attendances/{id}/leave-queue", leaveId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", clientToken))
@@ -528,7 +530,6 @@ class AttendanceIntegrationTest {
     void leaveQueue_wrongClient_forbidden() throws Exception {
         log.info("[Attendance] leaveQueue_wrongClient_forbidden");
 
-        // Create attendance for clientToken
         AttendanceRequest request = new AttendanceRequest(
                 UUID.fromString(professionalId),
                 UUID.fromString(establishmentId),
@@ -548,7 +549,6 @@ class AttendanceIntegrationTest {
 
         String targetId = new JSONObject(created.getResponse().getContentAsString()).getString("id");
 
-        // Another user (anotherProfToken is a valid authenticated user with CLIENT role) tries to leave
         mvc.perform(delete("/attendances/{id}/leave-queue", targetId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", anotherProfToken))
@@ -567,7 +567,6 @@ class AttendanceIntegrationTest {
     void removeFromQueue_success() throws Exception {
         log.info("[Attendance] removeFromQueue_success — creating attendance to remove");
 
-        // Create a new attendance
         var tempClient = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         AttendanceRequest request = new AttendanceRequest(
                 UUID.fromString(professionalId),
@@ -589,7 +588,6 @@ class AttendanceIntegrationTest {
         String removeId = new JSONObject(created.getResponse().getContentAsString()).getString("id");
         log.info("[Attendance] removeFromQueue_success — removeId={}", removeId);
 
-        // Professional removes the attendance
         mvc.perform(delete("/professional-queue/{id}/remove", removeId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
@@ -609,23 +607,18 @@ class AttendanceIntegrationTest {
     void removeFromQueue_guestAttendance() throws Exception {
         log.info("[Attendance] removeFromQueue_guestAttendance");
 
-        // Add a guest to the queue first
         AttendanceGuestRequest guestRequest = new AttendanceGuestRequest(
                 UUID.fromString(establishmentId),
                 UUID.fromString(professionalId),
                 null,
                 "Guest To Remove");
 
-        MvcResult created = mvc.perform(post("/professional-queue/add-quest-attendance")
+        mvc.perform(post("/professional-queue/add-quest-attendance")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(guestRequest)))
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        // Get the guest attendance ID from the queue response
-        JSONObject queueResponse = new JSONObject(created.getResponse().getContentAsString());
-        // The response is a QueueResponse — find the last attendance in the queue
-        // Use attendanceRepository to find the guest by guestName
         UUID guestAttendanceId = attendanceRepository.findAll().stream()
                 .filter(a -> "Guest To Remove".equals(a.getGuestName()))
                 .filter(a -> a.getStatus() == AttendanceStatus.SCHEDULED)
@@ -635,7 +628,6 @@ class AttendanceIntegrationTest {
 
         log.info("[Attendance] removeFromQueue_guestAttendance — guestAttendanceId={}", guestAttendanceId);
 
-        // Professional removes the guest
         mvc.perform(delete("/professional-queue/{id}/remove", guestAttendanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
@@ -650,7 +642,6 @@ class AttendanceIntegrationTest {
     void removeFromQueue_wrongProfessional() throws Exception {
         log.info("[Attendance] removeFromQueue_wrongProfessional");
 
-        // Create attendance in ownerProf's queue
         var tempClient2 = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         AttendanceRequest request = new AttendanceRequest(
                 UUID.fromString(professionalId),
@@ -671,12 +662,184 @@ class AttendanceIntegrationTest {
 
         String targetId = new JSONObject(created.getResponse().getContentAsString()).getString("id");
 
-        // anotherProfToken is from a DIFFERENT professional → should be 403
         mvc.perform(delete("/professional-queue/{id}/remove", targetId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", anotherProfToken))
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isIn(403, 404))
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO G — Pause / Resume
+    // The fullFlow finished at Order(33). Order(69) is a guard that
+    // cancels any remaining IN_PROGRESS attendance so the professional
+    // is free to start a new one at Order(71).
+    // ─────────────────────────────────────────────────────────────
+
+    String pauseAttendanceId;
+
+    @Test
+    @Order(69)
+    @DisplayName("Guard — cancela qualquer IN_PROGRESS restante antes do fluxo pause/resume")
+    void pauseResume_guard_clearInProgress() throws Exception {
+        log.info("[Attendance] pauseResume_guard — clearing any IN_PROGRESS for prof={}", professionalId);
+
+        // Finish any lingering IN_PROGRESS attendance for this professional
+        attendanceRepository.findAll().stream()
+                .filter(a -> professionalId.equals(
+                        a.getProfessional() != null ? a.getProfessional().getId().toString() : ""))
+                .filter(a -> a.getStatus() == AttendanceStatus.IN_PROGRESS)
+                .forEach(a -> {
+                    try {
+                        mvc.perform(patch("/attendances/{id}/finish", a.getId())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .header("Authorization", ownerProfToken))
+                                .andDo(print());
+                        log.info("[Attendance] pauseResume_guard — finished lingering attendance id={}", a.getId());
+                    } catch (Exception e) {
+                        log.warn("[Attendance] pauseResume_guard — could not finish id={}: {}", a.getId(), e.getMessage());
+                    }
+                });
+    }
+
+    @Test
+    @Order(70)
+    @DisplayName("POST /attendances — 201 cria attendance para teste de pause/resume")
+    void pauseResume_setup_createAttendance() throws Exception {
+        Assumptions.assumeTrue(professionalId != null && clientToken != null);
+        log.info("[Attendance] pauseResume_setup_createAttendance");
+
+        // Use a fresh client to avoid "already in queue" conflicts
+        var pauseClient = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+
+        AttendanceRequest request = new AttendanceRequest(
+                UUID.fromString(professionalId),
+                UUID.fromString(establishmentId),
+                UUID.fromString(pauseClient.id()),
+                serviceItemIds,
+                AttendanceStatus.SCHEDULED,
+                OffsetDateTime.now().plusMinutes(5),
+                30,
+                OffsetDateTime.now());
+
+        MvcResult result = mvc.perform(post("/attendances")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", pauseClient.token())
+                        .content(mapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        this.pauseAttendanceId = new JSONObject(result.getResponse().getContentAsString()).getString("id");
+        log.info("[Attendance] pauseResume_setup — attendanceId={}", pauseAttendanceId);
+        assertThat(pauseAttendanceId).isNotBlank();
+    }
+
+    @Test
+    @Order(71)
+    @DisplayName("PATCH /attendances/{id}/start — 200 inicia attendance para poder pausar")
+    void pauseResume_start() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null, "Depende do pauseResume_setup");
+        log.info("[Attendance] pauseResume_start — id={}", pauseAttendanceId);
+
+        mvc.perform(patch("/attendances/{id}/start", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(72)
+    @DisplayName("PATCH /attendances/{id}/pause — 200 pausa o attendance IN_PROGRESS")
+    void pauseAttendance_success() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null, "Depende do pauseResume_start");
+        log.info("[Attendance] pauseAttendance_success — id={}", pauseAttendanceId);
+
+        mvc.perform(patch("/attendances/{id}/pause", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(73)
+    @DisplayName("PATCH /attendances/{id}/pause — 401 sem token")
+    void pauseAttendance_noToken_401() throws Exception {
+        log.info("[Attendance] pauseAttendance_noToken_401");
+
+        mvc.perform(patch("/attendances/{id}/pause", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(74)
+    @DisplayName("PATCH /attendances/{id}/pause — 403 token CLIENT não tem ROLE_PROFESSIONAL")
+    void pauseAttendance_clientToken_403() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null);
+        log.info("[Attendance] pauseAttendance_clientToken_403");
+
+        mvc.perform(patch("/attendances/{id}/pause", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(75)
+    @DisplayName("PATCH /attendances/{id}/resume — 200 retoma o attendance PAUSED")
+    void resumeAttendance_success() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null, "Depende do pauseAttendance_success");
+        log.info("[Attendance] resumeAttendance_success — id={}", pauseAttendanceId);
+
+        mvc.perform(patch("/attendances/{id}/resume", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(76)
+    @DisplayName("PATCH /attendances/{id}/resume — 401 sem token")
+    void resumeAttendance_noToken_401() throws Exception {
+        log.info("[Attendance] resumeAttendance_noToken_401");
+
+        mvc.perform(patch("/attendances/{id}/resume", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(77)
+    @DisplayName("PATCH /attendances/{id}/resume — 403 token CLIENT não tem ROLE_PROFESSIONAL")
+    void resumeAttendance_clientToken_403() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null);
+        log.info("[Attendance] resumeAttendance_clientToken_403");
+
+        mvc.perform(patch("/attendances/{id}/resume", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(78)
+    @DisplayName("PATCH /attendances/{id}/finish — 200 finaliza o attendance (cleanup)")
+    void pauseResume_finish() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null, "Depende do resumeAttendance_success");
+        log.info("[Attendance] pauseResume_finish — id={}", pauseAttendanceId);
+
+        mvc.perform(patch("/attendances/{id}/finish", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
                 .andDo(print());
     }
 

@@ -17,6 +17,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -156,6 +157,7 @@ class ProfessionalIntervalIntegrationTest {
         log.info("[Interval] getActiveIntervals_containsCreatedInterval");
 
         mvc.perform(get("/api/v1/professionals/{id}/intervals", professionalId)
+                        .param("date", LocalDate.now(ZoneOffset.UTC).toString()) // <-- AGORA PASSOU
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", profToken))
                 .andExpect(status().isOk())

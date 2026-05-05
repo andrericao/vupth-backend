@@ -3,7 +3,6 @@ package com.ospaulos.vupth.integrations.useraddress;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
-
 import com.ospaulos.vupth.api.address.dto.request.UpdateAddressRequest;
 import com.ospaulos.vupth.api.address.dto.request.UserAddressRequest;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -17,7 +16,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -27,6 +25,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * Integration tests — domain: UserAddress
+ *
+ * zipCode: 8 dígitos puros, sem hífen ou ponto (ex: "01310100").
+ * Frontend formata para exibição ("01310-100").
+ *
+ * @compat zipCode format updated v14
+ */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @SpringBootTest(
@@ -46,18 +52,23 @@ public class UserAddressIntegrationTest {
 
     String userToken, userId;
 
-
     @BeforeAll
     void setup() throws Exception {
-
         log.info("STARTING SETUP AUTH TEST");
-
         var user = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.userId = user.id();
         this.userToken = user.token();
     }
 
-    private String createAddressAndReturnId() throws Exception{
+    /**
+     * CEP como 8 dígitos puros, sem formatação.
+     * Regex: ^\\d{8}$ — frontend formata para exibição.
+     */
+    private String validZip() {
+        return String.format("%08d", faker.number().numberBetween(1000000, 99999999));
+    }
+
+    private String createAddressAndReturnId() throws Exception {
 
         UserAddressRequest request = new UserAddressRequest(
                 faker.address().streetName(),
@@ -66,37 +77,30 @@ public class UserAddressIntegrationTest {
                 faker.address().streetSuffix(),
                 faker.address().city(),
                 faker.address().stateAbbr(),
-                String.format("%02d.%03d-%03d",
-                faker.number().numberBetween(0, 100),
-                faker.number().numberBetween(0, 1000),
-                faker.number().numberBetween(0, 1000)),
+                validZip(),
                 "Next to " + faker.company().name(),
                 Double.parseDouble(faker.address().latitude()),
                 Double.parseDouble(faker.address().longitude())
         );
 
         final MvcResult responseCreatedAddress = mvc.perform(post("/users/me/addresses")
-                .contentType(MediaType.APPLICATION_JSON)
-                .header("Authorization", this.userToken)
-                .content(mapper.writeValueAsString(request)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", this.userToken)
+                        .content(mapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andDo(print())
                 .andReturn();
 
         JSONObject addressResponseJson = new JSONObject(responseCreatedAddress.getResponse().getContentAsString());
-
         JSONObject userAddressId = addressResponseJson.getJSONObject("addressResponse");
-
         String id = userAddressId.getString("userAddressId");
 
         log.info("Response test: " + id);
-
         return id;
     }
 
     @Test
-    void shouldCreateUserAddress() throws Exception{
-
+    void shouldCreateUserAddress() throws Exception {
         log.info("STARTING CREATE ADDRESS TEST");
 
         UserAddressRequest request = new UserAddressRequest(
@@ -106,10 +110,7 @@ public class UserAddressIntegrationTest {
                 faker.address().streetSuffix(),
                 faker.address().city(),
                 faker.address().stateAbbr(),
-                String.format("%02d.%03d-%03d",
-                        faker.number().numberBetween(0, 100),
-                        faker.number().numberBetween(0, 1000),
-                        faker.number().numberBetween(0, 1000)),
+                validZip(),
                 "Next to " + faker.company().name(),
                 Double.parseDouble(faker.address().latitude()),
                 Double.parseDouble(faker.address().longitude())
@@ -124,31 +125,17 @@ public class UserAddressIntegrationTest {
                 .andReturn();
     }
 
-
     @Test
-    void shouldUpdateUserAddress() throws Exception{
-
+    void shouldUpdateUserAddress() throws Exception {
         log.info("STARTING UPDATE ADDRESS TEST");
 
         String userAddressId = createAddressAndReturnId();
         UUID idFromString = UUID.fromString(userAddressId);
 
         UpdateAddressRequest updateAddressRequest = new UpdateAddressRequest(
-
                 idFromString,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-                );
+                null, null, null, null, null, null, null, null, null, null, null, null
+        );
 
         mvc.perform(patch("/users/me/addresses/{userAddressId}", userAddressId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -160,12 +147,10 @@ public class UserAddressIntegrationTest {
     }
 
     @Test
-    public void shouldDeleteUserAddress() throws Exception{
-
+    public void shouldDeleteUserAddress() throws Exception {
         log.info("STARTING DELETE ADDRESS TEST");
 
         String userAddressId = createAddressAndReturnId();
-        UUID idFromString = UUID.fromString(userAddressId);
 
         mvc.perform(delete("/users/me/addresses/{userAddressId}", userAddressId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -176,18 +161,12 @@ public class UserAddressIntegrationTest {
     }
 
     @Test
-    public void shouldGetAllUserAddress() throws Exception{
-
+    public void shouldGetAllUserAddress() throws Exception {
         log.info("GET ALL USER-ADDRESSES TEST");
 
-        String userAddressId1 = createAddressAndReturnId();
-        UUID idFromString1 = UUID.fromString(userAddressId1);
-
-        String userAddressId2 = createAddressAndReturnId();
-        UUID idFromString2 = UUID.fromString(userAddressId2);
-
-        String userAddressId3 = createAddressAndReturnId();
-        UUID idFromString3 = UUID.fromString(userAddressId3);
+        createAddressAndReturnId();
+        createAddressAndReturnId();
+        createAddressAndReturnId();
 
         mvc.perform(get("/users/me/addresses")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -195,48 +174,35 @@ public class UserAddressIntegrationTest {
                 .andExpect(status().isOk())
                 .andDo(print())
                 .andReturn();
-
     }
 
     @Test
-    public void shouldSetUserAddressMain() throws Exception{
-
+    public void shouldSetUserAddressMain() throws Exception {
         log.info("SET USER-ADDRESSES LIKE MAIN TEST");
 
-        String userAddressId1 = createAddressAndReturnId();
-        UUID idFromString1 = UUID.fromString(userAddressId1);
-
+        createAddressAndReturnId();
         String userAddressId2 = createAddressAndReturnId();
-        UUID idFromString2 = UUID.fromString(userAddressId2);
+        createAddressAndReturnId();
 
-        String userAddressId3 = createAddressAndReturnId();
-        UUID idFromString3 = UUID.fromString(userAddressId3);
-
-        mvc.perform(patch("/users/me/addresses/{userAddressId}/main", idFromString2)
-                .contentType(MediaType.APPLICATION_JSON)
-                .header("Authorization", this.userToken))
+        mvc.perform(patch("/users/me/addresses/{userAddressId}/main", userAddressId2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", this.userToken))
                 .andExpect(status().isOk())
                 .andDo(print())
                 .andReturn();
     }
 
     @Test
-    public void shouldGetMainUserAddress() throws Exception{
-
+    public void shouldGetMainUserAddress() throws Exception {
         log.info("GET MAIN USER-ADDRESSES TEST");
 
-        String userAddressId1 = createAddressAndReturnId();
-        UUID idFromString1 = UUID.fromString(userAddressId1);
-
+        createAddressAndReturnId();
         String userAddressId2 = createAddressAndReturnId();
-        UUID idFromString2 = UUID.fromString(userAddressId2);
+        createAddressAndReturnId();
 
-        String userAddressId3 = createAddressAndReturnId();
-        UUID idFromString3 = UUID.fromString(userAddressId3);
+        log.info("TEST 5 - " + userAddressId2);
 
-        log.info("TEST 5 - " + idFromString2);
-
-        mvc.perform(patch("/users/me/addresses/{userAddressId}/main", idFromString2)
+        mvc.perform(patch("/users/me/addresses/{userAddressId}/main", userAddressId2)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", this.userToken))
                 .andExpect(status().isOk())
@@ -252,7 +218,7 @@ public class UserAddressIntegrationTest {
     }
 
     @AfterAll
-    void down(){
+    void down() {
         userRepository.deleteAll();
     }
 }

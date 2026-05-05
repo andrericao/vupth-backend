@@ -3,7 +3,14 @@ package com.ospaulos.vupth.api.address.dto.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
+/**
+ * DTO de criação de endereço.
+ *
+ * zipCode: 8 dígitos puros, sem hífen ou ponto (ex: "01310100").
+ * O frontend envia apenas os dígitos; a formatação visual fica no front.
+ */
 public record AddressRequest(
+
         @NotBlank(message = "Street is required")
         String street,
 
@@ -22,7 +29,10 @@ public record AddressRequest(
         String state,
 
         @NotBlank(message = "ZIP code is required")
-        @Pattern(regexp = "\\d{2}.\\d{3}-\\d{3}", message = "Invalid ZIP code format")
+        @Pattern(
+                regexp = "^\\d{8}$",
+                message = "Invalid ZIP code. Send only 8 digits, no punctuation (e.g. 01310100)"
+        )
         String zipCode,
 
         String reference,
@@ -30,5 +40,4 @@ public record AddressRequest(
         Double latitude,
 
         Double longitude
-) {
-}
+) {}
