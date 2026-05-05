@@ -42,12 +42,12 @@ public class GetEstablishmentWithQueueUseCase {
 
         log.info("GetEstablishmentWithQueueUseCase — establishmentId={}", establishmentId);
 
-        Establishment establishment = establishmentRepository.findByIdEager(establishmentId)
+        Establishment establishment = establishmentRepository.findById(establishmentId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Establishment not found: " + establishmentId));
 
         List<Professional> professionals = professionalRepository
-                .findByEstablishmentIdEager(establishmentId);
+                .findByEstablishmentId(establishmentId);
 
         List<ProfessionalWithQueueResponse> professionalDtos = professionals.stream()
                 .map(prof -> buildProfessionalSnapshot(prof, establishmentId))

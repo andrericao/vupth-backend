@@ -69,7 +69,8 @@ class UpdateProfileUseCasesTest {
 
         fakeTokens = new RefreshTokenResponse("new_access", "new_refresh", 3600L);
         generalInfos = new UserProfileGeneralInfosResponse(
-                USER_ID, null, null, NEW_EMAIL, null, null, null, null, null, null, Collections.emptyList());
+                USER_ID, null, null, NEW_EMAIL, null, null, null, null, null, null,
+                Collections.emptyList());
     }
 
     // ─────────────────────────────────────────────

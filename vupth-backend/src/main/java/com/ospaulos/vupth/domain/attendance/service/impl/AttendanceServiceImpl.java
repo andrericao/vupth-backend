@@ -80,7 +80,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
-        return attendanceRepository.findByIdEager(saved.getId()).orElse(saved);
+        return saved;
     }
 
     @Override
@@ -120,7 +120,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
-        return attendanceRepository.findByIdEager(saved.getId()).orElse(saved);
+        return saved;
     }
 
     @Override
@@ -153,7 +153,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
-        return attendanceRepository.findByIdEager(saved.getId()).orElse(saved);
+        return saved;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -220,6 +220,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public AttendanceInQueueResponse getById(UUID attendanceId) {
+        log.info("[Attendance] getById — attendanceId={}", attendanceId);
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+        return buildAttendanceInQueueResponse(attendance);
+    }
+
+    @Override
     public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId) {
         log.info("[Attendance] cancelAttendance — attendanceId={} clientId={}", attendanceId, clientId);
 
@@ -232,15 +240,11 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceAlreadyCancelledException(attendanceId);
         }
 
-        if (attendance.getStatus() == AttendanceStatus.FINISHED) {
-            log.warn("[Attendance] cancelAttendance — attendance={} is already FINISHED", attendanceId);
-            throw new AttendanceInvalidStatusException(
-                    "Attendance '" + attendanceId + "' is already FINISHED and cannot be cancelled.");
-        }
-
-        // Guard: client cannot cancel an IN_PROGRESS attendance — only the professional can
-        if (attendance.getStatus() == AttendanceStatus.IN_PROGRESS) {
-            log.warn("[Attendance] cancelAttendance — client={} attempted to cancel IN_PROGRESS attendance={}", clientId, attendanceId);
+        // Guard: client can only cancel SCHEDULED attendances.
+        // IN_PROGRESS, PAUSED and FINISHED cannot be cancelled by the client.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            log.warn("[Attendance] cancelAttendance — client={} attempted to cancel attendance={} with status={}",
+                    clientId, attendanceId, attendance.getStatus());
             throw new AttendanceCancelNotAllowedException(attendanceId);
         }
 

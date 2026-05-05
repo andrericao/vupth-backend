@@ -284,7 +284,6 @@ class ProfessionalServiceImplTest {
             when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
             when(queueService.getQueueOverview(any(), any())).thenReturn(mock(QueueResponse.class));
-            //when(attendanceService.getNextAttendance(any(), any())).thenReturn(null);
 
             professionalService.finishAttendance(professionalId, attendanceId);
 

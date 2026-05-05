@@ -62,7 +62,7 @@ public class QueueServiceImpl implements QueueService {
         int totalRemaining = tempoRestanteAtendimentoAtual + tempoRestanteFila;
 
         int tempoEstimadoFila = QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, queue.size());
-        int totalEstimated = attendanceInProgressResponse.remainingMinutes() + tempoEstimadoFila;
+        int totalEstimated = currentAttendance.get().getEstimatedTotalMinutes() + tempoEstimadoFila;
 
         int totalElapsed = attendanceInProgressResponse.elapsedMinutes()
                 + (totalEstimated - totalRemaining);
@@ -93,10 +93,8 @@ public class QueueServiceImpl implements QueueService {
 
     @Override
     public QueueResponse enqueueGuestAttendance(Attendance attendance, Professional professional) {
-
-        List<Attendance> queue = professional.getScheduledAttendances();
-        queue.add(attendance);
-
+        // O attendance já foi persistido pelo attendanceService.createGuestAttendance().
+        // Não é necessário manipular a lista em memória — getQueueOverview usa query ao banco.
         return getQueueOverview(professional, attendance.getEstablishment());
     }
 
@@ -142,10 +140,15 @@ public class QueueServiceImpl implements QueueService {
 
     private QueueResponse getQueueForProfessional(Professional professional, Establishment establishment) {
 
-        // List<Attendance> scheduledQueue = professional.getScheduledAttendances();
+        // IMPORTANTE: não usar professional.getScheduledAttendances() aqui.
+        // Esse método lê professional.attendances (coleção LAZY em memória) que pode estar
+        // desatualizada — especialmente logo após um save() de um novo guest attendance.
+        // A query direta ao banco garante dados consistentes.
         List<Attendance> scheduledQueue = attendanceRepository
                 .findWaitingQueueByProfessionalAndEstablishment(
-                        professional.getId(), establishment.getId());
+                        professional.getId(),
+                        establishment.getId()
+                );
 
         List<AttendanceInQueueResponse> itemInfos = new ArrayList<>();
 

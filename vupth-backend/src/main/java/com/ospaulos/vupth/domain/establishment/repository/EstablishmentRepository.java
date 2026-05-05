@@ -1,10 +1,13 @@
 package com.ospaulos.vupth.domain.establishment.repository;
 
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,4 +32,30 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
     WHERE e.id = :id
 """)
     Optional<Establishment> findByIdEager(@Param("id") UUID id);
+
+    // Lista todos os ativos (exclui INACTIVE) com associations para serialização
+    @Query("""
+        SELECT e FROM Establishment e
+        LEFT JOIN FETCH e.services
+        LEFT JOIN FETCH e.owner
+        WHERE e.status <> 'INACTIVE'
+        ORDER BY e.createdAt DESC
+        """)
+    List<Establishment> findAllActive();
+
+    // Busca por nome (case-insensitive, parcial) excluindo INACTIVE
+    List<Establishment> findByNameContainingIgnoreCaseAndStatusNot(
+            String name, EstablishmentStatus status);
+
+    // Filtra por ServiceType excluindo INACTIVE
+    @Query("""
+        SELECT DISTINCT e FROM Establishment e
+        LEFT JOIN FETCH e.services s
+        LEFT JOIN FETCH e.owner
+        WHERE :serviceType MEMBER OF e.services
+          AND e.status <> 'INACTIVE'
+        ORDER BY e.createdAt DESC
+        """)
+    List<Establishment> findActiveByServiceType(
+            @Param("serviceType") ServiceType serviceType);
 }
