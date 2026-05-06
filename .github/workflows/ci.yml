@@ -82,10 +82,10 @@ jobs:
       # 🔥 ALTERADO: antes era sleep 15
       - name: Wait for Render (readiness check)
         run: |
-          for i in {1..20}; do
+          for i in {1..40}; do
             echo "Tentativa $i..."
 
-            RESPONSE=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health)
+            RESPONSE=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health)
 
             echo "Resposta: $RESPONSE"
 
@@ -93,7 +93,7 @@ jobs:
               echo "App respondeu UP"
 
               # 🔥 valida readiness de verdade
-              READY=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness)
+              READY=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness)
 
               echo "Readiness: $READY"
 
