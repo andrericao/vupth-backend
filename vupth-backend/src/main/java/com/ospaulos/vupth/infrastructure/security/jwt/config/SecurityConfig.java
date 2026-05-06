@@ -109,7 +109,7 @@ public class SecurityConfig {
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())
                 .csrf(AbstractHttpConfigurer::disable)
-                .httpBasic(Customizer.withDefaults())
+                .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .jwt(jwt -> jwt
