@@ -44,8 +44,17 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
     List<Establishment> findAllActive();
 
     // Busca por nome (case-insensitive, parcial) excluindo INACTIVE
+    @Query("""
+        SELECT e FROM Establishment e
+        LEFT JOIN FETCH e.services
+        LEFT JOIN FETCH e.owner
+        WHERE LOWER(e.name) LIKE LOWER(CONCAT('%', :name, '%'))
+          AND e.status <> 'INACTIVE'
+        ORDER BY e.createdAt DESC
+        """)
     List<Establishment> findByNameContainingIgnoreCaseAndStatusNot(
-            String name, EstablishmentStatus status);
+            @Param("name") String name,
+            EstablishmentStatus status);
 
     // Filtra por ServiceType excluindo INACTIVE
     @Query("""
