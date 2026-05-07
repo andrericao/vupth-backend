@@ -72,7 +72,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     public List<EstablishmentResponse> searchByName(String name) {
         log.info("[Establishment] searchByName — name={}", name);
         return establishmentRepository
-                .findByNameContainingIgnoreCaseAndStatusNot(name, EstablishmentStatus.INACTIVE)
+                .findByNameContainingIgnoreCaseAndStatusNot(name)
                 .stream()
                 .map(EstablishmentResponse::fromEntity)
                 .toList();

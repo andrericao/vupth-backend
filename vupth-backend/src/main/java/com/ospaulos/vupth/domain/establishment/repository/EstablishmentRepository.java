@@ -53,8 +53,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         ORDER BY e.createdAt DESC
         """)
     List<Establishment> findByNameContainingIgnoreCaseAndStatusNot(
-            @Param("name") String name,
-            EstablishmentStatus status);
+            @Param("name") String name);
 
     // Filtra por ServiceType excluindo INACTIVE
     @Query("""
