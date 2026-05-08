@@ -104,7 +104,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
     @Override
     public EstablishmentResponse findById(UUID id){
-         Establishment establishment = establishmentRepository.findById(id)
+         Establishment establishment = establishmentRepository.findByIdEager(id)
                 .orElseThrow(() -> new EstablishmentNotFoundException(id));
 
          return EstablishmentResponse.fromEntity(establishment);
@@ -113,7 +113,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     @Override
     public List<ServiceItem> getServicesItemByEstablishment(UUID establishmentId){
 
-        Establishment establishment = establishmentRepository.findById(establishmentId)
+        Establishment establishment = establishmentRepository.findByIdEager(establishmentId)
                 .orElseThrow(() -> new EntityNotFoundException("Establishment not found"));
 
         return establishment.getServicesItemByEstablishment();
