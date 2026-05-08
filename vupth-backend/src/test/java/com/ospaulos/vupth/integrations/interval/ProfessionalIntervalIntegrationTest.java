@@ -66,6 +66,7 @@ class ProfessionalIntervalIntegrationTest {
 
     String profToken, professionalId, establishmentId;
     String clientToken;
+    OffsetDateTime createdIntervalStartTime;
 
     //Claude
     @BeforeAll
@@ -112,7 +113,8 @@ class ProfessionalIntervalIntegrationTest {
     void createUnexpectedInterval_success() throws Exception {
         log.info("[Interval] createUnexpectedInterval_success — professionalId={}", professionalId);
 
-        String startTime = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5)
+        createdIntervalStartTime = OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(5);
+        String startTime = createdIntervalStartTime
                 .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
 
         mvc.perform(post("/api/v1/professionals/{id}/intervals/unexpected", professionalId)
@@ -157,7 +159,7 @@ class ProfessionalIntervalIntegrationTest {
         log.info("[Interval] getActiveIntervals_containsCreatedInterval");
 
         mvc.perform(get("/api/v1/professionals/{id}/intervals", professionalId)
-                        .param("date", LocalDate.now(ZoneOffset.UTC).toString()) // <-- AGORA PASSOU
+                        .param("date", createdIntervalStartTime.toLocalDate().toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", profToken))
                 .andExpect(status().isOk())
