@@ -20,6 +20,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
     SELECT e
     FROM Establishment e
     JOIN FETCH e.owner o
+    LEFT JOIN FETCH e.services
     WHERE e.id = :establishmentId
       AND o.id = :ownerId
     """)
