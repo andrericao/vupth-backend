@@ -27,6 +27,7 @@ import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.hibernate.Hibernate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -79,6 +80,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setScheduledTime(request.scheduledTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
     }
@@ -119,6 +121,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setScheduledTime(request.scheduledTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
     }
@@ -152,6 +155,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
         return saved;
     }
@@ -578,5 +582,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     public AttendanceInQueueResponse buildAttendanceInQueueResponse(
             com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
         return AttendanceInQueueResponse.fromEntity(attendance);
+    }
+
+    private void initializeLazyAssociations(Attendance attendance) {
+        Hibernate.initialize(attendance.getEstablishment());
+        Hibernate.initialize(attendance.getProfessional());
+        Hibernate.initialize(attendance.getServiceItems());
+        if (attendance.getClient() != null) {
+            Hibernate.initialize(attendance.getClient().getBaseUser());
+        }
     }
 }
