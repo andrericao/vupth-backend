@@ -1,17 +1,14 @@
 package com.ospaulos.vupth.web.rest.professional.controller;
 
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
-import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
-import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
+import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
-import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,13 +38,9 @@ public class ProfessionalController {
 
         log.info("PROFESSIONAL CONTROLLER ADD CLIENT AT QUEUE");
 
-        // TODO: A chamada deve ser em AttendanceService
-        Attendance response = attendanceService.createAttendance(request);
+        AttendanceInQueueResponse response = attendanceService.createAttendance(request);
 
-        // TODO: Mudar para o service
-        AttendanceInQueueResponse resp = AttendanceInQueueResponse.fromEntity(response);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(resp);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("add-quest-attendance")

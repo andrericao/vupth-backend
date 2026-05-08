@@ -86,7 +86,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    public com.ospaulos.vupth.domain.attendance.model.Attendance createAttendance(AttendanceRequest request) {
+    public AttendanceInQueueResponse createAttendance(AttendanceRequest request) {
         log.info("[Attendance] createAttendance(request) — professionalId={} clientId={}",
                 request.professionalID(), request.clientId());
 
@@ -121,9 +121,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setScheduledTime(request.scheduledTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
-        initializeLazyAssociations(saved);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
-        return saved;
+        return AttendanceInQueueResponse.fromEntity(saved);
     }
 
     @Override

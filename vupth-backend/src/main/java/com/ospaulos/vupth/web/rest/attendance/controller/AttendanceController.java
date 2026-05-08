@@ -69,7 +69,7 @@ public class AttendanceController {
         );
 
         var response = attendanceService.createAttendance(secureRequest);
-        return ResponseEntity.status(HttpStatus.CREATED).body(AttendanceInQueueResponse.fromEntity(response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**

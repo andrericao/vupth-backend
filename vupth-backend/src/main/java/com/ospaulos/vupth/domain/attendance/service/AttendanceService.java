@@ -22,7 +22,7 @@ public interface AttendanceService {
                                        Establishment establishment,
                                        Client client);
 
-    public Attendance createAttendance(AttendanceRequest request);
+    public AttendanceInQueueResponse createAttendance(AttendanceRequest request);
 
     public Attendance createGuestAttendance(AttendanceGuestRequest request, Professional professional, Establishment establishment);
 
