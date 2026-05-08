@@ -79,7 +79,11 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
-      # 🔥 ALTERADO: antes era sleep 15
+      - name: Wait for Render deploy to start
+        run: |
+          echo "Aguardando Render iniciar o build (old instance still UP)..."
+          sleep 60
+
       - name: Wait for Render (readiness check)
         run: |
           for i in {1..40}; do

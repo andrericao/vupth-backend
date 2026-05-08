@@ -24,7 +24,7 @@ public record EstablishmentResponse(
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return new EstablishmentResponse(
                 establishment.getId(),
-                establishment.getServices(),
+                establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
                 establishment.getName(),
                 establishment.getUrlImage(),
                 establishment.getOwner().getId(),
