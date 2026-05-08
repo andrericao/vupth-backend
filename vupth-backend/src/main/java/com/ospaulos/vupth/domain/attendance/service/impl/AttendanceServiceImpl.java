@@ -587,6 +587,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private void initializeLazyAssociations(Attendance attendance) {
         Hibernate.initialize(attendance.getEstablishment());
         Hibernate.initialize(attendance.getProfessional());
+        Hibernate.initialize(attendance.getProfessional().getBaseUser());
         Hibernate.initialize(attendance.getServiceItems());
         if (attendance.getClient() != null) {
             Hibernate.initialize(attendance.getClient().getBaseUser());
