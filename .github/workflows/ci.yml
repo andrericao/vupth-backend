@@ -125,6 +125,7 @@ jobs:
           newman run postman/collection-homolog.json \
             --env-var "base_url=${{ secrets.HOMOLOG_URL }}" \
             --reporters cli \
+            --verbose \
             --bail
 
 
