@@ -137,7 +137,10 @@
               "mode": "raw",
               "raw": "{\"first_name\": \"Prof\", \"last_name\": \"Teste\", \"phone\": \"11999990001\"}"
             },
-            "url": "{{base_url}}/profile/general-infos"
+            "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -188,7 +191,10 @@
               "mode": "raw",
               "raw": "{\"last_name\": \"Atualizado\"}"
             },
-            "url": "{{base_url}}/profile/general-infos"
+            "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -239,7 +245,10 @@
               "mode": "raw",
               "raw": "{\"name\": \"campo invalido que nao existe\"}"
             },
-            "url": "{{base_url}}/profile/general-infos"
+            "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -278,7 +287,10 @@
               "mode": "raw",
               "raw": "{\"last_name\": \"Teste\"}"
             },
-            "url": "{{base_url}}/profile/general-infos"
+            "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -428,7 +440,10 @@
               "mode": "raw",
               "raw": "{\"name\": \"Barbearia Teste {{$timestamp}}\"}"
             },
-            "url": "{{base_url}}/establishment/quick-create"
+            "url": "{{base_url}}/establishment/quick-create",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -512,7 +527,10 @@
               "mode": "raw",
               "raw": "{\"name\": \"Sem Token\"}"
             },
-            "url": "{{base_url}}/establishment/quick-create"
+            "url": "{{base_url}}/establishment/quick-create",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -750,7 +768,10 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"CLOSED\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -799,7 +820,10 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -848,7 +872,10 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"TEMPORARILY_CLOSED\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -887,55 +914,14 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
             "type": "noauth"
-          }
-        },
-        {
-          "name": "[ERRO] update open status CLIENT token → 403",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 403 - Role OWNER necessária\", () => pm.response.to.have.status(403));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{client_token}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"openStatus\":\"OPEN\"}"
-            },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
-          },
-          "response": [],
-          "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{client_token}}",
-                "type": "string"
-              }
-            ]
           }
         },
         {
@@ -968,7 +954,10 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"INVALIDO\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1012,7 +1001,10 @@
               "mode": "raw",
               "raw": "{\"openStatus\":null}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1056,7 +1048,10 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1111,7 +1106,10 @@
               "mode": "raw",
               "raw": "{\"name\": \"Profissional Teste\", \"establishmentId\": \"{{establishment_id}}\"}"
             },
-            "url": "{{base_url}}/professional/quick-create"
+            "url": "{{base_url}}/professional/quick-create",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1203,6 +1201,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"name\":\"{{$randomFirstName}}\",\"specialty\":\"Corte Masculino\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1273,6 +1274,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"name\":\"Teste\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1318,6 +1322,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"name\":\"Teste\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1373,6 +1380,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"name\":\"\",\"specialty\":\"Barber\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1434,6 +1444,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1505,6 +1518,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1556,6 +1572,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1567,59 +1586,6 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ]
-        },
-        {
-          "name": "[ERRO] addProfessional - token CLIENT sem role OWNER → 403",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{client_token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "establishment",
-                "{{establishment_id}}",
-                "professionals"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
-            }
-          },
-          "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{client_token}}",
-                "type": "string"
-              }
-            ]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 403 - Role OWNER necessária\", () => pm.response.to.have.status(403));"
                 ],
                 "type": "text/javascript"
               }
@@ -1655,6 +1621,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"professionalId\":\"00000000-0000-0000-0000-000000000000\"}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1711,6 +1680,9 @@
             "body": {
               "mode": "raw",
               "raw": "{\"professionalId\": null}"
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "auth": {
@@ -1780,7 +1752,10 @@
               "mode": "raw",
               "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Degradê\",\"price\":35.00,\"estimatedMinutes\":30}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/service-items"
+            "url": "{{base_url}}/establishment/{{establishment_id}}/service-items",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1828,7 +1803,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/professional/{{professional_id}}/service-items"
+            "url": "{{base_url}}/professional/{{professional_id}}/service-items",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1864,7 +1842,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/professional/00000000-0000-0000-0000-000000000000/service-items"
+            "url": "{{base_url}}/professional/00000000-0000-0000-0000-000000000000/service-items",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1913,7 +1894,10 @@
               "mode": "raw",
               "raw": "{\"street\":\"Rua Teste\",\"number\":\"123\",\"neighborhood\":\"Centro\",\"city\":\"São Paulo\",\"state\":\"SP\",\"zipCode\":\"01001000\",\"addressType\":\"HOME\"}"
             },
-            "url": "{{base_url}}/establishments/{{establishment_id}}/addresses"
+            "url": "{{base_url}}/establishments/{{establishment_id}}/addresses",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2050,7 +2034,10 @@
               "mode": "raw",
               "raw": "{\"first_name\": \"Cliente\", \"last_name\": \"Teste\", \"phone\": \"11999990002\"}"
             },
-            "url": "{{base_url}}/profile/general-infos"
+            "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2096,7 +2083,10 @@
               "mode": "raw",
               "raw": "{\"last_name\": \"Atualizado\"}"
             },
-            "url": "{{base_url}}/profile/general-infos"
+            "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2185,7 +2175,10 @@
               "mode": "raw",
               "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
-            "url": "{{base_url}}/attendances"
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2231,7 +2224,10 @@
               "mode": "raw",
               "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
-            "url": "{{base_url}}/attendances"
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2270,7 +2266,10 @@
               "mode": "raw",
               "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
-            "url": "{{base_url}}/attendances"
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2318,6 +2317,9 @@
                   "value": "{{client_id}}"
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": [],
@@ -2359,7 +2361,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_id}}/start"
+            "url": "{{base_url}}/attendances/{{attendance_id}}/start",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2395,7 +2400,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_id}}/start"
+            "url": "{{base_url}}/attendances/{{attendance_id}}/start",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2451,6 +2459,9 @@
                   "value": "{{establishment_id}}"
                 }
               ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "response": [],
@@ -2495,7 +2506,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_id}}/finish"
+            "url": "{{base_url}}/attendances/{{attendance_id}}/finish",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2547,7 +2561,10 @@
               "mode": "raw",
               "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
-            "url": "{{base_url}}/attendances"
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2583,7 +2600,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/start"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/start",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2624,7 +2644,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/pause"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/pause",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2654,7 +2677,10 @@
           "request": {
             "method": "PATCH",
             "header": [],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/pause"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/pause",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2683,7 +2709,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/pause"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/pause",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2724,7 +2753,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/resume"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/resume",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2754,7 +2786,10 @@
           "request": {
             "method": "PATCH",
             "header": [],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/resume"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/resume",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2783,7 +2818,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/resume"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/resume",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2819,7 +2857,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/finish"
+            "url": "{{base_url}}/attendances/{{attendance_pause_id}}/finish",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2871,7 +2912,10 @@
               "mode": "raw",
               "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
-            "url": "{{base_url}}/attendances"
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2922,7 +2966,10 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel"
+            "url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -2973,7 +3020,10 @@
               "mode": "raw",
               "raw": "{}"
             },
-            "url": "{{base_url}}/attendances/{{attendance_id}}/cancel"
+            "url": "{{base_url}}/attendances/{{attendance_id}}/cancel",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3020,7 +3070,10 @@
               "mode": "raw",
               "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
-            "url": "{{base_url}}/attendances"
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3058,7 +3111,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue"
+            "url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3113,7 +3169,10 @@
               "mode": "raw",
               "raw": "{\"establishmentId\":\"{{establishment_id}}\",\"professionalId\":\"{{professional_id}}\",\"clientName\":\"GuestRemove\",\"serviceItemIds\":[\"{{service_item_id}}\"]}"
             },
-            "url": "{{base_url}}/professional-queue/add-quest-attendance"
+            "url": "{{base_url}}/professional-queue/add-quest-attendance",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3154,7 +3213,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/professional-queue/{{attendance_id_remove}}/remove"
+            "url": "{{base_url}}/professional-queue/{{attendance_id_remove}}/remove",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3294,7 +3356,10 @@
               "mode": "raw",
               "raw": "{\"name\":\"Sem Token\"}"
             },
-            "url": "{{base_url}}/establishment/quick-create"
+            "url": "{{base_url}}/establishment/quick-create",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3323,7 +3388,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/attendances/00000000-0000-0000-0000-000000000000"
+            "url": "{{base_url}}/attendances/00000000-0000-0000-0000-000000000000",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -3362,6 +3430,109 @@
           "auth": {
             "type": "noauth"
           }
+        },
+        {
+          "name": "[ERRO] update open status CLIENT token → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role OWNER necessária\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"openStatus\":\"OPEN\"}"
+            },
+            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "[ERRO] addProfessional - token CLIENT sem role OWNER → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{establishment_id}}",
+                "professionals"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role OWNER necessária\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
@@ -3392,7 +3563,10 @@
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/profile/delete/me"
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
