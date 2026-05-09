@@ -11,6 +11,7 @@ import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
+import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import com.ospaulos.vupth.domain.queue.service.QueueUtils;
 import lombok.AllArgsConstructor;
@@ -113,7 +114,7 @@ public class QueueServiceImpl implements QueueService {
         int clientPosition = findClientPosition(fullQueue, attendance.getId());
 
         if (clientPosition == -1) {
-            throw new IllegalStateException("Client not found in queue");
+            throw new ClientNotInQueueException(attendance.getId());
         }
 
         WaitingTimeCalculation calculation = calculateWaitingTime(fullQueue, clientPosition);

@@ -16,7 +16,9 @@ import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepositor
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.client.service.ClientService;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.AllArgsConstructor;
@@ -79,15 +81,15 @@ public class ClientServiceImpl implements ClientService {
                 .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
 
         if (!attendance.getClient().getId().equals(clientId)) {
-            throw new IllegalArgumentException("Client can only check their own attendance");
+            throw new EstablishmentAccessDeniedException("Client can only check their own attendance");
         }
 
         if (attendance.getStatus() == AttendanceStatus.FINISHED) {
-            throw new IllegalStateException("Attendance is already completed");
+            throw new AttendanceInvalidStatusException("Attendance is already completed");
         }
 
         if (attendance.getStatus() == AttendanceStatus.CANCELLED) {
-            throw new IllegalStateException("Attendance is canceled");
+            throw new AttendanceInvalidStatusException("Attendance is canceled");
         }
 
         return queueService.queueWaitingTime(attendance);
@@ -103,7 +105,7 @@ public class ClientServiceImpl implements ClientService {
                 .orElseThrow(() -> new EntityNotFoundException("Client not found"));
 
         if(!attendance.getClient().getId().equals(clientId)){
-            throw new IllegalArgumentException("Attendance or Client don't exists");
+            throw new EstablishmentAccessDeniedException("Attendance or Client don't exists");
         }
 
         AttendanceInProgressResponse attendanceInProgressResponse =
@@ -127,7 +129,7 @@ public class ClientServiceImpl implements ClientService {
                 .orElseThrow(() -> new EntityNotFoundException("Client not found"));
 
         if(!attendance.getClient().getId().equals(clientId)){
-            throw new IllegalArgumentException("Attendance or Client don't exists");
+            throw new EstablishmentAccessDeniedException("Attendance or Client don't exists");
         }
 
         return attendanceService.cancelAttendance(attendance);

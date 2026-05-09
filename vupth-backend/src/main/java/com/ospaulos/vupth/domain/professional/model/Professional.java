@@ -38,7 +38,7 @@ public class Professional {
     private Boolean isAvailable = true;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "establishment_id", nullable = false)
+    @JoinColumn(name = "establishment_id")
     @JsonBackReference("establishment-professionals")
     private Establishment establishment;
 
