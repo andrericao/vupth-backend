@@ -7,10 +7,10 @@
   },
   "item": [
     {
-      "name": "01 - auth prof",
+      "name": "01 - auth",
       "item": [
         {
-          "name": "register (prof)",
+          "name": "register (owner)",
           "event": [
             {
               "listen": "test",
@@ -20,7 +20,7 @@
                   "pm.test(\"Schema: id presente e é string UUID\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
-                  "  pm.collectionVariables.set(\"prof_id\", r.id);",
+                  "  pm.collectionVariables.set(\"owner_id\", r.id);",
                   "});",
                   "pm.test(\"Schema: email presente\", () => {",
                   "  pm.expect(pm.response.json().email).to.be.a(\"string\");",
@@ -33,8 +33,8 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@test.com\");",
-                  "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
+                  "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@test.com\");",
+                  "pm.collectionVariables.set(\"owner_password\", \"Senha@123\");"
                 ],
                 "type": "text/javascript"
               }
@@ -50,7 +50,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+              "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
             },
             "url": "{{base_url}}/auth/register"
           },
@@ -60,7 +60,7 @@
           }
         },
         {
-          "name": "login (prof)",
+          "name": "login (owner)",
           "event": [
             {
               "listen": "test",
@@ -70,9 +70,9 @@
                   "pm.test(\"Schema: tokens e user presentes\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.tokens).to.have.property(\"access_token\");",
-                  "  pm.collectionVariables.set(\"prof_token\", r.tokens.access_token);",
-                  "  pm.collectionVariables.set(\"prof_refresh_token\", r.tokens.refresh_token);",
-                  "  pm.collectionVariables.set(\"prof_id\", r.user.id);",
+                  "  pm.collectionVariables.set(\"owner_token\", r.tokens.access_token);",
+                  "  pm.collectionVariables.set(\"owner_refresh_token\", r.tokens.refresh_token);",
+                  "  pm.collectionVariables.set(\"owner_id\", r.user.id);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -89,7 +89,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+              "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
             },
             "url": "{{base_url}}/auth/login"
           },
@@ -99,7 +99,7 @@
           }
         },
         {
-          "name": "complete profile (prof)",
+          "name": "complete profile (owner)",
           "event": [
             {
               "listen": "test",
@@ -129,7 +129,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -148,14 +148,14 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
           }
         },
         {
-          "name": "update profile (prof)",
+          "name": "update profile (owner)",
           "event": [
             {
               "listen": "test",
@@ -183,7 +183,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -202,7 +202,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -237,7 +237,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -256,7 +256,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -288,6 +288,98 @@
               "raw": "{\"last_name\": \"Teste\"}"
             },
             "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "register (prof)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Prof registrado\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "  pm.collectionVariables.set(\"prof_id\", r.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@test.com\");",
+                  "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+            },
+            "url": "{{base_url}}/auth/register",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "login (prof)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Login prof OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: tokens presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+                  "  pm.collectionVariables.set(\"prof_token\", r.tokens.access_token);",
+                  "  pm.collectionVariables.set(\"prof_refresh_token\", r.tokens.refresh_token);",
+                  "  pm.collectionVariables.set(\"prof_id\", r.user.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+            },
+            "url": "{{base_url}}/auth/login",
             "auth": {
               "type": "noauth"
             }
@@ -413,7 +505,7 @@
                   "pm.test(\"Schema: id presente e é UUID\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
-                  "  pm.collectionVariables.set(\"establishment_id\", r.id);",
+                  "  pm.collectionVariables.set(\"owner_establishment_id\", r.id);",
                   "});",
                   "pm.test(\"Schema: name presente\", () => {",
                   "  pm.expect(pm.response.json().name).to.be.a(\"string\");",
@@ -432,7 +524,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -451,14 +543,58 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
           }
         },
         {
-          "name": "refresh token (OWNER role)",
+          "name": "owner quick-create professional (solo shop)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Owner agora também é profissional\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Owner Profissional\", \"specialty\": \"Manager\", \"establishmentId\": \"{{owner_establishment_id}}\"}"
+            },
+            "url": "{{base_url}}/professional/quick-create",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "refresh token (OWNER + PROFESSIONAL role)",
           "event": [
             {
               "listen": "test",
@@ -471,9 +607,9 @@
                   "  // GUARD: só atualiza prof_token se o novo valor for um JWT válido",
                   "  const newToken = r.access_token;",
                   "  if (newToken && typeof newToken === \"string\" && newToken.length > 20) {",
-                  "    pm.collectionVariables.set(\"prof_token\", newToken);",
-                  "    pm.collectionVariables.set(\"prof_refresh_token\", r.refresh_token);",
-                  "    console.log(\"[refresh] prof_token atualizado OK\");",
+                  "    pm.collectionVariables.set(\"owner_token\", newToken);",
+                  "    pm.collectionVariables.set(\"owner_refresh_token\", r.refresh_token);",
+                  "    console.log(\"[refresh] owner_token atualizado OK\");",
                   "  } else {",
                   "    console.warn(\"[refresh] token inválido ou vazio — prof_token NÃO sobrescrito. Valor:\", newToken);",
                   "  }",
@@ -493,9 +629,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"refresh_token\": \"{{prof_refresh_token}}\"}"
+              "raw": "{\"refresh_token\": \"{{owner_refresh_token}}\"}"
             },
-            "url": "{{base_url}}/auth/refresh"
+            "url": "{{base_url}}/auth/refresh",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -760,7 +899,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -768,7 +907,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"CLOSED\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -779,7 +918,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -812,7 +951,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -820,7 +959,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -831,7 +970,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -864,7 +1003,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -872,7 +1011,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"TEMPORARILY_CLOSED\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -883,7 +1022,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -914,7 +1053,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -946,7 +1085,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -954,7 +1093,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"INVALIDO\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -965,7 +1104,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -993,7 +1132,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1001,7 +1140,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":null}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -1012,7 +1151,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1040,7 +1179,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1048,7 +1187,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -1059,7 +1198,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1071,18 +1210,17 @@
       "name": "03 - professional",
       "item": [
         {
-          "name": "quick create professional",
+          "name": "register professional (prof)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 201 - Professional criado\", () => pm.response.to.have.status(201));",
-                  "pm.test(\"Schema: id, specialty presentes\", () => {",
+                  "pm.test(\"Status 201 - Profissional criado sem establishment\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
-                  "  pm.collectionVariables.set(\"professional_id\", r.id);",
-                  "  pm.collectionVariables.set(\"prof_id\", r.id);",
+                  "  pm.collectionVariables.set(\"prof_professional_id\", r.id);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -1104,23 +1242,16 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\": \"Profissional Teste\", \"establishmentId\": \"{{establishment_id}}\"}"
+              "raw": "{\"name\": \"Profissional Teste\", \"specialty\": \"Barber\"}"
             },
-            "url": "{{base_url}}/professional/quick-create",
+            "url": "{{base_url}}/professional/register",
             "auth": {
               "type": "noauth"
             }
           },
           "response": [],
           "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{prof_token}}",
-                "type": "string"
-              }
-            ]
+            "type": "noauth"
           }
         },
         {
@@ -1161,7 +1292,50 @@
               "mode": "raw",
               "raw": "{\"refresh_token\": \"{{prof_refresh_token}}\"}"
             },
-            "url": "{{base_url}}/auth/refresh"
+            "url": "{{base_url}}/auth/refresh",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "owner adds prof to establishment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Profissional vinculado ao establishment\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1426,18 +1600,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1454,7 +1628,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1480,7 +1654,7 @@
                   "  pm.test(\"Schema: id e establishment_id presentes\", () => {",
                   "    const r = pm.response.json();",
                   "    pm.expect(r.id).to.be.a(\"string\");",
-                  "    pm.expect(r.establishment_id).to.equal(pm.collectionVariables.get(\"establishment_id\"));",
+                  "    pm.expect(r.establishment_id).to.equal(pm.collectionVariables.get(\"owner_establishment_id\"));",
                   "  });",
                   "}"
                 ],
@@ -1500,18 +1674,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1528,7 +1702,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1559,13 +1733,13 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1603,18 +1777,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1631,7 +1805,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1662,18 +1836,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1690,7 +1864,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1744,7 +1918,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1752,7 +1926,7 @@
               "mode": "raw",
               "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Degradê\",\"price\":35.00,\"estimatedMinutes\":30}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/service-items",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
             "auth": {
               "type": "noauth"
             }
@@ -1763,7 +1937,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1799,11 +1973,11 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/professional/{{professional_id}}/service-items",
+            "url": "{{base_url}}/professional/{{prof_professional_id}}/service-items",
             "auth": {
               "type": "noauth"
             }
@@ -1814,7 +1988,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1838,7 +2012,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1853,7 +2027,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1886,7 +2060,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1894,7 +2068,7 @@
               "mode": "raw",
               "raw": "{\"street\":\"Rua Teste\",\"number\":\"123\",\"neighborhood\":\"Centro\",\"city\":\"São Paulo\",\"state\":\"SP\",\"zipCode\":\"01001000\",\"addressType\":\"HOME\"}"
             },
-            "url": "{{base_url}}/establishments/{{establishment_id}}/addresses",
+            "url": "{{base_url}}/establishments/{{owner_establishment_id}}/addresses",
             "auth": {
               "type": "noauth"
             }
@@ -1905,7 +2079,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -2113,14 +2287,10 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200 - Professionals com fila retornados\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Schema: professionals é array\", () => {",
+                  "pm.test(\"Schema: professionals é array não vazio\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r).to.have.property(\"professionals\");",
-                  "  pm.expect(r.professionals).to.be.an(\"array\");",
-                  "  if (r.professionals.length > 0) {",
-                  "    pm.collectionVariables.set(\"professional_id\", r.professionals[0].id);",
-                  "    pm.collectionVariables.set(\"prof_id\", r.professionals[0].id);",
-                  "  }",
+                  "  pm.expect(r.professionals).to.be.an(\"array\").that.is.not.empty;",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -2130,7 +2300,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/establishment/id/{{establishment_id}}/professionals-with-queue"
+            "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue"
           },
           "response": [],
           "auth": {
@@ -2173,7 +2343,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2222,7 +2392,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2264,7 +2434,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2444,19 +2614,19 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/client-queue/{{professional_id}}/queue?establishmentId={{establishment_id}}",
+              "raw": "{{base_url}}/client-queue/{{prof_professional_id}}/queue?establishmentId={{owner_establishment_id}}",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "client-queue",
-                "{{professional_id}}",
+                "{{prof_professional_id}}",
                 "queue"
               ],
               "query": [
                 {
                   "key": "establishmentId",
-                  "value": "{{establishment_id}}"
+                  "value": "{{owner_establishment_id}}"
                 }
               ]
             },
@@ -2559,7 +2729,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2910,7 +3080,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -3068,7 +3238,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -3167,7 +3337,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"establishmentId\":\"{{establishment_id}}\",\"professionalId\":\"{{professional_id}}\",\"clientName\":\"GuestRemove\",\"serviceItemIds\":[\"{{service_item_id}}\"]}"
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\",\"professionalId\":\"{{prof_professional_id}}\",\"clientName\":\"GuestRemove\",\"serviceItemIds\":[\"{{service_item_id}}\"]}"
             },
             "url": "{{base_url}}/professional-queue/add-quest-attendance",
             "auth": {
@@ -3258,7 +3428,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"email\":\"{{prof_email}}\",\"password\":\"SenhaErrada@999\"}"
+              "raw": "{\"email\":\"{{owner_email}}\",\"password\":\"SenhaErrada@999\"}"
             },
             "url": "{{base_url}}/auth/login"
           },
@@ -3384,7 +3554,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -3399,7 +3569,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -3424,7 +3594,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/establishment/id/{{establishment_id}}/professionals-with-queue"
+            "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue"
           },
           "response": [],
           "auth": {
@@ -3461,7 +3631,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -3494,13 +3664,13 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -3540,13 +3710,54 @@
       "name": "99 - cleanup",
       "item": [
         {
-          "name": "deletar clientes seed (pre-request) + deletar prof",
+          "name": "deletar owner",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test(\"Cleanup OK\", () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deletar prof",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Cleanup prof OK\", () => {",
                   "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
                   "});"
                 ],
@@ -3570,14 +3781,75 @@
           },
           "response": [],
           "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{prof_token}}",
-                "type": "string"
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "deletar partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Cleanup partner OK\", () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
               }
-            ]
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "deletar client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Cleanup client OK\", () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
           }
         }
       ]
@@ -3613,11 +3885,11 @@
       "value": "http://localhost:8080"
     },
     {
-      "key": "prof_token",
+      "key": "owner_token",
       "value": ""
     },
     {
-      "key": "prof_refresh_token",
+      "key": "owner_refresh_token",
       "value": ""
     },
     {
@@ -3629,7 +3901,7 @@
       "value": ""
     },
     {
-      "key": "prof_id",
+      "key": "owner_id",
       "value": ""
     },
     {
@@ -3637,11 +3909,11 @@
       "value": ""
     },
     {
-      "key": "professional_id",
+      "key": "prof_professional_id",
       "value": ""
     },
     {
-      "key": "establishment_id",
+      "key": "owner_establishment_id",
       "value": ""
     },
     {
@@ -3669,11 +3941,11 @@
       "value": ""
     },
     {
-      "key": "prof_email",
+      "key": "owner_email",
       "value": ""
     },
     {
-      "key": "prof_password",
+      "key": "owner_password",
       "value": ""
     },
     {
@@ -3713,6 +3985,31 @@
       "key": "partner_professional_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "prof_email",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_password",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_id",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_refresh_token",
+      "value": "",
+      "type": "default"
     }
   ],
   "auth": {
@@ -3720,7 +4017,7 @@
     "bearer": [
       {
         "key": "token",
-        "value": "{{prof_token}}",
+        "value": "{{owner_token}}",
         "type": "string"
       }
     ]
