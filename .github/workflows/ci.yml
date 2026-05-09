@@ -79,21 +79,24 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
-      # 🔥 ALTERADO: antes era sleep 15
+      - name: Wait for Render deploy to start
+        run: |
+          echo "Aguardando Render iniciar o build (old instance still UP)..."
+          sleep 60
+
       - name: Wait for Render (readiness check)
         run: |
-          for i in {1..20}; do
+          for i in {1..40}; do
             echo "Tentativa $i..."
 
-            RESPONSE=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health)
+            RESPONSE=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health || true)
 
             echo "Resposta: $RESPONSE"
 
             if echo "$RESPONSE" | grep -q '"status":"UP"'; then
               echo "App respondeu UP"
 
-              # 🔥 valida readiness de verdade
-              READY=$(curl -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness)
+              READY=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness || true)
 
               echo "Readiness: $READY"
 
@@ -104,7 +107,7 @@ jobs:
             fi
 
             echo "Ainda não está pronta..."
-            sleep 10
+            sleep 15
           done
 
           echo "Timeout aguardando app"
@@ -126,6 +129,7 @@ jobs:
           newman run postman/collection-homolog.json \
             --env-var "base_url=${{ secrets.HOMOLOG_URL }}" \
             --reporters cli \
+            --verbose \
             --bail
 
 
@@ -167,14 +171,14 @@ jobs:
         run: |
           for i in {1..20}; do
             echo "Tentativa $i..."
-            RESPONSE=$(curl -s "${{ secrets.PROD_URL }}/actuator/health")
+            RESPONSE=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
             echo "Resposta: $RESPONSE"
             if echo "$RESPONSE" | grep -q '"status":"UP"'; then
               echo "App PRONTA!"
               exit 0
             fi
             echo "Ainda não está pronta..."
-            sleep 10
+            sleep 15
           done
           echo "Timeout aguardando app"
           exit 1

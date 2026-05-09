@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.establishment.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import jakarta.validation.constraints.NotNull;
@@ -12,15 +13,23 @@ public record EstablishmentResponse(
         @NotNull Set<ServiceType> services,
         @NotNull String name,
         String urlImage,
-        @NotNull UUID ownerId
+        @NotNull UUID ownerId,
+
+        @JsonProperty("open_status")
+        String openStatus,
+
+        @JsonProperty("status")
+        String status
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return new EstablishmentResponse(
                 establishment.getId(),
-                establishment.getServices(),
+                establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
                 establishment.getName(),
                 establishment.getUrlImage(),
-                establishment.getOwner().getId()
+                establishment.getOwner().getId(),
+                establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
+                establishment.getStatus() != null ? establishment.getStatus().name() : null
         );
     }
 }

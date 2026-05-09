@@ -169,12 +169,12 @@ class AttendanceServiceImplTest {
                 return a;
             });
 
-            Attendance result = attendanceService.createAttendance(request);
+            AttendanceInQueueResponse result = attendanceService.createAttendance(request);
 
             assertThat(result).isNotNull();
-            assertThat(result.getStatus()).isEqualTo(AttendanceStatus.SCHEDULED);
-            assertThat(result.getProfessional()).isEqualTo(professional);
-            assertThat(result.getClient()).isEqualTo(client);
+            assertThat(result.status()).isEqualTo(AttendanceStatus.SCHEDULED);
+            assertThat(result.professionalId()).isEqualTo(professionalId);
+            assertThat(result.clientId()).isEqualTo(clientId);
             verify(attendanceRepository).save(any());
         }
 

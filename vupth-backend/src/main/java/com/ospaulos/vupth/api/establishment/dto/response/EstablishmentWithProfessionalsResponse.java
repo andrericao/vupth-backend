@@ -53,7 +53,7 @@ public record EstablishmentWithProfessionalsResponse(
                 establishment.getId(),
                 establishment.getName(),
                 establishment.getUrlImage(),
-                establishment.getServices(),
+                establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
                 establishment.getOwner().getId(),
                 establishment.getOpenStatus().name(),
                 totalInQueue,

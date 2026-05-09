@@ -71,7 +71,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
               a.scheduledTime >= :fromTime
               OR (a.startTime IS NOT NULL AND a.startTime >= :fromTime)
           )
-        ORDER BY a.scheduledTime ASC, a.createdAt ASC
+        ORDER BY a.scheduledTime ASC
     """)
     //Ajuste: AND a.status IN ('SCHEDULED', 'IN_PROGRESS', 'WAITING')
     List<Attendance> findQueueByProfessionalAndEstablishment(
@@ -107,7 +107,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
         WHERE a.professional.id = :professionalId
           AND a.establishment.id = :establishmentId
           AND a.status = 'SCHEDULED'
-        ORDER BY a.scheduledTime ASC, a.createdAt ASC
+        ORDER BY a.scheduledTime ASC
     """)
     List<Attendance> findWaitingQueueByProfessionalAndEstablishment(
             @Param("professionalId") UUID professionalId,

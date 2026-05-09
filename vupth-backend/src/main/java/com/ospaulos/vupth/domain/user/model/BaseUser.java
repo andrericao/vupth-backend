@@ -6,6 +6,7 @@ import com.ospaulos.vupth.api.address.dto.request.UpdateAddressRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserProfileGeneralInfosRequest;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
 import com.ospaulos.vupth.api.user.exception.UserNotDeletedException;
+import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.user.exception.NotFoundUserException;
@@ -165,6 +166,10 @@ public class BaseUser implements Serializable {
         if (request.profileImageUrl() != null && !request.profileImageUrl().isBlank()) {
             this.profileImageUrl = request.profileImageUrl();
             modified.add("profile_image_url");
+        }
+
+        if (modified.isEmpty()) {
+            throw new NoFieldsToUpdateException();
         }
 
         return modified;

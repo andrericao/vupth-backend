@@ -13,7 +13,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -26,18 +25,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integration tests — domain: EstablishmentAddress
  *
- * Scenarios covered:
- * - POST /establishments/{id}/addresses — 201 happy path
- * - POST /establishments/{id}/addresses — 401 no token
- * - POST /establishments/{id}/addresses — 422 missing required fields (street, city)
- * - POST /establishments/{id}/addresses — 422 invalid ZIP code format
- * - POST /establishments/{id}/addresses — 404 establishment not found
- *
- * Root bug fixed: test was using "/establishments/{establishmentId}/addresses" as a literal
- * URI template string but not passing the path variable → IllegalArgumentException at runtime.
- * Fixed to: post("/establishments/{id}/addresses", establishmentId)
+ * zipCode: 8 dígitos puros, sem hífen ou ponto (ex: "01310100").
+ * Frontend é responsável por formatar para exibição ("01310-100").
  *
  * @since v8
+ * @compat zipCode format updated v14
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -83,7 +75,7 @@ class EstablishmentAddressIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
                         .content(mapper.writeValueAsString(request)))
-                .andDo(print())  // print before assertion to capture 500 body
+                .andDo(print())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.establishmenID").value(establishmentId))
                 .andExpect(jsonPath("$.street").value(request.street()))
@@ -170,7 +162,7 @@ class EstablishmentAddressIntegrationTest {
 
     @Test
     @Order(32)
-    @DisplayName("POST /establishments/{id}/addresses — 422 invalid ZIP code format")
+    @DisplayName("POST /establishments/{id}/addresses — 422 invalid ZIP (with formatting chars)")
     void createAddress_invalidZip() throws Exception {
         log.info("[EstabAddress] createAddress_invalidZip");
 
@@ -181,7 +173,33 @@ class EstablishmentAddressIntegrationTest {
                 faker.address().streetSuffix(),
                 faker.address().city(),
                 faker.address().stateAbbr(),
-                "not-a-zip",
+                "01310-100",  // formatted ZIP — must be rejected (only raw digits accepted)
+                null, null, null);
+
+        mvc.perform(post("/establishments/{id}/addresses", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(mapper.writeValueAsString(request)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.zipCode").exists())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(33)
+    @DisplayName("POST /establishments/{id}/addresses — 422 ZIP with wrong digit count")
+    void createAddress_zipWrongLength() throws Exception {
+        log.info("[EstabAddress] createAddress_zipWrongLength");
+
+        AddressRequest request = new AddressRequest(
+                faker.address().streetName(),
+                faker.address().buildingNumber(),
+                null,
+                faker.address().streetSuffix(),
+                faker.address().city(),
+                faker.address().stateAbbr(),
+                "1234",  // only 4 digits — must be rejected
                 null, null, null);
 
         mvc.perform(post("/establishments/{id}/addresses", establishmentId)
@@ -237,11 +255,11 @@ class EstablishmentAddressIntegrationTest {
                 Double.parseDouble(faker.address().longitude()));
     }
 
-    /** Returns a ZIP matching the pattern \d{2}.\d{3}-\d{3} */
+    /**
+     * CEP como 8 dígitos puros, sem formatação.
+     * O frontend formata para exibição ("01310-100").
+     */
     private String validZip() {
-        return String.format("%02d.%03d-%03d",
-                faker.number().numberBetween(0, 100),
-                faker.number().numberBetween(0, 1000),
-                faker.number().numberBetween(0, 1000));
+        return String.format("%08d", faker.number().numberBetween(1000000, 99999999));
     }
 }

@@ -13,6 +13,7 @@ import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
 import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidException;
@@ -24,6 +25,7 @@ import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
+import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -50,9 +52,6 @@ import java.util.Map;
  * Every handled exception is logged with:
  *   [STATUS] ExceptionType | method=HTTP_METHOD path=REQUEST_URI | detail
  *
- * This pattern lets the front-end correlate an error response to a specific
- * API call by matching (method + path) against the network tab.
- *
  * HTTP status convention:
  *   400 — Invalid data or business rule violation (invalid state)
  *   401 — Unauthenticated (wrong credentials, invalid/expired token)
@@ -63,6 +62,7 @@ import java.util.Map;
  *   500 — Unexpected internal error
  *
  * @since v7
+ * @compat ProfessionalAlreadyAffiliatedException added v14
  */
 @Slf4j
 @RestControllerAdvice
@@ -72,11 +72,6 @@ public class GlobalExceptionHandler {
     // 404 NOT FOUND
     // ─────────────────────────────────────────────
 
-    /**
-     * Catches bare .orElseThrow() calls (NoSuchElementException) and
-     * JPA EntityNotFoundException — both indicate a resource was not found.
-     * Without these handlers they bubble up as 500 INTERNAL_ERROR.
-     */
     @ExceptionHandler(EntityNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleEntityNotFound(
             EntityNotFoundException ex, HttpServletRequest req) {
@@ -193,6 +188,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_BIRTH_DATE");
     }
 
+    @ExceptionHandler(NoFieldsToUpdateException.class)
+    public ResponseEntity<ErrorResponse> handleNoFieldsToUpdate(
+            NoFieldsToUpdateException ex, HttpServletRequest req) {
+        log.warn("[400] NoFieldsToUpdate | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "NO_FIELDS_TO_UPDATE");
+    }
+
     // ─────────────────────────────────────────────
     // 401 UNAUTHORIZED
     // ─────────────────────────────────────────────
@@ -268,6 +270,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "USER_ALREADY_PROFESSIONAL");
     }
 
+    @ExceptionHandler(ProfessionalAlreadyAffiliatedException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalAlreadyAffiliated(
+            ProfessionalAlreadyAffiliatedException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalAlreadyAffiliated | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_ALREADY_AFFILIATED");
+    }
+
     @ExceptionHandler(AttendanceAlreadyInProgressException.class)
     public ResponseEntity<ErrorResponse> handleAlreadyInProgress(
             AttendanceAlreadyInProgressException ex, HttpServletRequest req) {
@@ -324,10 +333,6 @@ public class GlobalExceptionHandler {
                         OffsetDateTime.now()));
     }
 
-    /**
-     * Handles deserialization errors: wrong type (string where number expected,
-     * invalid enum, malformed UUID, etc.)
-     */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleNotReadable(
             HttpMessageNotReadableException ex, HttpServletRequest req) {
@@ -337,11 +342,6 @@ public class GlobalExceptionHandler {
                 "INVALID_REQUEST_BODY");
     }
 
-
-    /**
-     * Handles type conversion failures on @PathVariable and @RequestParam.
-     * Example: GET /users/id/not-a-uuid -> 400 INVALID_PATH_VARIABLE instead of 500.
-     */
     @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(
             org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex,
@@ -358,7 +358,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
         log.error("[500] UnexpectedError | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage(), ex);
-        // DEBUG: exposes root cause so .andDo(print()) shows the actual exception in test output
         String debugMsg = ex.getClass().getSimpleName() + ": " + ex.getMessage();
         return build(HttpStatus.INTERNAL_SERVER_ERROR, debugMsg, "INTERNAL_ERROR");
     }

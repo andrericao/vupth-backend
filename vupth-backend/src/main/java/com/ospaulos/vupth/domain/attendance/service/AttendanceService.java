@@ -15,12 +15,14 @@ import java.util.UUID;
 
 public interface AttendanceService {
 
+    public AttendanceInQueueResponse getById(UUID attendanceId);
+
     public Attendance createAttendance(AttendanceRequest request,
                                        Professional professional,
                                        Establishment establishment,
                                        Client client);
 
-    public Attendance createAttendance(AttendanceRequest request);
+    public AttendanceInQueueResponse createAttendance(AttendanceRequest request);
 
     public Attendance createGuestAttendance(AttendanceGuestRequest request, Professional professional, Establishment establishment);
 
@@ -32,16 +34,8 @@ public interface AttendanceService {
 
     public AttendanceInQueueResponse cancelAttendance(UUID attendance, UUID clientId);
 
-    /**
-     * Client leaves the queue voluntarily (status → CANCELED).
-     * Only the owner of the attendance (by clientId from JWT) can call this.
-     */
     public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId);
 
-    /**
-     * Professional removes any attendance from the queue (status → CANCELED).
-     * Used to remove guests or no-shows. No ownership check on the client side.
-     */
     public AttendanceInQueueResponse removeFromQueue(UUID attendanceId, UUID professionalId);
 
     public AttendanceInQueueResponse getNextAttendance(Professional professional, Establishment establishment);
@@ -56,10 +50,6 @@ public interface AttendanceService {
 
     public AttendanceInProgressResponse buildAttendanceInProgressResponse(Attendance attendance);
 
-    /**
-     * Builds a response for a FINISHED attendance, populating the status and duration fields.
-     * Used by finishAttendance to return the completed attendance in the QueueResponse.inAttendance field.
-     */
     public AttendanceInProgressResponse buildFinishedAttendanceResponse(Attendance attendance);
 
     public AttendancePausedResponse buildPausedAttendance(Attendance attendance);

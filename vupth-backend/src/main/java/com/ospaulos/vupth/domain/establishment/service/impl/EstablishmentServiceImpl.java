@@ -6,6 +6,9 @@ import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
+import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
+import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
@@ -15,6 +18,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -57,8 +61,50 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     @Override
+    public List<EstablishmentResponse> findAllActive() {
+        log.info("[Establishment] findAllActive");
+        return establishmentRepository.findAllActive().stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
+    public List<EstablishmentResponse> searchByName(String name) {
+        log.info("[Establishment] searchByName — name={}", name);
+        return establishmentRepository
+                .findByNameContainingIgnoreCaseAndStatusNot(name)
+                .stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
+    public List<EstablishmentResponse> findByServiceType(ServiceType serviceType) {
+        log.info("[Establishment] findByServiceType — type={}", serviceType);
+        return establishmentRepository.findActiveByServiceType(serviceType).stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
+    public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID ownerId, OpenStatus newStatus) {
+        log.info("[Establishment] updateOpenStatus — id={} owner={} newStatus={}",
+                establishmentId, ownerId, newStatus);
+
+        Establishment establishment = establishmentRepository
+                .findByIdAndOwnerId(establishmentId, ownerId)
+                .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
+
+        establishment.setOpenStatus(newStatus);
+        establishment.setLastStatusChange(ZonedDateTime.now());
+        Establishment saved = establishmentRepository.save(establishment);
+
+        return EstablishmentResponse.fromEntity(saved);
+    }
+
+    @Override
     public EstablishmentResponse findById(UUID id){
-         Establishment establishment = establishmentRepository.findById(id)
+         Establishment establishment = establishmentRepository.findByIdEager(id)
                 .orElseThrow(() -> new EstablishmentNotFoundException(id));
 
          return EstablishmentResponse.fromEntity(establishment);
@@ -67,7 +113,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     @Override
     public List<ServiceItem> getServicesItemByEstablishment(UUID establishmentId){
 
-        Establishment establishment = establishmentRepository.findById(establishmentId)
+        Establishment establishment = establishmentRepository.findByIdEager(establishmentId)
                 .orElseThrow(() -> new EntityNotFoundException("Establishment not found"));
 
         return establishment.getServicesItemByEstablishment();

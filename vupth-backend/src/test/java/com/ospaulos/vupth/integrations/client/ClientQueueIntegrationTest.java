@@ -60,6 +60,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class ClientQueueIntegrationTest {
 
+    //private static final org.slf4j.Logger log =
+      //      org.slf4j.LoggerFactory.getLogger(ClientQueueIntegrationTest.class);
+
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
