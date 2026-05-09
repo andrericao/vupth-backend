@@ -3350,6 +3350,15 @@
           "name": "add attendance (prof autenticado)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"SCHEDULED_TIME\", new Date().toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -3392,7 +3401,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"clientId\":\"{{client_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{SCHEDULED_TIME}}\"}",
               "options": {
                 "raw": {
                   "language": "json"
