@@ -682,6 +682,49 @@
       "name": "02b - establishment filters + openStatus",
       "item": [
         {
+          "name": "get establishment by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Establishment retornado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: id e name presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"id\");",
+                  "  pm.expect(r).to.have.property(\"name\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/id/{{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "id",
+                "{{owner_establishment_id}}"
+              ]
+            }
+          }
+        },
+        {
           "name": "list all active establishments",
           "event": [
             {
@@ -3304,6 +3347,61 @@
       "name": "10 - prof attendance handle",
       "item": [
         {
+          "name": "add attendance (prof autenticado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Attendance criado via add-attendance\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/add-attendance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "add-attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "create guest attendance para remover (prof)",
           "event": [
             {
@@ -3398,6 +3496,145 @@
                 "type": "string"
               }
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 - profile updates",
+      "item": [
+        {
+          "name": "update password (partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Password atualizado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: tokens presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"tokens\");",
+                  "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+                  "  if (r.tokens.access_token) {",
+                  "    pm.collectionVariables.set(\"partner_token\", r.tokens.access_token);",
+                  "    pm.collectionVariables.set(\"partner_refresh_token\", r.tokens.refresh_token);",
+                  "    pm.collectionVariables.set(\"partner_password\", \"NovaSenha@456\");",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-password/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-password",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"NovaSenha@456\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "update email (partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Email atualizado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: tokens e user presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"tokens\");",
+                  "  pm.expect(r).to.have.property(\"user\");",
+                  "  if (r.tokens.access_token) {",
+                  "    pm.collectionVariables.set(\"partner_token\", r.tokens.access_token);",
+                  "    pm.collectionVariables.set(\"partner_refresh_token\", r.tokens.refresh_token);",
+                  "    pm.collectionVariables.set(\"partner_email\", r.user.email);",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const newEmail = \"partner_updated_\" + Date.now() + \"@test.com\";",
+                  "pm.collectionVariables.set(\"partner_new_email\", newEmail);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-email/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-email",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{partner_new_email}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           }
         }
       ]
@@ -3703,12 +3940,1169 @@
               }
             }
           ]
+        },
+        {
+          "name": "[ERRO] logout - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"invalid_token\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] update-email - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-email/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-email",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"hacker@test.com\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] update-password - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-password/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-password",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"HackerPass@123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] delete profile - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/delete/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "delete",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add service item - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "service-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Teste\",\"price\":10.00,\"estimatedMinutes\":15}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] quick-create professional - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/quick-create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "quick-create"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Hacker\",\"establishmentId\":\"{{owner_establishment_id}}\",\"specialty\":\"BARBER\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] affiliate professional - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/affiliate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "affiliate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] get attendance by id - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] cancel attendance - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "cancel"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] leave queue - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/leave-queue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "leave-queue"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] start attendance - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "start"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] finish attendance - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/finish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "finish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add-attendance (prof) - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/add-attendance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "add-attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] remove from queue - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/00000000-0000-0000-0000-000000000000/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "00000000-0000-0000-0000-000000000000",
+                "remove"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] client queue - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/client-queue/{{prof_professional_id}}/queue?establishmentId={{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "client-queue",
+                "{{prof_professional_id}}",
+                "queue?establishmentId={{owner_establishment_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] client wait-time - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/client-queue/{{attendance_id}}/wait-time?clientId={{client_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "client-queue",
+                "{{attendance_id}}",
+                "wait-time?clientId={{client_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add address - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishments/{{owner_establishment_id}}/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishments",
+                "{{owner_establishment_id}}",
+                "addresses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"street\":\"Rua Teste\",\"number\":\"123\",\"neighborhood\":\"Centro\",\"city\":\"SP\",\"state\":\"SP\",\"zipCode\":\"01310100\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] establishment create - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "create"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"ownerID\":\"{{client_id}}\",\"name\":\"Hack Shop\",\"services\":[\"BARBER\"],\"urlImage\":\"http://img.com/x\",\"status\":\"ACTIVE\",\"openStatus\":\"OPEN\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add service item - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "service-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Hack\",\"price\":10.00,\"estimatedMinutes\":15}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] affiliate professional - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/affiliate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "affiliate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] finish attendance - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/finish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "finish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add-attendance - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/add-attendance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "add-attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] remove from queue - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/00000000-0000-0000-0000-000000000000/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "00000000-0000-0000-0000-000000000000",
+                "remove"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] affiliate - já afiliado (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 - Já afiliado\", () => pm.response.to.have.status(409));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/affiliate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "affiliate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
         }
       ]
     },
     {
       "name": "99 - cleanup",
       "item": [
+        {
+          "name": "logout (partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Logout OK\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"{{partner_refresh_token}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "re-login partner (após logout)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Re-login OK\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"partner_token\", r.tokens.access_token);",
+                  "  pm.collectionVariables.set(\"partner_refresh_token\", r.tokens.refresh_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{partner_email}}\",\"password\":\"{{partner_password}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
         {
           "name": "deletar owner",
           "event": [
