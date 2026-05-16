@@ -178,6 +178,8 @@ class EstablishmentIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.name").exists())
+                .andExpect(jsonPath("$.services").isArray())
+                .andExpect(jsonPath("$.services[0]").value("BARBER"))
                 .andDo(print());
     }
 
@@ -227,6 +229,8 @@ class EstablishmentIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.services").isArray())
+                .andExpect(jsonPath("$.services[0]").value("BARBER"))
                 .andDo(print());
     }
 
@@ -556,11 +560,29 @@ class EstablishmentIntegrationTest {
     void filterByServiceType_barber() throws Exception {
         log.info("[Establishment] filterByServiceType_barber");
 
-        mvc.perform(get("/establishment")
+        MvcResult result = mvc.perform(get("/establishment")
                         .param("serviceType", "BARBER")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
-                .andDo(print());
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        assertThat(array.length()).isGreaterThan(0);
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject est = array.getJSONObject(i);
+            JSONArray services = est.getJSONArray("services");
+            boolean containsBarber = false;
+            for (int j = 0; j < services.length(); j++) {
+                if ("BARBER".equals(services.getString(j))) {
+                    containsBarber = true;
+                    break;
+                }
+            }
+            assertThat(containsBarber)
+                    .as("Establishment %s deve conter BARBER em services", est.getString("id"))
+                    .isTrue();
+        }
     }
 
     @Test
