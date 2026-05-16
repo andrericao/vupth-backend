@@ -530,7 +530,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\": \"Barbearia Teste {{$timestamp}}\"}"
+              "raw": "{\"name\": \"Barbearia Teste {{$timestamp}}\", \"serviceType\": \"BARBER\"}"
             },
             "url": "{{base_url}}/establishment/quick-create",
             "auth": {
@@ -664,7 +664,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\": \"Sem Token\"}"
+              "raw": "{\"name\": \"Sem Token\", \"serviceType\": \"BARBER\"}"
             },
             "url": "{{base_url}}/establishment/quick-create",
             "auth": {
@@ -806,8 +806,15 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200 - Filtro por serviceType OK\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Schema: retorna array\", () => {",
-                  "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "pm.test(\"Schema: retorna array não vazio\", () => {",
+                  "  const arr = pm.response.json();",
+                  "  pm.expect(arr).to.be.an(\"array\");",
+                  "  pm.expect(arr.length).to.be.above(0);",
+                  "});",
+                  "pm.test(\"Todos os resultados contêm serviceType BARBER\", () => {",
+                  "  pm.response.json().forEach(e => {",
+                  "    pm.expect(e.serviceType).to.eql(\"BARBER\");",
+                  "  });",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -848,6 +855,12 @@
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "pm.test(\"Schema: retorna array\", () => {",
                   "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});",
+                  "pm.test(\"Se há resultados, todos têm serviceType NAIL_SALON\", () => {",
+                  "  const arr = pm.response.json();",
+                  "  if (arr.length > 0) {",
+                  "    arr.forEach(e => pm.expect(e.serviceType).to.eql(\"NAIL_SALON\"));",
+                  "  }",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -3770,7 +3783,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\":\"Sem Token\"}"
+              "raw": "{\"name\": \"Sem Token\", \"serviceType\": \"BARBER\"}"
             },
             "url": "{{base_url}}/establishment/quick-create",
             "auth": {

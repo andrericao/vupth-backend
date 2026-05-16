@@ -18,6 +18,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
+
 import java.util.Optional;
 import java.util.UUID;
 
@@ -92,7 +94,7 @@ class QuickCreateEstablishmentUseCaseTest {
         when(establishmentRepository.save(any())).thenReturn(saved);
 
         EstablishmentQuickCreateResponse result = useCase.execute(USER_ID,
-                new EstablishmentQuickCreateRequest("Test Barbershop"));
+                new EstablishmentQuickCreateRequest("Test Barbershop", ServiceType.BARBER));
 
         assertThat(result).isNotNull();
         assertThat(result.id()).isEqualTo(ESTAB_ID);
@@ -119,7 +121,7 @@ class QuickCreateEstablishmentUseCaseTest {
         when(establishmentRepository.save(any())).thenReturn(saved);
 
         EstablishmentQuickCreateResponse result = useCase.execute(USER_ID,
-                new EstablishmentQuickCreateRequest("Second Establishment"));
+                new EstablishmentQuickCreateRequest("Second Establishment", ServiceType.BARBER));
 
         assertThat(result).isNotNull();
         verify(userRepository, never()).save(any()); // role already exists — no redundant save
@@ -139,7 +141,7 @@ class QuickCreateEstablishmentUseCaseTest {
         saved.setOwner(owner);
         when(establishmentRepository.save(any())).thenReturn(saved);
 
-        useCase.execute(USER_ID, new EstablishmentQuickCreateRequest("Barbearia"));
+        useCase.execute(USER_ID, new EstablishmentQuickCreateRequest("Barbearia", ServiceType.BARBER));
 
         assertThat(user.isClient()).isTrue();
         assertThat(user.isOwner()).isTrue();
@@ -155,7 +157,7 @@ class QuickCreateEstablishmentUseCaseTest {
         when(userRepository.findById(USER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
-                useCase.execute(USER_ID, new EstablishmentQuickCreateRequest("Name")))
+                useCase.execute(USER_ID, new EstablishmentQuickCreateRequest("Name", ServiceType.BARBER)))
                 .isInstanceOf(UserNotFoundException.class);
 
         verify(establishmentRepository, never()).save(any());

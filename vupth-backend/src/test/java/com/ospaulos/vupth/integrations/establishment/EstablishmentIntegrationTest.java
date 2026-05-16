@@ -133,12 +133,12 @@ class EstablishmentIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("POST /establishment/quick-create — 201 creation with name only (minimum MVP)")
+    @DisplayName("POST /establishment/quick-create — 201 creation with name and serviceType")
     void quickCreate_success() throws Exception {
         log.info("[Establishment] quickCreate_success — ownerId={}", ownerId);
 
         EstablishmentQuickCreateRequest request = new EstablishmentQuickCreateRequest(
-                faker.company().name());
+                faker.company().name(), ServiceType.BARBER);
 
         MvcResult result = mvc.perform(post("/establishment/quick-create")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -288,7 +288,7 @@ class EstablishmentIntegrationTest {
 
         mvc.perform(post("/establishment/quick-create")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest("Barbershop"))))
+                        .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest("Barbershop", ServiceType.BARBER))))
                 .andExpect(status().isUnauthorized())
                 .andDo(print());
     }
@@ -302,7 +302,7 @@ class EstablishmentIntegrationTest {
         mvc.perform(post("/establishment/quick-create")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest(""))))
+                        .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest("", ServiceType.BARBER))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors.name").exists())
@@ -413,7 +413,7 @@ class EstablishmentIntegrationTest {
         log.info("[Establishment] ownerProf_quickCreate — userId={}", ownerProfId);
 
         EstablishmentQuickCreateRequest request = new EstablishmentQuickCreateRequest(
-                "Barbershop do Dono-Profissional " + faker.number().digits(4));
+                "Barbershop do Dono-Profissional " + faker.number().digits(4), ServiceType.BARBER);
 
         MvcResult result = mvc.perform(post("/establishment/quick-create")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -492,7 +492,7 @@ class EstablishmentIntegrationTest {
         mvc.perform(post("/establishment/quick-create")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", clientToken)
-                        .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest("Barbershop do Ex-Cliente"))))
+                        .content(mapper.writeValueAsString(new EstablishmentQuickCreateRequest("Barbershop do Ex-Cliente", ServiceType.BARBER))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andDo(print());

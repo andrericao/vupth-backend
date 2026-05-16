@@ -150,7 +150,7 @@ public class TestUserUtils {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(mapper.writeValueAsString(
-                                new EstablishmentQuickCreateRequest(faker.company().name()))))
+                                new EstablishmentQuickCreateRequest(faker.company().name(), ServiceType.BARBER))))
                 .andExpect(status().isCreated())
                 .andReturn();
 
