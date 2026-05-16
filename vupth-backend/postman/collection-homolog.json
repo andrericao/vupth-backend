@@ -839,7 +839,7 @@
           }
         },
         {
-          "name": "filter by serviceType=MANICURE",
+          "name": "filter by serviceType=NAIL_SALON",
           "event": [
             {
               "listen": "test",
@@ -858,7 +858,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/establishment?serviceType=MANICURE",
+              "raw": "{{base_url}}/establishment?serviceType=NAIL_SALON",
               "host": [
                 "{{base_url}}"
               ],
@@ -868,7 +868,7 @@
               "query": [
                 {
                   "key": "serviceType",
-                  "value": "MANICURE"
+                  "value": "NAIL_SALON"
                 }
               ]
             }

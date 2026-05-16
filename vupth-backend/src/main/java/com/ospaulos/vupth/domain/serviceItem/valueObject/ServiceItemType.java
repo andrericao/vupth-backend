@@ -10,11 +10,11 @@ import java.util.Set;
 @AllArgsConstructor
 public enum ServiceItemType {
 
-    PEDICURE("Pedicure", Set.of(ServiceType.MANICURE)),
+    PEDICURE("Pedicure", Set.of(ServiceType.NAIL_SALON)),
     CORTE_MAQUINA("Corte à máquina", Set.of(ServiceType.BARBER)),
-    RECORTE_PONTAS("Recorte das pontas", Set.of(ServiceType.SALON_BEAUTY)),
-    PINTURA("Pintura", Set.of(ServiceType.BARBER, ServiceType.SALON_BEAUTY)),
-    MANICURE("Manicure", Set.of(ServiceType.MANICURE));
+    RECORTE_PONTAS("Recorte das pontas", Set.of(ServiceType.BEAUTY_SALON)),
+    PINTURA("Pintura", Set.of(ServiceType.BARBER, ServiceType.BEAUTY_SALON)),
+    MANICURE("Manicure", Set.of(ServiceType.NAIL_SALON));
 
     private final String displayName;
     private final Set<ServiceType> serviceTypes;
