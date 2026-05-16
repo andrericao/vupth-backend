@@ -70,6 +70,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *    - Token CLIENT → 403  ← usa pureClientToken (nunca criou establishment)
  *    - Owner errado → 404
  *    - Body inválido → 400
+ *
+ * F) General infos (PATCH /establishment/{id}/general-infos)
+ *    - Atualiza nome → 200
+ *    - Atualiza service_type → 200
+ *    - Atualiza url_image → 200
+ *    - Atualiza services → 200
+ *    - Atualiza múltiplos campos → 200
+ *    - Body vazio → 200, modified_fields vazio
+ *    - Sem token → 401
+ *    - Token CLIENT → 403
+ *    - Owner errado → 404
+ *    - service_type inválido → 400
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -731,6 +743,179 @@ class EstablishmentIntegrationTest {
                         .content("{\"openStatus\":null}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO F — PATCH /establishment/{id}/general-infos
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(70)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 atualiza nome")
+    void updateGeneralInfos_name() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_name — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"name\":\"Novo Nome da Barbearia\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.name").value("Novo Nome da Barbearia"))
+                .andExpect(jsonPath("$.modified_fields").isArray())
+                .andExpect(jsonPath("$.modified_fields[0]").value("name"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(71)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 atualiza service_type")
+    void updateGeneralInfos_serviceType() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_serviceType — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"service_type\":\"BEAUTY_SALON\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.service_type").value("BEAUTY_SALON"))
+                .andExpect(jsonPath("$.modified_fields[0]").value("service_type"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(72)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 atualiza url_image")
+    void updateGeneralInfos_urlImage() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_urlImage — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"url_image\":\"https://img.com/nova-foto.jpg\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.url_image").value("https://img.com/nova-foto.jpg"))
+                .andExpect(jsonPath("$.modified_fields[0]").value("url_image"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(73)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 atualiza services")
+    void updateGeneralInfos_services() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_services — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"services\":[\"BARBER\",\"BEAUTY_SALON\"]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.services").isArray())
+                .andExpect(jsonPath("$.modified_fields[0]").value("services"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(74)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 atualiza múltiplos campos")
+    void updateGeneralInfos_multipleFields() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_multipleFields — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"name\":\"Barbearia Premium\",\"service_type\":\"BARBER\",\"url_image\":\"https://img.com/premium.jpg\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.name").value("Barbearia Premium"))
+                .andExpect(jsonPath("$.service_type").value("BARBER"))
+                .andExpect(jsonPath("$.url_image").value("https://img.com/premium.jpg"))
+                .andExpect(jsonPath("$.modified_fields.length()").value(3))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(75)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 body vazio retorna modified_fields vazio")
+    void updateGeneralInfos_emptyBody() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_emptyBody — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.modified_fields").isArray())
+                .andExpect(jsonPath("$.modified_fields.length()").value(0))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(76)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 401 sem token")
+    void updateGeneralInfos_noToken_401() throws Exception {
+        log.info("[Establishment] updateGeneralInfos_noToken_401");
+
+        mvc.perform(patch("/establishment/{id}/general-infos", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Teste\"}"))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(77)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 403 token CLIENT puro")
+    void updateGeneralInfos_clientToken_403() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_clientToken_403");
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", pureClientToken)
+                        .content("{\"name\":\"Teste\"}"))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(78)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 404 owner errado")
+    void updateGeneralInfos_wrongOwner_404() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_wrongOwner_404");
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"name\":\"Teste\"}"))
+                .andExpect(status().isNotFound())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(79)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 400 service_type inválido")
+    void updateGeneralInfos_invalidServiceType_400() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_invalidServiceType_400");
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"service_type\":\"INVALIDO\"}"))
+                .andExpect(status().isBadRequest())
                 .andDo(print());
     }
 

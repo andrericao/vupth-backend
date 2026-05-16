@@ -1263,6 +1263,405 @@
       ]
     },
     {
+      "name": "02c - establishment general-infos",
+      "item": [
+        {
+          "name": "update general-infos → nome",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Nome atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"name atualizado\", () => pm.expect(r.name).to.equal(\"Barbearia Atualizada\"));",
+                  "  pm.test(\"modified_fields contém name\", () => pm.expect(r.modified_fields).to.include(\"name\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Barbearia Atualizada\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → service_type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - service_type atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"service_type é BEAUTY_SALON\", () => pm.expect(r.service_type).to.equal(\"BEAUTY_SALON\"));",
+                  "  pm.test(\"modified_fields contém service_type\", () => pm.expect(r.modified_fields).to.include(\"service_type\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"service_type\":\"BEAUTY_SALON\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → url_image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - url_image atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"url_image atualizado\", () => pm.expect(r.url_image).to.equal(\"https://img.com/nova-foto.jpg\"));",
+                  "  pm.test(\"modified_fields contém url_image\", () => pm.expect(r.modified_fields).to.include(\"url_image\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"url_image\":\"https://img.com/nova-foto.jpg\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → services",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - services atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"services é array\", () => pm.expect(r.services).to.be.an(\"array\"));",
+                  "  pm.test(\"modified_fields contém services\", () => pm.expect(r.modified_fields).to.include(\"services\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"services\":[\"BARBER\",\"BEAUTY_SALON\"]}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → múltiplos campos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Múltiplos campos atualizados\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"name atualizado\", () => pm.expect(r.name).to.equal(\"Barbearia Premium\"));",
+                  "  pm.test(\"service_type BARBER\", () => pm.expect(r.service_type).to.equal(\"BARBER\"));",
+                  "  pm.test(\"modified_fields tem 3 campos\", () => pm.expect(r.modified_fields).to.have.lengthOf(3));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Barbearia Premium\",\"service_type\":\"BARBER\",\"url_image\":\"https://img.com/premium.jpg\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → body vazio (nenhum campo alterado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Body vazio aceito\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"modified_fields vazio\", () => pm.expect(r.modified_fields).to.have.lengthOf(0));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "[ERRO] general-infos sem token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Teste\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] general-infos service_type inválido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 - service_type inválido rejeitado\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"service_type\":\"INVALIDO\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "03 - professional",
       "item": [
         {
@@ -4965,6 +5364,53 @@
                 "remove"
               ]
             }
+          }
+        },
+        {
+          "name": "[ERRO] general-infos token CLIENT → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - CLIENT não pode editar\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Teste\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
           }
         },
         {

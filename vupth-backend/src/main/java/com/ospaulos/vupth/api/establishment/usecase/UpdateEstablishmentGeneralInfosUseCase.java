@@ -60,7 +60,8 @@ public class UpdateEstablishmentGeneralInfosUseCase {
         }
 
         if (request.services() != null && !request.services().isEmpty()) {
-            establishment.setServices(Set.copyOf(request.services()));
+            establishment.getServices().clear();
+            establishment.getServices().addAll(request.services());
             modified.add("services");
         }
 
