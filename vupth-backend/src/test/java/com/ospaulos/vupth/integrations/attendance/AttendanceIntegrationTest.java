@@ -64,6 +64,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *    - Cancel non-existent attendance (→ 404)
  *    - Profissional diferente tentando iniciar attendance de outro (→ 403)
  *    - Start attendance already IN_PROGRESS (→ 400)
+ *    - GET /attendances/{id} — 200 busca por ID, 404 inexistente, 401 sem token
  *
  * E) leaveQueue (CLIENT voluntarily leaves)
  *
@@ -478,6 +479,54 @@ class AttendanceIntegrationTest {
                         .header("Authorization", anotherProfToken))
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isIn(403, 404))
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO D.2 — GET /attendances/{id}
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(45)
+    @DisplayName("GET /attendances/{id} — 200 busca attendance existente")
+    void getById_success() throws Exception {
+        Assumptions.assumeTrue(attendanceId != null, "Depende do createAttendance_success");
+        log.info("[Attendance] getById_success — attendanceId={}", attendanceId);
+
+        mvc.perform(get("/attendances/{id}", attendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(attendanceId))
+                .andExpect(jsonPath("$.status").exists())
+                .andExpect(jsonPath("$.establishmentId").value(establishmentId))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(46)
+    @DisplayName("GET /attendances/{id} — 404 attendance inexistente")
+    void getById_notFound() throws Exception {
+        UUID inexistente = UUID.randomUUID();
+        log.info("[Attendance] getById_notFound — id={}", inexistente);
+
+        mvc.perform(get("/attendances/{id}", inexistente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ATTENDANCE_NOT_FOUND"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(47)
+    @DisplayName("GET /attendances/{id} — 401 sem token")
+    void getById_noToken_401() throws Exception {
+        log.info("[Attendance] getById_noToken_401");
+
+        mvc.perform(get("/attendances/{id}", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
                 .andDo(print());
     }
 

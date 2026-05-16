@@ -1,0 +1,15 @@
+databaseChangeLog:
+  - changeSet:
+      id: 018-backfill-service-type-existing-establishments
+      author: andrericao
+      changes:
+        - sql:
+            sql: >
+              UPDATE establishment
+              SET service_type = 'BARBER'
+              WHERE id = '6908671e-aa13-7cfa-d99c-fea4a4102d66';
+        - sql:
+            sql: >
+              UPDATE establishment
+              SET service_type = 'BEAUTY_SALON'
+              WHERE id = '6c0e76f9-631b-1f6f-21c5-ddb8b9a21972';
