@@ -14,5 +14,6 @@ public record EstablishmentRequest(
         @NotNull String name,
         @NotNull String urlImage,
         @NotNull EstablishmentStatus status,
-        @NotNull OpenStatus openStatus) {
+        @NotNull OpenStatus openStatus,
+        ServiceType serviceType) {
 }

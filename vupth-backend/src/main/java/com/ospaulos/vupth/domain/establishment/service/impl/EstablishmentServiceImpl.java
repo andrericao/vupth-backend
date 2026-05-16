@@ -44,6 +44,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
         establishment.setServices(request.services());
         establishment.setName(request.name());
         establishment.setUrlImage(request.urlImage());
+        establishment.setServiceType(request.serviceType());
         establishment.setStatus(request.status());
         establishment.setOpenStatus(request.openStatus());
         establishment.setOwner(owner);
