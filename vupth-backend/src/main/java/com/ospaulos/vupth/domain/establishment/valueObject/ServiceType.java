@@ -8,9 +8,10 @@ import lombok.Getter;
 public enum ServiceType {
 
     BARBER("barbeiro"),
-    SALON_BEAUTY("salaoBeleza"),
-    EYEBROW("sobrancelha"),
-    MANICURE("manicure");
+    BEAUTY_SALON("salaoBeleza"),
+    NAIL_SALON("manicure"),
+    SPA("spa"),
+    CLINIC("clinica");
 
     private String service;
 }
