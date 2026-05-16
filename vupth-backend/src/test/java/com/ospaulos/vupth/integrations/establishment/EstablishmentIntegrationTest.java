@@ -168,7 +168,8 @@ class EstablishmentIntegrationTest {
                 faker.company().name(),
                 faker.internet().url(),
                 EstablishmentStatus.ACTIVE,
-                OpenStatus.OPEN);
+                OpenStatus.OPEN,
+                null);
 
         mvc.perform(post("/establishment/create")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -177,6 +178,41 @@ class EstablishmentIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.name").exists())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("POST /establishment/create — 201 cria com serviceType e retorna no response")
+    void createFull_withServiceType() throws Exception {
+        log.info("[Establishment] createFull_withServiceType — ownerId={}", ownerId);
+
+        EstablishmentRequest request = new EstablishmentRequest(
+                UUID.fromString(ownerId),
+                Set.of(ServiceType.BARBER),
+                "Barbearia do Ricardo",
+                faker.internet().url(),
+                EstablishmentStatus.ACTIVE,
+                OpenStatus.OPEN,
+                ServiceType.BARBER);
+
+        MvcResult result = mvc.perform(post("/establishment/create")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(mapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.serviceType").value("BARBER"))
+                .andDo(print())
+                .andReturn();
+
+        String createdId = new JSONObject(result.getResponse().getContentAsString()).getString("id");
+
+        mvc.perform(get("/establishment/id/{id}", createdId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(createdId))
+                .andExpect(jsonPath("$.serviceType").value("BARBER"))
                 .andDo(print());
     }
 
