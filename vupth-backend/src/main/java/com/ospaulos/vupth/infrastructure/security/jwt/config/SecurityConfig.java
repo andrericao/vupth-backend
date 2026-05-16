@@ -101,6 +101,7 @@ public class SecurityConfig {
                         // ── ROLE_OWNER ────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")
 
                         // Owner adiciona profissional ao seu establishment

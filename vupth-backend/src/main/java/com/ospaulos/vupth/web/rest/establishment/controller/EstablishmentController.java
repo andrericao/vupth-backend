@@ -2,12 +2,15 @@ package com.ospaulos.vupth.web.rest.establishment.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.ospaulos.vupth.api.establishment.dto.request.AddProfessionalToEstablishmentRequest;
+import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentGeneralInfosRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.UpdateOpenStatusRequest;
+import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentGeneralInfosResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentWithProfessionalsResponse;
 import com.ospaulos.vupth.api.establishment.usecase.AddProfessionalToEstablishmentUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralInfosUseCase;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
@@ -55,6 +58,7 @@ public class EstablishmentController {
     private final GetEstablishmentWithQueueUseCase    getWithQueueUseCase;
     private final ProfessionalServiceImpl             professionalService;
     private final AddProfessionalToEstablishmentUseCase addProfessionalUseCase;
+    private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
 
     @PostMapping("/create")
     public ResponseEntity<EstablishmentResponse> createEstablishment(
@@ -106,6 +110,19 @@ public class EstablishmentController {
             @PathVariable UUID id) {
         log.info("[Establishment] findWithQueue — id={}", id);
         EstablishmentWithProfessionalsResponse response = getWithQueueUseCase.execute(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/general-infos")
+    public ResponseEntity<EstablishmentGeneralInfosResponse> updateGeneralInfos(
+            @PathVariable UUID id,
+            @RequestBody @Valid EstablishmentGeneralInfosRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] updateGeneralInfos — id={} owner={}", id, user.getUserId());
+
+        EstablishmentGeneralInfosResponse response =
+                updateGeneralInfosUseCase.execute(user.getUserId(), id, request);
         return ResponseEntity.ok(response);
     }
 
