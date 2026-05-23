@@ -14,6 +14,7 @@ import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException
 import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidException;
@@ -303,6 +304,13 @@ public class GlobalExceptionHandler {
             ServiceItemAlreadyExistsException ex, HttpServletRequest req) {
         log.warn("[409] ServiceItemAlreadyExists | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "SERVICE_ITEM_ALREADY_EXISTS");
+    }
+
+    @ExceptionHandler(ProfessionalHasActiveAttendancesException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalHasActiveAttendances(
+            ProfessionalHasActiveAttendancesException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_HAS_ACTIVE_ATTENDANCES");
     }
 
     @ExceptionHandler(IntervalConflictException.class)

@@ -103,9 +103,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/owner").hasRole("OWNER")
 
-                        // Owner adiciona profissional ao seu establishment
+                        // Owner adiciona/remove profissional do seu establishment
                         .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.DELETE, "/establishment/*/professionals/*").hasRole("OWNER")
 
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())

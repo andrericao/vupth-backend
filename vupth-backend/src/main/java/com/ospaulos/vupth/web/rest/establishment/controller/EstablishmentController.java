@@ -4,12 +4,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.ospaulos.vupth.api.establishment.dto.request.AddProfessionalToEstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentGeneralInfosRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
+import com.ospaulos.vupth.api.establishment.dto.request.TransferOwnershipRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.UpdateOpenStatusRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentGeneralInfosResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentWithProfessionalsResponse;
 import com.ospaulos.vupth.api.establishment.usecase.AddProfessionalToEstablishmentUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.RemoveProfessionalFromEstablishmentUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.TransferEstablishmentOwnershipUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralInfosUseCase;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
@@ -42,6 +45,8 @@ import java.util.UUID;
  *   PATCH  /establishment/{id}/open-status               — atualiza status de abertura (OWNER)
  *   POST   /establishment/{establishmentId}/service-items — adiciona serviço (OWNER)
  *   POST   /establishment/{establishmentId}/professionals — owner adiciona profissional (OWNER)
+ *   DELETE /establishment/{id}/professionals/{pid}       — owner remove profissional (OWNER)
+ *   PATCH  /establishment/{id}/owner                    — transfere ownership (OWNER)
  *
  * @since v5
  * @compat service-items endpoint fixed v8
@@ -59,6 +64,8 @@ public class EstablishmentController {
     private final ProfessionalServiceImpl             professionalService;
     private final AddProfessionalToEstablishmentUseCase addProfessionalUseCase;
     private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
+    private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
+    private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
 
     @PostMapping("/create")
     public ResponseEntity<EstablishmentResponse> createEstablishment(
@@ -193,5 +200,32 @@ public class EstablishmentController {
                 addProfessionalUseCase.execute(user.getUserId(), establishmentId, request.professionalId());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @DeleteMapping("/{establishmentId}/professionals/{professionalId}")
+    public ResponseEntity<Void> removeProfessional(
+            @PathVariable UUID establishmentId,
+            @PathVariable UUID professionalId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] removeProfessional — establishment={} owner={} professional={}",
+                establishmentId, user.getUserId(), professionalId);
+
+        removeProfessionalUseCase.execute(user.getUserId(), establishmentId, professionalId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/owner")
+    public ResponseEntity<EstablishmentResponse> transferOwnership(
+            @PathVariable UUID id,
+            @RequestBody @Valid TransferOwnershipRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] transferOwnership — id={} from={} to={}",
+                id, user.getUserId(), request.newOwnerId());
+
+        EstablishmentResponse response =
+                transferOwnershipUseCase.execute(user.getUserId(), id, request.newOwnerId());
+        return ResponseEntity.ok(response);
     }
 }

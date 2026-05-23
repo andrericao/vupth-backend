@@ -185,6 +185,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             AttendanceStatus status
     );
 
+    boolean existsByProfessional_IdAndStatusIn(UUID professionalId, List<AttendanceStatus> statuses);
+
     /**
      * Counts how many attendances are waiting in the queue
      */
