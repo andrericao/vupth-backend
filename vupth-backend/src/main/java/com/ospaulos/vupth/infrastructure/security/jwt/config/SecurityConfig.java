@@ -98,6 +98,8 @@ public class SecurityConfig {
                         // Profissional se afilia/desafilia de um establishment
                         .requestMatchers(HttpMethod.POST, "/professional/affiliate").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/establishment").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.POST, "/professional/me/affiliations").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.GET, "/professional/me/affiliations").hasRole("PROFESSIONAL")
 
                         // ── ROLE_OWNER ────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
@@ -109,6 +111,8 @@ public class SecurityConfig {
                         // Owner adiciona/remove profissional do seu establishment
                         .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/professionals/*").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.POST, "/establishment/*/affiliations").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
 
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())
