@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.affiliation.dto.request.CreateAffiliationRequestDT
 import com.ospaulos.vupth.api.affiliation.dto.response.AffiliationRequestResponse;
 import com.ospaulos.vupth.api.affiliation.usecase.InviteProfessionalUseCase;
 import com.ospaulos.vupth.api.affiliation.usecase.RequestAffiliationUseCase;
+import com.ospaulos.vupth.api.affiliation.usecase.ResolveAffiliationUseCase;
 import com.ospaulos.vupth.domain.affiliation.model.AffiliationStatus;
 import com.ospaulos.vupth.domain.affiliation.repository.AffiliationRequestRepository;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
@@ -27,6 +28,9 @@ import java.util.UUID;
  *   GET    /professional/me/affiliations                — profissional lista pendentes (PROFESSIONAL)
  *   POST   /establishment/{id}/affiliations             — owner convida profissional (OWNER)
  *   GET    /establishment/{id}/affiliations              — owner lista pendentes (OWNER)
+ *   PATCH  /affiliations/{id}/accept                    — contraparte aceita (PROFESSIONAL ou OWNER)
+ *   PATCH  /affiliations/{id}/reject                    — contraparte rejeita (PROFESSIONAL ou OWNER)
+ *   DELETE /affiliations/{id}                           — iniciador cancela (PROFESSIONAL ou OWNER)
  */
 @Slf4j
 @RestController
@@ -35,6 +39,7 @@ public class AffiliationController {
 
     private final RequestAffiliationUseCase requestAffiliationUseCase;
     private final InviteProfessionalUseCase inviteProfessionalUseCase;
+    private final ResolveAffiliationUseCase resolveAffiliationUseCase;
     private final AffiliationRequestRepository affiliationRepository;
 
     @PostMapping("/professional/me/affiliations")
@@ -91,6 +96,39 @@ public class AffiliationController {
                 .stream()
                 .map(AffiliationRequestResponse::fromEntity)
                 .toList();
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/affiliations/{id}/accept")
+    public ResponseEntity<AffiliationRequestResponse> acceptAffiliation(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Affiliation] PATCH /affiliations/{}/accept — user={}", id, user.getUserId());
+
+        AffiliationRequestResponse response = resolveAffiliationUseCase.accept(user.getUserId(), id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/affiliations/{id}/reject")
+    public ResponseEntity<AffiliationRequestResponse> rejectAffiliation(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Affiliation] PATCH /affiliations/{}/reject — user={}", id, user.getUserId());
+
+        AffiliationRequestResponse response = resolveAffiliationUseCase.reject(user.getUserId(), id);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/affiliations/{id}")
+    public ResponseEntity<AffiliationRequestResponse> cancelAffiliation(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Affiliation] DELETE /affiliations/{} — user={}", id, user.getUserId());
+
+        AffiliationRequestResponse response = resolveAffiliationUseCase.cancel(user.getUserId(), id);
         return ResponseEntity.ok(response);
     }
 }
