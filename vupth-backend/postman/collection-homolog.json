@@ -1,7 +1,7 @@
 {
   "info": {
     "_postman_id": "df5b99ea-e196-41c5-a4ff-994c7bdf6e3e",
-    "name": "Vupth backend homolog (v14 - partner flow)",
+    "name": "Vupth backend homolog (v15 - affiliations + ownership)",
     "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
     "_exporter_id": "51940681"
   },
@@ -2332,6 +2332,994 @@
                   "pm.test(\"Status 422 - professionalId nulo rejeitado\", () => pm.response.to.have.status(422));",
                   "pm.test(\"code VALIDATION_ERROR\", () => {",
                   "  pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03d - ownership transfer + remove/leave professional",
+      "item": [
+        {
+          "name": "transfer ownership to partner professional",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "owner"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newOwnerId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Ownership transferred\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test(\"New owner matches\", () => {",
+                  "    const r = pm.response.json();",
+                  "    pm.expect(r.ownerId).to.equal(pm.collectionVariables.get(\"partner_professional_id\"));",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "transfer ownership back to original owner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "owner"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newOwnerId\": \"{{owner_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{partner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const oid = pm.collectionVariables.get(\"owner_id\");",
+                  "console.log(\"[transferBack] owner_id:\", oid);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Ownership transferred back\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test(\"Owner restored\", () => {",
+                  "    const r = pm.response.json();",
+                  "    pm.expect(r.ownerId).to.equal(pm.collectionVariables.get(\"owner_id\"));",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner remove professional from establishment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals/{{partner_professional_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals",
+                "{{partner_professional_id}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Professional removed\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "re-add partner professional (restore state)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Re-added\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional leaves establishment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{partner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Left establishment\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "re-add partner professional after leave (restore state)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Re-added after leave\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03e - affiliations (bidirectional)",
+      "item": [
+        {
+          "name": "professional requests affiliation to establishment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Affiliation requested\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"affiliation_request_id\", r.id);",
+                  "  pm.test(\"Type is REQUEST\", () => pm.expect(r.type).to.equal(\"REQUEST\"));",
+                  "  pm.test(\"Status is PENDING\", () => pm.expect(r.status).to.equal(\"PENDING\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional lists pending affiliations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Array with pending affiliation\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.be.an(\"array\");",
+                  "  pm.expect(r.length).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner lists pending affiliations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Has pending request\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.be.an(\"array\");",
+                  "  pm.expect(r.length).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner rejects affiliation request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_request_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_request_id}}",
+                "reject"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Rejected\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is REJECTED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"REJECTED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional requests affiliation again (for accept test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"affiliation_request_id_2\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner accepts affiliation request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_request_id_2}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_request_id_2}}",
+                "accept"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Accepted\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is ACCEPTED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"ACCEPTED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional leaves establishment (cleanup for invitation test)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Left\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner invites professional to establishment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Invitation sent\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"affiliation_invitation_id\", r.id);",
+                  "  pm.test(\"Type is INVITATION\", () => pm.expect(r.type).to.equal(\"INVITATION\"));",
+                  "  pm.test(\"Status is PENDING\", () => pm.expect(r.status).to.equal(\"PENDING\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner cancels invitation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_invitation_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_invitation_id}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Cancelled\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is CANCELLED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"CANCELLED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner invites professional again (for accept test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"affiliation_invitation_id_2\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional accepts invitation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_invitation_id_2}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_invitation_id_2}}",
+                "accept"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Accepted\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is ACCEPTED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"ACCEPTED\");",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -5463,6 +6451,228 @@
               }
             }
           }
+        },
+        {
+          "name": "affiliation_alreadyPending (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 - Already affiliated or pending\", () => {",
+                  "  pm.expect([409]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "affiliation_notFound (404)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/00000000-0000-0000-0000-000000000000/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "00000000-0000-0000-0000-000000000000",
+                "accept"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 404 - Affiliation not found\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Code is AFFILIATION_NOT_FOUND\", () => {",
+                  "  pm.expect(pm.response.json().code).to.equal(\"AFFILIATION_NOT_FOUND\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "transfer_ownership_notOwner (403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "owner"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newOwnerId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Not authorized\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "remove_professional_notOwner (403)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals/{{partner_professional_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals",
+                "{{partner_professional_id}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Not authorized\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
@@ -5872,6 +7082,22 @@
       "key": "prof_refresh_token",
       "value": "",
       "type": "default"
+    },
+    {
+      "key": "affiliation_request_id",
+      "value": ""
+    },
+    {
+      "key": "affiliation_request_id_2",
+      "value": ""
+    },
+    {
+      "key": "affiliation_invitation_id",
+      "value": ""
+    },
+    {
+      "key": "affiliation_invitation_id_2",
+      "value": ""
     }
   ],
   "auth": {
