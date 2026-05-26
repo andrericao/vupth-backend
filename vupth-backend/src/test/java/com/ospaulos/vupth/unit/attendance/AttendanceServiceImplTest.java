@@ -14,6 +14,7 @@ import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
@@ -203,6 +204,17 @@ class AttendanceServiceImplTest {
         }
 
         @Test
+        @DisplayName("throws ProfessionalNotAffiliatedException if professional has no establishment")
+        void createAttendance_professionalNotAffiliated() {
+            professional.setEstablishment(null);
+            when(professionalRepository.findById(professionalId)).thenReturn(Optional.of(professional));
+
+            assertThatThrownBy(() -> attendanceService.createAttendance(request))
+                    .isInstanceOf(ProfessionalNotAffiliatedException.class);
+            verify(attendanceRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("throws ClientNotFoundException if client does not exist")
         void createAttendance_clientNotFound() {
             when(professionalRepository.findById(professionalId)).thenReturn(Optional.of(professional));
@@ -286,6 +298,18 @@ class AttendanceServiceImplTest {
 
             assertThat(result.getGuestName()).isEqualTo("Maria");
             assertThat(result.getServiceItems()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("throws ProfessionalNotAffiliatedException if professional has no establishment")
+        void createGuest_professionalNotAffiliated() {
+            professional.setEstablishment(null);
+            AttendanceGuestRequest req = new AttendanceGuestRequest(
+                    establishmentId, professionalId, null, "Guest");
+
+            assertThatThrownBy(() -> attendanceService.createGuestAttendance(req, professional, establishment))
+                    .isInstanceOf(ProfessionalNotAffiliatedException.class);
+            verify(attendanceRepository, never()).save(any());
         }
     }
 
@@ -429,6 +453,37 @@ class AttendanceServiceImplTest {
             assertThatThrownBy(() ->
                     attendanceService.cancelAttendance(inexistente, clientId))
                     .isInstanceOf(AttendanceNotFoundException.class);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // createAttendance(request, professional, establishment, client) — 4-arg overload
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("createAttendance(request, professional, establishment, client)")
+    class CreateAttendanceFourArgTests {
+
+        private AttendanceRequest request;
+
+        @BeforeEach
+        void setUpRequest() {
+            request = new AttendanceRequest(
+                    professionalId, establishmentId, clientId,
+                    List.of(UUID.randomUUID()),
+                    AttendanceStatus.SCHEDULED,
+                    OffsetDateTime.now(), 30, OffsetDateTime.now());
+        }
+
+        @Test
+        @DisplayName("throws ProfessionalNotAffiliatedException if professional has no establishment")
+        void createAttendance_professionalNotAffiliated() {
+            professional.setEstablishment(null);
+
+            assertThatThrownBy(() ->
+                    attendanceService.createAttendance(request, professional, establishment, client))
+                    .isInstanceOf(ProfessionalNotAffiliatedException.class);
+            verify(attendanceRepository, never()).save(any());
         }
     }
 }

@@ -18,6 +18,7 @@ import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidException;
@@ -261,6 +262,13 @@ public class GlobalExceptionHandler {
             EstablishmentAccessDeniedException ex, HttpServletRequest req) {
         log.warn("[403] EstablishmentAccessDenied | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), "ESTABLISHMENT_ACCESS_DENIED");
+    }
+
+    @ExceptionHandler(ProfessionalNotAffiliatedException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalNotAffiliated(
+            ProfessionalNotAffiliatedException ex, HttpServletRequest req) {
+        log.warn("[403] ProfessionalNotAffiliated | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), "PROFESSIONAL_NOT_AFFILIATED");
     }
 
     @ExceptionHandler(NotAProfessionalException.class)

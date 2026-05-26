@@ -46,8 +46,6 @@ public class QueueServiceImpl implements QueueService {
             return queueBase;
         }
 
-        // TODO: Logic to add interval to queue
-
         AttendanceInProgressResponse attendanceInProgressResponse =
                 attendanceService.buildAttendanceInProgressResponse(currentAttendance.orElse(null));
 
@@ -101,11 +99,6 @@ public class QueueServiceImpl implements QueueService {
 
     @Override
     public ClientInQueueResponse queueWaitingTime(Attendance attendance) {
-
-        /*
-        TODO: Create function to define attendance start time
-         + with the help of a flag (a status)
-         */
 
         QueueResponse fullQueue = getQueueOverview(
                 attendance.getProfessional(),
@@ -248,10 +241,6 @@ public class QueueServiceImpl implements QueueService {
             return new WaitingTimeCalculation(waitingTime, OffsetDateTime.now().plusMinutes(waitingTime));
         }
 
-        /*
-        TODO: Add logic to sum the wait interval
-         */
-
         int totalWaitingTime = 0;
 
         // Tempo restante do attendance em progresso
@@ -279,7 +268,4 @@ public class QueueServiceImpl implements QueueService {
         }
     }
 
-    /*
-    TODO: the "getQueueForProfessional" method is incorrect
-     */
 }

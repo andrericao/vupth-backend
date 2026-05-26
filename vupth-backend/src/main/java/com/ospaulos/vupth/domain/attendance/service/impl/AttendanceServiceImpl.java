@@ -19,6 +19,7 @@ import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
@@ -64,6 +65,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] createAttendance — professional={} establishment={} client={}",
                 professional.getId(), establishment.getId(), client.getId());
 
+        if (professional.getEstablishment() == null) {
+            throw new ProfessionalNotAffiliatedException(professional.getId());
+        }
+
         List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
         if (serviceItems.isEmpty()) {
             log.warn("[Attendance] createAttendance — no serviceItems found for ids={}", request.serviceItemIds());
@@ -92,6 +97,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         Professional professional = professionalRepository.findById(request.professionalID())
                 .orElseThrow(() -> new ProfessionalNotFoundException(request.professionalID()));
+
+        if (professional.getEstablishment() == null) {
+            throw new ProfessionalNotAffiliatedException(request.professionalID());
+        }
 
         Establishment establishment = professional.getEstablishment();
 
@@ -133,6 +142,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         log.info("[Attendance] createGuestAttendance — professional={} establishment={} guestName={}",
                 professional.getId(), establishment.getId(), request.clientName());
+
+        if (professional.getEstablishment() == null) {
+            throw new ProfessionalNotAffiliatedException(professional.getId());
+        }
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();
