@@ -962,7 +962,7 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
 **Request:**
 ```json
 {
-  "professionalID": "uuid",
+  "professionalId": "uuid",
   "establishmentId": "uuid",
   "clientId": "uuid",
   "serviceItemIds": ["uuid", "uuid"],
@@ -975,7 +975,7 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
 
 | Campo | Tipo | Obrigatorio | Notas |
 |-------|------|-------------|-------|
-| professionalID | UUID | Sim | ID do profissional |
+| professionalId | UUID | Sim | ID do profissional |
 | establishmentId | UUID | Sim | ID do establishment |
 | clientId | UUID | Ignorado | Extraido do JWT |
 | serviceItemIds | UUID[] | Nao | Lista de servicos |
@@ -983,8 +983,6 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
 | scheduledTime | OffsetDateTime | Nao | ISO-8601 |
 | estimatedMinutes | Integer | Nao | Estimativa em minutos |
 | local | OffsetDateTime | Nao | Hora local do cliente |
-
-> **Nota:** `professionalID` usa "ID" maiusculo (inconsistencia conhecida — manter para retrocompatibilidade).
 
 **Response (201):** `AttendanceInQueueResponse`
 
@@ -1648,10 +1646,6 @@ Lista intervalos ativos para uma data (default: hoje).
 
 ## 21. Pendente de Implementacao no Backend
 
-### Em andamento (nao commitado)
-
-- Validacao `ProfessionalNotAffiliatedException` no `AttendanceServiceImpl` — profissional deve pertencer ao establishment para criar attendance. Precisa rodar testes e commitar.
-
 ### Funcionalidades faltantes
 
 | Item | Prioridade | Descricao |
@@ -1664,8 +1658,7 @@ Lista intervalos ativos para uma data (default: hoje).
 
 | Item | Descricao |
 |------|-----------|
-| `professionalID` vs `professionalId` | `AttendanceRequest` usa `professionalID` (ID maiusculo), todos os outros DTOs usam `professionalId` |
-| `establishmenID` | `EstablishmentAddressResponse` falta o "t" — deveria ser `establishmentID` |
+| `establishmenID` | `EstablishmentAddressResponse` falta o "t" — deveria ser `establishmentId` |
 | `POST /profile/register` | Duplica `POST /auth/register` — mesma funcionalidade, endpoints diferentes |
 
 ### Itens de seguranca/melhorias

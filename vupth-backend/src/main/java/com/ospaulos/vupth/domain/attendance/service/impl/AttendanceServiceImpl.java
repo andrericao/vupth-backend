@@ -93,13 +93,13 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public AttendanceInQueueResponse createAttendance(AttendanceRequest request) {
         log.info("[Attendance] createAttendance(request) — professionalId={} clientId={}",
-                request.professionalID(), request.clientId());
+                request.professionalId(), request.clientId());
 
-        Professional professional = professionalRepository.findById(request.professionalID())
-                .orElseThrow(() -> new ProfessionalNotFoundException(request.professionalID()));
+        Professional professional = professionalRepository.findById(request.professionalId())
+                .orElseThrow(() -> new ProfessionalNotFoundException(request.professionalId()));
 
         if (professional.getEstablishment() == null) {
-            throw new ProfessionalNotAffiliatedException(request.professionalID());
+            throw new ProfessionalNotAffiliatedException(request.professionalId());
         }
 
         Establishment establishment = professional.getEstablishment();
@@ -107,7 +107,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Bug fix: was == (reference comparison) — now uses .equals()
         if (!establishment.getId().equals(request.establishmentId())) {
             log.warn("[Attendance] createAttendance — establishmentId={} does not belong to professional={}",
-                    request.establishmentId(), request.professionalID());
+                    request.establishmentId(), request.professionalId());
             throw new EstablishmentNotFoundException(request.establishmentId());
         }
 

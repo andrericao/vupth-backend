@@ -2701,6 +2701,60 @@
       "name": "03e - affiliations (bidirectional)",
       "item": [
         {
+          "name": "[setup] prof leaves establishment if affiliated",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 or 403/409 (not affiliated) — both OK\", () => {",
+                  "  pm.expect([204, 403, 409]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "professional requests affiliation to establishment",
           "request": {
             "method": "POST",
@@ -3786,7 +3840,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -3835,7 +3889,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -3877,7 +3931,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -4172,7 +4226,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -4523,7 +4577,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -4681,7 +4735,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -4801,7 +4855,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"clientId\":\"{{client_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{SCHEDULED_TIME}}\"}",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"clientId\":\"{{client_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{SCHEDULED_TIME}}\"}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -5893,7 +5947,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6302,7 +6356,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
               "options": {
                 "raw": {
                   "language": "json"

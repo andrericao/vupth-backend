@@ -54,11 +54,11 @@ public class AttendanceController {
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
         log.info("ATTENDANCE CONTROLLER CREATE — client={} prof={} estab={}",
-                principal.getUserId(), request.professionalID(), request.establishmentId());
+                principal.getUserId(), request.professionalId(), request.establishmentId());
 
         // clientId comes from the token, not the body — body value is ignored
         AttendanceRequest secureRequest = new AttendanceRequest(
-                request.professionalID(),
+                request.professionalId(),
                 request.establishmentId(),
                 principal.getUserId(),   // ← sempre do token
                 request.serviceItemIds(),

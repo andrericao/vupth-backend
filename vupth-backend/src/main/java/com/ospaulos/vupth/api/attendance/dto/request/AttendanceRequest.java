@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 public record AttendanceRequest(
-        UUID professionalID,
+        UUID professionalId,
         UUID establishmentId,
         UUID clientId,
         List<UUID> serviceItemIds,
