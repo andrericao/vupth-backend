@@ -268,7 +268,7 @@ Renova tokens. **Obrigatorio apos ganhar novas roles.**
 **Request:**
 ```json
 {
-  "refreshToken": "uuid-refresh-token"
+  "refresh_token": "uuid-refresh-token"
 }
 ```
 
@@ -293,7 +293,7 @@ Invalida o refresh token.
 **Request:**
 ```json
 {
-  "refreshToken": "uuid-refresh-token"
+  "refresh_token": "uuid-refresh-token"
 }
 ```
 
@@ -1367,7 +1367,7 @@ Cria endereco para um establishment.
 **Response (201):**
 ```json
 {
-  "establishmenID": "uuid",
+  "establishmentId": "uuid",
   "establishmentName": "Barbearia do Ze",
   "street": "Rua das Flores",
   "number": "123",
@@ -1380,8 +1380,6 @@ Cria endereco para um establishment.
   "longitude": -46.6333
 }
 ```
-
-> **Nota:** O campo retornado e `establishmenID` (sem o "t" — inconsistencia conhecida).
 
 **Testes:** Integracao
 
@@ -1658,7 +1656,6 @@ Lista intervalos ativos para uma data (default: hoje).
 
 | Item | Descricao |
 |------|-----------|
-| `establishmenID` | `EstablishmentAddressResponse` falta o "t" — deveria ser `establishmentId` |
 | `POST /profile/register` | Duplica `POST /auth/register` — mesma funcionalidade, endpoints diferentes |
 
 ### Itens de seguranca/melhorias
