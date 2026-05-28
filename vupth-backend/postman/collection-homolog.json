@@ -1,16 +1,16 @@
 {
   "info": {
     "_postman_id": "df5b99ea-e196-41c5-a4ff-994c7bdf6e3e",
-    "name": "Vupth backend homolog (v14 - partner flow)",
+    "name": "Vupth backend homolog (v15 - affiliations + ownership)",
     "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
     "_exporter_id": "51940681"
   },
   "item": [
     {
-      "name": "01 - auth prof",
+      "name": "01 - auth",
       "item": [
         {
-          "name": "register (prof)",
+          "name": "register (owner)",
           "event": [
             {
               "listen": "test",
@@ -20,7 +20,7 @@
                   "pm.test(\"Schema: id presente e é string UUID\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
-                  "  pm.collectionVariables.set(\"prof_id\", r.id);",
+                  "  pm.collectionVariables.set(\"owner_id\", r.id);",
                   "});",
                   "pm.test(\"Schema: email presente\", () => {",
                   "  pm.expect(pm.response.json().email).to.be.a(\"string\");",
@@ -33,8 +33,8 @@
               "listen": "prerequest",
               "script": {
                 "exec": [
-                  "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@test.com\");",
-                  "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
+                  "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@test.com\");",
+                  "pm.collectionVariables.set(\"owner_password\", \"Senha@123\");"
                 ],
                 "type": "text/javascript"
               }
@@ -50,7 +50,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+              "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
             },
             "url": "{{base_url}}/auth/register"
           },
@@ -60,7 +60,7 @@
           }
         },
         {
-          "name": "login (prof)",
+          "name": "login (owner)",
           "event": [
             {
               "listen": "test",
@@ -70,9 +70,9 @@
                   "pm.test(\"Schema: tokens e user presentes\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.tokens).to.have.property(\"access_token\");",
-                  "  pm.collectionVariables.set(\"prof_token\", r.tokens.access_token);",
-                  "  pm.collectionVariables.set(\"prof_refresh_token\", r.tokens.refresh_token);",
-                  "  pm.collectionVariables.set(\"prof_id\", r.user.id);",
+                  "  pm.collectionVariables.set(\"owner_token\", r.tokens.access_token);",
+                  "  pm.collectionVariables.set(\"owner_refresh_token\", r.tokens.refresh_token);",
+                  "  pm.collectionVariables.set(\"owner_id\", r.user.id);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -89,7 +89,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+              "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
             },
             "url": "{{base_url}}/auth/login"
           },
@@ -99,7 +99,7 @@
           }
         },
         {
-          "name": "complete profile (prof)",
+          "name": "complete profile (owner)",
           "event": [
             {
               "listen": "test",
@@ -129,7 +129,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -148,14 +148,14 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
           }
         },
         {
-          "name": "update profile (prof)",
+          "name": "update profile (owner)",
           "event": [
             {
               "listen": "test",
@@ -183,7 +183,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -202,7 +202,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -237,7 +237,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -256,7 +256,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -288,6 +288,98 @@
               "raw": "{\"last_name\": \"Teste\"}"
             },
             "url": "{{base_url}}/profile/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "register (prof)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Prof registrado\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "  pm.collectionVariables.set(\"prof_id\", r.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@test.com\");",
+                  "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+            },
+            "url": "{{base_url}}/auth/register",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "login (prof)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Login prof OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: tokens presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+                  "  pm.collectionVariables.set(\"prof_token\", r.tokens.access_token);",
+                  "  pm.collectionVariables.set(\"prof_refresh_token\", r.tokens.refresh_token);",
+                  "  pm.collectionVariables.set(\"prof_id\", r.user.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+            },
+            "url": "{{base_url}}/auth/login",
             "auth": {
               "type": "noauth"
             }
@@ -413,7 +505,7 @@
                   "pm.test(\"Schema: id presente e é UUID\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
-                  "  pm.collectionVariables.set(\"establishment_id\", r.id);",
+                  "  pm.collectionVariables.set(\"owner_establishment_id\", r.id);",
                   "});",
                   "pm.test(\"Schema: name presente\", () => {",
                   "  pm.expect(pm.response.json().name).to.be.a(\"string\");",
@@ -432,13 +524,13 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\": \"Barbearia Teste {{$timestamp}}\"}"
+              "raw": "{\"name\": \"Barbearia Teste {{$timestamp}}\", \"serviceType\": \"BARBER\"}"
             },
             "url": "{{base_url}}/establishment/quick-create",
             "auth": {
@@ -451,14 +543,58 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
           }
         },
         {
-          "name": "refresh token (OWNER role)",
+          "name": "owner quick-create professional (solo shop)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Owner agora também é profissional\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Owner Profissional\", \"specialty\": \"Manager\", \"establishmentId\": \"{{owner_establishment_id}}\"}"
+            },
+            "url": "{{base_url}}/professional/quick-create",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "refresh token (OWNER + PROFESSIONAL role)",
           "event": [
             {
               "listen": "test",
@@ -471,9 +607,9 @@
                   "  // GUARD: só atualiza prof_token se o novo valor for um JWT válido",
                   "  const newToken = r.access_token;",
                   "  if (newToken && typeof newToken === \"string\" && newToken.length > 20) {",
-                  "    pm.collectionVariables.set(\"prof_token\", newToken);",
-                  "    pm.collectionVariables.set(\"prof_refresh_token\", r.refresh_token);",
-                  "    console.log(\"[refresh] prof_token atualizado OK\");",
+                  "    pm.collectionVariables.set(\"owner_token\", newToken);",
+                  "    pm.collectionVariables.set(\"owner_refresh_token\", r.refresh_token);",
+                  "    console.log(\"[refresh] owner_token atualizado OK\");",
                   "  } else {",
                   "    console.warn(\"[refresh] token inválido ou vazio — prof_token NÃO sobrescrito. Valor:\", newToken);",
                   "  }",
@@ -493,9 +629,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"refresh_token\": \"{{prof_refresh_token}}\"}"
+              "raw": "{\"refresh_token\": \"{{owner_refresh_token}}\"}"
             },
-            "url": "{{base_url}}/auth/refresh"
+            "url": "{{base_url}}/auth/refresh",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -525,7 +664,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\": \"Sem Token\"}"
+              "raw": "{\"name\": \"Sem Token\", \"serviceType\": \"BARBER\"}"
             },
             "url": "{{base_url}}/establishment/quick-create",
             "auth": {
@@ -542,6 +681,49 @@
     {
       "name": "02b - establishment filters + openStatus",
       "item": [
+        {
+          "name": "get establishment by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Establishment retornado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: id e name presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"id\");",
+                  "  pm.expect(r).to.have.property(\"name\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/id/{{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "id",
+                "{{owner_establishment_id}}"
+              ]
+            }
+          }
+        },
         {
           "name": "list all active establishments",
           "event": [
@@ -624,8 +806,15 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200 - Filtro por serviceType OK\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Schema: retorna array\", () => {",
-                  "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "pm.test(\"Schema: retorna array não vazio\", () => {",
+                  "  const arr = pm.response.json();",
+                  "  pm.expect(arr).to.be.an(\"array\");",
+                  "  pm.expect(arr.length).to.be.above(0);",
+                  "});",
+                  "pm.test(\"Todos os resultados contêm serviceType BARBER\", () => {",
+                  "  pm.response.json().forEach(e => {",
+                  "    pm.expect(e.serviceType).to.eql(\"BARBER\");",
+                  "  });",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -657,7 +846,7 @@
           }
         },
         {
-          "name": "filter by serviceType=MANICURE",
+          "name": "filter by serviceType=NAIL_SALON",
           "event": [
             {
               "listen": "test",
@@ -666,6 +855,12 @@
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "pm.test(\"Schema: retorna array\", () => {",
                   "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});",
+                  "pm.test(\"Se há resultados, todos têm serviceType NAIL_SALON\", () => {",
+                  "  const arr = pm.response.json();",
+                  "  if (arr.length > 0) {",
+                  "    arr.forEach(e => pm.expect(e.serviceType).to.eql(\"NAIL_SALON\"));",
+                  "  }",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -676,7 +871,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/establishment?serviceType=MANICURE",
+              "raw": "{{base_url}}/establishment?serviceType=NAIL_SALON",
               "host": [
                 "{{base_url}}"
               ],
@@ -686,7 +881,7 @@
               "query": [
                 {
                   "key": "serviceType",
-                  "value": "MANICURE"
+                  "value": "NAIL_SALON"
                 }
               ]
             }
@@ -760,7 +955,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -768,7 +963,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"CLOSED\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -779,7 +974,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -812,7 +1007,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -820,7 +1015,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -831,7 +1026,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -864,7 +1059,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -872,7 +1067,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"TEMPORARILY_CLOSED\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -883,7 +1078,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -914,7 +1109,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -946,7 +1141,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -954,7 +1149,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"INVALIDO\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -965,7 +1160,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -993,7 +1188,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1001,7 +1196,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":null}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -1012,7 +1207,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1040,7 +1235,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1048,7 +1243,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -1059,7 +1254,406 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02c - establishment general-infos",
+      "item": [
+        {
+          "name": "update general-infos → nome",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Nome atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"name atualizado\", () => pm.expect(r.name).to.equal(\"Barbearia Atualizada\"));",
+                  "  pm.test(\"modified_fields contém name\", () => pm.expect(r.modified_fields).to.include(\"name\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Barbearia Atualizada\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → service_type",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - service_type atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"service_type é BEAUTY_SALON\", () => pm.expect(r.service_type).to.equal(\"BEAUTY_SALON\"));",
+                  "  pm.test(\"modified_fields contém service_type\", () => pm.expect(r.modified_fields).to.include(\"service_type\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"service_type\":\"BEAUTY_SALON\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → url_image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - url_image atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"url_image atualizado\", () => pm.expect(r.url_image).to.equal(\"https://img.com/nova-foto.jpg\"));",
+                  "  pm.test(\"modified_fields contém url_image\", () => pm.expect(r.modified_fields).to.include(\"url_image\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"url_image\":\"https://img.com/nova-foto.jpg\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → services",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - services atualizado\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"services é array\", () => pm.expect(r.services).to.be.an(\"array\"));",
+                  "  pm.test(\"modified_fields contém services\", () => pm.expect(r.modified_fields).to.include(\"services\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"services\":[\"BARBER\",\"BEAUTY_SALON\"]}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → múltiplos campos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Múltiplos campos atualizados\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"name atualizado\", () => pm.expect(r.name).to.equal(\"Barbearia Premium\"));",
+                  "  pm.test(\"service_type BARBER\", () => pm.expect(r.service_type).to.equal(\"BARBER\"));",
+                  "  pm.test(\"modified_fields tem 3 campos\", () => pm.expect(r.modified_fields).to.have.lengthOf(3));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Barbearia Premium\",\"service_type\":\"BARBER\",\"url_image\":\"https://img.com/premium.jpg\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "update general-infos → body vazio (nenhum campo alterado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Body vazio aceito\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"modified_fields vazio\", () => pm.expect(r.modified_fields).to.have.lengthOf(0));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "[ERRO] general-infos sem token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Teste\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] general-infos service_type inválido → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 - service_type inválido rejeitado\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"service_type\":\"INVALIDO\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1071,18 +1665,17 @@
       "name": "03 - professional",
       "item": [
         {
-          "name": "quick create professional",
+          "name": "register professional (prof)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 201 - Professional criado\", () => pm.response.to.have.status(201));",
-                  "pm.test(\"Schema: id, specialty presentes\", () => {",
+                  "pm.test(\"Status 201 - Profissional criado sem establishment\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
-                  "  pm.collectionVariables.set(\"professional_id\", r.id);",
-                  "  pm.collectionVariables.set(\"prof_id\", r.id);",
+                  "  pm.collectionVariables.set(\"prof_professional_id\", r.id);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -1104,23 +1697,16 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\": \"Profissional Teste\", \"establishmentId\": \"{{establishment_id}}\"}"
+              "raw": "{\"name\": \"Profissional Teste\", \"specialty\": \"Barber\"}"
             },
-            "url": "{{base_url}}/professional/quick-create",
+            "url": "{{base_url}}/professional/register",
             "auth": {
               "type": "noauth"
             }
           },
           "response": [],
           "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{prof_token}}",
-                "type": "string"
-              }
-            ]
+            "type": "noauth"
           }
         },
         {
@@ -1161,7 +1747,50 @@
               "mode": "raw",
               "raw": "{\"refresh_token\": \"{{prof_refresh_token}}\"}"
             },
-            "url": "{{base_url}}/auth/refresh"
+            "url": "{{base_url}}/auth/refresh",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "owner adds prof to establishment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Profissional vinculado ao establishment\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+            "auth": {
+              "type": "noauth"
+            }
           },
           "response": [],
           "auth": {
@@ -1426,18 +2055,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1454,7 +2083,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1480,7 +2109,7 @@
                   "  pm.test(\"Schema: id e establishment_id presentes\", () => {",
                   "    const r = pm.response.json();",
                   "    pm.expect(r.id).to.be.a(\"string\");",
-                  "    pm.expect(r.establishment_id).to.equal(pm.collectionVariables.get(\"establishment_id\"));",
+                  "    pm.expect(r.establishment_id).to.equal(pm.collectionVariables.get(\"owner_establishment_id\"));",
                   "  });",
                   "}"
                 ],
@@ -1500,18 +2129,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1528,7 +2157,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1559,13 +2188,13 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1603,18 +2232,18 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -1631,7 +2260,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1662,24 +2291,440 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
             "body": {
               "mode": "raw",
               "raw": "{\"professionalId\": null}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 - professionalId nulo rejeitado\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"code VALIDATION_ERROR\", () => {",
+                  "  pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03d - ownership transfer + remove/leave professional",
+      "item": [
+        {
+          "name": "transfer ownership to partner professional",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "owner"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newOwnerId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Ownership transferred\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test(\"New owner matches\", () => {",
+                  "    const r = pm.response.json();",
+                  "    pm.expect(r.ownerId).to.equal(pm.collectionVariables.get(\"partner_professional_id\"));",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "transfer ownership back to original owner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "owner"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newOwnerId\": \"{{owner_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{partner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const oid = pm.collectionVariables.get(\"owner_id\");",
+                  "console.log(\"[transferBack] owner_id:\", oid);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Ownership transferred back\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test(\"Owner restored\", () => {",
+                  "    const r = pm.response.json();",
+                  "    pm.expect(r.ownerId).to.equal(pm.collectionVariables.get(\"owner_id\"));",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner remove professional from establishment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals/{{partner_professional_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals",
+                "{{partner_professional_id}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Professional removed\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "re-add partner professional (restore state)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Re-added\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional leaves establishment",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{partner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Left establishment\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "re-add partner professional after leave (restore state)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Re-added after leave\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03e - affiliations (bidirectional)",
+      "item": [
+        {
+          "name": "[setup] prof leaves establishment if affiliated",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
             },
             "auth": {
               "type": "noauth"
@@ -1700,9 +2745,635 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 422 - professionalId nulo rejeitado\", () => pm.response.to.have.status(422));",
-                  "pm.test(\"code VALIDATION_ERROR\", () => {",
-                  "  pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\");",
+                  "pm.test(\"Status 204 or 403/409 (not affiliated) — both OK\", () => {",
+                  "  pm.expect([204, 403, 409]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional requests affiliation to establishment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Affiliation requested\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"affiliation_request_id\", r.id);",
+                  "  pm.test(\"Type is REQUEST\", () => pm.expect(r.type).to.equal(\"REQUEST\"));",
+                  "  pm.test(\"Status is PENDING\", () => pm.expect(r.status).to.equal(\"PENDING\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional lists pending affiliations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Array with pending affiliation\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.be.an(\"array\");",
+                  "  pm.expect(r.length).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner lists pending affiliations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Has pending request\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.be.an(\"array\");",
+                  "  pm.expect(r.length).to.be.at.least(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner rejects affiliation request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_request_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_request_id}}",
+                "reject"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Rejected\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is REJECTED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"REJECTED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional requests affiliation again (for accept test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"affiliation_request_id_2\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner accepts affiliation request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_request_id_2}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_request_id_2}}",
+                "accept"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Accepted\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is ACCEPTED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"ACCEPTED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional leaves establishment (cleanup for invitation test)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Left\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner invites professional to establishment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Invitation sent\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"affiliation_invitation_id\", r.id);",
+                  "  pm.test(\"Type is INVITATION\", () => pm.expect(r.type).to.equal(\"INVITATION\"));",
+                  "  pm.test(\"Status is PENDING\", () => pm.expect(r.status).to.equal(\"PENDING\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner cancels invitation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_invitation_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_invitation_id}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Cancelled\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is CANCELLED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"CANCELLED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "owner invites professional again (for accept test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"affiliation_invitation_id_2\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "professional accepts invitation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/{{affiliation_invitation_id_2}}/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "{{affiliation_invitation_id_2}}",
+                "accept"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Accepted\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is ACCEPTED\", () => {",
+                  "  pm.expect(pm.response.json().status).to.equal(\"ACCEPTED\");",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -1744,7 +3415,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1752,7 +3423,7 @@
               "mode": "raw",
               "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Degradê\",\"price\":35.00,\"estimatedMinutes\":30}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/service-items",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
             "auth": {
               "type": "noauth"
             }
@@ -1763,7 +3434,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1799,11 +3470,11 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
-            "url": "{{base_url}}/professional/{{professional_id}}/service-items",
+            "url": "{{base_url}}/professional/{{prof_professional_id}}/service-items",
             "auth": {
               "type": "noauth"
             }
@@ -1814,7 +3485,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1838,7 +3509,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1853,7 +3524,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -1886,7 +3557,7 @@
               },
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -1894,7 +3565,7 @@
               "mode": "raw",
               "raw": "{\"street\":\"Rua Teste\",\"number\":\"123\",\"neighborhood\":\"Centro\",\"city\":\"São Paulo\",\"state\":\"SP\",\"zipCode\":\"01001000\",\"addressType\":\"HOME\"}"
             },
-            "url": "{{base_url}}/establishments/{{establishment_id}}/addresses",
+            "url": "{{base_url}}/establishments/{{owner_establishment_id}}/addresses",
             "auth": {
               "type": "noauth"
             }
@@ -1905,7 +3576,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -2113,14 +3784,10 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200 - Professionals com fila retornados\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Schema: professionals é array\", () => {",
+                  "pm.test(\"Schema: professionals é array não vazio\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r).to.have.property(\"professionals\");",
-                  "  pm.expect(r.professionals).to.be.an(\"array\");",
-                  "  if (r.professionals.length > 0) {",
-                  "    pm.collectionVariables.set(\"professional_id\", r.professionals[0].id);",
-                  "    pm.collectionVariables.set(\"prof_id\", r.professionals[0].id);",
-                  "  }",
+                  "  pm.expect(r.professionals).to.be.an(\"array\").that.is.not.empty;",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -2130,7 +3797,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/establishment/id/{{establishment_id}}/professionals-with-queue"
+            "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue"
           },
           "response": [],
           "auth": {
@@ -2173,7 +3840,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2222,7 +3889,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2264,7 +3931,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2444,19 +4111,19 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/client-queue/{{professional_id}}/queue?establishmentId={{establishment_id}}",
+              "raw": "{{base_url}}/client-queue/{{prof_professional_id}}/queue?establishmentId={{owner_establishment_id}}",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "client-queue",
-                "{{professional_id}}",
+                "{{prof_professional_id}}",
                 "queue"
               ],
               "query": [
                 {
                   "key": "establishmentId",
-                  "value": "{{establishment_id}}"
+                  "value": "{{owner_establishment_id}}"
                 }
               ]
             },
@@ -2559,7 +4226,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -2910,7 +4577,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -3068,7 +4735,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"professionalID\":\"{{professional_id}}\",\"establishmentId\":\"{{establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
             },
             "url": "{{base_url}}/attendances",
             "auth": {
@@ -3134,6 +4801,70 @@
       "name": "10 - prof attendance handle",
       "item": [
         {
+          "name": "add attendance (prof autenticado)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"SCHEDULED_TIME\", new Date().toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Attendance criado via add-attendance\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"Schema: id presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/add-attendance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "add-attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"clientId\":\"{{client_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{SCHEDULED_TIME}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "create guest attendance para remover (prof)",
           "event": [
             {
@@ -3167,7 +4898,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"establishmentId\":\"{{establishment_id}}\",\"professionalId\":\"{{professional_id}}\",\"clientName\":\"GuestRemove\",\"serviceItemIds\":[\"{{service_item_id}}\"]}"
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\",\"professionalId\":\"{{prof_professional_id}}\",\"clientName\":\"GuestRemove\",\"serviceItemIds\":[\"{{service_item_id}}\"]}"
             },
             "url": "{{base_url}}/professional-queue/add-quest-attendance",
             "auth": {
@@ -3233,6 +4964,145 @@
       ]
     },
     {
+      "name": "11 - profile updates",
+      "item": [
+        {
+          "name": "update password (partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Password atualizado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: tokens presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"tokens\");",
+                  "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+                  "  if (r.tokens.access_token) {",
+                  "    pm.collectionVariables.set(\"partner_token\", r.tokens.access_token);",
+                  "    pm.collectionVariables.set(\"partner_refresh_token\", r.tokens.refresh_token);",
+                  "    pm.collectionVariables.set(\"partner_password\", \"NovaSenha@456\");",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-password/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-password",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"NovaSenha@456\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "update email (partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Email atualizado\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: tokens e user presentes\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"tokens\");",
+                  "  pm.expect(r).to.have.property(\"user\");",
+                  "  if (r.tokens.access_token) {",
+                  "    pm.collectionVariables.set(\"partner_token\", r.tokens.access_token);",
+                  "    pm.collectionVariables.set(\"partner_refresh_token\", r.tokens.refresh_token);",
+                  "    pm.collectionVariables.set(\"partner_email\", r.user.email);",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const newEmail = \"partner_updated_\" + Date.now() + \"@test.com\";",
+                  "pm.collectionVariables.set(\"partner_new_email\", newEmail);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-email/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-email",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{partner_new_email}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "error tests",
       "item": [
         {
@@ -3258,7 +5128,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"email\":\"{{prof_email}}\",\"password\":\"SenhaErrada@999\"}"
+              "raw": "{\"email\":\"{{owner_email}}\",\"password\":\"SenhaErrada@999\"}"
             },
             "url": "{{base_url}}/auth/login"
           },
@@ -3354,7 +5224,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\":\"Sem Token\"}"
+              "raw": "{\"name\": \"Sem Token\", \"serviceType\": \"BARBER\"}"
             },
             "url": "{{base_url}}/establishment/quick-create",
             "auth": {
@@ -3384,7 +5254,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{prof_token}}",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
@@ -3399,7 +5269,7 @@
             "bearer": [
               {
                 "key": "token",
-                "value": "{{prof_token}}",
+                "value": "{{owner_token}}",
                 "type": "string"
               }
             ]
@@ -3424,7 +5294,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/establishment/id/{{establishment_id}}/professionals-with-queue"
+            "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue"
           },
           "response": [],
           "auth": {
@@ -3461,7 +5331,7 @@
               "mode": "raw",
               "raw": "{\"openStatus\":\"OPEN\"}"
             },
-            "url": "{{base_url}}/establishment/{{establishment_id}}/open-status",
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
               "type": "noauth"
             }
@@ -3494,13 +5364,13 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/establishment/{{establishment_id}}/professionals",
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "establishment",
-                "{{establishment_id}}",
+                "{{owner_establishment_id}}",
                 "professionals"
               ]
             },
@@ -3533,6 +5403,1330 @@
               }
             }
           ]
+        },
+        {
+          "name": "[ERRO] logout - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"invalid_token\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] update-email - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-email/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-email",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"hacker@test.com\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] update-password - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-password/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-password",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"HackerPass@123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] delete profile - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/delete/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "delete",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add service item - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "service-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Teste\",\"price\":10.00,\"estimatedMinutes\":15}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] quick-create professional - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/quick-create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "quick-create"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Hacker\",\"establishmentId\":\"{{owner_establishment_id}}\",\"specialty\":\"BARBER\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] affiliate professional - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/affiliate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "affiliate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] get attendance by id - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] cancel attendance - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "cancel"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] leave queue - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/leave-queue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "leave-queue"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] start attendance - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "start"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] finish attendance - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/finish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "finish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add-attendance (prof) - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/add-attendance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "add-attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] remove from queue - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/00000000-0000-0000-0000-000000000000/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "00000000-0000-0000-0000-000000000000",
+                "remove"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] client queue - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/client-queue/{{prof_professional_id}}/queue?establishmentId={{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "client-queue",
+                "{{prof_professional_id}}",
+                "queue?establishmentId={{owner_establishment_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] client wait-time - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/client-queue/{{attendance_id}}/wait-time?clientId={{client_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "client-queue",
+                "{{attendance_id}}",
+                "wait-time?clientId={{client_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add address - sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token rejeitado\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishments/{{owner_establishment_id}}/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishments",
+                "{{owner_establishment_id}}",
+                "addresses"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"street\":\"Rua Teste\",\"number\":\"123\",\"neighborhood\":\"Centro\",\"city\":\"SP\",\"state\":\"SP\",\"zipCode\":\"01310100\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] establishment create - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/create",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "create"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"ownerID\":\"{{client_id}}\",\"name\":\"Hack Shop\",\"services\":[\"BARBER\"],\"urlImage\":\"http://img.com/x\",\"status\":\"ACTIVE\",\"openStatus\":\"OPEN\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add service item - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "service-items"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Hack\",\"price\":10.00,\"estimatedMinutes\":15}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] affiliate professional - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/affiliate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "affiliate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] finish attendance - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/{{attendance_id}}/finish",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "{{attendance_id}}",
+                "finish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] add-attendance - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/add-attendance",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "add-attendance"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] remove from queue - token CLIENT sem role adequada (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Role CLIENT insuficiente\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional-queue/00000000-0000-0000-0000-000000000000/remove",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional-queue",
+                "00000000-0000-0000-0000-000000000000",
+                "remove"
+              ]
+            }
+          }
+        },
+        {
+          "name": "[ERRO] general-infos token CLIENT → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - CLIENT não pode editar\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Teste\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "[ERRO] affiliate - já afiliado (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 - Já afiliado\", () => pm.response.to.have.status(409));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/affiliate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "affiliate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\":\"{{owner_establishment_id}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "affiliation_alreadyPending (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 - Already affiliated or pending\", () => {",
+                  "  pm.expect([409]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "affiliation_notFound (404)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/affiliations/00000000-0000-0000-0000-000000000000/accept",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "affiliations",
+                "00000000-0000-0000-0000-000000000000",
+                "accept"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 404 - Affiliation not found\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"Code is AFFILIATION_NOT_FOUND\", () => {",
+                  "  pm.expect(pm.response.json().code).to.equal(\"AFFILIATION_NOT_FOUND\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "transfer_ownership_notOwner (403)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "owner"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"newOwnerId\": \"{{partner_professional_id}}\"}"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Not authorized\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "remove_professional_notOwner (403)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals/{{partner_professional_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "professionals",
+                "{{partner_professional_id}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Not authorized\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },
@@ -3540,13 +6734,156 @@
       "name": "99 - cleanup",
       "item": [
         {
-          "name": "deletar clientes seed (pre-request) + deletar prof",
+          "name": "logout (partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Logout OK\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"refresh_token\":\"{{partner_refresh_token}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "re-login partner (após logout)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Re-login OK\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"partner_token\", r.tokens.access_token);",
+                  "  pm.collectionVariables.set(\"partner_refresh_token\", r.tokens.refresh_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{partner_email}}\",\"password\":\"{{partner_password}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "deletar owner",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
                   "pm.test(\"Cleanup OK\", () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deletar prof",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Cleanup prof OK\", () => {",
                   "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
                   "});"
                 ],
@@ -3570,14 +6907,75 @@
           },
           "response": [],
           "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{prof_token}}",
-                "type": "string"
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "deletar partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Cleanup partner OK\", () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
               }
-            ]
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "deletar client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Cleanup client OK\", () => {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/delete/me",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
           }
         }
       ]
@@ -3613,11 +7011,11 @@
       "value": "http://localhost:8080"
     },
     {
-      "key": "prof_token",
+      "key": "owner_token",
       "value": ""
     },
     {
-      "key": "prof_refresh_token",
+      "key": "owner_refresh_token",
       "value": ""
     },
     {
@@ -3629,7 +7027,7 @@
       "value": ""
     },
     {
-      "key": "prof_id",
+      "key": "owner_id",
       "value": ""
     },
     {
@@ -3637,11 +7035,11 @@
       "value": ""
     },
     {
-      "key": "professional_id",
+      "key": "prof_professional_id",
       "value": ""
     },
     {
-      "key": "establishment_id",
+      "key": "owner_establishment_id",
       "value": ""
     },
     {
@@ -3669,11 +7067,11 @@
       "value": ""
     },
     {
-      "key": "prof_email",
+      "key": "owner_email",
       "value": ""
     },
     {
-      "key": "prof_password",
+      "key": "owner_password",
       "value": ""
     },
     {
@@ -3713,6 +7111,47 @@
       "key": "partner_professional_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "prof_email",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_password",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_id",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "prof_refresh_token",
+      "value": "",
+      "type": "default"
+    },
+    {
+      "key": "affiliation_request_id",
+      "value": ""
+    },
+    {
+      "key": "affiliation_request_id_2",
+      "value": ""
+    },
+    {
+      "key": "affiliation_invitation_id",
+      "value": ""
+    },
+    {
+      "key": "affiliation_invitation_id_2",
+      "value": ""
     }
   ],
   "auth": {
@@ -3720,7 +7159,7 @@
     "bearer": [
       {
         "key": "token",
-        "value": "{{prof_token}}",
+        "value": "{{owner_token}}",
         "type": "string"
       }
     ]

@@ -77,7 +77,7 @@ class EstablishmentAddressIntegrationTest {
                         .content(mapper.writeValueAsString(request)))
                 .andDo(print())
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.establishmenID").value(establishmentId))
+                .andExpect(jsonPath("$.establishmentId").value(establishmentId))
                 .andExpect(jsonPath("$.street").value(request.street()))
                 .andExpect(jsonPath("$.city").value(request.city()))
                 .andReturn();

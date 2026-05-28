@@ -12,6 +12,7 @@ public record EstablishmentResponse(
         @NotNull UUID id,
         @NotNull Set<ServiceType> services,
         @NotNull String name,
+        ServiceType serviceType,
         String urlImage,
         @NotNull UUID ownerId,
 
@@ -26,6 +27,7 @@ public record EstablishmentResponse(
                 establishment.getId(),
                 establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
                 establishment.getName(),
+                establishment.getServiceType(),
                 establishment.getUrlImage(),
                 establishment.getOwner().getId(),
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,

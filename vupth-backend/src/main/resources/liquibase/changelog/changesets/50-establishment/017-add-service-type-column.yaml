@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 017-add-service-type-to-establishment
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: establishment
+                columnName: service_type
+      changes:
+        - addColumn:
+            tableName: establishment
+            columns:
+              - column:
+                  name: service_type
+                  type: VARCHAR(50)

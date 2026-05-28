@@ -58,6 +58,10 @@ public class Establishment implements Serializable {
     private LocalDateTime createdAt;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "service_type")
+    private ServiceType serviceType;
+
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private EstablishmentStatus status;
 

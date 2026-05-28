@@ -4,19 +4,19 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-/**
- * Retorno do cadastro simplificado.
- * The {@code id} field is fixed and permanent — it never changes, even when other
- * data is updated (name, photo, services, address).
- */
 public record EstablishmentQuickCreateResponse(
 
         UUID id,
         String name,
+
+        @JsonProperty("service_type")
+        ServiceType serviceType,
+
         String status,
 
         @JsonProperty("open_status")
@@ -34,6 +34,7 @@ public record EstablishmentQuickCreateResponse(
         return new EstablishmentQuickCreateResponse(
                 e.getId(),
                 e.getName(),
+                e.getServiceType(),
                 e.getStatus() != null ? e.getStatus().name() : EstablishmentStatus.ACTIVE.name(),
                 e.getOpenStatus() != null ? e.getOpenStatus().name() : OpenStatus.CLOSED.name(),
                 e.getOwner() != null ? e.getOwner().getId() : null,

@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public record EstablishmentAddressResponse(
 
-        UUID establishmenID,
+        UUID establishmentId,
 
         @NotNull String establishmentName,
 

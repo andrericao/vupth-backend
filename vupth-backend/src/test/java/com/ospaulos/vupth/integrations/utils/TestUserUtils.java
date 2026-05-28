@@ -150,7 +150,7 @@ public class TestUserUtils {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(mapper.writeValueAsString(
-                                new EstablishmentQuickCreateRequest(faker.company().name()))))
+                                new EstablishmentQuickCreateRequest(faker.company().name(), ServiceType.BARBER))))
                 .andExpect(status().isCreated())
                 .andReturn();
 
@@ -229,7 +229,7 @@ public class TestUserUtils {
         var request = new com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest(
                 UUID.fromString(ownerId), services,
                 faker.company().name(), faker.internet().url(),
-                EstablishmentStatus.ACTIVE, OpenStatus.OPEN);
+                EstablishmentStatus.ACTIVE, OpenStatus.OPEN, null);
 
         MvcResult result = mvc.perform(post("/establishment/create")
                         .contentType(MediaType.APPLICATION_JSON)

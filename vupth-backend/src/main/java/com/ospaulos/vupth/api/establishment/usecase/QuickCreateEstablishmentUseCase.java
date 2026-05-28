@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -61,20 +62,20 @@ public class QuickCreateEstablishmentUseCase {
         // 3. Create establishment with minimum required data
         Establishment establishment = new Establishment();
         establishment.setName(request.name());
+        establishment.setServiceType(request.serviceType());
+        establishment.setServices(Set.of(request.serviceType()));
         establishment.setStatus(EstablishmentStatus.ACTIVE);
-        establishment.setOpenStatus(OpenStatus.CLOSED); // starts closed until configured
+        establishment.setOpenStatus(OpenStatus.CLOSED);
         establishment.setOwner(owner);
-        // services, urlImage, address → null por enquanto (opcionais)
 
         Establishment saved = establishmentRepository.save(establishment);
 
         log.info("Establishment created — id={} name={} owner={}", saved.getId(), saved.getName(), userId);
 
-        // Build response from in-memory references to avoid LazyInitializationException
-        // on saved.getOwner() after the Hibernate session closes.
         return new EstablishmentQuickCreateResponse(
                 saved.getId(),
                 saved.getName(),
+                request.serviceType(),
                 EstablishmentStatus.ACTIVE.name(),
                 OpenStatus.CLOSED.name(),
                 owner.getId(),

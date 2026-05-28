@@ -1,0 +1,64 @@
+databaseChangeLog:
+  - changeSet:
+      id: 090-001-create-affiliation-request
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: affiliation_request
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: type
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: resolved_at
+                  type: TIMESTAMPTZ
+
+        - addForeignKeyConstraint:
+            baseTableName: affiliation_request
+            baseColumnNames: professional_id
+            constraintName: fk_affiliation_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+        - addForeignKeyConstraint:
+            baseTableName: affiliation_request
+            baseColumnNames: establishment_id
+            constraintName: fk_affiliation_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE

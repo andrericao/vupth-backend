@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRe
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.professional.usecase.AffiliateToEstablishmentUseCase;
+import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
@@ -41,6 +42,10 @@ import java.util.UUID;
  *     Afilia profissional existente a um establishment (quando o profissional tem o ID).
  *     Auth: ROLE_PROFESSIONAL
  *
+ *   DELETE /professional/me/establishment
+ *     Profissional sai do establishment atual (bloqueia se houver atendimentos ativos).
+ *     Auth: ROLE_PROFESSIONAL
+ *
  *   GET /professional/{id}/service-items
  *     Lista serviços do profissional (público).
  *
@@ -57,6 +62,7 @@ public class ProfessionalQuickCreateController {
     private final QuickCreateProfessionalUseCase quickCreateUseCase;
     private final RegisterProfessionalUseCase    registerUseCase;
     private final AffiliateToEstablishmentUseCase affiliateUseCase;
+    private final LeaveEstablishmentUseCase       leaveUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
 
@@ -122,6 +128,23 @@ public class ProfessionalQuickCreateController {
         ProfessionalQuickCreateResponse response =
                 affiliateUseCase.execute(principal.getUserId(), request.establishmentId());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * DELETE /professional/me/establishment
+     *
+     * Profissional sai do establishment atual por conta própria.
+     * Bloqueia se houver atendimentos ativos (SCHEDULED ou IN_PROGRESS).
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @DeleteMapping("/me/establishment")
+    public ResponseEntity<Void> leaveEstablishment(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("DELETE /professional/me/establishment — user={}", principal.getUserId());
+
+        leaveUseCase.execute(principal.getUserId());
+        return ResponseEntity.noContent().build();
     }
 
     /**

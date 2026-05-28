@@ -1,13 +1,10 @@
 package com.ospaulos.vupth.api.establishment.dto.request;
 
+import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
-/**
- * Cadastro simplificado (MVP):
- * - Only the name is required.
- * - A fixed UUID is generated on creation and never changes.
- * - The owner can complete remaining info later (serviceTypes, photo, address).
- */
 public record EstablishmentQuickCreateRequest(
-        @NotBlank(message = "Establishment name is required") String name
+        @NotBlank(message = "Establishment name is required") String name,
+        @NotNull(message = "Service type is required") ServiceType serviceType
 ) {}

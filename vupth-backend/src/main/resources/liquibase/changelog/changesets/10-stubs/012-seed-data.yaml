@@ -19,6 +19,7 @@ databaseChangeLog:
       id: seed-base_user-owner1
       author: vupth-seed
       context: "!prod"
+      validCheckSum: ANY
       changes:
         - insert:
             tableName: base_user
@@ -56,6 +57,7 @@ databaseChangeLog:
       id: seed-establishments
       author: vupth-seed
       context: "!prod"
+      validCheckSum: ANY
       changes:
         - insert:
             tableName: establishment
@@ -83,6 +85,7 @@ databaseChangeLog:
       id: seed-professional-users
       author: vupth-seed
       context: "!prod"
+      validCheckSum: ANY
       changes:
         # Carlos — Barbearia do Ricardo
         - insert:
@@ -192,6 +195,7 @@ databaseChangeLog:
       id: seed-service-items
       author: vupth-seed
       context: "!prod"
+      validCheckSum: ANY
       changes:
         # Carlos: Corte Máquina
         - insert:
@@ -259,6 +263,7 @@ databaseChangeLog:
       id: seed-clients
       author: vupth-seed
       context: "!prod"
+      validCheckSum: ANY
       changes:
         # Ana Costa
         - insert:

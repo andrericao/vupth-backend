@@ -1,5 +1,8 @@
 package com.ospaulos.vupth.web.rest.exception;
 
+import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAccessDeniedException;
+import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAlreadyPendingException;
+import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
@@ -14,6 +17,8 @@ import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException
 import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidException;
@@ -142,6 +147,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "ATTENDANCE_SERVICE_ITEM_NOT_FOUND");
     }
 
+    @ExceptionHandler(AffiliationNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleAffiliationNotFound(
+            AffiliationNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] AffiliationNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "AFFILIATION_NOT_FOUND");
+    }
+
     @ExceptionHandler(ClientNotInQueueException.class)
     public ResponseEntity<ErrorResponse> handleClientNotInQueue(
             ClientNotInQueueException ex, HttpServletRequest req) {
@@ -238,11 +250,25 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, "Access denied", "ACCESS_DENIED");
     }
 
+    @ExceptionHandler(AffiliationAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAffiliationAccessDenied(
+            AffiliationAccessDeniedException ex, HttpServletRequest req) {
+        log.warn("[403] AffiliationAccessDenied | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), "AFFILIATION_ACCESS_DENIED");
+    }
+
     @ExceptionHandler(EstablishmentAccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleEstablishmentAccess(
             EstablishmentAccessDeniedException ex, HttpServletRequest req) {
         log.warn("[403] EstablishmentAccessDenied | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), "ESTABLISHMENT_ACCESS_DENIED");
+    }
+
+    @ExceptionHandler(ProfessionalNotAffiliatedException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalNotAffiliated(
+            ProfessionalNotAffiliatedException ex, HttpServletRequest req) {
+        log.warn("[403] ProfessionalNotAffiliated | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), "PROFESSIONAL_NOT_AFFILIATED");
     }
 
     @ExceptionHandler(NotAProfessionalException.class)
@@ -268,6 +294,13 @@ public class GlobalExceptionHandler {
             UserAlreadyProfessionalException ex, HttpServletRequest req) {
         log.warn("[409] UserAlreadyProfessional | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "USER_ALREADY_PROFESSIONAL");
+    }
+
+    @ExceptionHandler(AffiliationAlreadyPendingException.class)
+    public ResponseEntity<ErrorResponse> handleAffiliationAlreadyPending(
+            AffiliationAlreadyPendingException ex, HttpServletRequest req) {
+        log.warn("[409] AffiliationAlreadyPending | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "AFFILIATION_ALREADY_PENDING");
     }
 
     @ExceptionHandler(ProfessionalAlreadyAffiliatedException.class)
@@ -303,6 +336,13 @@ public class GlobalExceptionHandler {
             ServiceItemAlreadyExistsException ex, HttpServletRequest req) {
         log.warn("[409] ServiceItemAlreadyExists | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "SERVICE_ITEM_ALREADY_EXISTS");
+    }
+
+    @ExceptionHandler(ProfessionalHasActiveAttendancesException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalHasActiveAttendances(
+            ProfessionalHasActiveAttendancesException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_HAS_ACTIVE_ATTENDANCES");
     }
 
     @ExceptionHandler(IntervalConflictException.class)

@@ -44,7 +44,7 @@ public class ClientServiceImpl implements ClientService {
     @Override
     public ClientInQueueResponse createAndAddtAttendanceInQueue(AttendanceRequest request){
 
-        Professional professional = professionalRepository.findById(request.professionalID())
+        Professional professional = professionalRepository.findById(request.professionalId())
                 .orElseThrow(() -> new EntityNotFoundException("Professional not found"));
 
         Establishment establishment = establishmentRepository.findById(request.establishmentId())
