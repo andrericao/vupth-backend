@@ -315,7 +315,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("success: finds professional by professionalId (not by establishmentId from the request)")
         void createServiceItem_success_usesProfessionalId() {
             ServiceItemRequest request = new ServiceItemRequest(
-                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
+                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), 30);
 
             // professional has 0 service items, no duplicate
             establishment.setProfessionals(new ArrayList<>(List.of(professional)));
@@ -340,7 +340,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("service item with same name already exists → throws ServiceItemAlreadyExistsException")
         void createServiceItem_duplicate_throws() {
             ServiceItemRequest request = new ServiceItemRequest(
-                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
+                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), 30);
 
             ServiceItem existing = new ServiceItem();
             existing.setCustomName("Corte"); // mesmo nome
@@ -404,11 +404,11 @@ class ProfessionalServiceImplTest {
         }
 
         @Test
-        @DisplayName("attendance not in SCHEDULED status → AttendanceInvalidStatusException")
+        @DisplayName("attendance FINISHED → AttendanceInvalidStatusException")
         void removeFromQueue_wrongStatus_throws() {
             when(attendanceService.removeFromQueue(attendanceId, professionalId))
                     .thenThrow(new AttendanceInvalidStatusException(
-                            AttendanceStatus.IN_PROGRESS, AttendanceStatus.SCHEDULED));
+                            AttendanceStatus.FINISHED, AttendanceStatus.SCHEDULED));
 
             assertThatThrownBy(() -> attendanceService.removeFromQueue(attendanceId, professionalId))
                     .isInstanceOf(AttendanceInvalidStatusException.class);

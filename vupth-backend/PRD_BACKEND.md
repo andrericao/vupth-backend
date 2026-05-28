@@ -159,10 +159,37 @@ Todos os erros seguem um dos dois formatos:
 `FEMALE` | `MALE` | `NON_BINARY` | `OTHERS`
 
 ### ServiceType (categoria do establishment)
-`BARBER` | `BEAUTY_SALON` | `NAIL_SALON` | `SPA` | `CLINIC`
+`BARBER` | `BEAUTY_SALON` | `EYEBROW` | `NAIL_SALON` | `SPA` | `CLINIC`
 
-### ServiceItemType (tipo de servico)
-`PEDICURE` | `CORTE_MAQUINA` | `RECORTE_PONTAS` | `PINTURA` | `MANICURE`
+### ServiceItemType (tipo de servico — 25 valores)
+
+| ServiceItemType | displayName | ServiceType compativel |
+|---|---|---|
+| `CORTE_MAQUINA` | Corte à máquina | BARBER |
+| `CORTE_TESOURA` | Corte à tesoura | BARBER |
+| `BARBA` | Barba | BARBER |
+| `SOBRANCELHA` | Design de sobrancelha | BARBER, EYEBROW |
+| `PINTURA` | Pintura | BARBER, BEAUTY_SALON |
+| `HENNA_SOBRANCELHA` | Henna para sobrancelha | EYEBROW |
+| `MICROPIGMENTACAO_SOBRANCELHA` | Micropigmentação fio a fio | EYEBROW |
+| `BROW_LAMINATION` | Brow lamination | EYEBROW |
+| `TINTURA_SOBRANCELHA` | Tintura para sobrancelha | EYEBROW |
+| `RECORTE_PONTAS` | Recorte das pontas | BEAUTY_SALON |
+| `ESCOVA` | Escova | BEAUTY_SALON |
+| `HIDRATACAO` | Hidratação capilar | BEAUTY_SALON |
+| `PROGRESSIVA` | Progressiva | BEAUTY_SALON |
+| `MANICURE` | Manicure | NAIL_SALON |
+| `PEDICURE` | Pedicure | NAIL_SALON |
+| `UNHAS_GEL` | Unhas em gel | NAIL_SALON |
+| `NAIL_ART` | Nail art | NAIL_SALON |
+| `MASSAGEM_RELAXANTE` | Massagem relaxante | SPA |
+| `MASSAGEM_MODELADORA` | Massagem modeladora | SPA |
+| `LIMPEZA_PELE` | Limpeza de pele | SPA, CLINIC |
+| `DEPILACAO` | Depilação | SPA |
+| `DRENAGEM` | Drenagem linfática | SPA |
+| `PEELING` | Peeling facial | CLINIC |
+| `BOTOX` | Aplicação de botox | CLINIC |
+| `MICROAGULHAMENTO` | Microagulhamento | CLINIC |
 
 ### EstablishmentStatus
 `ACTIVE` | `INACTIVE` | `TEMPORARY_CLOSED`
@@ -268,7 +295,7 @@ Renova tokens. **Obrigatorio apos ganhar novas roles.**
 **Request:**
 ```json
 {
-  "refresh_token": "uuid-refresh-token"
+  "refreshToken": "uuid-refresh-token"
 }
 ```
 
@@ -293,7 +320,7 @@ Invalida o refresh token.
 **Request:**
 ```json
 {
-  "refresh_token": "uuid-refresh-token"
+  "refreshToken": "uuid-refresh-token"
 }
 ```
 
@@ -705,7 +732,8 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
   "establishmentId": "uuid",
   "serviceItemType": "CORTE_MAQUINA",
   "customName": "Corte degradê",
-  "price": 50.00
+  "price": 50.00,
+  "estimatedMinutes": 30
 }
 ```
 
@@ -1089,9 +1117,10 @@ SCHEDULED ──start──> IN_PROGRESS ──finish──> FINISHED
     │                    ▼    │
     │                  PAUSED
     │
-    └──cancel──> CANCELLED
-    
-IN_PROGRESS ──cancel──> CANCELLED
+    └──cancel/leave──> CANCELLED  (cliente: so SCHEDULED)
+
+IN_PROGRESS ──remove──> CANCELLED  (profissional)
+PAUSED      ──remove──> CANCELLED  (profissional)
 ```
 
 ---
@@ -1140,7 +1169,7 @@ Adiciona um guest (sem cadastro) na fila.
 ---
 
 ### DELETE /professional-queue/{attendanceId}/remove
-Profissional remove um attendance da fila.
+Profissional cancela um attendance. Aceita status: SCHEDULED, IN_PROGRESS, PAUSED.
 
 **Acesso:** PROFESSIONAL
 

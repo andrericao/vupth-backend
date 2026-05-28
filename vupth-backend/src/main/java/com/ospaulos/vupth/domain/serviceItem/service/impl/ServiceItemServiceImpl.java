@@ -37,6 +37,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
         serviceItem.setServiceItemType(request.serviceItemType());
         serviceItem.setCustomName(request.customName());
         serviceItem.setPrice(request.price());
+        serviceItem.setEstimatedMinutes(request.estimatedMinutes());
         serviceItem.setProfessional(professional);
 
         ServiceItem saved = serviceItemRepository.save(serviceItem);

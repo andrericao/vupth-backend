@@ -5,8 +5,8 @@ import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosR
 
 public record LoginResponse(
 
-        @JsonProperty("refresh_token")
-        RefreshTokenResponse refreshToken,
+        @JsonProperty("tokens")
+        RefreshTokenResponse tokens,
 
         @JsonProperty("user")
         UserProfileGeneralInfosResponse user

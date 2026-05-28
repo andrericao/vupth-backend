@@ -328,8 +328,11 @@ public class AttendanceServiceImpl implements AttendanceService {
                     "You can only remove attendances from your own queue.");
         }
 
-        if (!attendance.getStatus().equals(AttendanceStatus.SCHEDULED)) {
-            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        var status = attendance.getStatus();
+        if (status != AttendanceStatus.SCHEDULED
+                && status != AttendanceStatus.IN_PROGRESS
+                && status != AttendanceStatus.PAUSED) {
+            throw new AttendanceInvalidStatusException(status, AttendanceStatus.SCHEDULED);
         }
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
@@ -338,7 +341,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         String clientName = attendance.getClient() != null
                 ? attendance.getClient().getFirstName()
                 : (attendance.getGuestName() != null ? attendance.getGuestName() : "anonymous");
-        log.info("[Attendance] removeFromQueue — professional removed '{}' from queue", clientName);
+        log.info("[Attendance] removeFromQueue — professional cancelled '{}' (was {})", clientName, status);
 
         return buildAttendanceInQueueResponse(saved);
     }

@@ -91,7 +91,8 @@ class ServiceItemIntegrationTest {
                 UUID.fromString(establishmentId),
                 ServiceItemType.CORTE_MAQUINA,
                 "Corte Degradê",
-                BigDecimal.valueOf(35.00));
+                BigDecimal.valueOf(35.00),
+                30);
 
         MvcResult result = mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -121,7 +122,8 @@ class ServiceItemIntegrationTest {
                 UUID.fromString(establishmentId),
                 ServiceItemType.CORTE_MAQUINA,
                 "Outro Corte",
-                BigDecimal.valueOf(25));
+                BigDecimal.valueOf(25),
+                30);
 
         mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -212,7 +214,8 @@ class ServiceItemIntegrationTest {
                 UUID.fromString(establishmentId),
                 ServiceItemType.CORTE_MAQUINA,
                 "Corte Cliente",
-                BigDecimal.valueOf(20));
+                BigDecimal.valueOf(20),
+                30);
 
         mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)

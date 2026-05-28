@@ -14,8 +14,14 @@ public enum ServiceItemType {
     CORTE_MAQUINA("Corte à máquina", Set.of(ServiceType.BARBER)),
     CORTE_TESOURA("Corte à tesoura", Set.of(ServiceType.BARBER)),
     BARBA("Barba", Set.of(ServiceType.BARBER)),
-    SOBRANCELHA("Design de sobrancelha", Set.of(ServiceType.BARBER)),
+    SOBRANCELHA("Design de sobrancelha", Set.of(ServiceType.BARBER, ServiceType.EYEBROW)),
     PINTURA("Pintura", Set.of(ServiceType.BARBER, ServiceType.BEAUTY_SALON)),
+
+    // EYEBROW
+    HENNA_SOBRANCELHA("Henna para sobrancelha", Set.of(ServiceType.EYEBROW)),
+    MICROPIGMENTACAO_SOBRANCELHA("Micropigmentação fio a fio", Set.of(ServiceType.EYEBROW)),
+    BROW_LAMINATION("Brow lamination", Set.of(ServiceType.EYEBROW)),
+    TINTURA_SOBRANCELHA("Tintura para sobrancelha", Set.of(ServiceType.EYEBROW)),
 
     // BEAUTY_SALON
     RECORTE_PONTAS("Recorte das pontas", Set.of(ServiceType.BEAUTY_SALON)),

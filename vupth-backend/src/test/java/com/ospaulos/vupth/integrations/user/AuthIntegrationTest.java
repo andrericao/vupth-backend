@@ -303,7 +303,7 @@ class AuthIntegrationTest {
 
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(String.format("{\"refresh_token\": \"%s\"}", refreshToken)))
+                        .content(String.format("{\"refreshToken\": \"%s\"}", refreshToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.access_token").exists())
                 .andDo(print());
@@ -317,7 +317,7 @@ class AuthIntegrationTest {
 
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refresh_token\": \"completely-invalid-token-xyz\"}"))
+                        .content("{\"refreshToken\": \"completely-invalid-token-xyz\"}"))
                 .andExpect(status().isUnauthorized())
                 .andDo(print());
     }
@@ -351,7 +351,7 @@ class AuthIntegrationTest {
         mvc.perform(post("/auth/logout")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", accessToken)
-                        .content("{\"refresh_token\": \"" + refreshToken + "\"}"))
+                        .content("{\"refreshToken\": \"" + refreshToken + "\"}"))
                 .andExpect(status().isNoContent())
                 .andDo(print());
     }

@@ -80,7 +80,7 @@ class RefreshTokenIntegrationTest {
     void refresh_success() throws Exception {
         log.info("[RefreshToken] refresh_success");
 
-        String body = String.format("{\"refresh_token\": \"%s\"}", refreshToken);
+        String body = String.format("{\"refreshToken\": \"%s\"}", refreshToken);
 
         MvcResult result = mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -104,7 +104,7 @@ class RefreshTokenIntegrationTest {
 
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refresh_token\": \"token-completamente-invalido-12345\"}"))
+                        .content("{\"refreshToken\": \"token-completamente-invalido-12345\"}"))
                 .andExpect(status().isUnauthorized())
                 .andDo(print());
     }
@@ -131,7 +131,7 @@ class RefreshTokenIntegrationTest {
 
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"refresh_token\": 12345}"))
+                        .content("{\"refreshToken\": 12345}"))
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isNotEqualTo(500))
                 .andDo(print());
@@ -147,7 +147,7 @@ class RefreshTokenIntegrationTest {
         mvc.perform(post("/auth/logout")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", "Bearer " + accessToken)
-                        .content(String.format("{\"refresh_token\": \"%s\"}", refreshToken)))
+                        .content(String.format("{\"refreshToken\": \"%s\"}", refreshToken)))
                 .andDo(print());
         // Status pode ser 200 ou 204
 
@@ -156,7 +156,7 @@ class RefreshTokenIntegrationTest {
         // Attempt to use the same refresh_token — should be invalid
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(String.format("{\"refresh_token\": \"%s\"}", refreshToken)))
+                        .content(String.format("{\"refreshToken\": \"%s\"}", refreshToken)))
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isIn(401, 404))
                 .andDo(print());
