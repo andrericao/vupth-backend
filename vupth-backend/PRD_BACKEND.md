@@ -295,7 +295,7 @@ Renova tokens. **Obrigatorio apos ganhar novas roles.**
 **Request:**
 ```json
 {
-  "refreshToken": "uuid-refresh-token"
+  "refresh_token": "uuid-refresh-token"
 }
 ```
 
@@ -320,7 +320,7 @@ Invalida o refresh token.
 **Request:**
 ```json
 {
-  "refreshToken": "uuid-refresh-token"
+  "refresh_token": "uuid-refresh-token"
 }
 ```
 

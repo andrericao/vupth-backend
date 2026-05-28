@@ -629,7 +629,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"refreshToken\": \"{{owner_refresh_token}}\"}"
+              "raw": "{\"refresh_token\": \"{{owner_refresh_token}}\"}"
             },
             "url": "{{base_url}}/auth/refresh",
             "auth": {
@@ -1745,7 +1745,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"refreshToken\": \"{{prof_refresh_token}}\"}"
+              "raw": "{\"refresh_token\": \"{{prof_refresh_token}}\"}"
             },
             "url": "{{base_url}}/auth/refresh",
             "auth": {
@@ -5441,7 +5441,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"refreshToken\":\"invalid_token\"}",
+              "raw": "{\"refresh_token\":\"invalid_token\"}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -6775,7 +6775,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"refreshToken\":\"{{partner_refresh_token}}\"}",
+              "raw": "{\"refresh_token\":\"{{partner_refresh_token}}\"}",
               "options": {
                 "raw": {
                   "language": "json"
