@@ -1566,6 +1566,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | Affiliate to Establishment | 9 | `AffiliateToEstablishmentIntegrationTest` |
 | Intervals | 9 | `ProfessionalIntervalIntegrationTest` |
 | Establishment Address | 9 | `EstablishmentAddressIntegrationTest` |
+| Affiliation (bidirectional) | 37 | `AffiliationIntegrationTest` |
 | Client Queue | 9 | `ClientQueueIntegrationTest` |
 | User Address | 8 | `UserAddressIntegrationTest` |
 | Service Items | 8 | `ServiceItemIntegrationTest` |
@@ -1607,13 +1608,13 @@ Lista intervalos ativos para uma data (default: hoje).
 | POST /professional/affiliate | ✅ |
 | DELETE /professional/me/establishment | ✅ |
 | GET /professional/{id}/service-items | 🟡 Integracao |
-| POST /professional/me/affiliations | 🟡 Unitario |
-| GET /professional/me/affiliations | 🟡 Unitario |
-| POST /establishment/{id}/affiliations | 🟡 Unitario |
-| GET /establishment/{id}/affiliations | 🟡 Unitario |
-| PATCH /affiliations/{id}/accept | 🟡 Unitario |
-| PATCH /affiliations/{id}/reject | 🟡 Unitario |
-| DELETE /affiliations/{id} | 🟡 Unitario |
+| POST /professional/me/affiliations | ✅ |
+| GET /professional/me/affiliations | ✅ |
+| POST /establishment/{id}/affiliations | ✅ |
+| GET /establishment/{id}/affiliations | ✅ |
+| PATCH /affiliations/{id}/accept | ✅ |
+| PATCH /affiliations/{id}/reject | ✅ |
+| DELETE /affiliations/{id} | ✅ |
 | GET /attendances/{id} | 🟡 Integracao |
 | POST /attendances | ✅ |
 | PUT /attendances/{id}/cancel | ✅ |
@@ -1650,7 +1651,7 @@ Lista intervalos ativos para uma data (default: hoje).
 |------|-----------|-----------|
 | Trocar lugar na fila | Media | TODO no `ClientServiceImpl` — endpoint para cliente trocar posicao |
 | Mover codigo para ProfessionalService | Baixa | TODO no `QueueServiceImpl` — refatoracao interna |
-| Testes de integracao para Affiliations | Media | Endpoints de affiliation so tem testes unitarios |
+
 
 ### Inconsistencias conhecidas
 
