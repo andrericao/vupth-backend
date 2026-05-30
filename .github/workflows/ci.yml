@@ -79,49 +79,35 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
-      - name: Wait for Render deploy to start
+      - name: Wait for Render deploy with commit verification
         run: |
-          echo "Aguardando Render iniciar o build (old instance still UP)..."
-          sleep 60
+          EXPECTED_COMMIT=$(git rev-parse --short HEAD)
+          echo "Esperando Render deployar commit: $EXPECTED_COMMIT"
 
-      - name: Wait for Render (readiness check)
-        run: |
-          for i in {1..40}; do
-            echo "Tentativa $i..."
+          for i in {1..60}; do
+            echo "Tentativa $i/60..."
 
-            RESPONSE=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health || true)
+            INFO=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/info || true)
+            echo "Info: $INFO"
 
-            echo "Resposta: $RESPONSE"
+            DEPLOYED_COMMIT=$(echo "$INFO" | grep -o '"commit":{[^}]*}' | grep -o '"id":"[^"]*"' | cut -d'"' -f4 || true)
 
-            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
-              echo "App respondeu UP"
+            if [ "$DEPLOYED_COMMIT" = "$EXPECTED_COMMIT" ]; then
+              echo "Commit correto deployado! ($DEPLOYED_COMMIT)"
 
-              READY=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness || true)
-
-              echo "Readiness: $READY"
-
-              if echo "$READY" | grep -q '"status":"UP"'; then
-                echo "App PRONTA!"
+              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness || true)
+              if echo "$HEALTH" | grep -q '"status":"UP"'; then
+                echo "App PRONTA com commit correto!"
                 exit 0
               fi
             fi
 
-            echo "Ainda não está pronta..."
+            echo "Commit deployado: '$DEPLOYED_COMMIT' | Esperado: '$EXPECTED_COMMIT'"
             sleep 15
           done
 
-          echo "Timeout aguardando app"
+          echo "Timeout: commit $EXPECTED_COMMIT nao foi deployado em 15 min"
           exit 1
-
-      - name: Debug files
-        run: |
-          pwd
-          ls -R
-
-      - name: Debug API
-        run: |
-          curl -v ${{ secrets.HOMOLOG_URL }}/actuator/health
-          curl -v ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness
 
       - name: Run Postman (HOMOLOG)
         working-directory: vupth-backend
