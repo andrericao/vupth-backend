@@ -206,7 +206,7 @@ public class TestUserUtils {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(mapper.writeValueAsString(new ServiceItemRequest(
-                                UUID.fromString(establishmentId), type, description, price))))
+                                UUID.fromString(establishmentId), type, description, price, 30))))
                 .andExpect(status().isCreated())
                 .andReturn();
 

@@ -9,6 +9,7 @@ public record ServiceItemRequest(
         UUID establishmentId,
         ServiceItemType serviceItemType,
         String customName,
-        BigDecimal price
+        BigDecimal price,
+        Integer estimatedMinutes
 ) {
 }

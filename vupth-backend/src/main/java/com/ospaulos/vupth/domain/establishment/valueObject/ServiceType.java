@@ -9,6 +9,7 @@ public enum ServiceType {
 
     BARBER("barbeiro"),
     BEAUTY_SALON("salaoBeleza"),
+    EYEBROW("sobrancelha"),
     NAIL_SALON("manicure"),
     SPA("spa"),
     CLINIC("clinica");
