@@ -67,4 +67,10 @@ public interface AttendanceService {
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status);
+
+    public List<AttendanceListResponse> listClientAttendances(
+            UUID clientId,
+            AttendanceStatus status,
+            LocalDate dateFrom,
+            LocalDate dateTo);
 }

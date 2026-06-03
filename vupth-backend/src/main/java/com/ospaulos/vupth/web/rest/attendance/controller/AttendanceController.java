@@ -46,6 +46,21 @@ public class AttendanceController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/client/me")
+    public ResponseEntity<List<AttendanceListResponse>> listClientAttendances(
+            @RequestParam(required = false) AttendanceStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER LIST CLIENT — clientId={} status={} dateFrom={} dateTo={}",
+                principal.getUserId(), status, dateFrom, dateTo);
+
+        List<AttendanceListResponse> response = attendanceService.listClientAttendances(
+                principal.getUserId(), status, dateFrom, dateTo);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{attendanceId}")
     public ResponseEntity<AttendanceInQueueResponse> getById(
             @PathVariable UUID attendanceId) {
