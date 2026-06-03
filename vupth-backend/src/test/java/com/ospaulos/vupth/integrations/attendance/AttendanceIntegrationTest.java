@@ -892,6 +892,185 @@ class AttendanceIntegrationTest {
                 .andDo(print());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO H — List attendances (GET /attendances)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(80)
+    @DisplayName("GET /attendances?establishmentId=X — 200 owner lista attendances do establishment")
+    void listAttendances_byEstablishment_owner() throws Exception {
+        log.info("[Attendance] listAttendances_byEstablishment_owner");
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].establishmentId").value(establishmentId))
+                .andExpect(jsonPath("$[0].professionalId").exists())
+                .andExpect(jsonPath("$[0].services").isArray())
+                .andExpect(jsonPath("$[0].status").exists())
+                .andExpect(jsonPath("$[0].totalValue").exists())
+                .andExpect(jsonPath("$[0].scheduledTime").exists())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(81)
+    @DisplayName("GET /attendances?establishmentId=X&status=FINISHED — 200 filtra por status")
+    void listAttendances_byStatus() throws Exception {
+        log.info("[Attendance] listAttendances_byStatus");
+
+        MvcResult result = mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .param("status", "FINISHED")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        for (var item : items) {
+            assertThat(item.get("status").asText()).isEqualTo("FINISHED");
+        }
+    }
+
+    @Test
+    @Order(82)
+    @DisplayName("GET /attendances?establishmentId=X&status=CANCELLED — 200 filtra cancelados")
+    void listAttendances_byCancelledStatus() throws Exception {
+        log.info("[Attendance] listAttendances_byCancelledStatus");
+
+        MvcResult result = mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .param("status", "CANCELLED")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        for (var item : items) {
+            assertThat(item.get("status").asText()).isEqualTo("CANCELLED");
+        }
+    }
+
+    @Test
+    @Order(83)
+    @DisplayName("GET /attendances?establishmentId=X&dateFrom=Y&dateTo=Z — 200 filtra por periodo")
+    void listAttendances_byDateRange() throws Exception {
+        log.info("[Attendance] listAttendances_byDateRange");
+
+        String today = java.time.LocalDate.now().toString();
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .param("dateFrom", today)
+                        .param("dateTo", today)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(84)
+    @DisplayName("GET /attendances?professionalId=X — 200 profissional lista seus proprios attendances")
+    void listAttendances_byProfessional() throws Exception {
+        log.info("[Attendance] listAttendances_byProfessional");
+
+        MvcResult result = mvc.perform(get("/attendances")
+                        .param("professionalId", professionalId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        for (var item : items) {
+            assertThat(item.get("professionalId").asText()).isEqualTo(professionalId);
+        }
+    }
+
+    @Test
+    @Order(85)
+    @DisplayName("GET /attendances — 200 sem params, retorna attendances do establishment do profissional logado")
+    void listAttendances_noParams_defaultsToOwnEstablishment() throws Exception {
+        log.info("[Attendance] listAttendances_noParams");
+
+        mvc.perform(get("/attendances")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(86)
+    @DisplayName("GET /attendances — 401 sem token")
+    void listAttendances_noToken_401() throws Exception {
+        log.info("[Attendance] listAttendances_noToken_401");
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(87)
+    @DisplayName("GET /attendances?establishmentId=X — 403 client sem role OWNER/PROFESSIONAL")
+    void listAttendances_clientToken_403() throws Exception {
+        log.info("[Attendance] listAttendances_clientToken_403");
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(88)
+    @DisplayName("GET /attendances?establishmentId=RANDOM — 403 owner tenta ver establishment de outro")
+    void listAttendances_wrongEstablishment_403() throws Exception {
+        log.info("[Attendance] listAttendances_wrongEstablishment_403");
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", UUID.randomUUID().toString())
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isNotFound())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(89)
+    @DisplayName("GET /attendances — response tem campos de client (clientId, clientName)")
+    void listAttendances_hasClientFields() throws Exception {
+        log.info("[Attendance] listAttendances_hasClientFields");
+
+        MvcResult result = mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        boolean hasClientItem = false;
+        for (var item : items) {
+            if (!item.get("clientId").isNull()) {
+                hasClientItem = true;
+                assertThat(item.has("clientName")).isTrue();
+            }
+        }
+        assertThat(hasClientItem).as("Deve ter ao menos um attendance com clientId preenchido").isTrue();
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[Attendance] tearDown — limpando dados");

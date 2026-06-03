@@ -2,17 +2,22 @@ package com.ospaulos.vupth.web.rest.attendance.controller;
 
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
+import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -24,13 +29,38 @@ public class AttendanceController {
     private final AttendanceService attendanceService;
     private final ProfessionalService professionalService;
 
-    /**
-     * GET /attendances/{attendanceId}
-     *
-     * Busca um attendance pelo ID. Retorna 404 se não encontrado.
-     * Usado pelo Postman e pelo frontend para verificar o estado de um atendimento.
-     * Requer: autenticação (qualquer role).
-     */
+    @GetMapping
+    public ResponseEntity<List<AttendanceListResponse>> listAttendances(
+            @RequestParam(required = false) UUID establishmentId,
+            @RequestParam(required = false) UUID professionalId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) AttendanceStatus status,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} dateFrom={} dateTo={} status={}",
+                principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo, status);
+
+        List<AttendanceListResponse> response = attendanceService.listAttendances(
+                principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo, status);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/client/me")
+    public ResponseEntity<List<AttendanceListResponse>> listClientAttendances(
+            @RequestParam(required = false) AttendanceStatus status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER LIST CLIENT — clientId={} status={} dateFrom={} dateTo={}",
+                principal.getUserId(), status, dateFrom, dateTo);
+
+        List<AttendanceListResponse> response = attendanceService.listClientAttendances(
+                principal.getUserId(), status, dateFrom, dateTo);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{attendanceId}")
     public ResponseEntity<AttendanceInQueueResponse> getById(
             @PathVariable UUID attendanceId) {

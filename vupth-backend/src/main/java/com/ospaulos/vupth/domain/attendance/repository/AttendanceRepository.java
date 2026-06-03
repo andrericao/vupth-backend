@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -199,5 +200,47 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     long countWaitingQueueByProfessionalAndEstablishment(
             @Param("professionalId") UUID professionalId,
             @Param("establishmentId") UUID establishmentId
+    );
+
+    @Query(value = """
+        SELECT DISTINCT a.* FROM attendance a
+        LEFT JOIN client c ON c.id = a.client_id
+        LEFT JOIN base_user bu1 ON bu1.id = c.id
+        LEFT JOIN professional p ON p.id = a.professional_id
+        LEFT JOIN base_user bu2 ON bu2.id = p.id
+        LEFT JOIN establishment e ON e.id = a.establishment_id
+        WHERE (CAST(:establishmentId AS uuid) IS NULL OR a.establishment_id = CAST(:establishmentId AS uuid))
+          AND (CAST(:professionalId AS uuid) IS NULL OR a.professional_id = CAST(:professionalId AS uuid))
+          AND (CAST(:status AS varchar) IS NULL OR a.status = CAST(:status AS varchar))
+          AND (CAST(:dateFrom AS timestamptz) IS NULL OR a.scheduled_time >= CAST(:dateFrom AS timestamptz))
+          AND (CAST(:dateTo AS timestamptz) IS NULL OR a.scheduled_time < CAST(:dateTo AS timestamptz))
+        ORDER BY a.scheduled_time DESC
+    """, nativeQuery = true)
+    List<Attendance> findByFilters(
+            @Param("establishmentId") UUID establishmentId,
+            @Param("professionalId") UUID professionalId,
+            @Param("status") String status,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo
+    );
+
+    @Query(value = """
+        SELECT DISTINCT a.* FROM attendance a
+        LEFT JOIN client c ON c.id = a.client_id
+        LEFT JOIN base_user bu1 ON bu1.id = c.id
+        LEFT JOIN professional p ON p.id = a.professional_id
+        LEFT JOIN base_user bu2 ON bu2.id = p.id
+        LEFT JOIN establishment e ON e.id = a.establishment_id
+        WHERE a.client_id = :clientId
+          AND (CAST(:status AS varchar) IS NULL OR a.status = CAST(:status AS varchar))
+          AND (CAST(:dateFrom AS timestamptz) IS NULL OR a.scheduled_time >= CAST(:dateFrom AS timestamptz))
+          AND (CAST(:dateTo AS timestamptz) IS NULL OR a.scheduled_time < CAST(:dateTo AS timestamptz))
+        ORDER BY a.scheduled_time DESC
+    """, nativeQuery = true)
+    List<Attendance> findByClientFilters(
+            @Param("clientId") UUID clientId,
+            @Param("status") String status,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo
     );
 }

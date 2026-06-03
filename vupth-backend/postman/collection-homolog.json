@@ -4544,6 +4544,316 @@
       ]
     },
     {
+      "name": "08c - list attendances (reports)",
+      "item": [
+        {
+          "name": "list attendances by establishment (owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Lista de atendimentos\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test(\"Each item has required fields\", () => {",
+                  "    const items = pm.response.json();",
+                  "    if (items.length > 0) {",
+                  "        const item = items[0];",
+                  "        pm.expect(item).to.have.property('id');",
+                  "        pm.expect(item).to.have.property('professionalId');",
+                  "        pm.expect(item).to.have.property('establishmentId');",
+                  "        pm.expect(item).to.have.property('services');",
+                  "        pm.expect(item).to.have.property('status');",
+                  "        pm.expect(item).to.have.property('totalValue');",
+                  "        pm.expect(item).to.have.property('scheduledTime');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?establishmentId={{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "establishmentId",
+                  "value": "{{owner_establishment_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "list attendances by status FINISHED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"All items are FINISHED\", () => {",
+                  "    const items = pm.response.json();",
+                  "    items.forEach(item => pm.expect(item.status).to.equal('FINISHED'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?establishmentId={{owner_establishment_id}}&status=FINISHED",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "establishmentId",
+                  "value": "{{owner_establishment_id}}"
+                },
+                {
+                  "key": "status",
+                  "value": "FINISHED"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "list attendances by date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?establishmentId={{owner_establishment_id}}&dateFrom=2026-06-01&dateTo=2026-06-30",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "establishmentId",
+                  "value": "{{owner_establishment_id}}"
+                },
+                {
+                  "key": "dateFrom",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2026-06-30"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "list attendances by professional",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"All items belong to professional\", () => {",
+                  "    const items = pm.response.json();",
+                  "    const profId = pm.collectionVariables.get('prof_professional_id');",
+                  "    items.forEach(item => pm.expect(item.professionalId).to.equal(profId));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?professionalId={{prof_professional_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "professionalId",
+                  "value": "{{prof_professional_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] list attendances sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem token\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?establishmentId={{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "establishmentId",
+                  "value": "{{owner_establishment_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] list attendances de outro establishment (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403 - Access denied\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?establishmentId={{owner_establishment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "establishmentId",
+                  "value": "{{owner_establishment_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "auth": {
+            "type": "noauth"
+          }
+        }
+      ]
+    },
+    {
       "name": "09 - client attendance",
       "item": [
         {
@@ -4793,6 +5103,211 @@
                 "type": "string"
               }
             ]
+          }
+        },
+        {
+          "name": "list client attendances (sem filtro)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Lista de atendimentos do cliente\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test(\"Each item has required fields\", () => {",
+                  "    const items = pm.response.json();",
+                  "    if (items.length > 0) {",
+                  "        const item = items[0];",
+                  "        pm.expect(item).to.have.property('id');",
+                  "        pm.expect(item).to.have.property('clientId');",
+                  "        pm.expect(item).to.have.property('professionalId');",
+                  "        pm.expect(item).to.have.property('establishmentId');",
+                  "        pm.expect(item).to.have.property('services');",
+                  "        pm.expect(item).to.have.property('status');",
+                  "        pm.expect(item).to.have.property('totalValue');",
+                  "        pm.expect(item).to.have.property('scheduledTime');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "list client attendances by status SCHEDULED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test(\"All items have status SCHEDULED\", () => {",
+                  "    const items = pm.response.json();",
+                  "    items.forEach(item => pm.expect(item.status).to.eql(\"SCHEDULED\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me?status=SCHEDULED",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "SCHEDULED"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "list client attendances by date range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me?dateFrom=2026-01-01&dateTo=2026-12-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2026-12-31"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] list client attendances sem token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - Sem autenticacao\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
           }
         }
       ]

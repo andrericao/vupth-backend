@@ -67,7 +67,8 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | Acesso | Endpoints |
 |--------|-----------|
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
-| **CLIENT** | `POST /attendances`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
+| **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
+| **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
 | **PROFESSIONAL** | `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
 | **OWNER** | `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
@@ -971,6 +972,103 @@ Iniciador cancela a afiliacao pendente.
 
 ## 11. Endpoints — Attendance (Atendimento)
 
+### GET /attendances
+Lista atendimentos filtrados por establishment, profissional, periodo e status. Usado para relatorios e historico no app partner.
+
+**Acesso:** OWNER ou PROFESSIONAL (so ve dados do proprio establishment)
+
+**Query params (todos opcionais):**
+
+| Param | Tipo | Descricao |
+|-------|------|-----------|
+| establishmentId | UUID | Filtrar por establishment |
+| professionalId | UUID | Filtrar por profissional |
+| dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
+| dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
+| status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED |
+
+**Regras de autorizacao:**
+- Se `establishmentId` informado: usuario deve ser owner ou profissional afiliado ao establishment
+- Se `professionalId` informado sem `establishmentId`: usuario so pode consultar a si mesmo
+- Se nenhum informado: retorna attendances do establishment do profissional logado
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "clientId": "uuid",
+    "clientName": "Joao Silva",
+    "professionalId": "uuid",
+    "professionalName": "Carlos",
+    "establishmentId": "uuid",
+    "services": [
+      { "id": "uuid", "customName": "Corte Degrade", "estimatedMinutes": 30 }
+    ],
+    "status": "FINISHED",
+    "totalValue": 35.00,
+    "scheduledTime": "2026-06-01T14:00:00Z",
+    "startTime": "2026-06-01T14:02:00Z",
+    "endTime": "2026-06-01T14:28:00Z",
+    "durationInMinutes": 26
+  }
+]
+```
+
+**Exemplos de uso:**
+- Relatorio do dia: `?establishmentId=X&dateFrom=2026-06-03&dateTo=2026-06-03&status=FINISHED`
+- Relatorio semanal: `?establishmentId=X&dateFrom=2026-05-27&dateTo=2026-06-03`
+- Receita por profissional: `?professionalId=Y&dateFrom=2026-05-01&dateTo=2026-06-01&status=FINISHED`
+
+**Testes:** Integracao
+
+---
+
+### GET /attendances/client/me
+Lista atendimentos do cliente logado, com filtros opcionais de status e periodo. O clientId e extraido do JWT.
+
+**Acesso:** CLIENT
+
+**Query params (todos opcionais):**
+
+| Param | Tipo | Descricao |
+|-------|------|-----------|
+| status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED |
+| dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
+| dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "clientId": "uuid",
+    "clientName": "Joao Silva",
+    "professionalId": "uuid",
+    "professionalName": "Carlos",
+    "establishmentId": "uuid",
+    "services": [
+      { "id": "uuid", "customName": "Corte Degrade", "estimatedMinutes": 30 }
+    ],
+    "status": "FINISHED",
+    "totalValue": 35.00,
+    "scheduledTime": "2026-06-01T14:00:00Z",
+    "startTime": "2026-06-01T14:02:00Z",
+    "endTime": "2026-06-01T14:28:00Z",
+    "durationInMinutes": 26
+  }
+]
+```
+
+**Exemplos de uso:**
+- Historico completo: `GET /attendances/client/me`
+- Agendamentos futuros: `?status=SCHEDULED`
+- Atendimentos do mes: `?dateFrom=2026-06-01&dateTo=2026-06-30`
+
+**Testes:** Integracao
+
+---
+
 ### GET /attendances/{attendanceId}
 Busca attendance por ID.
 
@@ -1644,6 +1742,8 @@ Lista intervalos ativos para uma data (default: hoje).
 | PATCH /affiliations/{id}/accept | ✅ |
 | PATCH /affiliations/{id}/reject | ✅ |
 | DELETE /affiliations/{id} | ✅ |
+| GET /attendances | 🟡 Integracao |
+| GET /attendances/client/me | 🟡 Integracao |
 | GET /attendances/{id} | 🟡 Integracao |
 | POST /attendances | ✅ |
 | PUT /attendances/{id}/cancel | ✅ |

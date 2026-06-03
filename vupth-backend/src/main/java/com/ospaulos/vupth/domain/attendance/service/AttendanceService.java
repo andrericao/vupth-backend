@@ -10,7 +10,11 @@ import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 
+import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
+import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
+
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public interface AttendanceService {
@@ -55,4 +59,18 @@ public interface AttendanceService {
     public AttendancePausedResponse buildPausedAttendance(Attendance attendance);
 
     public AttendanceInQueueResponse buildAttendanceInQueueResponse(Attendance attendance);
+
+    public List<AttendanceListResponse> listAttendances(
+            UUID userId,
+            UUID establishmentId,
+            UUID professionalId,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            AttendanceStatus status);
+
+    public List<AttendanceListResponse> listClientAttendances(
+            UUID clientId,
+            AttendanceStatus status,
+            LocalDate dateFrom,
+            LocalDate dateTo);
 }
