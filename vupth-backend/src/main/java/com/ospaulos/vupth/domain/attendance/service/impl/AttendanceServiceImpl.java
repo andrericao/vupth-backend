@@ -4,6 +4,7 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendancePausedResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
@@ -19,6 +20,7 @@ import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -50,6 +52,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final ServiceItemRepository serviceItemRepository;
     private final ProfessionalRepository professionalRepository;
     private final ClientRepository clientRepository;
+    private final EstablishmentRepository establishmentRepository;
 
     // ─────────────────────────────────────────────────────────────
     // CREATE
@@ -597,6 +600,69 @@ public class AttendanceServiceImpl implements AttendanceService {
     public AttendanceInQueueResponse buildAttendanceInQueueResponse(
             com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
         return AttendanceInQueueResponse.fromEntity(attendance);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // LIST
+    // ─────────────────────────────────────────────────────────────
+
+    @Override
+    public List<AttendanceListResponse> listAttendances(
+            UUID userId,
+            UUID establishmentId,
+            UUID professionalId,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            AttendanceStatus status) {
+
+        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} dateFrom={} dateTo={} status={}",
+                userId, establishmentId, professionalId, dateFrom, dateTo, status);
+
+        Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
+        final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
+
+        OffsetDateTime from = dateFrom != null ? dateFrom.atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
+        OffsetDateTime to = dateTo != null ? dateTo.plusDays(1).atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
+
+        String statusStr = status != null ? status.name() : null;
+        List<Attendance> attendances = attendanceRepository.findByFilters(
+                resolvedEstablishmentId, professionalId, statusStr, from, to);
+
+        attendances.forEach(this::initializeLazyAssociations);
+
+        return attendances.stream()
+                .map(AttendanceListResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    private UUID resolveEstablishmentId(UUID userId, UUID establishmentId, UUID professionalId, Professional professional) {
+        if (establishmentId != null) {
+            Establishment establishment = establishmentRepository.findById(establishmentId)
+                    .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
+
+            boolean isOwner = establishment.getOwner() != null
+                    && establishment.getOwner().getId().equals(userId);
+            boolean isProfessionalOfEstablishment = professional != null
+                    && professional.getEstablishment() != null
+                    && professional.getEstablishment().getId().equals(establishmentId);
+
+            if (!isOwner && !isProfessionalOfEstablishment) {
+                throw new EstablishmentAccessDeniedException("You can only list attendances from your own establishment.");
+            }
+            return establishmentId;
+        }
+
+        if (professionalId != null) {
+            if (professional == null || !professional.getId().equals(professionalId)) {
+                throw new EstablishmentAccessDeniedException("You can only list your own attendances.");
+            }
+            return null;
+        }
+
+        if (professional == null || professional.getEstablishment() == null) {
+            throw new EstablishmentAccessDeniedException("You must specify an establishmentId or professionalId.");
+        }
+        return professional.getEstablishment().getId();
     }
 
     private void initializeLazyAssociations(Attendance attendance) {
