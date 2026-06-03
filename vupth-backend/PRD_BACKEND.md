@@ -1776,10 +1776,20 @@ Lista intervalos ativos para uma data (default: hoje).
 
 ### Funcionalidades faltantes
 
-| Item | Prioridade | Descricao |
-|------|-----------|-----------|
-| Trocar lugar na fila | Media | TODO no `ClientServiceImpl` — endpoint para cliente trocar posicao |
-| Mover codigo para ProfessionalService | Baixa | TODO no `QueueServiceImpl` — refatoracao interna |
+| Item | Prioridade | Descricao | Onde |
+|------|-----------|-----------|------|
+| Trocar lugar na fila | Media | Endpoint para cliente trocar posicao na fila | `ClientServiceImpl:138` — **Front-Client** |
+| Visualizacao de fila para qualquer cliente | Media | Tela de fila visivel para qualquer cliente | `ProfessionalController:86` — **Front-Client** |
+| Visualizacao completa da fila | Media | Tela de fila completa (profissional/owner) | `ProfessionalController:87` — **Front-Partner** |
+| Visualizacao do atendimento atual do cliente | Media | Cliente ve detalhes do atendimento em andamento | `ProfessionalController:88` — **Front-Client** |
+| Calcular tempo de fila para agendados | Media | Estimativa de tempo inclui IN_PROGRESS, nao so SCHEDULED | `Professional:110` — Backend |
+| Aceitar ID como parametro no ProfessionalController | Baixa | Suportar roteamento especifico por caller | `ProfessionalController:32` — Backend |
+| Validar horarios do ProfessionalInterval | Baixa | Validar start > end, permitir estender +5min | `ProfessionalIntervalService:137-138` — Backend |
+| Finalizar intervalo atendendo proximo | Baixa | Acao de servir proximo attendance ao terminar intervalo | `ProfessionalIntervalService:139` — Backend |
+| Melhorar excecoes em BaseUser e SetMainAddress | Baixa | Trocar RuntimeException por excecoes especificas | `BaseUser:245` / `SetMainAddressUseCase:21` — Backend |
+| Verificar metodo updateStatus | Baixa | Revisar logica de atualizacao de status do establishment | `EstablishmentOpenStatusServiceImpl:121` — Backend |
+| Mover codigo para ProfessionalService | Baixa | Refatoracao interna — logica no lugar errado | `QueueServiceImpl:178` — Backend |
+| Criar UpdateAddressRequest | Baixa | DTO de atualização de endereco nao implementado | `UpdateAddressRequest:10` — Backend |
 
 
 ### Inconsistencias conhecidas
