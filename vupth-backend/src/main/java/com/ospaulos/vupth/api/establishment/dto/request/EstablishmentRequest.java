@@ -9,7 +9,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public record EstablishmentRequest(
-        @NotNull UUID ownerID,
+        @NotNull UUID ownerId,
         @NotNull Set<ServiceType> services,
         @NotNull String name,
         @NotNull String urlImage,

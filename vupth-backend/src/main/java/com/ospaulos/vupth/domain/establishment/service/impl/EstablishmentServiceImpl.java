@@ -37,7 +37,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
         log.info("SERVICE CREATING ESTABLISHMENT " + request.name() );
 
-        Owner owner = ownerRepository.findById(request.ownerID()).orElseThrow();
+        Owner owner = ownerRepository.findById(request.ownerId()).orElseThrow();
 
         Establishment establishment = new Establishment();
 
