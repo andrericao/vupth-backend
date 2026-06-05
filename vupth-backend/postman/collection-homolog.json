@@ -6674,7 +6674,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"ownerID\":\"{{client_id}}\",\"name\":\"Hack Shop\",\"services\":[\"BARBER\"],\"urlImage\":\"http://img.com/x\",\"status\":\"ACTIVE\",\"openStatus\":\"OPEN\"}",
+              "raw": "{\"ownerId\":\"{{client_id}}\",\"name\":\"Hack Shop\",\"services\":[\"BARBER\"],\"urlImage\":\"http://img.com/x\",\"status\":\"ACTIVE\",\"openStatus\":\"OPEN\"}",
               "options": {
                 "raw": {
                   "language": "json"

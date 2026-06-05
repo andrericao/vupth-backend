@@ -510,7 +510,7 @@ Cria establishment com dados completos.
 **Request:**
 ```json
 {
-  "ownerID": "uuid",
+  "ownerId": "uuid",
   "services": ["BARBER"],
   "name": "Barbearia Premium",
   "urlImage": "https://...",

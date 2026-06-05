@@ -342,13 +342,13 @@ class EstablishmentIntegrationTest {
 
     @Test
     @Order(24)
-    @DisplayName("POST /establishment/create — 400 ownerID as non-UUID string")
+    @DisplayName("POST /establishment/create — 400 ownerId as non-UUID string")
     void createFull_ownerIdInvalidFormat() throws Exception {
         log.info("[Establishment] createFull_ownerIdInvalidFormat");
 
         String body = """
                 {
-                  "ownerID": "nao-e-um-uuid",
+                  "ownerId": "nao-e-um-uuid",
                   "services": ["BARBER"],
                   "name": "Teste",
                   "urlImage": "http://img.com",
@@ -374,7 +374,7 @@ class EstablishmentIntegrationTest {
 
         String body = String.format("""
                 {
-                  "ownerID": "%s",
+                  "ownerId": "%s",
                   "services": ["BARBER"],
                   "name": "Teste",
                   "urlImage": "http://img.com",
@@ -400,7 +400,7 @@ class EstablishmentIntegrationTest {
 
         String body = String.format("""
                 {
-                  "ownerID": "%s",
+                  "ownerId": "%s",
                   "services": "BARBER",
                   "name": "Teste",
                   "urlImage": "http://img.com",
