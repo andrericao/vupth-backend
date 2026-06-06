@@ -648,8 +648,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new ClientNotFoundException(clientId));
 
-        OffsetDateTime from = dateFrom != null ? dateFrom.atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
-        OffsetDateTime to = dateTo != null ? dateTo.plusDays(1).atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
+        OffsetDateTime from = dateFrom != null
+                ? dateFrom.atStartOfDay().atOffset(java.time.ZoneOffset.UTC)
+                : OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
+        OffsetDateTime to = dateTo != null
+                ? dateTo.plusDays(1).atStartOfDay().atOffset(java.time.ZoneOffset.UTC)
+                : OffsetDateTime.of(2100, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
 
         List<Attendance> attendances = attendanceRepository.findByClientFilters(
                 clientId, status, from, to);

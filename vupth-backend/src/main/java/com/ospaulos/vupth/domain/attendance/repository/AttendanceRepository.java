@@ -234,8 +234,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
         LEFT JOIN FETCH a.serviceItems
         WHERE a.client.id = :clientId
           AND (:status IS NULL OR a.status = :status)
-          AND (:dateFrom IS NULL OR a.scheduledTime >= :dateFrom)
-          AND (:dateTo IS NULL OR a.scheduledTime < :dateTo)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
         ORDER BY a.scheduledTime DESC
     """)
     List<Attendance> findByClientFilters(
