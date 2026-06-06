@@ -648,14 +648,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new ClientNotFoundException(clientId));
 
-        String statusStr = status != null ? status.name() : null;
         OffsetDateTime from = dateFrom != null ? dateFrom.atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
         OffsetDateTime to = dateTo != null ? dateTo.plusDays(1).atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
 
         List<Attendance> attendances = attendanceRepository.findByClientFilters(
-                clientId, statusStr, from, to);
-
-        attendances.forEach(this::initializeLazyAssociations);
+                clientId, status, from, to);
 
         return attendances.stream()
                 .map(AttendanceListResponse::fromEntity)
