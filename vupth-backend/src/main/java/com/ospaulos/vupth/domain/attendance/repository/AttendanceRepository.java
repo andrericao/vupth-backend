@@ -224,22 +224,23 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("dateTo") OffsetDateTime dateTo
     );
 
-    @Query(value = """
-        SELECT DISTINCT a.* FROM attendance a
-        LEFT JOIN client c ON c.id = a.client_id
-        LEFT JOIN base_user bu1 ON bu1.id = c.id
-        LEFT JOIN professional p ON p.id = a.professional_id
-        LEFT JOIN base_user bu2 ON bu2.id = p.id
-        LEFT JOIN establishment e ON e.id = a.establishment_id
-        WHERE a.client_id = :clientId
-          AND (CAST(:status AS varchar) IS NULL OR a.status = CAST(:status AS varchar))
-          AND (CAST(:dateFrom AS timestamptz) IS NULL OR a.scheduled_time >= CAST(:dateFrom AS timestamptz))
-          AND (CAST(:dateTo AS timestamptz) IS NULL OR a.scheduled_time < CAST(:dateTo AS timestamptz))
-        ORDER BY a.scheduled_time DESC
-    """, nativeQuery = true)
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.client.id = :clientId
+          AND (:status IS NULL OR a.status = :status)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+        ORDER BY a.scheduledTime DESC
+    """)
     List<Attendance> findByClientFilters(
             @Param("clientId") UUID clientId,
-            @Param("status") String status,
+            @Param("status") AttendanceStatus status,
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo
     );

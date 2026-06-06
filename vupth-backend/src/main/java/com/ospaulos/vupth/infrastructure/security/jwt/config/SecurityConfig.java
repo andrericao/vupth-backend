@@ -69,6 +69,7 @@ public class SecurityConfig {
 
                         // ── ROLE_CLIENT (qualquer autenticado) ────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/attendances").hasAnyRole("OWNER", "PROFESSIONAL")
+                        .requestMatchers(HttpMethod.GET, "/attendances/client/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
                         .requestMatchers(HttpMethod.POST, "/attendances").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PUT, "/attendances/*/cancel").hasRole("CLIENT")
