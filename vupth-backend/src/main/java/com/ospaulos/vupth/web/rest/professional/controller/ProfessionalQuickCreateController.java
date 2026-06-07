@@ -79,7 +79,7 @@ public class ProfessionalQuickCreateController {
 
         log.info("GET /professional/me — user={}", principal.getUserId());
 
-        Professional professional = professionalRepository.findByIdWithBaseUser(principal.getUserId())
+        Professional professional = professionalRepository.findByIdWithBaseUserAndEstablishment(principal.getUserId())
                 .orElseThrow(() -> new ProfessionalNotFoundException(principal.getUserId()));
 
         return ResponseEntity.ok(new ProfessionalQuickCreateResponse(
