@@ -62,6 +62,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()

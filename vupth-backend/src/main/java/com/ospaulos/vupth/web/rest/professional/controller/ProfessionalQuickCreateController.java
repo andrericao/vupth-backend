@@ -67,6 +67,32 @@ public class ProfessionalQuickCreateController {
     private final ServiceItemRepository          serviceItemRepository;
 
     /**
+     * GET /professional/me
+     *
+     * Retorna os dados do profissional autenticado.
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @GetMapping("/me")
+    public ResponseEntity<ProfessionalQuickCreateResponse> getMyProfile(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("GET /professional/me — user={}", principal.getUserId());
+
+        Professional professional = professionalRepository.findByIdWithBaseUser(principal.getUserId())
+                .orElseThrow(() -> new ProfessionalNotFoundException(principal.getUserId()));
+
+        return ResponseEntity.ok(new ProfessionalQuickCreateResponse(
+                professional.getId(),
+                professional.getBaseUser().getFirstName(),
+                professional.getSpecialty(),
+                professional.getEstablishment() != null ? professional.getEstablishment().getId() : null,
+                professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
+                professional.getIsAvailable(),
+                null
+        ));
+    }
+
+    /**
      * POST /professional/register
      *
      * Fluxo app parceiro: usuário escolhe "sou profissional" sem criar uma loja.

@@ -34,6 +34,16 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
 """)
     Optional<Establishment> findByIdEager(@Param("id") UUID id);
 
+    @Query("""
+    SELECT e FROM Establishment e
+    LEFT JOIN FETCH e.services
+    LEFT JOIN FETCH e.owner
+    WHERE e.owner.id = :ownerId
+      AND e.status <> 'INACTIVE'
+    ORDER BY e.createdAt DESC
+    """)
+    List<Establishment> findByOwnerId(@Param("ownerId") UUID ownerId);
+
     // Lista todos os ativos (exclui INACTIVE) com associations para serialização
     @Query("""
         SELECT e FROM Establishment e
