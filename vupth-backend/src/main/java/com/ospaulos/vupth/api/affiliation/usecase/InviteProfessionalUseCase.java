@@ -58,9 +58,18 @@ public class InviteProfessionalUseCase {
         }
 
         AffiliationRequest invitation = new AffiliationRequest(professional, establishment, AffiliationType.INVITATION);
+
+        boolean selfInvite = ownerId.equals(professionalId);
+        if (selfInvite) {
+            invitation.accept();
+            professional.setEstablishment(establishment);
+            professionalRepository.save(professional);
+        }
+
         AffiliationRequest saved = affiliationRepository.save(invitation);
 
-        log.info("[Affiliation] invitation created — id={}", saved.getId());
+        log.info("[Affiliation] invitation {} — id={} selfInvite={}",
+                selfInvite ? "auto-accepted" : "created", saved.getId(), selfInvite);
         return AffiliationRequestResponse.fromEntity(saved);
     }
 }

@@ -3380,6 +3380,90 @@
               }
             }
           ]
+        },
+        {
+          "name": "DELETE [setup] owner leaves establishment for self-invite test",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/establishment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "establishment"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204 - Owner desafiliado do establishment\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST owner self-invite (auto-accept)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "affiliations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\": \"{{owner_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Self-invite created\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"Type is INVITATION\", () => pm.expect(r.type).to.equal(\"INVITATION\"));",
+                  "  pm.test(\"Status is ACCEPTED (auto-accept)\", () => pm.expect(r.status).to.equal(\"ACCEPTED\"));",
+                  "  pm.test(\"Professional is owner\", () => pm.expect(r.professionalId).to.equal(pm.collectionVariables.get(\"owner_id\")));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },

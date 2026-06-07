@@ -922,7 +922,9 @@ Owner convida um profissional para o establishment.
 
 **Response (201):** `AffiliationRequestResponse` com `type: "INVITATION"`
 
-**Testes:** Unitario
+**Auto-aceite:** quando `ownerId == professionalId` (owner convidando a si mesmo), o convite e criado ja com `status: "ACCEPTED"` e o vinculo com o establishment e feito automaticamente na mesma chamada — sem necessidade de PATCH /accept.
+
+**Testes:** Unitario (`InviteProfessionalUseCaseTest`)
 
 ---
 
@@ -1670,7 +1672,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | Remove Professional | 6 | `RemoveProfessionalFromEstablishmentUseCaseTest` |
 | Transfer Ownership | 4 | `TransferEstablishmentOwnershipUseCaseTest` |
 | Affiliation — Request | 5 | `RequestAffiliationUseCaseTest` |
-| Affiliation — Invite | 6 | `InviteProfessionalUseCaseTest` |
+| Affiliation — Invite | 7 | `InviteProfessionalUseCaseTest` |
 | Affiliation — Resolve | 14 | `ResolveAffiliationUseCaseTest` |
 | Client Service | 7 | `ClientServiceImplTest` |
 | Service Item | 6 | `ServiceItemServiceImplTest` |
@@ -1790,6 +1792,9 @@ Lista intervalos ativos para uma data (default: hoje).
 | Verificar metodo updateStatus | Baixa | Revisar logica de atualizacao de status do establishment | `EstablishmentOpenStatusServiceImpl:121` — Backend |
 | Mover codigo para ProfessionalService | Baixa | Refatoracao interna — logica no lugar errado | `QueueServiceImpl:178` — Backend |
 | Criar UpdateAddressRequest | Baixa | DTO de atualização de endereco nao implementado | `UpdateAddressRequest:10` — Backend |
+| GET /establishment/mine | Alta | Listar establishments do owner logado (hoje so tem listagem publica) | **Front-Partner** |
+| GET /professional/me | Alta | Retornar dados do profissional autenticado (id, specialty, establishmentId, isAvailable) | **Front-Partner** |
+| Regra owner unico nao pode se desafiliar | Baixa | Owner unico deve adicionar outro owner (transferir) antes de sair, ou deletar o establishment. Desafiliacao de owner por outro owner exige confirmacao da contraparte. Ao perder ultimo establishment, usuario perde role OWNER | `Establishment` / `AffiliationController` — Backend |
 
 
 ### Inconsistencias conhecidas
