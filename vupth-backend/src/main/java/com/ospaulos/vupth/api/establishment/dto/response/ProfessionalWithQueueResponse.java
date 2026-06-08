@@ -2,10 +2,12 @@ package com.ospaulos.vupth.api.establishment.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
-import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
+import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,9 +34,31 @@ public record ProfessionalWithQueueResponse(
         int queueCount,
 
         @JsonProperty("estimated_wait_minutes")
-        int estimatedWaitMinutes
+        int estimatedWaitMinutes,
+
+        @JsonProperty("service_items")
+        List<ServiceItemSummary> serviceItems
 
 ) {
+
+    public record ServiceItemSummary(
+            UUID id,
+            ServiceItemType serviceItemType,
+            String customName,
+            BigDecimal price,
+            Integer estimatedMinutes
+    ) {
+        public static ServiceItemSummary fromEntity(ServiceItem item) {
+            return new ServiceItemSummary(
+                    item.getId(),
+                    item.getServiceItemType(),
+                    item.getCustomName(),
+                    item.getPrice(),
+                    item.getEstimatedMinutes()
+            );
+        }
+    }
+
     public static ProfessionalWithQueueResponse fromEntity(
             Professional professional,
             Attendance currentAttendance,
@@ -56,6 +80,10 @@ public record ProfessionalWithQueueResponse(
             estimatedWait += currentAttendance.getRemainingMinutes();
         }
 
+        List<ServiceItemSummary> serviceItemDtos = professional.getServices().stream()
+                .map(ServiceItemSummary::fromEntity)
+                .toList();
+
         return new ProfessionalWithQueueResponse(
                 professional.getId(),
                 professional.getName(),
@@ -64,7 +92,8 @@ public record ProfessionalWithQueueResponse(
                 currentDto,
                 waitingDtos,
                 waitingList.size(),
-                estimatedWait
+                estimatedWait,
+                serviceItemDtos
         );
     }
 }
