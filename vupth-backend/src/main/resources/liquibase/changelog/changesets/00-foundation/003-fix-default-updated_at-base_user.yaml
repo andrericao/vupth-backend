@@ -1,0 +1,9 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-fix-default-updated_at-base_user
+      author: andrericao
+      changes:
+        - addDefaultValue:
+            tableName: base_user
+            columnName: updated_at
+            defaultValueComputed: CURRENT_TIMESTAMP

@@ -40,4 +40,7 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     @Query("SELECT p FROM Professional p JOIN FETCH p.baseUser WHERE p.id = :id")
     Optional<Professional> findByIdWithBaseUser(@Param("id") UUID id);
 
+    @Query("SELECT p FROM Professional p JOIN FETCH p.baseUser LEFT JOIN FETCH p.establishment WHERE p.id = :id")
+    Optional<Professional> findByIdWithBaseUserAndEstablishment(@Param("id") UUID id);
+
 }

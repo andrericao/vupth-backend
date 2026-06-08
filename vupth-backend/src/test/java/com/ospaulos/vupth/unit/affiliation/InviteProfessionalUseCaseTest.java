@@ -73,6 +73,39 @@ class InviteProfessionalUseCaseTest {
     class SuccessCases {
 
         @Test
+        @DisplayName("success: owner invites himself — auto-accepted")
+        void execute_selfInvite_autoAccepted() {
+            BaseUser selfUser = new BaseUser();
+            selfUser.setId(OWNER_ID);
+            Owner selfOwner = new Owner(selfUser);
+
+            Establishment selfEstab = new Establishment();
+            selfEstab.setId(ESTAB_ID);
+            selfEstab.setName("Minha Barbearia");
+            selfEstab.setOwner(selfOwner);
+
+            selfUser.addProfessionalProfile();
+            Professional selfProf = selfUser.getProfessional();
+
+            when(establishmentRepository.findByIdEager(ESTAB_ID)).thenReturn(Optional.of(selfEstab));
+            when(professionalRepository.findByIdWithBaseUser(OWNER_ID)).thenReturn(Optional.of(selfProf));
+            when(affiliationRepository.existsByProfessional_IdAndEstablishment_IdAndStatus(
+                    OWNER_ID, ESTAB_ID, AffiliationStatus.PENDING)).thenReturn(false);
+            when(affiliationRepository.save(any())).thenAnswer(inv -> {
+                AffiliationRequest ar = inv.getArgument(0);
+                ar.setId(UUID.randomUUID());
+                return ar;
+            });
+
+            AffiliationRequestResponse response = useCase.execute(OWNER_ID, ESTAB_ID, OWNER_ID);
+
+            assertThat(response.type()).isEqualTo("INVITATION");
+            assertThat(response.status()).isEqualTo("ACCEPTED");
+            assertThat(selfProf.getEstablishment()).isEqualTo(selfEstab);
+            verify(professionalRepository).save(selfProf);
+        }
+
+        @Test
         @DisplayName("success: owner invites unaffiliated professional")
         void execute_success() {
             when(establishmentRepository.findByIdEager(ESTAB_ID)).thenReturn(Optional.of(establishment));

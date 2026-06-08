@@ -69,8 +69,8 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
-| **OWNER** | `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **OWNER** | `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
 
 ---
@@ -526,6 +526,17 @@ Cria establishment com dados completos.
 
 ---
 
+### GET /establishment/mine
+Lista apenas os establishments do owner autenticado (exclui INACTIVE).
+
+**Acesso:** OWNER
+
+**Response (200):** `EstablishmentResponse[]`
+
+**Testes:** Postman
+
+---
+
 ### GET /establishment
 Lista establishments ativos com filtros opcionais.
 
@@ -757,6 +768,30 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
 
 ## 9. Endpoints — Professional
 
+### GET /professional/me
+Retorna os dados do profissional autenticado.
+
+**Acesso:** PROFESSIONAL
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "name": "Carlos",
+  "specialty": "Corte Masculino",
+  "establishment_id": "uuid | null",
+  "establishment_name": "Barbearia do Ricardo | null",
+  "is_available": true,
+  "message": null
+}
+```
+
+**Erros:** 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
+
+**Testes:** Postman
+
+---
+
 ### POST /professional/register
 Cria perfil profissional SEM establishment (fluxo app parceiro).
 
@@ -922,7 +957,9 @@ Owner convida um profissional para o establishment.
 
 **Response (201):** `AffiliationRequestResponse` com `type: "INVITATION"`
 
-**Testes:** Unitario
+**Auto-aceite:** quando `ownerId == professionalId` (owner convidando a si mesmo), o convite e criado ja com `status: "ACCEPTED"` e o vinculo com o establishment e feito automaticamente na mesma chamada — sem necessidade de PATCH /accept.
+
+**Testes:** Unitario (`InviteProfessionalUseCaseTest`)
 
 ---
 
@@ -1670,7 +1707,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | Remove Professional | 6 | `RemoveProfessionalFromEstablishmentUseCaseTest` |
 | Transfer Ownership | 4 | `TransferEstablishmentOwnershipUseCaseTest` |
 | Affiliation — Request | 5 | `RequestAffiliationUseCaseTest` |
-| Affiliation — Invite | 6 | `InviteProfessionalUseCaseTest` |
+| Affiliation — Invite | 7 | `InviteProfessionalUseCaseTest` |
 | Affiliation — Resolve | 14 | `ResolveAffiliationUseCaseTest` |
 | Client Service | 7 | `ClientServiceImplTest` |
 | Service Item | 6 | `ServiceItemServiceImplTest` |
@@ -1790,6 +1827,9 @@ Lista intervalos ativos para uma data (default: hoje).
 | Verificar metodo updateStatus | Baixa | Revisar logica de atualizacao de status do establishment | `EstablishmentOpenStatusServiceImpl:121` — Backend |
 | Mover codigo para ProfessionalService | Baixa | Refatoracao interna — logica no lugar errado | `QueueServiceImpl:178` — Backend |
 | Criar UpdateAddressRequest | Baixa | DTO de atualização de endereco nao implementado | `UpdateAddressRequest:10` — Backend |
+| ~~GET /establishment/mine~~ | ~~Alta~~ | ~~Listar establishments do owner logado~~ | **IMPLEMENTADO** |
+| ~~GET /professional/me~~ | ~~Alta~~ | ~~Retornar dados do profissional autenticado~~ | **IMPLEMENTADO** |
+| Regra owner unico nao pode se desafiliar | Baixa | Owner unico deve adicionar outro owner (transferir) antes de sair, ou deletar o establishment. Desafiliacao de owner por outro owner exige confirmacao da contraparte. Ao perder ultimo establishment, usuario perde role OWNER | `Establishment` / `AffiliationController` — Backend |
 
 
 ### Inconsistencias conhecidas

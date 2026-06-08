@@ -10,6 +10,7 @@ import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCas
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
+import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
@@ -65,6 +66,32 @@ public class ProfessionalQuickCreateController {
     private final LeaveEstablishmentUseCase       leaveUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
+
+    /**
+     * GET /professional/me
+     *
+     * Retorna os dados do profissional autenticado.
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @GetMapping("/me")
+    public ResponseEntity<ProfessionalQuickCreateResponse> getMyProfile(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("GET /professional/me — user={}", principal.getUserId());
+
+        Professional professional = professionalRepository.findByIdWithBaseUserAndEstablishment(principal.getUserId())
+                .orElseThrow(() -> new ProfessionalNotFoundException(principal.getUserId()));
+
+        return ResponseEntity.ok(new ProfessionalQuickCreateResponse(
+                professional.getId(),
+                professional.getBaseUser().getFirstName(),
+                professional.getSpecialty(),
+                professional.getEstablishment() != null ? professional.getEstablishment().getId() : null,
+                professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
+                professional.getIsAvailable(),
+                null
+        ));
+    }
 
     /**
      * POST /professional/register

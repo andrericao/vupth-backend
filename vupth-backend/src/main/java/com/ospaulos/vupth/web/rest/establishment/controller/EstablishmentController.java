@@ -17,6 +17,7 @@ import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralIn
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
+import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
@@ -60,12 +61,28 @@ import java.util.UUID;
 public class EstablishmentController {
 
     private final EstablishmentServiceImpl            service;
+    private final EstablishmentRepository             establishmentRepository;
     private final GetEstablishmentWithQueueUseCase    getWithQueueUseCase;
     private final ProfessionalServiceImpl             professionalService;
     private final AddProfessionalToEstablishmentUseCase addProfessionalUseCase;
     private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
     private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
+
+    @GetMapping("/mine")
+    public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] findMyEstablishments — owner={}", user.getUserId());
+
+        List<EstablishmentResponse> result = establishmentRepository
+                .findByOwnerId(user.getUserId())
+                .stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+
+        return ResponseEntity.ok(result);
+    }
 
     @PostMapping("/create")
     public ResponseEntity<EstablishmentResponse> createEstablishment(
