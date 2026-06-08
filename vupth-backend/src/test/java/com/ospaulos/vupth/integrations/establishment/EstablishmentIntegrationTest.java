@@ -485,6 +485,7 @@ class EstablishmentIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.professionals").isArray())
+                .andExpect(jsonPath("$.professionals[0].service_items").isArray())
                 .andDo(print())
                 .andReturn();
 

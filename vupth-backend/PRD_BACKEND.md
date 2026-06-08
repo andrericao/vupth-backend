@@ -636,11 +636,23 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
         }
       ],
       "queue_count": 3,
-      "estimated_wait_minutes": 90
+      "estimated_wait_minutes": 90,
+      "service_items": [
+        {
+          "id": "uuid",
+          "serviceItemType": "CORTE_MAQUINA",
+          "customName": "Corte a maquina",
+          "price": 35.00,
+          "estimatedMinutes": 20
+        }
+      ]
     }
   ]
 }
 ```
+
+> **service_items** retorna os servicos oferecidos por cada profissional (id, tipo, nome, preco, duracao estimada).
+> O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
 
 **Testes:** Integracao
 
