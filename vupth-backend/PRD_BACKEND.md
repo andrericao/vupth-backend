@@ -8,7 +8,21 @@
 > **Base URL prod:** Railway (main branch)
 > **Base URL local:** `http://localhost:8080`
 >
-> **Ultima atualizacao:** 2026-05-26
+> **Ultima atualizacao:** 2026-06-08
+>
+> ### Keep-Alive (Render staging)
+>
+> O Render free tier dorme o servico apos 15 min de inatividade. O cold start do Spring Boot
+> leva 1-3 min em recursos limitados, causando timeout nos clientes.
+>
+> **Solucao:** GitHub Actions cron (`.github/workflows/keep-alive.yml`) pinga
+> `GET /actuator/health` a cada 14 minutos para manter o servico acordado.
+>
+> **Toggle:** Variavel de repositorio no GitHub Actions:
+> - **Ativar:** `KEEP_ALIVE_ENABLED=true` (Settings > Secrets and variables > Actions > Variables)
+> - **Desativar:** Mudar para `false` ou deletar a variavel
+>
+> Quando nao estiver testando, desative para nao consumir minutos do GitHub Actions.
 
 ---
 
@@ -622,11 +636,23 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
         }
       ],
       "queue_count": 3,
-      "estimated_wait_minutes": 90
+      "estimated_wait_minutes": 90,
+      "service_items": [
+        {
+          "id": "uuid",
+          "serviceItemType": "CORTE_MAQUINA",
+          "customName": "Corte a maquina",
+          "price": 35.00,
+          "estimatedMinutes": 20
+        }
+      ]
     }
   ]
 }
 ```
+
+> **service_items** retorna os servicos oferecidos por cada profissional (id, tipo, nome, preco, duracao estimada).
+> O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
 
 **Testes:** Integracao
 

@@ -20,6 +20,14 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     // Find profissional por establishment
     List<Professional> findByEstablishmentId(UUID establishmentId);
 
+    @Query("""
+        SELECT DISTINCT p FROM Professional p
+        JOIN FETCH p.baseUser
+        LEFT JOIN FETCH p.services
+        WHERE p.establishment.id = :establishmentId
+        """)
+    List<Professional> findByEstablishmentIdWithServices(@Param("establishmentId") UUID establishmentId);
+
     // Find available professionals in an establishment
     @Query("SELECT p FROM Professional p WHERE p.establishment.id = :establishmentId AND p.isAvailable = true")
     List<Professional> findAvailableByEstablishmentId(@Param("establishmentId") UUID establishmentId);
