@@ -179,4 +179,5 @@ jobs:
           newman run postman/collection-prod.json \
             --env-var "base_url=${{ secrets.PROD_URL }}" \
             --reporters cli \
+            --verbose \
             --bail

@@ -49,6 +49,7 @@
 19. [Fluxos de Usuario](#19-fluxos-de-usuario)
 20. [Resumo de Testes](#20-resumo-de-testes)
 21. [Pendente de Implementacao no Backend](#21-pendente-de-implementacao-no-backend)
+22. [Evolucao Pos-MVP — Roadmap](#22-evolucao-pos-mvp--roadmap)
 
 ---
 
@@ -1856,7 +1857,16 @@ Lista intervalos ativos para uma data (default: hoje).
 | ~~GET /establishment/mine~~ | ~~Alta~~ | ~~Listar establishments do owner logado~~ | **IMPLEMENTADO** |
 | ~~GET /professional/me~~ | ~~Alta~~ | ~~Retornar dados do profissional autenticado~~ | **IMPLEMENTADO** |
 | Regra owner unico nao pode se desafiliar | Baixa | Owner unico deve adicionar outro owner (transferir) antes de sair, ou deletar o establishment. Desafiliacao de owner por outro owner exige confirmacao da contraparte. Ao perder ultimo establishment, usuario perde role OWNER | `Establishment` / `AffiliationController` — Backend |
+| Adicao de servico por funcionario da mesma loja | Media | Profissional afiliado pode adicionar ServiceItem ao establishment onde trabalha (hoje so owner pode). Novo endpoint ou permissao adicional em POST /establishment/{id}/service-items | Backend + **Front-Partner** |
 
+
+### Bugs reportados pelo Front-Partner (2026-06-09)
+
+| Bug | Endpoint | Erro | Prioridade |
+|-----|----------|------|------------|
+| BUG 1 | `GET /establishment/{id}/affiliations` | 500 — `Cannot invoke UserDetailsImpl.getUserId() because user is null`. Provavel: rota sem `.authenticated()` no SecurityConfig, JWT filter nao popula SecurityContext | ALTA |
+| BUG 2 | `POST /establishment/{id}/service-items` | "Nao foi possivel adicionar o servico". Verificar: enum ServiceItemType vs valores do front, campo `estimatedMinutes` obrigatorio, tipo do campo `price` | ALTA |
+| BUG 3 | `GET /attendances?establishmentId=X&status=Y` | "Carregar atendimento" nao funciona. Verificar se endpoint existe e retorna dados corretos | ALTA |
 
 ### Inconsistencias conhecidas
 
@@ -1871,3 +1881,62 @@ Lista intervalos ativos para uma data (default: hoje).
 | Rate limiting | Nenhum rate limit nos endpoints publicos |
 | Paginacao | Endpoints de listagem (GET /establishment, GET /users) nao tem paginacao |
 | Upload de imagem | `profile_image_url` e `urlImage` aceitam URL, nao ha upload real |
+
+---
+
+## 22. Evolucao Pos-MVP — Roadmap
+
+> Referencia permanente de prioridades. Cada item indica os ambientes afetados.
+>
+> Legenda de ambientes:
+> - **Backend** — API Spring Boot
+> - **Front-Client** — app React Native do cliente final
+> - **Front-Partner** — app React Native do profissional/owner
+
+### CRITICO — implementar logo apos MVP
+
+| # | Item | Descricao | Ambientes |
+|---|------|-----------|-----------|
+| 1 | WebSocket / tempo real | Substituir polling de 30s por WebSocket STOMP. Topico: `/topic/queue/{professionalId}`. Publicar evento apos start/finish/pause/cancel. Cliente ve fila atualizar sem recarregar | **Backend** (STOMP broker + eventos) / **Front-Client** (subscribe na fila) / **Front-Partner** (subscribe na fila) |
+| 2 | Busca por geolocalizacao | Adicionar lat/lng no Establishment. Endpoint: `GET /establishment?lat=&lng=&radius=km`. Ordenar por proximidade | **Backend** (query espacial) / **Front-Client** (enviar coordenadas, exibir distancia) |
+| 3 | Notificacoes push | Avisar cliente quando esta em 2o lugar na fila e quando atendimento foi iniciado. Expo Push Notifications. Backend: endpoint para registrar device token | **Backend** (endpoint device token + disparo push) / **Front-Client** (registro token + receber push) / **Front-Partner** (registro token + receber push) |
+| 4 | Filtro real de establishment por openStatus | `GET /establishment` so retorna OPEN por padrao. Parametro `?includeAll=true` para ver fechados. Hoje o front filtra localmente | **Backend** (filtro na query) / **Front-Client** (remover filtro local) |
+
+### ALTA PRIORIDADE — proximo ciclo
+
+| # | Item | Descricao | Ambientes |
+|---|------|-----------|-----------|
+| 5 | Paginacao no GET /establishment | Adicionar page, size, sort como @RequestParam. Spring Data Pageable. Frontend: scroll infinito ou botao "carregar mais" | **Backend** (Pageable) / **Front-Client** (scroll infinito) |
+| 6 | Rating / avaliacao de atendimentos | Apos FINISHED, cliente pode avaliar (1-5 estrelas). Exibir media no card do profissional. Tabela: `attendance_rating` (attendanceId, score, comment) | **Backend** (entidade + endpoints CRUD) / **Front-Client** (tela de avaliacao + exibir media) / **Front-Partner** (ver avaliacoes recebidas) |
+| 7 | Foto de perfil do profissional | Campo `profileImageUrl` ja existe em BaseUser. Upload via URL externa (Cloudinary ou S3). Exibir no card do profissional | **Backend** (integrar storage externo) / **Front-Client** (exibir foto) / **Front-Partner** (upload de foto) |
+| 8 | Historico de atendimentos do cliente | `GET /attendances/me` — lista todos os atendimentos do cliente logado. Filtro por status: FINISHED, CANCELLED. Util para "voltar ao mesmo profissional" | **Backend** (endpoint + query) / **Front-Client** (tela de historico) |
+| 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
+| 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
+| 11 | Recurrent intervals (horario de almoco) | `ProfessionalIntervalController` ja tem `POST /recurring`. Falta UI no partner-app para configurar. Tempo de espera mais preciso para clientes | **Front-Partner** (tela de configuracao de intervalos) — Backend ja implementado |
+
+### MEDIA PRIORIDADE — v2
+
+| # | Item | Descricao | Ambientes |
+|---|------|-----------|-----------|
+| 12 | QR Code dinamico por profissional | Hoje e apenas link do estabelecimento. Futuro: link direto ao profissional especifico. Parametro `?professionalId=` na URL | **Front-Partner** (gerar QR) / **Front-Client** (ler QR e redirecionar) |
+| 13 | Fila de espera virtual com posicao nominal | Exibir ao cliente: "Voce e o 3o da fila". Esconder lista completa mas calcular posicao do cliente logado | **Backend** (endpoint posicao individual) / **Front-Client** (exibir posicao) |
+| 14 | Modo offline completo (partner-app) | Cache da fila atual no AsyncStorage. Acoes offline: fila local, sincroniza ao reconectar. Estrategia last-write-wins | **Front-Partner** (cache + sync) |
+| 15 | Editar e deletar ServiceItem | `PUT /establishment/{id}/service-items/{itemId}` e `DELETE ...`. Validacao: nao deletar se ha attendances SCHEDULED vinculados | **Backend** (endpoints + validacao) / **Front-Partner** (UI de edicao/remocao) |
+| 16 | Transferencia de atendimento entre profissionais | Profissional pode passar cliente para colega. `PATCH /attendances/{id}/transfer?toProfessionalId=` | **Backend** (endpoint + logica de transferencia) / **Front-Partner** (botao transferir) |
+| 17 | Blacklist / bloquear cliente | Owner ou professional pode bloquear cliente. Tabela: `establishment_blocked_users` | **Backend** (entidade + endpoints) / **Front-Partner** (botao bloquear) |
+| 18 | Multiplos estabelecimentos por owner | Owner atual so ve o proprio establishment. Dashboard para owners com varios locais (franquias) | **Backend** (refatorar relacao Owner-Establishment) / **Front-Partner** (seletor de establishment) |
+| 19 | App iOS (TestFlight) | Hoje foco em Android (APK via EAS). iOS requer conta Apple Developer ($99/ano) | **Front-Client** (build iOS) / **Front-Partner** (build iOS) |
+
+### BAIXA PRIORIDADE — v3 / futuro
+
+| # | Item | Descricao | Ambientes |
+|---|------|-----------|-----------|
+| 20 | Integracao com WhatsApp | Notificar cliente via WhatsApp Business API. "Falta 1 pessoa para sua vez". Alternativa sem push notifications | **Backend** (integracao API WhatsApp) / **Front-Partner** (config de notificacao) |
+| 21 | Pagamento integrado | PIX ou cartao direto no app. Integracao: Stripe, Mercado Pago ou Pagar.me | **Backend** (gateway de pagamento) / **Front-Client** (tela de pagamento) / **Front-Partner** (visualizar recebimentos) |
+| 22 | Cupons e promocoes | Desconto para primeira visita. Fidelidade: a cada 10 cortes, 1 gratis. Integracao com ServiceItem | **Backend** (entidade + logica de cupom) / **Front-Client** (aplicar cupom) / **Front-Partner** (criar cupons) |
+| 23 | Agendamento futuro (nao apenas fila no dia) | Cliente escolhe dia e hora. Bloqueio de horario na agenda do profissional. Logica complexa de conflitos com fila do dia | **Backend** (agenda + conflitos) / **Front-Client** (tela de agendamento) / **Front-Partner** (ver agenda) |
+| 24 | Multi-idioma (i18n) | PT-BR (padrao), Ingles, Espanhol. react-i18next | **Front-Client** (i18n) / **Front-Partner** (i18n) — Backend nao afetado |
+| 25 | Analytics avancado | Taxa de no-show, churn de clientes, receita estimada vs realizada, exportacao CSV | **Backend** (endpoints de relatorio) / **Front-Partner** (tela de analytics) |
+| 26 | API publica para parceiros | Terceiros podem integrar filas do Vupth. API key por establishment. Rate limiting por key | **Backend** (API key + rate limit + docs) |
+| 27 | Sentry / observabilidade | Rastreamento de erros em producao. Alertas por email quando 500 aumenta | **Backend** (Sentry Java SDK) / **Front-Client** (Sentry React Native) / **Front-Partner** (Sentry React Native) |
+| 28 | Rate limiting no backend | Protecao contra brute force no /auth/login. Maximo 5 tentativas por IP por minuto. Spring: bucket4j ou resilience4j | **Backend** (middleware de rate limit) |

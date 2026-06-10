@@ -284,6 +284,36 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         return serviceItemService.createServiceItem(professional, request);
     }
 
+    @Override
+    @Transactional
+    public ServiceItemResponse createServiceItemForEstablishment(UUID ownerId, UUID establishmentId, ServiceItemRequest request) {
+        log.info("[Professional] createServiceItemForEstablishment — owner={} establishment={} type={} name={}",
+                ownerId, establishmentId, request.serviceItemType(), request.customName());
+
+        Establishment establishment = establishmentRepository.findById(establishmentId)
+                .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
+
+        if (establishment.getOwner() == null || !establishment.getOwner().getId().equals(ownerId)) {
+            throw new EstablishmentAccessDeniedException("User " + ownerId + " is not the owner of establishment " + establishmentId);
+        }
+
+        Professional professional = professionalRepository.findByIdWithBaseUser(ownerId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(ownerId));
+
+        if (professional.getEstablishment() == null || !professional.getEstablishment().getId().equals(establishmentId)) {
+            throw new EstablishmentAccessDeniedException(ownerId, establishmentId);
+        }
+
+        List<ServiceItem> services = establishmentService.getServicesItemByEstablishment(establishmentId);
+        boolean nameExists = services.stream()
+                .anyMatch(s -> s.getCustomName().equalsIgnoreCase(request.customName()));
+        if (nameExists) {
+            throw new ServiceItemAlreadyExistsException(request.customName());
+        }
+
+        return serviceItemService.createServiceItem(professional, request);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // GUARDS
     // ─────────────────────────────────────────────────────────────
