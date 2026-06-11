@@ -300,10 +300,6 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         Professional professional = professionalRepository.findByIdWithBaseUser(ownerId)
                 .orElseThrow(() -> new ProfessionalNotFoundException(ownerId));
 
-        if (professional.getEstablishment() == null || !professional.getEstablishment().getId().equals(establishmentId)) {
-            throw new EstablishmentAccessDeniedException(ownerId, establishmentId);
-        }
-
         List<ServiceItem> services = establishmentService.getServicesItemByEstablishment(establishmentId);
         boolean nameExists = services.stream()
                 .anyMatch(s -> s.getCustomName().equalsIgnoreCase(request.customName()));
