@@ -1170,7 +1170,7 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
 | clientId | UUID | Ignorado | Extraido do JWT |
 | serviceItemIds | UUID[] | Nao | Lista de servicos |
 | status | Enum | Nao | Default: SCHEDULED |
-| scheduledTime | OffsetDateTime | Nao | ISO-8601 |
+| scheduledTime | OffsetDateTime | Nao | ISO-8601. Default: now() se nao informado |
 | estimatedMinutes | Integer | Nao | Estimativa em minutos |
 | local | OffsetDateTime | Nao | Hora local do cliente |
 
