@@ -94,6 +94,9 @@ public class Attendance implements Serializable {
     @PrePersist
     @PreUpdate
     protected void calculateFields() {
+        if (this.scheduledTime == null) {
+            this.scheduledTime = OffsetDateTime.now();
+        }
         calculateEstimatedMinutes();
         calculateTotalValue();
 

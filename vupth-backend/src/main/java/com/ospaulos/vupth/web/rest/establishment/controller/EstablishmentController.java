@@ -170,22 +170,17 @@ public class EstablishmentController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * POST /establishment/{establishmentId}/service-items
-     * Cria um service item para o profissional autenticado.
-     * O professionalId é extraído do JWT.
-     * Requer: ROLE_OWNER.
-     */
     @PostMapping("/{establishmentId}/service-items")
     public ResponseEntity<ServiceItemResponse> addServiceItem(
             @PathVariable UUID establishmentId,
             @RequestBody @Valid ServiceItemRequest request,
             @AuthenticationPrincipal UserDetailsImpl user) {
 
-        log.info("[Establishment] addServiceItem — establishment={} professional={}",
+        log.info("[Establishment] addServiceItem — establishment={} owner={}",
                 establishmentId, user.getUserId());
 
-        ServiceItemResponse response = professionalService.createServiceItem(user.getUserId(), request);
+        ServiceItemResponse response = professionalService.createServiceItemForEstablishment(
+                user.getUserId(), establishmentId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

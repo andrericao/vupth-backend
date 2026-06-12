@@ -64,6 +64,7 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
@@ -116,7 +117,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/professionals/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/*/affiliations").hasRole("OWNER")
-                        .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
 
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())

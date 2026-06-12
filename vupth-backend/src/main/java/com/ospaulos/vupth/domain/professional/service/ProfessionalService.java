@@ -27,4 +27,6 @@ public interface ProfessionalService {
     //public Set<ServiceItem> getServicesItemByEstablishment();
 
     public ServiceItemResponse createServiceItem(UUID professionalId, ServiceItemRequest request);
+
+    public ServiceItemResponse createServiceItemForEstablishment(UUID ownerId, UUID establishmentId, ServiceItemRequest request);
 }
