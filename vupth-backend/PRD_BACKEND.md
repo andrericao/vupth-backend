@@ -1129,7 +1129,7 @@ Lista atendimentos do cliente logado, com filtros opcionais de status e periodo.
 - Agendamentos futuros: `?status=SCHEDULED`
 - Atendimentos do mes: `?dateFrom=2026-06-01&dateTo=2026-06-30`
 
-**Testes:** Integracao
+**Testes:** Integracao — `AttendanceIntegrationTest` cobre: happy path (so retorna attendances do proprio client), filtro `status=CANCELLED`, filtro `status=FINISHED`, filtro por periodo (`dateFrom`/`dateTo`), periodo futuro retornando lista vazia, `401` sem token e isolamento (outro usuario nunca recebe o historico de outro client). Postman: pasta `09 - client attendance`.
 
 ---
 
@@ -1807,7 +1807,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | PATCH /affiliations/{id}/reject | ✅ |
 | DELETE /affiliations/{id} | ✅ |
 | GET /attendances | 🟡 Integracao |
-| GET /attendances/client/me | 🟡 Integracao |
+| GET /attendances/client/me | ✅ |
 | GET /attendances/{id} | 🟡 Integracao |
 | POST /attendances | ✅ |
 | PUT /attendances/{id}/cancel | ✅ |
@@ -1909,7 +1909,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | 5 | Paginacao no GET /establishment | Adicionar page, size, sort como @RequestParam. Spring Data Pageable. Frontend: scroll infinito ou botao "carregar mais" | **Backend** (Pageable) / **Front-Client** (scroll infinito) |
 | 6 | Rating / avaliacao de atendimentos | Apos FINISHED, cliente pode avaliar (1-5 estrelas). Exibir media no card do profissional. Tabela: `attendance_rating` (attendanceId, score, comment) | **Backend** (entidade + endpoints CRUD) / **Front-Client** (tela de avaliacao + exibir media) / **Front-Partner** (ver avaliacoes recebidas) |
 | 7 | Foto de perfil do profissional | Campo `profileImageUrl` ja existe em BaseUser. Upload via URL externa (Cloudinary ou S3). Exibir no card do profissional | **Backend** (integrar storage externo) / **Front-Client** (exibir foto) / **Front-Partner** (upload de foto) |
-| 8 | Historico de atendimentos do cliente | `GET /attendances/me` — lista todos os atendimentos do cliente logado. Filtro por status: FINISHED, CANCELLED. Util para "voltar ao mesmo profissional" | **Backend** (endpoint + query) / **Front-Client** (tela de historico) |
+| 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
 | 11 | Recurrent intervals (horario de almoco) | `ProfessionalIntervalController` ja tem `POST /recurring`. Falta UI no partner-app para configurar. Tempo de espera mais preciso para clientes | **Front-Partner** (tela de configuracao de intervalos) — Backend ja implementado |

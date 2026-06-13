@@ -5399,6 +5399,112 @@
           }
         },
         {
+          "name": "list client attendances by status CANCELLED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test(\"All items have status CANCELLED\", () => {",
+                  "    const items = pm.response.json();",
+                  "    items.forEach(item => pm.expect(item.status).to.eql(\"CANCELLED\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me?status=CANCELLED",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "CANCELLED"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "list client attendances by status FINISHED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test(\"All items have status FINISHED\", () => {",
+                  "    const items = pm.response.json();",
+                  "    items.forEach(item => pm.expect(item.status).to.eql(\"FINISHED\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me?status=FINISHED",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "FINISHED"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
           "name": "list client attendances by date range",
           "event": [
             {
@@ -5452,6 +5558,63 @@
           }
         },
         {
+          "name": "list client attendances by future date range (vazio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is empty array\", () => {",
+                  "    const items = pm.response.json();",
+                  "    pm.expect(items).to.be.an('array');",
+                  "    pm.expect(items.length).to.eql(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me?dateFrom=2099-01-01&dateTo=2099-12-31",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "dateFrom",
+                  "value": "2099-01-01"
+                },
+                {
+                  "key": "dateTo",
+                  "value": "2099-12-31"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
           "name": "[ERRO] list client attendances sem token (401)",
           "event": [
             {
@@ -5470,6 +5633,58 @@
               {
                 "key": "Authorization",
                 "value": "Bearer ",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances/client/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances",
+                "client",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "isolamento - outro user nao ve historico do client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Response is array\", () => { pm.expect(pm.response.json()).to.be.an('array'); });",
+                  "pm.test(\"client/me nunca retorna attendance de outro client\", () => {",
+                  "    const items = pm.response.json();",
+                  "    const ownerId = pm.collectionVariables.get('owner_id');",
+                  "    const clientId = pm.collectionVariables.get('client_id');",
+                  "    items.forEach(item => {",
+                  "        pm.expect(item.clientId).to.eql(ownerId);",
+                  "        pm.expect(item.clientId).to.not.eql(clientId);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
                 "type": "text"
               }
             ],
