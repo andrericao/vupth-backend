@@ -1907,7 +1907,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | # | Item | Descricao | Ambientes |
 |---|------|-----------|-----------|
 | 5 | Paginacao no GET /establishment | Adicionar page, size, sort como @RequestParam. Spring Data Pageable. Frontend: scroll infinito ou botao "carregar mais" | **Backend** (Pageable) / **Front-Client** (scroll infinito) |
-| 6 | Rating / avaliacao de atendimentos | Apos FINISHED, cliente pode avaliar (1-5 estrelas). Exibir media no card do profissional. Tabela: `attendance_rating` (attendanceId, score, comment) | **Backend** (entidade + endpoints CRUD) / **Front-Client** (tela de avaliacao + exibir media) / **Front-Partner** (ver avaliacoes recebidas) |
+| 6 | Rating / avaliacao de atendimentos | Cliente avalia apos `FINISHED` (1-5 estrelas, inteiro). Especificacao detalhada na secao "Item 6 — Rating" abaixo do backlog | **Backend** (entidade + endpoint + agregados denormalizados) / **Front-Client** (tela de avaliacao + exibir media) / **Front-Partner** (ver avaliacoes recebidas) |
 | 7 | Foto de perfil do profissional | Campo `profileImageUrl` ja existe em BaseUser. Upload via URL externa (Cloudinary ou S3). Exibir no card do profissional | **Backend** (integrar storage externo) / **Front-Client** (exibir foto) / **Front-Partner** (upload de foto) |
 | 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
@@ -1951,3 +1951,26 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
 | 31 | Status ATIVA do establishment condicionado a servico | So permitir abrir (`open-status=OPEN`) se houver >=1 profissional com >=1 servico; caso contrario retornar `422 ESTABLISHMENT_NOT_READY`. Alem disso, profissional **sem servico nao deve aparecer para clientes** mesmo com a loja aberta | **Backend** (validacao no open-status + filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
 | 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
+
+### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
+
+Decisao 2026-06-13. **Status: especificado, nao implementado.**
+
+**Objetivo:** capturar nota do profissional E, quando possivel, do tipo de servico — um profissional pode ser otimo na pintura e ruim no corte. O `serviceItemType` (enum ja existente em `ServiceItem`) e o eixo de agregacao por tipo.
+
+**Regra de atribuicao (definida pelo Andre):**
+- Atendimento com **exatamente 1 servico** -> a nota e atribuida ao **profissional E ao `ServiceItem`** (alimentando a media daquele `serviceItemType`).
+- Atendimento com **2 ou mais servicos** -> a nota vai **somente ao profissional**, ainda que vinculada ao atendimento. Motivo: com combo (ou multiplas pessoas na mesma marcacao, ex. pai + 2 filhos) nao da para saber qual servico recebeu qual nota. O modelo atual nao representa "servico por pessoa" (`Attendance` tem 1 client e uma lista `@ManyToMany` de servicos), entao nao se tenta dividir.
+
+**Entrada:** estrelas inteiras de 1 a 5. **Saida:** media com 2 casas decimais + contagem de votos (ex. `4.73 (212)`) — sempre exibir a contagem porque media sem volume engana. Ajuste bayesiano fica para depois, sem mudanca de schema.
+
+**Modelo:**
+- Entidade `AttendanceRating`: `attendanceId` (UNIQUE — 1 voto por atendimento), `score` (int 1-5), `comment` (opcional), `serviceItemId` (preenchido **so** quando o atendimento tem 1 servico, senao `null` — guarda a origem do voto para auditoria/recalculo), `createdAt`.
+- Agregados denormalizados (para nao rodar `AVG()` a cada leitura de card):
+  - `Professional`: `ratingSum` (long) + `ratingCount` (long); media = `ratingSum/ratingCount`.
+  - `ServiceItem`: `ratingSum` + `ratingCount`; media por `serviceItemType` = rollup dos ServiceItems daquele tipo do profissional.
+- Escrita: incrementa sempre os contadores do `Professional`; **se** `serviceItems.size() == 1`, incrementa tambem os do `ServiceItem`.
+
+**Endpoint:** `POST /attendances/{id}/rating` — apenas o `clientId` dono do attendance, apenas com `status = FINISHED`, bloqueia segundo voto (409). Atendimento guest (`guestName`, sem `client`) nao avalia.
+
+**Exibicao:** media geral no card do profissional; media por servico/tipo na lista de servicos do profissional.
