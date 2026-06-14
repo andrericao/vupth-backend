@@ -42,6 +42,8 @@ public class ServiceItemServiceImpl implements ServiceItemService {
         serviceItem.setServiceItemType(request.serviceItemType());
         serviceItem.setCustomName(request.customName());
         serviceItem.setPrice(request.price());
+        serviceItem.setClientPrice(request.clientPrice());
+        serviceItem.setUsesPlatformPricing(request.usesPlatformPricing());
         serviceItem.setEstimatedMinutes(request.estimatedMinutes());
         serviceItem.setProfessional(professional);
 
@@ -66,6 +68,12 @@ public class ServiceItemServiceImpl implements ServiceItemService {
         }
         if (request.estimatedMinutes() != null) {
             item.setEstimatedMinutes(request.estimatedMinutes());
+        }
+        if (request.clientPrice() != null) {
+            item.setClientPrice(request.clientPrice());
+        }
+        if (request.usesPlatformPricing() != null) {
+            item.setUsesPlatformPricing(request.usesPlatformPricing());
         }
 
         return ServiceItemResponse.fromEntity(serviceItemRepository.save(item));

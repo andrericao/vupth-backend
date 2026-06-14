@@ -814,22 +814,15 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
   "serviceItemType": "CORTE_MAQUINA",
   "customName": "Corte degradê",
   "price": 50.00,
-  "estimatedMinutes": 30
+  "estimatedMinutes": 30,
+  "client_price": 52.90,
+  "uses_platform_pricing": true
 }
 ```
 
-**Response (201):**
-```json
-{
-  "establishmentId": "uuid",
-  "establishmentName": "Barbearia do Ze",
-  "id": "uuid",
-  "serviceItemType": "CORTE_MAQUINA",
-  "customName": "Corte degradê",
-  "price": 50.00,
-  "weeklyAverageDurationInMinutes": null
-}
-```
+> **client_price** (total pago pelo cliente, ja com Taxas Vupth) e **uses_platform_pricing** sao **calculados no front** e apenas persistidos pelo backend (fonte da verdade para o app cliente). O backend nao recalcula a formula no MVP — ver backlog. Ambos opcionais.
+
+**Response (201):** `ServiceItemResponse` (inclui `client_price` e `uses_platform_pricing`).
 
 **Testes:** Integracao
 
@@ -1557,6 +1550,8 @@ Edicao parcial de um servico do profissional. So o proprio profissional (JWT) po
 | customName | String | null/em branco ignorado |
 | price | BigDecimal | quando enviado, deve ser > 0 |
 | estimatedMinutes | Integer | quando enviado, deve ser > 0 |
+| client_price | BigDecimal | quando enviado, deve ser > 0 |
+| uses_platform_pricing | Boolean | opcional |
 
 **Response (200):** `ServiceItemResponse`
 
@@ -1590,9 +1585,13 @@ Remove um servico do profissional. So o proprio profissional (JWT) pode remover.
   "serviceItemType": "CORTE_MAQUINA",
   "customName": "Corte degradê",
   "price": 50.00,
+  "client_price": 52.90,
+  "uses_platform_pricing": true,
   "weeklyAverageDurationInMinutes": null
 }
 ```
+
+> `price` = valor base digitado pelo profissional. `client_price` = total pago pelo cliente (preco + Taxas Vupth), calculado no front. `uses_platform_pricing` = se aplica a absorcao das Taxas Vupth. Os dois ultimos sao opcionais (podem vir `null` em itens antigos).
 
 **Testes:** Unitario + Integracao
 
@@ -2157,6 +2156,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 33 | Busca por proximidade (GPS) | `GET /establishment?lat=&lng=&radiusKm=` ordenando por distancia e retornando `distance_km`. **MVP nao tem.** Pre-requisito: **geocodificar endereco no cadastro** (preencher `lat/lng`, hoje opcionais). Caminho recomendado: **Haversine nativo** (sem dependencia nova) agora; **PostGIS** (coluna `geography` + indice GiST + `ST_DWithin`) quando escalar. Busca por bairro (`?neighborhood=`) ja existe e cobre o MVP. | **Backend** (geocoding no cadastro + query Haversine) / **Front-Client** (pedir permissao de localizacao, ordenar por distancia) |
 | 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
 | 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
+| 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 

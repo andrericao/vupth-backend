@@ -95,7 +95,7 @@ class ServiceItemIntegrationTest {
                 ServiceItemType.CORTE_MAQUINA,
                 "Corte Degradê",
                 BigDecimal.valueOf(35.00),
-                30);
+                30, null, null);
 
         MvcResult result = mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -126,7 +126,7 @@ class ServiceItemIntegrationTest {
                 ServiceItemType.CORTE_MAQUINA,
                 "Outro Corte",
                 BigDecimal.valueOf(25),
-                30);
+                30, null, null);
 
         mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -218,7 +218,7 @@ class ServiceItemIntegrationTest {
                 ServiceItemType.CORTE_MAQUINA,
                 "Corte Cliente",
                 BigDecimal.valueOf(20),
-                30);
+                30, null, null);
 
         mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -334,6 +334,48 @@ class ServiceItemIntegrationTest {
                         .header("Authorization", ownerToken))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("SERVICE_ITEM_NOT_FOUND"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(16)
+    @DisplayName("#3: cria service item com client_price e uses_platform_pricing e os retorna")
+    void createServiceItem_withPricingFields() throws Exception {
+        log.info("[ServiceItem] createServiceItem_withPricingFields");
+
+        String body = String.format("""
+                {
+                  "establishmentId": "%s",
+                  "serviceItemType": "CORTE_TESOURA",
+                  "customName": "Corte com Precificacao %s",
+                  "price": 40.00,
+                  "estimatedMinutes": 30,
+                  "client_price": 42.90,
+                  "uses_platform_pricing": true
+                }
+                """, establishmentId, faker.number().digits(4));
+
+        MvcResult result = mvc.perform(post("/establishment/{id}/service-items", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.price").value(40.00))
+                .andExpect(jsonPath("$.client_price").value(42.90))
+                .andExpect(jsonPath("$.uses_platform_pricing").value(true))
+                .andDo(print())
+                .andReturn();
+
+        String itemId = new JSONObject(result.getResponse().getContentAsString()).getString("id");
+
+        // PATCH atualiza client_price
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"client_price\":49.90,\"uses_platform_pricing\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.client_price").value(49.90))
+                .andExpect(jsonPath("$.uses_platform_pricing").value(false))
                 .andDo(print());
     }
 

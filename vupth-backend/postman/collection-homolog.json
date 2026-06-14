@@ -3712,11 +3712,13 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 201 - Service item criado\", () => pm.response.to.have.status(201));",
-                  "pm.test(\"Schema: id, customName, price presentes\", () => {",
+                  "pm.test(\"Schema: id, customName, price, client_price, uses_platform_pricing\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r.id).to.be.a(\"string\");",
                   "  pm.expect(r).to.have.property(\"customName\");",
                   "  pm.expect(r).to.have.property(\"price\");",
+                  "  pm.expect(r.client_price).to.eql(52.90);",
+                  "  pm.expect(r.uses_platform_pricing).to.eql(true);",
                   "  pm.collectionVariables.set(\"service_item_id\", r.id);",
                   "});"
                 ],
@@ -3739,7 +3741,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Degradê\",\"price\":35.00,\"estimatedMinutes\":30}"
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Degradê\",\"price\":35.00,\"estimatedMinutes\":30,\"client_price\":52.90,\"uses_platform_pricing\":true}"
             },
             "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
             "auth": {

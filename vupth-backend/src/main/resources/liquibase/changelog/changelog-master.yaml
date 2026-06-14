@@ -139,6 +139,11 @@ databaseChangeLog:
       file: changesets/50-establishment/019-add-phone-instagram-columns.yaml
       relativeToChangeLogFile: true
 
+  # Add client_price + uses_platform_pricing columns to service_item
+  - include:
+      file: changesets/50-establishment/020-add-serviceitem-pricing-columns.yaml
+      relativeToChangeLogFile: true
+
   # Affiliation request table
   - include:
       file: changesets/90-affiliation/001-create-affiliation-request.yaml

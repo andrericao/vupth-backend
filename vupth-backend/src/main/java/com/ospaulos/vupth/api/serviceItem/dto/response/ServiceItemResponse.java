@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.serviceItem.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 
@@ -13,6 +14,13 @@ public record ServiceItemResponse(
         ServiceItemType serviceItemType,
         String customName,
         BigDecimal price,
+
+        @JsonProperty("client_price")
+        BigDecimal clientPrice,
+
+        @JsonProperty("uses_platform_pricing")
+        Boolean usesPlatformPricing,
+
         Integer weeklyAverageDurationInMinutes
 ){
 
@@ -24,6 +32,8 @@ public record ServiceItemResponse(
                 item.getServiceItemType(),
                 item.getCustomName(),
                 item.getPrice(),
+                item.getClientPrice(),
+                item.getUsesPlatformPricing(),
                 item.getWeeklyAverageDurationInMinutes()
         );
     }

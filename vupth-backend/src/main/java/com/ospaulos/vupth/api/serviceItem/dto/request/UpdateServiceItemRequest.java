@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.serviceItem.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Positive;
 
 import java.math.BigDecimal;
@@ -22,6 +23,13 @@ public record UpdateServiceItemRequest(
         BigDecimal price,
 
         @Positive(message = "Estimated minutes must be greater than zero")
-        Integer estimatedMinutes
+        Integer estimatedMinutes,
+
+        @JsonProperty("client_price")
+        @Positive(message = "Client price must be greater than zero")
+        BigDecimal clientPrice,
+
+        @JsonProperty("uses_platform_pricing")
+        Boolean usesPlatformPricing
 
 ) {}
