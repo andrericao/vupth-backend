@@ -542,6 +542,13 @@ class EstablishmentIntegrationTest {
         JSONArray array = new JSONArray(result.getResponse().getContentAsString());
         log.info("[Establishment] findAllActive_returnsOnlyActive — {} retornados", array.length());
         assertThat(array.length()).isGreaterThanOrEqualTo(0);
+
+        // #11: cada item da listagem traz a chave estimated_wait_minutes (pode ser null)
+        for (int i = 0; i < array.length(); i++) {
+            assertThat(array.getJSONObject(i).has("estimated_wait_minutes"))
+                    .as("item %d deve conter estimated_wait_minutes", i)
+                    .isTrue();
+        }
     }
 
     @Test

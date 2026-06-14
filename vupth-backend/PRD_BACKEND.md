@@ -568,9 +568,11 @@ Lista establishments ativos com filtros opcionais.
 > - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
 > - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais).
 > - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
-> - Sem filtro, lista todos os ativos. Ordenacao sempre por `createdAt DESC`.
+> - Sem filtro, lista todos os ativos.
 >
-> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog (secao de pendencias). No MVP nao ha ordenacao por distancia.
+> **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja.
+>
+> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog. No MVP nao ha ordenacao por distancia.
 
 **Response (200):**
 ```json
@@ -584,11 +586,14 @@ Lista establishments ativos com filtros opcionais.
     "ownerId": "uuid",
     "phone": "11999990000 | null",
     "instagram": "@barbearia | null",
+    "estimated_wait_minutes": 25,
     "open_status": "OPEN",
     "status": "ACTIVE"
   }
 ]
 ```
+
+> `estimated_wait_minutes` e preenchido **apenas na listagem** (`GET /establishment`). Em `GET /establishment/id/{id}` e nos demais usos do `EstablishmentResponse` vem `null`.
 
 **Testes:** Integracao
 

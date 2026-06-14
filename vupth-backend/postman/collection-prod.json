@@ -812,6 +812,9 @@
                   "pm.test(\"Status 200 - Busca por nome OK\", () => pm.response.to.have.status(200));",
                   "pm.test(\"Schema: retorna array\", () => {",
                   "  pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});",
+                  "pm.test(\"#11: itens trazem estimated_wait_minutes\", () => {",
+                  "  pm.response.json().forEach(e => pm.expect(e).to.have.property(\"estimated_wait_minutes\"));",
                   "});"
                 ],
                 "type": "text/javascript"

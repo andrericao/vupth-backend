@@ -19,6 +19,12 @@ public record EstablishmentResponse(
         String phone,
         String instagram,
 
+        // Menor tempo de espera (min) entre os profissionais da loja, em minutos.
+        // null quando a loja nao tem profissional com servico (sem disponibilidade).
+        // Preenchido apenas na busca/listagem publica (GET /establishment).
+        @JsonProperty("estimated_wait_minutes")
+        Integer estimatedWaitMinutes,
+
         @JsonProperty("open_status")
         String openStatus,
 
@@ -26,6 +32,10 @@ public record EstablishmentResponse(
         String status
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
+        return fromEntity(establishment, null);
+    }
+
+    public static EstablishmentResponse fromEntity(Establishment establishment, Integer estimatedWaitMinutes) {
         return new EstablishmentResponse(
                 establishment.getId(),
                 establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
@@ -35,6 +45,7 @@ public record EstablishmentResponse(
                 establishment.getOwner().getId(),
                 establishment.getPhone(),
                 establishment.getInstagram(),
+                estimatedWaitMinutes,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
                 establishment.getStatus() != null ? establishment.getStatus().name() : null
         );
