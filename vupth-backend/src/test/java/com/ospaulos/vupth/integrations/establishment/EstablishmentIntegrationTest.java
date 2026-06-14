@@ -105,6 +105,9 @@ class EstablishmentIntegrationTest {
     // Scenario A — OWNER only
     String ownerToken, ownerId, establishmentId;
 
+    // Bairro único usado no filtro por bairro (Scenario D)
+    String testNeighborhood;
+
     // Scenario B — OWNER + PROFESSIONAL
     String ownerProfToken, ownerProfId, ownerProfEstablishmentId;
 
@@ -477,25 +480,28 @@ class EstablishmentIntegrationTest {
 
     @Test
     @Order(32)
-    @DisplayName("OWNER+PROFESSIONAL — establishment com fila aparece professional vinculado")
-    void ownerProf_queueSnapshotShowsProfessional() throws Exception {
+    @DisplayName("OWNER+PROFESSIONAL — profissional SEM serviço NÃO aparece na fila (item #31, 2a metade)")
+    void ownerProf_queueSnapshotHidesProfessionalWithoutService() throws Exception {
         Assumptions.assumeTrue(ownerProfEstablishmentId != null);
-        log.info("[Establishment] ownerProf_queueSnapshotShowsProfessional");
+        log.info("[Establishment] ownerProf_queueSnapshotHidesProfessionalWithoutService");
 
+        // ownerProf já está vinculado como profissional (Order 31), mas ainda sem
+        // serviço (o serviço só é adicionado no Order 68). Pela regra #31 (2a metade),
+        // profissional sem serviço não deve ser exibido ao cliente.
         MvcResult result = mvc.perform(get("/establishment/id/{id}/professionals-with-queue",
                         ownerProfEstablishmentId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.professionals").isArray())
-                .andExpect(jsonPath("$.professionals[0].service_items").isArray())
+                .andExpect(jsonPath("$.professionals").isEmpty())
                 .andDo(print())
                 .andReturn();
 
         JSONObject json = new JSONObject(result.getResponse().getContentAsString());
         JSONArray professionals = json.getJSONArray("professionals");
-        log.info("[Establishment] ownerProf_queueSnapshotShowsProfessional — {} profissional(is) encontrado(s)",
+        log.info("[Establishment] ownerProf_queueSnapshotHidesProfessionalWithoutService — {} profissional(is) exibido(s)",
                 professionals.length());
-        assertThat(professionals.length()).isGreaterThan(0);
+        assertThat(professionals.length()).isZero();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -611,6 +617,152 @@ class EstablishmentIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andDo(print());
+    }
+
+    @Test
+    @Order(55)
+    @DisplayName("POST /establishments/{id}/addresses — 201 owner cadastra endereço (setup do filtro por bairro)")
+    void owner_addsAddress_forNeighborhoodFilter() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        this.testNeighborhood = "Bairro Filtro " + faker.number().digits(5);
+        log.info("[Establishment] owner_addsAddress_forNeighborhoodFilter — neighborhood={}", testNeighborhood);
+
+        String body = String.format("""
+                {
+                  "street": "Rua das Tesouras",
+                  "number": "123",
+                  "neighborhood": "%s",
+                  "city": "São Paulo",
+                  "state": "SP",
+                  "zipCode": "01310100"
+                }
+                """, testNeighborhood);
+
+        mvc.perform(post("/establishments/{id}/addresses", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.neighborhood").value(testNeighborhood))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(56)
+    @DisplayName("GET /establishment?neighborhood=x — 200 filtra por bairro (parcial, case-insensitive)")
+    void filterByNeighborhood_found() throws Exception {
+        Assumptions.assumeTrue(testNeighborhood != null, "Depende do owner_addsAddress_forNeighborhoodFilter");
+        log.info("[Establishment] filterByNeighborhood_found — neighborhood={}", testNeighborhood);
+
+        // busca por parte do bairro, em minúsculas, para validar LIKE + case-insensitive
+        String partial = testNeighborhood.substring(0, 12).toLowerCase();
+
+        MvcResult result = mvc.perform(get("/establishment")
+                        .param("neighborhood", partial)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        boolean contains = false;
+        for (int i = 0; i < array.length(); i++) {
+            if (establishmentId.equals(array.getJSONObject(i).getString("id"))) {
+                contains = true;
+                break;
+            }
+        }
+        assertThat(contains)
+                .as("Establishment %s do bairro %s deve aparecer no filtro", establishmentId, testNeighborhood)
+                .isTrue();
+    }
+
+    @Test
+    @Order(57)
+    @DisplayName("GET /establishment?neighborhood=xyzNaoExiste — 200 retorna array vazio")
+    void filterByNeighborhood_notFound_returnsEmpty() throws Exception {
+        log.info("[Establishment] filterByNeighborhood_notFound_returnsEmpty");
+
+        MvcResult result = mvc.perform(get("/establishment")
+                        .param("neighborhood", "BairroQueNuncaExistiu999")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        assertThat(array.length()).isZero();
+    }
+
+    @Test
+    @Order(58)
+    @DisplayName("GET /establishment?serviceType=BARBER&neighborhood=x — 200 combina categoria + bairro")
+    void filterByServiceTypeAndNeighborhood_found() throws Exception {
+        Assumptions.assumeTrue(testNeighborhood != null, "Depende do owner_addsAddress_forNeighborhoodFilter");
+        log.info("[Establishment] filterByServiceTypeAndNeighborhood_found — neighborhood={}", testNeighborhood);
+
+        // establishmentId é BARBER (quick-create) e tem endereço em testNeighborhood (Order 55)
+        String partial = testNeighborhood.substring(0, 12).toLowerCase();
+
+        MvcResult result = mvc.perform(get("/establishment")
+                        .param("serviceType", "BARBER")
+                        .param("neighborhood", partial)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        boolean contains = false;
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject est = array.getJSONObject(i);
+            if (establishmentId.equals(est.getString("id"))) {
+                contains = true;
+            }
+            // todo resultado da combinação deve conter BARBER
+            JSONArray services = est.getJSONArray("services");
+            boolean hasBarber = false;
+            for (int j = 0; j < services.length(); j++) {
+                if ("BARBER".equals(services.getString(j))) { hasBarber = true; break; }
+            }
+            assertThat(hasBarber)
+                    .as("Establishment %s da combinação deve conter BARBER", est.getString("id"))
+                    .isTrue();
+        }
+        assertThat(contains)
+                .as("Establishment BARBER %s do bairro %s deve aparecer na combinação", establishmentId, testNeighborhood)
+                .isTrue();
+    }
+
+    @Test
+    @Order(59)
+    @DisplayName("GET /establishment?serviceType=NAIL_SALON&neighborhood=x — 200 combinação sem match retorna vazio")
+    void filterByServiceTypeAndNeighborhood_noMatch_returnsEmpty() throws Exception {
+        Assumptions.assumeTrue(testNeighborhood != null, "Depende do owner_addsAddress_forNeighborhoodFilter");
+        log.info("[Establishment] filterByServiceTypeAndNeighborhood_noMatch_returnsEmpty");
+
+        // bairro existe (BARBER), mas categoria NAIL_SALON não casa → vazio
+        String partial = testNeighborhood.substring(0, 12).toLowerCase();
+
+        MvcResult result = mvc.perform(get("/establishment")
+                        .param("serviceType", "NAIL_SALON")
+                        .param("neighborhood", partial)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andDo(print())
+                .andReturn();
+
+        JSONArray array = new JSONArray(result.getResponse().getContentAsString());
+        boolean contains = false;
+        for (int i = 0; i < array.length(); i++) {
+            if (establishmentId.equals(array.getJSONObject(i).getString("id"))) {
+                contains = true;
+                break;
+            }
+        }
+        assertThat(contains)
+                .as("Establishment BARBER %s não deve aparecer ao filtrar NAIL_SALON", establishmentId)
+                .isFalse();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -781,6 +933,32 @@ class EstablishmentIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.open_status").value("OPEN"))
                 .andDo(print());
+    }
+
+    @Test
+    @Order(69)
+    @DisplayName("GET /establishment/id/{id}/professionals-with-queue — profissional COM serviço aparece na fila (item #31, 2a metade)")
+    void ownerProf_queueSnapshotShowsProfessionalWithService() throws Exception {
+        Assumptions.assumeTrue(ownerProfEstablishmentId != null, "Depende do ownerProf_quickCreate");
+        log.info("[Establishment] ownerProf_queueSnapshotShowsProfessionalWithService");
+
+        // Após o Order 68 ter adicionado um serviço ao ownerProf, o profissional
+        // passa a ter >= 1 serviço e deve voltar a ser exibido ao cliente.
+        MvcResult result = mvc.perform(get("/establishment/id/{id}/professionals-with-queue",
+                        ownerProfEstablishmentId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals").isArray())
+                .andExpect(jsonPath("$.professionals[0].service_items").isArray())
+                .andExpect(jsonPath("$.professionals[0].service_items").isNotEmpty())
+                .andDo(print())
+                .andReturn();
+
+        JSONObject json = new JSONObject(result.getResponse().getContentAsString());
+        JSONArray professionals = json.getJSONArray("professionals");
+        log.info("[Establishment] ownerProf_queueSnapshotShowsProfessionalWithService — {} profissional(is) exibido(s)",
+                professionals.length());
+        assertThat(professionals.length()).isGreaterThan(0);
     }
 
     // ─────────────────────────────────────────────────────────────

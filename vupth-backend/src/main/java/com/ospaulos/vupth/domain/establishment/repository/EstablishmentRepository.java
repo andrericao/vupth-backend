@@ -77,4 +77,35 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         """)
     List<Establishment> findActiveByServiceType(
             @Param("serviceType") ServiceType serviceType);
+
+    // Filtra por bairro (case-insensitive, parcial) excluindo INACTIVE.
+    // JOIN (nao LEFT JOIN) em addresses: so retorna quem tem endereco no bairro.
+    @Query("""
+        SELECT DISTINCT e FROM Establishment e
+        LEFT JOIN FETCH e.services
+        LEFT JOIN FETCH e.owner
+        JOIN e.addresses ea
+        JOIN ea.address a
+        WHERE LOWER(a.neighborhood) LIKE LOWER(CONCAT('%', :neighborhood, '%'))
+          AND e.status <> 'INACTIVE'
+        ORDER BY e.createdAt DESC
+        """)
+    List<Establishment> findActiveByNeighborhood(
+            @Param("neighborhood") String neighborhood);
+
+    // Combina ServiceType + bairro (caso de uso "barbearia no Centro") excluindo INACTIVE.
+    @Query("""
+        SELECT DISTINCT e FROM Establishment e
+        LEFT JOIN FETCH e.services
+        LEFT JOIN FETCH e.owner
+        JOIN e.addresses ea
+        JOIN ea.address a
+        WHERE :serviceType MEMBER OF e.services
+          AND LOWER(a.neighborhood) LIKE LOWER(CONCAT('%', :neighborhood, '%'))
+          AND e.status <> 'INACTIVE'
+        ORDER BY e.createdAt DESC
+        """)
+    List<Establishment> findActiveByServiceTypeAndNeighborhood(
+            @Param("serviceType") ServiceType serviceType,
+            @Param("neighborhood") String neighborhood);
 }

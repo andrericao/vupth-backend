@@ -40,7 +40,7 @@ import java.util.UUID;
  *
  * Endpoints:
  *   POST   /establishment/create                          — cria establishment completo (OWNER)
- *   GET    /establishment                                 — lista ativos (público, suporta ?name= e ?serviceType=)
+ *   GET    /establishment                                 — lista ativos (público, suporta ?name=, ?neighborhood= e ?serviceType=)
  *   GET    /establishment/id/{id}                        — busca por ID (público)
  *   GET    /establishment/id/{id}/professionals-with-queue — snapshot da fila (público)
  *   PATCH  /establishment/{id}/open-status               — atualiza status de abertura (OWNER)
@@ -95,19 +95,30 @@ public class EstablishmentController {
     /**
      * GET /establishment
      * Lista establishments ativos. Filtros opcionais:
-     *   ?name=barbearia     — busca parcial, case-insensitive
-     *   ?serviceType=BARBER — filtra por categoria
+     *   ?name=barbearia                      — busca parcial por nome, case-insensitive (tem prioridade)
+     *   ?serviceType=BARBER&neighborhood=centro — combina categoria + bairro ("barbearia no Centro")
+     *   ?neighborhood=centro                 — so bairro
+     *   ?serviceType=BARBER                  — so categoria
+     * Sem filtro, lista todos os ativos. Ordenacao sempre por createdAt DESC.
      */
     @GetMapping
     public ResponseEntity<List<EstablishmentResponse>> findAll(
             @RequestParam(required = false) String name,
+            @RequestParam(required = false) String neighborhood,
             @RequestParam(required = false) ServiceType serviceType) {
 
-        log.info("[Establishment] findAll — name={} serviceType={}", name, serviceType);
+        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={}",
+                name, neighborhood, serviceType);
+
+        boolean hasNeighborhood = neighborhood != null && !neighborhood.isBlank();
 
         List<EstablishmentResponse> result;
         if (name != null && !name.isBlank()) {
             result = service.searchByName(name);
+        } else if (serviceType != null && hasNeighborhood) {
+            result = service.searchByServiceTypeAndNeighborhood(serviceType, neighborhood);
+        } else if (hasNeighborhood) {
+            result = service.searchByNeighborhood(neighborhood);
         } else if (serviceType != null) {
             result = service.findByServiceType(serviceType);
         } else {

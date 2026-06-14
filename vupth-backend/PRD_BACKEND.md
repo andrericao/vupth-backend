@@ -560,8 +560,17 @@ Lista establishments ativos com filtros opcionais.
 **Query params opcionais:**
 | Param | Tipo | Descricao |
 |-------|------|-----------|
-| name | String | Busca parcial, case-insensitive |
+| name | String | Busca parcial por nome, case-insensitive |
+| neighborhood | String | Busca parcial por bairro do endereco, case-insensitive (`LIKE`). So retorna establishments que tem endereco no bairro |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
+
+> **Combinacao e precedencia:**
+> - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
+> - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais).
+> - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
+> - Sem filtro, lista todos os ativos. Ordenacao sempre por `createdAt DESC`.
+>
+> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog (secao de pendencias). No MVP nao ha ordenacao por distancia.
 
 **Response (200):**
 ```json
@@ -654,6 +663,10 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
 
 > **service_items** retorna os servicos oferecidos por cada profissional (id, tipo, nome, preco, duracao estimada).
 > O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
+
+> **Filtro #31 (2a metade):** profissional **sem nenhum servico** nao e exibido neste snapshot,
+> mesmo com a loja aberta. Apenas profissionais com `service_items` nao vazio entram em `professionals`.
+> O cliente nunca ve um profissional que ainda nao pode atender.
 
 **Testes:** Integracao
 
@@ -1959,8 +1972,9 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 |---|------|-----------|-----------|
 | 29 | Cancelar solicitacao de afiliacao + pendencia unica global | `PATCH /affiliations/{id}/cancel` (status `CANCELLED` ja existe). Alem disso, validar **pendencia unica global**: profissional com afiliacao `PENDING` nao pode solicitar a nenhum outro establishment. Hoje o `409` so cobre o mesmo establishment | **Backend** (endpoint cancel + validacao global de PENDING) / **Front-Partner** (botao cancelar solicitacao) |
 | 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
-| 31 | Status ATIVA do establishment condicionado a servico | **[Backend parcial]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ⏳ Pendente: profissional **sem servico nao deve aparecer para clientes** (filtro no listing). | **Backend** (✅ validacao no open-status / ⏳ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
+| 31 | Status ATIVA do establishment condicionado a servico | **[Backend concluido]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ✅ Filtro no listing: profissional **sem servico nao aparece** em `GET /establishment/id/{id}/professionals-with-queue`, mesmo com a loja aberta. | **Backend** (✅ validacao no open-status / ✅ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
 | 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
+| 33 | Busca por proximidade (GPS) | `GET /establishment?lat=&lng=&radiusKm=` ordenando por distancia e retornando `distance_km`. **MVP nao tem.** Pre-requisito: **geocodificar endereco no cadastro** (preencher `lat/lng`, hoje opcionais). Caminho recomendado: **Haversine nativo** (sem dependencia nova) agora; **PostGIS** (coluna `geography` + indice GiST + `ST_DWithin`) quando escalar. Busca por bairro (`?neighborhood=`) ja existe e cobre o MVP. | **Backend** (geocoding no cadastro + query Haversine) / **Front-Client** (pedir permissao de localizacao, ordenar por distancia) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 

@@ -3751,6 +3751,94 @@
               }
             ]
           }
+        },
+        {
+          "name": "filter by neighborhood=centro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Filtro por bairro OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: retorna array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+                  "pm.test(\"Filtro por bairro (case-insensitive) retorna ao menos o establishment de Centro\", () => {",
+                  "  pm.expect(pm.response.json().length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/establishment?neighborhood=centro",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment"
+              ],
+              "query": [
+                {
+                  "key": "neighborhood",
+                  "value": "centro"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "filter by serviceType=BARBER & neighborhood=centro",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - Combinação categoria + bairro OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Schema: retorna array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+                  "pm.test(\"Todos os resultados contêm BARBER\", () => {",
+                  "  pm.response.json().forEach(e => {",
+                  "    pm.expect(e.services).to.include(\"BARBER\");",
+                  "  });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/establishment?serviceType=BARBER&neighborhood=centro",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment"
+              ],
+              "query": [
+                {
+                  "key": "serviceType",
+                  "value": "BARBER"
+                },
+                {
+                  "key": "neighborhood",
+                  "value": "centro"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
         }
       ]
     },
@@ -3960,11 +4048,11 @@
                   "  pm.expect(r.professionals).to.be.an(\"array\").that.is.not.empty;",
                   "});",
                   "",
-                  "pm.test(\"Schema: cada professional tem service_items array\", () => {",
+                  "pm.test(\"Item #31: todo professional exibido tem service_items NÃO vazio\", () => {",
                   "  const r = pm.response.json();",
                   "  r.professionals.forEach(p => {",
                   "    pm.expect(p).to.have.property(\"service_items\");",
-                  "    pm.expect(p.service_items).to.be.an(\"array\");",
+                  "    pm.expect(p.service_items).to.be.an(\"array\").that.is.not.empty;",
                   "    p.service_items.forEach(si => {",
                   "      pm.expect(si).to.have.property(\"id\");",
                   "      pm.expect(si).to.have.property(\"serviceItemType\");",
@@ -5890,6 +5978,12 @@
                   "pm.test(\"Status 200 - LazyInit resolvido (regressão)\", () => pm.response.to.have.status(200));",
                   "pm.test(\"Schema: professionals presente\", () => {",
                   "  pm.expect(pm.response.json()).to.have.property(\"professionals\");",
+                  "});",
+                  "pm.test(\"Item #31: nenhum professional sem serviço é exibido\", () => {",
+                  "  const r = pm.response.json();",
+                  "  r.professionals.forEach(p => {",
+                  "    pm.expect(p.service_items, `professional ${p.id} sem serviço não deveria aparecer`).to.be.an(\"array\").that.is.not.empty;",
+                  "  });",
                   "});"
                 ],
                 "type": "text/javascript"
