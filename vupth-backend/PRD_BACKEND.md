@@ -85,7 +85,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
 | **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
-| **OWNER** | `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
+| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
 
 ---
@@ -834,6 +834,35 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
 ---
 
 ## 9. Endpoints — Professional
+
+### GET /professional?name=&specialty=
+Busca profissionais por nome e/ou especialidade (filtros opcionais, parciais, case-insensitive). O owner usa para localizar profissionais e enviar convite de afiliacao via `POST /establishment/{id}/affiliations`.
+
+**Acesso:** OWNER
+
+**Query params opcionais:**
+| Param | Tipo | Notas |
+|-------|------|-------|
+| name | String | LIKE parcial no nome (firstName), case-insensitive |
+| specialty | String | LIKE parcial na especialidade, case-insensitive |
+
+Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Maria",
+    "specialty": "Colorista",
+    "is_available": true
+  }
+]
+```
+
+**Testes:** Integracao
+
+---
 
 ### GET /professional/me
 Retorna os dados do profissional autenticado.
@@ -1912,6 +1941,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | DELETE /establishment/{id}/professionals/{pid} | ✅ |
 | PATCH /establishment/{id}/owner | ✅ |
 | POST /establishment/{id}/service-items | 🟡 Integracao |
+| GET /professional (busca) | ✅ |
 | POST /professional/register | ✅ |
 | PATCH /professional/me | ✅ |
 | POST /professional/quick-create | ✅ |
@@ -2069,7 +2099,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 29 | Cancelar solicitacao de afiliacao + pendencia unica global | `PATCH /affiliations/{id}/cancel` (status `CANCELLED` ja existe). Alem disso, validar **pendencia unica global**: profissional com afiliacao `PENDING` nao pode solicitar a nenhum outro establishment. Hoje o `409` so cobre o mesmo establishment | **Backend** (endpoint cancel + validacao global de PENDING) / **Front-Partner** (botao cancelar solicitacao) |
 | 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
 | 31 | Status ATIVA do establishment condicionado a servico | **[Backend concluido]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ✅ Filtro no listing: profissional **sem servico nao aparece** em `GET /establishment/id/{id}/professionals-with-queue`, mesmo com a loja aberta. | **Backend** (✅ validacao no open-status / ✅ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
-| 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
+| 32 | Buscar profissionais (owner convidar) | **[Backend concluido]** ✅ `GET /professional?name=&specialty=` (OWNER, filtros parciais case-insensitive, response `{id,name,specialty,is_available}`). Falta o Front-Partner (busca + convite). | **Backend** ✅ / **Front-Partner** (busca + convite) |
 | 33 | Busca por proximidade (GPS) | `GET /establishment?lat=&lng=&radiusKm=` ordenando por distancia e retornando `distance_km`. **MVP nao tem.** Pre-requisito: **geocodificar endereco no cadastro** (preencher `lat/lng`, hoje opcionais). Caminho recomendado: **Haversine nativo** (sem dependencia nova) agora; **PostGIS** (coluna `geography` + indice GiST + `ST_DWithin`) quando escalar. Busca por bairro (`?neighborhood=`) ja existe e cobre o MVP. | **Backend** (geocoding no cadastro + query Haversine) / **Front-Client** (pedir permissao de localizacao, ordenar por distancia) |
 | 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
 | 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |

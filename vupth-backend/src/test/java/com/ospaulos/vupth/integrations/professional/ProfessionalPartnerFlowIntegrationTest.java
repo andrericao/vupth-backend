@@ -439,6 +439,88 @@ class ProfessionalPartnerFlowIntegrationTest {
                 .andDo(print());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // FLUXO E — GET /professional?name=&specialty= (owner busca p/ convidar)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(50)
+    @DisplayName("GET /professional?specialty= — 200 owner encontra profissional por especialidade")
+    void searchProfessional_bySpecialty() throws Exception {
+        log.info("[PartnerFlow] searchProfessional_bySpecialty");
+
+        // cria um profissional fresco com especialidade unica
+        String uniqueSpecialty = "Esp" + faker.number().digits(6);
+        var freshProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        MvcResult reg = mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freshProf.token())
+                        .content(mapper.writeValueAsString(
+                                new ProfessionalRegisterRequest("Maria Busca", uniqueSpecialty))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String freshProfId = new JSONObject(reg.getResponse().getContentAsString()).getString("id");
+
+        // owner busca por parte da especialidade (case-insensitive)
+        MvcResult result = mvc.perform(get("/professional")
+                        .param("specialty", uniqueSpecialty.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].id").value(freshProfId))
+                .andExpect(jsonPath("$[0].name").value("Maria Busca"))
+                .andExpect(jsonPath("$[0].specialty").value(uniqueSpecialty))
+                .andExpect(jsonPath("$[0].is_available").exists())
+                .andDo(print())
+                .andReturn();
+
+        assertThat(new org.json.JSONArray(result.getResponse().getContentAsString()).length())
+                .isEqualTo(1);
+    }
+
+    @Test
+    @Order(51)
+    @DisplayName("GET /professional — 200 sem filtros lista profissionais (owner)")
+    void searchProfessional_noFilters() throws Exception {
+        log.info("[PartnerFlow] searchProfessional_noFilters");
+
+        MvcResult result = mvc.perform(get("/professional")
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        assertThat(new org.json.JSONArray(result.getResponse().getContentAsString()).length())
+                .isGreaterThan(0);
+    }
+
+    @Test
+    @Order(52)
+    @DisplayName("GET /professional — 401 sem token")
+    void searchProfessional_noToken_401() throws Exception {
+        mvc.perform(get("/professional")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(53)
+    @DisplayName("GET /professional — 403 token PROFESSIONAL (so OWNER)")
+    void searchProfessional_professionalToken_403() throws Exception {
+        Assumptions.assumeTrue(profToken != null);
+        log.info("[PartnerFlow] searchProfessional_professionalToken_403");
+
+        mvc.perform(get("/professional")
+                        .header("Authorization", profToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[PartnerFlow] tearDown");

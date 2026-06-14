@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRe
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
 import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalRequest;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
+import com.ospaulos.vupth.api.professional.dto.response.ProfessionalSearchResponse;
 import com.ospaulos.vupth.api.professional.usecase.AffiliateToEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
@@ -69,6 +70,34 @@ public class ProfessionalQuickCreateController {
     private final UpdateMyProfileUseCase          updateMyProfileUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
+
+    /**
+     * GET /professional?name=&specialty=
+     *
+     * Busca profissionais por nome e/ou especialidade (filtros opcionais, parciais,
+     * case-insensitive). Usado pelo owner para localizar profissionais e enviar
+     * convite de afiliacao via POST /establishment/{id}/affiliations.
+     * Auth: ROLE_OWNER
+     */
+    @GetMapping
+    public ResponseEntity<List<ProfessionalSearchResponse>> search(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String specialty) {
+
+        log.info("GET /professional — search name={} specialty={}", name, specialty);
+
+        // Prepara padroes LIKE: "%" quando sem filtro, "%termo%" quando filtrando.
+        String nameLike = (name != null && !name.isBlank()) ? "%" + name.trim() + "%" : "%";
+        String specialtyLike = (specialty != null && !specialty.isBlank()) ? "%" + specialty.trim() + "%" : "%";
+
+        List<ProfessionalSearchResponse> result = professionalRepository
+                .searchByNameAndSpecialty(nameLike, specialtyLike)
+                .stream()
+                .map(ProfessionalSearchResponse::fromEntity)
+                .toList();
+
+        return ResponseEntity.ok(result);
+    }
 
     /**
      * GET /professional/me
