@@ -707,7 +707,17 @@ Atualiza status de abertura.
 
 Valores: `OPEN`, `CLOSED`, `TEMPORARILY_CLOSED`
 
+**Gate #31:** so permite abrir (`OPEN`) se o establishment tiver **>=1 profissional com >=1 servico**. Caso contrario retorna `422 ESTABLISHMENT_NOT_READY`. `CLOSED` e `TEMPORARILY_CLOSED` nao tem essa restricao.
+
 **Response (200):** `EstablishmentResponse`
+
+**Erros:**
+| Status | Code | Quando |
+|--------|------|--------|
+| 422 | `ESTABLISHMENT_NOT_READY` | Tentou abrir sem nenhum profissional com servico |
+| 401 | — | Sem token |
+| 403 | — | Token nao-owner |
+| 404 | `ESTABLISHMENT_NOT_FOUND` | Establishment inexistente ou de outro owner |
 
 **Testes:** Integracao
 
@@ -1129,7 +1139,7 @@ Lista atendimentos do cliente logado, com filtros opcionais de status e periodo.
 - Agendamentos futuros: `?status=SCHEDULED`
 - Atendimentos do mes: `?dateFrom=2026-06-01&dateTo=2026-06-30`
 
-**Testes:** Integracao
+**Testes:** Integracao — `AttendanceIntegrationTest` cobre: happy path (so retorna attendances do proprio client), filtro `status=CANCELLED`, filtro `status=FINISHED`, filtro por periodo (`dateFrom`/`dateTo`), periodo futuro retornando lista vazia, `401` sem token e isolamento (outro usuario nunca recebe o historico de outro client). Postman: pasta `09 - client attendance`.
 
 ---
 
@@ -1807,7 +1817,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | PATCH /affiliations/{id}/reject | ✅ |
 | DELETE /affiliations/{id} | ✅ |
 | GET /attendances | 🟡 Integracao |
-| GET /attendances/client/me | 🟡 Integracao |
+| GET /attendances/client/me | ✅ |
 | GET /attendances/{id} | 🟡 Integracao |
 | POST /attendances | ✅ |
 | PUT /attendances/{id}/cancel | ✅ |
@@ -1898,7 +1908,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | # | Item | Descricao | Ambientes |
 |---|------|-----------|-----------|
 | 1 | WebSocket / tempo real | Substituir polling de 30s por WebSocket STOMP. Topico: `/topic/queue/{professionalId}`. Publicar evento apos start/finish/pause/cancel. Cliente ve fila atualizar sem recarregar | **Backend** (STOMP broker + eventos) / **Front-Client** (subscribe na fila) / **Front-Partner** (subscribe na fila) |
-| 2 | Busca por geolocalizacao | Adicionar lat/lng no Establishment. Endpoint: `GET /establishment?lat=&lng=&radius=km`. Ordenar por proximidade | **Backend** (query espacial) / **Front-Client** (enviar coordenadas, exibir distancia) |
+| 2 | Busca de establishment por bairro e geolocalizacao | **Fase 1 (prioridade):** `GET /establishment?neighborhood=X`. Requer cadastrar/expor o campo `neighborhood` no endereco do establishment; o response precisa trazer o **tempo de espera agregado por establishment** para ordenar (menor -> maior). **Fase 2:** busca por GPS `GET /establishment?lat=&lng=&radiusKm=`, ordenar por proximidade (lat/lng no Establishment, query espacial) | **Backend** (campo neighborhood + query + agregacao de tempo de espera + ordenacao + query espacial na fase 2) / **Front-Partner** e **Front-Client** (busca por bairro, exibir tempo de espera; fase 2: enviar coordenadas, exibir distancia) |
 | 3 | Notificacoes push | Avisar cliente quando esta em 2o lugar na fila e quando atendimento foi iniciado. Expo Push Notifications. Backend: endpoint para registrar device token | **Backend** (endpoint device token + disparo push) / **Front-Client** (registro token + receber push) / **Front-Partner** (registro token + receber push) |
 | 4 | Filtro real de establishment por openStatus | `GET /establishment` so retorna OPEN por padrao. Parametro `?includeAll=true` para ver fechados. Hoje o front filtra localmente | **Backend** (filtro na query) / **Front-Client** (remover filtro local) |
 
@@ -1907,9 +1917,9 @@ Lista intervalos ativos para uma data (default: hoje).
 | # | Item | Descricao | Ambientes |
 |---|------|-----------|-----------|
 | 5 | Paginacao no GET /establishment | Adicionar page, size, sort como @RequestParam. Spring Data Pageable. Frontend: scroll infinito ou botao "carregar mais" | **Backend** (Pageable) / **Front-Client** (scroll infinito) |
-| 6 | Rating / avaliacao de atendimentos | Apos FINISHED, cliente pode avaliar (1-5 estrelas). Exibir media no card do profissional. Tabela: `attendance_rating` (attendanceId, score, comment) | **Backend** (entidade + endpoints CRUD) / **Front-Client** (tela de avaliacao + exibir media) / **Front-Partner** (ver avaliacoes recebidas) |
+| 6 | Rating / avaliacao de atendimentos | Cliente avalia apos `FINISHED` (1-5 estrelas, inteiro). Especificacao detalhada na secao "Item 6 — Rating" abaixo do backlog | **Backend** (entidade + endpoint + agregados denormalizados) / **Front-Client** (tela de avaliacao + exibir media) / **Front-Partner** (ver avaliacoes recebidas) |
 | 7 | Foto de perfil do profissional | Campo `profileImageUrl` ja existe em BaseUser. Upload via URL externa (Cloudinary ou S3). Exibir no card do profissional | **Backend** (integrar storage externo) / **Front-Client** (exibir foto) / **Front-Partner** (upload de foto) |
-| 8 | Historico de atendimentos do cliente | `GET /attendances/me` — lista todos os atendimentos do cliente logado. Filtro por status: FINISHED, CANCELLED. Util para "voltar ao mesmo profissional" | **Backend** (endpoint + query) / **Front-Client** (tela de historico) |
+| 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
 | 11 | Recurrent intervals (horario de almoco) | `ProfessionalIntervalController` ja tem `POST /recurring`. Falta UI no partner-app para configurar. Tempo de espera mais preciso para clientes | **Front-Partner** (tela de configuracao de intervalos) — Backend ja implementado |
@@ -1921,7 +1931,7 @@ Lista intervalos ativos para uma data (default: hoje).
 | 12 | QR Code dinamico por profissional | Hoje e apenas link do estabelecimento. Futuro: link direto ao profissional especifico. Parametro `?professionalId=` na URL | **Front-Partner** (gerar QR) / **Front-Client** (ler QR e redirecionar) |
 | 13 | Fila de espera virtual com posicao nominal | Exibir ao cliente: "Voce e o 3o da fila". Esconder lista completa mas calcular posicao do cliente logado | **Backend** (endpoint posicao individual) / **Front-Client** (exibir posicao) |
 | 14 | Modo offline completo (partner-app) | Cache da fila atual no AsyncStorage. Acoes offline: fila local, sincroniza ao reconectar. Estrategia last-write-wins | **Front-Partner** (cache + sync) |
-| 15 | Editar e deletar ServiceItem | `PUT /establishment/{id}/service-items/{itemId}` e `DELETE ...`. Validacao: nao deletar se ha attendances SCHEDULED vinculados | **Backend** (endpoints + validacao) / **Front-Partner** (UI de edicao/remocao) |
+| 15 | Editar e deletar ServiceItem (establishment e professional-queue) | **Establishment:** `PUT /establishment/{id}/service-items/{itemId}` e `DELETE ...` (validacao: nao deletar se ha attendances SCHEDULED vinculados). **Professional-queue:** `PATCH /professional-queue/{profId}/service-items/{itemId}` (editar nome e preco) e `DELETE /professional-queue/{profId}/service-items/{itemId}` — hoje so existe o POST de adicionar; validar owner/membership | **Backend** (endpoints + validacao nos dois escopos) / **Front-Partner** (UI de edicao/remocao) |
 | 16 | Transferencia de atendimento entre profissionais | Profissional pode passar cliente para colega. `PATCH /attendances/{id}/transfer?toProfessionalId=` | **Backend** (endpoint + logica de transferencia) / **Front-Partner** (botao transferir) |
 | 17 | Blacklist / bloquear cliente | Owner ou professional pode bloquear cliente. Tabela: `establishment_blocked_users` | **Backend** (entidade + endpoints) / **Front-Partner** (botao bloquear) |
 | 18 | Multiplos estabelecimentos por owner | Owner atual so ve o proprio establishment. Dashboard para owners com varios locais (franquias) | **Backend** (refatorar relacao Owner-Establishment) / **Front-Partner** (seletor de establishment) |
@@ -1940,3 +1950,37 @@ Lista intervalos ativos para uma data (default: hoje).
 | 26 | API publica para parceiros | Terceiros podem integrar filas do Vupth. API key por establishment. Rate limiting por key | **Backend** (API key + rate limit + docs) |
 | 27 | Sentry / observabilidade | Rastreamento de erros em producao. Alertas por email quando 500 aumenta | **Backend** (Sentry Java SDK) / **Front-Client** (Sentry React Native) / **Front-Partner** (Sentry React Native) |
 | 28 | Rate limiting no backend | Protecao contra brute force no /auth/login. Maximo 5 tentativas por IP por minuto. Spring: bucket4j ou resilience4j | **Backend** (middleware de rate limit) |
+
+### PENDENCIAS APP PARTNER — endpoints backend necessarios (entrada 2026-06-13)
+
+Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Numeracao continua a sequencia do backlog. (Editar/remover servico do profissional foi consolidado no item 15; busca por bairro foi consolidada no item 2.)
+
+| # | Item | Descricao | Ambientes |
+|---|------|-----------|-----------|
+| 29 | Cancelar solicitacao de afiliacao + pendencia unica global | `PATCH /affiliations/{id}/cancel` (status `CANCELLED` ja existe). Alem disso, validar **pendencia unica global**: profissional com afiliacao `PENDING` nao pode solicitar a nenhum outro establishment. Hoje o `409` so cobre o mesmo establishment | **Backend** (endpoint cancel + validacao global de PENDING) / **Front-Partner** (botao cancelar solicitacao) |
+| 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
+| 31 | Status ATIVA do establishment condicionado a servico | **[Backend parcial]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ⏳ Pendente: profissional **sem servico nao deve aparecer para clientes** (filtro no listing). | **Backend** (✅ validacao no open-status / ⏳ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
+| 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
+
+### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
+
+Decisao 2026-06-13. **Status: especificado, nao implementado.**
+
+**Objetivo:** capturar nota do profissional E, quando possivel, do tipo de servico — um profissional pode ser otimo na pintura e ruim no corte. O `serviceItemType` (enum ja existente em `ServiceItem`) e o eixo de agregacao por tipo.
+
+**Regra de atribuicao (definida pelo Andre):**
+- Atendimento com **exatamente 1 servico** -> a nota e atribuida ao **profissional E ao `ServiceItem`** (alimentando a media daquele `serviceItemType`).
+- Atendimento com **2 ou mais servicos** -> a nota vai **somente ao profissional**, ainda que vinculada ao atendimento. Motivo: com combo (ou multiplas pessoas na mesma marcacao, ex. pai + 2 filhos) nao da para saber qual servico recebeu qual nota. O modelo atual nao representa "servico por pessoa" (`Attendance` tem 1 client e uma lista `@ManyToMany` de servicos), entao nao se tenta dividir.
+
+**Entrada:** estrelas inteiras de 1 a 5. **Saida:** media com 2 casas decimais + contagem de votos (ex. `4.73 (212)`) — sempre exibir a contagem porque media sem volume engana. Ajuste bayesiano fica para depois, sem mudanca de schema.
+
+**Modelo:**
+- Entidade `AttendanceRating`: `attendanceId` (UNIQUE — 1 voto por atendimento), `score` (int 1-5), `comment` (opcional), `serviceItemId` (preenchido **so** quando o atendimento tem 1 servico, senao `null` — guarda a origem do voto para auditoria/recalculo), `createdAt`.
+- Agregados denormalizados (para nao rodar `AVG()` a cada leitura de card):
+  - `Professional`: `ratingSum` (long) + `ratingCount` (long); media = `ratingSum/ratingCount`.
+  - `ServiceItem`: `ratingSum` + `ratingCount`; media por `serviceItemType` = rollup dos ServiceItems daquele tipo do profissional.
+- Escrita: incrementa sempre os contadores do `Professional`; **se** `serviceItems.size() == 1`, incrementa tambem os do `ServiceItem`.
+
+**Endpoint:** `POST /attendances/{id}/rating` — apenas o `clientId` dono do attendance, apenas com `status = FINISHED`, bloqueia segundo voto (409). Atendimento guest (`guestName`, sem `client`) nao avalia.
+
+**Exibicao:** media geral no card do profissional; media por servico/tipo na lista de servicos do profissional.

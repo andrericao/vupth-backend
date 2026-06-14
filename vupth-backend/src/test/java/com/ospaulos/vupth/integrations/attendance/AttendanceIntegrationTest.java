@@ -74,6 +74,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *    IMPORTANT: Order(69) ensures profissional has NO IN_PROGRESS attendance
  *    before the pause/resume flow starts. The fullFlow (Orders 30-33) finishes
  *    the attendance, but we add an extra guard to be safe.
+ *
+ * H) List attendances (GET /attendances) — owner/professional reports
+ *
+ * I) Client attendance history (GET /attendances/client/me)
+ *    - Happy path, filtros por status (CANCELLED/FINISHED) e periodo
+ *    - 401 sem token, isolamento entre clients
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -1069,6 +1075,158 @@ class AttendanceIntegrationTest {
             }
         }
         assertThat(hasClientItem).as("Deve ter ao menos um attendance com clientId preenchido").isTrue();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // SCENARIO I — Client attendance history (GET /attendances/client/me)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(90)
+    @DisplayName("GET /attendances/client/me — 200 client lista o proprio historico")
+    void listClientAttendances_happyPath() throws Exception {
+        log.info("[Attendance] listClientAttendances_happyPath");
+
+        MvcResult result = mvc.perform(get("/attendances/client/me")
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].clientId").value(clientId))
+                .andExpect(jsonPath("$[0].establishmentId").exists())
+                .andExpect(jsonPath("$[0].professionalId").exists())
+                .andExpect(jsonPath("$[0].services").isArray())
+                .andExpect(jsonPath("$[0].status").exists())
+                .andExpect(jsonPath("$[0].totalValue").exists())
+                .andExpect(jsonPath("$[0].scheduledTime").exists())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        for (var item : items) {
+            assertThat(item.get("clientId").asText())
+                    .as("Historico do client so pode conter attendances dele mesmo")
+                    .isEqualTo(clientId);
+        }
+    }
+
+    @Test
+    @Order(91)
+    @DisplayName("GET /attendances/client/me?status=CANCELLED — 200 filtra cancelados")
+    void listClientAttendances_byCancelledStatus() throws Exception {
+        log.info("[Attendance] listClientAttendances_byCancelledStatus");
+
+        MvcResult result = mvc.perform(get("/attendances/client/me")
+                        .param("status", "CANCELLED")
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        assertThat(items.size())
+                .as("Client cancelou attendances nos cenarios anteriores")
+                .isGreaterThan(0);
+        for (var item : items) {
+            assertThat(item.get("status").asText()).isEqualTo("CANCELLED");
+            assertThat(item.get("clientId").asText()).isEqualTo(clientId);
+        }
+    }
+
+    @Test
+    @Order(92)
+    @DisplayName("GET /attendances/client/me?status=FINISHED — 200 filtra finalizados")
+    void listClientAttendances_byFinishedStatus() throws Exception {
+        log.info("[Attendance] listClientAttendances_byFinishedStatus");
+
+        MvcResult result = mvc.perform(get("/attendances/client/me")
+                        .param("status", "FINISHED")
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        for (var item : items) {
+            assertThat(item.get("status").asText()).isEqualTo("FINISHED");
+        }
+    }
+
+    @Test
+    @Order(93)
+    @DisplayName("GET /attendances/client/me?dateFrom=hoje&dateTo=hoje — 200 filtra por periodo")
+    void listClientAttendances_byDateRange() throws Exception {
+        log.info("[Attendance] listClientAttendances_byDateRange");
+
+        String today = java.time.LocalDate.now().toString();
+
+        MvcResult result = mvc.perform(get("/attendances/client/me")
+                        .param("dateFrom", today)
+                        .param("dateTo", today)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        assertThat(items.size())
+                .as("Attendances criados hoje devem aparecer no filtro de hoje")
+                .isGreaterThan(0);
+    }
+
+    @Test
+    @Order(94)
+    @DisplayName("GET /attendances/client/me?dateFrom=2099 — 200 periodo futuro retorna lista vazia")
+    void listClientAttendances_futureDateRange_empty() throws Exception {
+        log.info("[Attendance] listClientAttendances_futureDateRange_empty");
+
+        MvcResult result = mvc.perform(get("/attendances/client/me")
+                        .param("dateFrom", "2099-01-01")
+                        .param("dateTo", "2099-12-31")
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        assertThat(items).isEmpty();
+    }
+
+    @Test
+    @Order(95)
+    @DisplayName("GET /attendances/client/me — 401 sem token")
+    void listClientAttendances_noToken_401() throws Exception {
+        log.info("[Attendance] listClientAttendances_noToken_401");
+
+        mvc.perform(get("/attendances/client/me"))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(96)
+    @DisplayName("GET /attendances/client/me — isolamento: outro user nao ve historico do client")
+    void listClientAttendances_isolation_otherUser() throws Exception {
+        log.info("[Attendance] listClientAttendances_isolation_otherUser");
+
+        // ownerProf tambem nasce CLIENT (roles acumulativas), mas nunca criou
+        // attendance como client — o historico dele nao pode vazar o do clientToken
+        MvcResult result = mvc.perform(get("/attendances/client/me")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        var items = mapper.readTree(result.getResponse().getContentAsString());
+        for (var item : items) {
+            assertThat(item.get("clientId").asText())
+                    .as("client/me nunca pode retornar attendance de outro client")
+                    .isEqualTo(ownerProfId);
+        }
     }
 
     @AfterAll

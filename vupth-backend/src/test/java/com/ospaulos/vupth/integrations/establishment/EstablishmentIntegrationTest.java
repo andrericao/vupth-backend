@@ -65,7 +65,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * E) Toggle openStatus (PATCH /establishment/{id}/open-status)
  *    - Owner fecha → 200 CLOSED
- *    - Owner reabre → 200 OPEN
+ *    - Gate #31: abrir sem profissional com serviço → 422 ESTABLISHMENT_NOT_READY
+ *    - Gate #31: abrir com profissional + serviço → 200 OPEN
+ *    - TEMPORARILY_CLOSED → 200
  *    - Sem token → 401
  *    - Token CLIENT → 403  ← usa pureClientToken (nunca criou establishment)
  *    - Owner errado → 404
@@ -634,17 +636,18 @@ class EstablishmentIntegrationTest {
 
     @Test
     @Order(61)
-    @DisplayName("PATCH /establishment/{id}/open-status — 200 owner reabre o establishment")
-    void updateOpenStatus_ownerReopens() throws Exception {
+    @DisplayName("PATCH /establishment/{id}/open-status — 422 não abre sem profissional com serviço (gate #31)")
+    void updateOpenStatus_notReady_422() throws Exception {
         Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
-        log.info("[Establishment] updateOpenStatus_ownerReopens — id={}", establishmentId);
+        log.info("[Establishment] updateOpenStatus_notReady_422 — id={}", establishmentId);
 
+        // establishmentId é de um owner puro (sem profissional/serviço) → não pode abrir
         mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
                         .content("{\"openStatus\":\"OPEN\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.open_status").value("OPEN"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_NOT_READY"))
                 .andDo(print());
     }
 
@@ -663,12 +666,8 @@ class EstablishmentIntegrationTest {
                 .andExpect(jsonPath("$.open_status").value("TEMPORARILY_CLOSED"))
                 .andDo(print());
 
-        // Restaura para OPEN
-        mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .header("Authorization", ownerToken)
-                        .content("{\"openStatus\":\"OPEN\"}"))
-                .andExpect(status().isOk());
+        // Não restaura para OPEN: establishmentId não tem profissional com serviço,
+        // logo reabrir seria bloqueado pelo gate #31 (ver updateOpenStatus_notReady_422).
     }
 
     @Test
@@ -744,6 +743,43 @@ class EstablishmentIntegrationTest {
                         .content("{\"openStatus\":null}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(68)
+    @DisplayName("PATCH /establishment/{id}/open-status — 200 abre quando há profissional com serviço (gate #31)")
+    void updateOpenStatus_readyEstablishment_opens_200() throws Exception {
+        Assumptions.assumeTrue(ownerProfEstablishmentId != null, "Depende do ownerProf_quickCreate");
+        log.info("[Establishment] updateOpenStatus_readyEstablishment_opens_200 — establishment={}",
+                ownerProfEstablishmentId);
+
+        // ownerProf já se vinculou como profissional (Order 31). Adiciona um serviço
+        // a ele → establishment passa a ter profissional com serviço (fica "pronto").
+        String serviceItemBody = """
+                {
+                  "establishmentId": "%s",
+                  "serviceItemType": "CORTE_MAQUINA",
+                  "customName": "Corte Gate 31",
+                  "price": 35.00,
+                  "estimatedMinutes": 30
+                }
+                """.formatted(ownerProfEstablishmentId);
+
+        mvc.perform(post("/establishment/{establishmentId}/service-items", ownerProfEstablishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content(serviceItemBody))
+                .andExpect(status().isCreated())
+                .andDo(print());
+
+        // agora pode abrir
+        mvc.perform(patch("/establishment/{id}/open-status", ownerProfEstablishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"openStatus\":\"OPEN\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.open_status").value("OPEN"))
                 .andDo(print());
     }
 
