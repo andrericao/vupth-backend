@@ -12,6 +12,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFo
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
 import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
@@ -103,6 +104,13 @@ public class GlobalExceptionHandler {
             EstablishmentNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] EstablishmentNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "ESTABLISHMENT_NOT_FOUND");
+    }
+
+    @ExceptionHandler(EstablishmentNotReadyException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentNotReady(
+            EstablishmentNotReadyException ex, HttpServletRequest req) {
+        log.warn("[422] EstablishmentNotReady | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_NOT_READY");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)

@@ -707,7 +707,17 @@ Atualiza status de abertura.
 
 Valores: `OPEN`, `CLOSED`, `TEMPORARILY_CLOSED`
 
+**Gate #31:** so permite abrir (`OPEN`) se o establishment tiver **>=1 profissional com >=1 servico**. Caso contrario retorna `422 ESTABLISHMENT_NOT_READY`. `CLOSED` e `TEMPORARILY_CLOSED` nao tem essa restricao.
+
 **Response (200):** `EstablishmentResponse`
+
+**Erros:**
+| Status | Code | Quando |
+|--------|------|--------|
+| 422 | `ESTABLISHMENT_NOT_READY` | Tentou abrir sem nenhum profissional com servico |
+| 401 | — | Sem token |
+| 403 | — | Token nao-owner |
+| 404 | `ESTABLISHMENT_NOT_FOUND` | Establishment inexistente ou de outro owner |
 
 **Testes:** Integracao
 
@@ -1949,7 +1959,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 |---|------|-----------|-----------|
 | 29 | Cancelar solicitacao de afiliacao + pendencia unica global | `PATCH /affiliations/{id}/cancel` (status `CANCELLED` ja existe). Alem disso, validar **pendencia unica global**: profissional com afiliacao `PENDING` nao pode solicitar a nenhum outro establishment. Hoje o `409` so cobre o mesmo establishment | **Backend** (endpoint cancel + validacao global de PENDING) / **Front-Partner** (botao cancelar solicitacao) |
 | 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
-| 31 | Status ATIVA do establishment condicionado a servico | So permitir abrir (`open-status=OPEN`) se houver >=1 profissional com >=1 servico; caso contrario retornar `422 ESTABLISHMENT_NOT_READY`. Alem disso, profissional **sem servico nao deve aparecer para clientes** mesmo com a loja aberta | **Backend** (validacao no open-status + filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
+| 31 | Status ATIVA do establishment condicionado a servico | **[Backend parcial]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ⏳ Pendente: profissional **sem servico nao deve aparecer para clientes** (filtro no listing). | **Backend** (✅ validacao no open-status / ⏳ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
 | 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)

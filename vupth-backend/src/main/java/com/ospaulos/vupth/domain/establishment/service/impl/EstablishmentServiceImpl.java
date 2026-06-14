@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
@@ -96,11 +97,25 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 .findByIdAndOwnerId(establishmentId, ownerId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
 
+        // Gate: só pode abrir se estiver "ativo" — ao menos um profissional com ao menos um serviço.
+        if (newStatus == OpenStatus.OPEN && !hasProfessionalWithService(establishment)) {
+            throw new EstablishmentNotReadyException(establishmentId);
+        }
+
         establishment.setOpenStatus(newStatus);
         establishment.setLastStatusChange(ZonedDateTime.now());
         Establishment saved = establishmentRepository.save(establishment);
 
         return EstablishmentResponse.fromEntity(saved);
+    }
+
+    /**
+     * Establishment é considerado "ativo o suficiente para abrir" quando tem
+     * ao menos um profissional vinculado com ao menos um serviço cadastrado.
+     */
+    private boolean hasProfessionalWithService(Establishment establishment) {
+        return establishment.getProfessionals().stream()
+                .anyMatch(prof -> prof.getServices() != null && !prof.getServices().isEmpty());
     }
 
     @Override

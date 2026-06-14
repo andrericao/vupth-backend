@@ -1025,18 +1025,16 @@
           }
         },
         {
-          "name": "update open status → OPEN (owner reabre)",
+          "name": "update open status → OPEN sem serviço → 422 (gate #31)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200 - Reabertura OK\", () => pm.response.to.have.status(200));",
-                  "if (pm.response.code === 200) {",
-                  "  pm.test(\"open_status é OPEN\", () => {",
-                  "    pm.expect(pm.response.json().open_status).to.equal(\"OPEN\");",
-                  "  });",
-                  "}"
+                  "pm.test(\"Status 422 - gate #31: sem profissional com servico\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"code ESTABLISHMENT_NOT_READY\", () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('ESTABLISHMENT_NOT_READY');",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
@@ -1239,53 +1237,6 @@
             "body": {
               "mode": "raw",
               "raw": "{\"openStatus\":null}"
-            },
-            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "response": [],
-          "auth": {
-            "type": "bearer",
-            "bearer": [
-              {
-                "key": "token",
-                "value": "{{owner_token}}",
-                "type": "string"
-              }
-            ]
-          }
-        },
-        {
-          "name": "update open status → OPEN (restaurar após testes)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Status 200 - Restaurado para OPEN\", () => pm.response.to.have.status(200));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{owner_token}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"openStatus\":\"OPEN\"}"
             },
             "url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
             "auth": {
@@ -3606,6 +3557,57 @@
                 "type": "string"
               }
             ]
+          }
+        },
+        {
+          "name": "update open status → OPEN (gate #31, com serviço)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - abre apos ter profissional com servico (gate #31)\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"open_status OPEN\", () => pm.expect(pm.response.json().open_status).to.eql('OPEN'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"openStatus\":\"OPEN\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "open-status"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
           }
         },
         {
