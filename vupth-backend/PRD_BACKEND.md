@@ -84,7 +84,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
 
@@ -1528,6 +1528,52 @@ Service items sao criados via dois caminhos:
 - `POST /establishment/{id}/service-items` (OWNER)
 - `POST /professional-queue/{professionalId}/add-service-items` (PROFESSIONAL)
 
+E gerenciados pelo proprio profissional:
+- `PATCH /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — edita nome, preco e/ou duracao
+- `DELETE /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — remove
+
+### PATCH /professional-queue/{professionalId}/service-items/{itemId}
+Edicao parcial de um servico do profissional. So o proprio profissional (JWT) pode editar seus servicos.
+
+**Acesso:** PROFESSIONAL
+
+**Request (campos opcionais):**
+```json
+{
+  "customName": "Corte Degradê Premium",
+  "price": 45.00,
+  "estimatedMinutes": 40
+}
+```
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| customName | String | null/em branco ignorado |
+| price | BigDecimal | quando enviado, deve ser > 0 |
+| estimatedMinutes | Integer | quando enviado, deve ser > 0 |
+
+**Response (200):** `ServiceItemResponse`
+
+**Erros:**
+- 404 `SERVICE_ITEM_NOT_FOUND` — item nao existe
+- 403 `ESTABLISHMENT_ACCESS_DENIED` — item nao pertence ao profissional autenticado
+- 422 `VALIDATION_ERROR` — price/estimatedMinutes <= 0
+
+---
+
+### DELETE /professional-queue/{professionalId}/service-items/{itemId}
+Remove um servico do profissional. So o proprio profissional (JWT) pode remover.
+
+**Acesso:** PROFESSIONAL
+
+**Response (204):** sem corpo.
+
+**Erros:** 404 `SERVICE_ITEM_NOT_FOUND`, 403 `ESTABLISHMENT_ACCESS_DENIED`.
+
+> A remocao e fisica; o vinculo com atendimentos passados (`attendance_service_item`) e removido em cascata (FK ON DELETE CASCADE).
+
+---
+
 ### ServiceItemResponse
 
 ```json
@@ -1969,6 +2015,8 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | POST /professional-queue/add-quest-attendance | 🟡 Integracao |
 | DELETE /professional-queue/{id}/remove | 🟡 Integracao |
 | POST /professional-queue/{id}/add-service-items | 🟡 Integracao |
+| PATCH /professional-queue/{profId}/service-items/{itemId} | ✅ |
+| DELETE /professional-queue/{profId}/service-items/{itemId} | ✅ |
 | GET /client-queue/{profId}/queue | 🟡 Integracao |
 | GET /client-queue/{id}/wait-time | 🟡 Integracao |
 | GET /clients/{id} | 🟡 Integracao |

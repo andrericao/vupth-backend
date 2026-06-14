@@ -5,9 +5,11 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
+import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
@@ -28,6 +30,7 @@ public class ProfessionalController {
 
     private final AttendanceService attendanceService;
     private final ProfessionalService professionalService;
+    private final ServiceItemService serviceItemService;
 
     // TODO: accept ID as parameter to support caller-specific routing
 
@@ -79,6 +82,48 @@ public class ProfessionalController {
 
         ServiceItemResponse response = professionalService.createServiceItem(professionalId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * PATCH /professional-queue/{professionalId}/service-items/{itemId}
+     *
+     * Profissional edita um servico seu (nome, preco e/ou duracao estimada).
+     * So o proprio profissional (JWT) pode editar seus servicos.
+     * Requer: ROLE_PROFESSIONAL.
+     */
+    @PatchMapping("/{professionalId}/service-items/{itemId}")
+    public ResponseEntity<ServiceItemResponse> updateServiceItem(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID itemId,
+            @RequestBody @Valid UpdateServiceItemRequest request,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("PROFESSIONAL CONTROLLER UPDATE SERVICE-ITEM {} professional={} by user={}",
+                itemId, professionalId, principal.getUserId());
+
+        ServiceItemResponse response = serviceItemService.updateServiceItem(
+                principal.getUserId(), professionalId, itemId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * DELETE /professional-queue/{professionalId}/service-items/{itemId}
+     *
+     * Profissional remove um servico seu.
+     * So o proprio profissional (JWT) pode remover seus servicos.
+     * Requer: ROLE_PROFESSIONAL.
+     */
+    @DeleteMapping("/{professionalId}/service-items/{itemId}")
+    public ResponseEntity<Void> deleteServiceItem(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID itemId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("PROFESSIONAL CONTROLLER DELETE SERVICE-ITEM {} professional={} by user={}",
+                itemId, professionalId, principal.getUserId());
+
+        serviceItemService.deleteServiceItem(principal.getUserId(), professionalId, itemId);
+        return ResponseEntity.noContent().build();
     }
 
     /*

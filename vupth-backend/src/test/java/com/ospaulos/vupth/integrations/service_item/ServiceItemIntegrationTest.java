@@ -25,6 +25,8 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -56,7 +58,7 @@ class ServiceItemIntegrationTest {
 
     private final Faker faker = new Faker();
 
-    String ownerToken, establishmentId, serviceItemId;
+    String ownerToken, ownerId, establishmentId, serviceItemId;
     String clientToken;
 
     @BeforeAll
@@ -68,6 +70,7 @@ class ServiceItemIntegrationTest {
         // createServiceItem endpoint requires OWNER role (security) and PROFESSIONAL profile (service layer).
         var owner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.ownerToken = owner.token();
+        this.ownerId = owner.id();
 
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
         this.establishmentId = estab.id();
@@ -222,6 +225,115 @@ class ServiceItemIntegrationTest {
                         .header("Authorization", clientToken)
                         .content(mapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // #10 — Editar e remover ServiceItem do profissional
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(10)
+    @DisplayName("PATCH /professional-queue/{profId}/service-items/{itemId} — 200 edita nome e preco")
+    void updateServiceItem_success() throws Exception {
+        Assumptions.assumeTrue(serviceItemId != null, "Depende do createServiceItem_success");
+        log.info("[ServiceItem] updateServiceItem_success — item={}", serviceItemId);
+
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"customName\":\"Corte Degradê Premium\",\"price\":45.00,\"estimatedMinutes\":40}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(serviceItemId))
+                .andExpect(jsonPath("$.customName").value("Corte Degradê Premium"))
+                .andExpect(jsonPath("$.price").value(45.00))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(11)
+    @DisplayName("PATCH service-items — 404 item inexistente")
+    void updateServiceItem_notFound_404() throws Exception {
+        log.info("[ServiceItem] updateServiceItem_notFound_404");
+
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"price\":50.00}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("SERVICE_ITEM_NOT_FOUND"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("PATCH service-items — 403 token CLIENT (sem ROLE_PROFESSIONAL)")
+    void updateServiceItem_clientToken_403() throws Exception {
+        Assumptions.assumeTrue(serviceItemId != null);
+        log.info("[ServiceItem] updateServiceItem_clientToken_403");
+
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content("{\"price\":1.00}"))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(13)
+    @DisplayName("PATCH service-items — 403 outro profissional nao pode editar item alheio")
+    void updateServiceItem_otherProfessional_403() throws Exception {
+        Assumptions.assumeTrue(serviceItemId != null);
+        log.info("[ServiceItem] updateServiceItem_otherProfessional_403");
+
+        // outro profissional (solo shop proprio)
+        var other = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var otherEstab = TestUserUtils.becomeOwner(mvc, mapper, faker, other.token());
+        TestUserUtils.becomeProfessional(mvc, mapper, faker, other.token(), otherEstab.id());
+
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", other.token())
+                        .content("{\"price\":9.99}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_ACCESS_DENIED"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(14)
+    @DisplayName("PATCH service-items — 422 preco negativo")
+    void updateServiceItem_negativePrice_422() throws Exception {
+        Assumptions.assumeTrue(serviceItemId != null);
+        log.info("[ServiceItem] updateServiceItem_negativePrice_422");
+
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"price\":-5.00}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("DELETE /professional-queue/{profId}/service-items/{itemId} — 204 remove; depois 404")
+    void deleteServiceItem_success() throws Exception {
+        Assumptions.assumeTrue(serviceItemId != null);
+        log.info("[ServiceItem] deleteServiceItem_success — item={}", serviceItemId);
+
+        mvc.perform(delete("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isNoContent())
+                .andDo(print());
+
+        // remover de novo → 404 (ja nao existe)
+        mvc.perform(delete("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("SERVICE_ITEM_NOT_FOUND"))
                 .andDo(print());
     }
 

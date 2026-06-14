@@ -3712,6 +3712,117 @@
           }
         },
         {
+          "name": "create disposable service item (#10 setup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set(\"disposable_service_item_id\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"BARBA\",\"customName\":\"Servico Descartavel {{$timestamp}}\",\"price\":20.00,\"estimatedMinutes\":15}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "edit service item → PATCH (#10)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"customName atualizado\", () => pm.expect(r.customName).to.eql(\"Barba Premium\"));",
+                  "  pm.test(\"price atualizado\", () => pm.expect(Number(r.price)).to.eql(30));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"customName\":\"Barba Premium\",\"price\":30.00,\"estimatedMinutes\":25}"
+            },
+            "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "delete service item → DELETE (#10)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
           "name": "update open status → OPEN (gate #31, com serviço)",
           "event": [
             {

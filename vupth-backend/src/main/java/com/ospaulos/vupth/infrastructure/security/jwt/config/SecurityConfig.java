@@ -103,6 +103,7 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional-queue/**").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional-queue/**").hasRole("PROFESSIONAL")
 
                         // Profissional se afilia/desafilia de um establishment
