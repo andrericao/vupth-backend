@@ -1417,6 +1417,62 @@
           }
         },
         {
+          "name": "update general-infos → phone + instagram",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 - phone/instagram atualizados\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"phone atualizado\", () => pm.expect(r.phone).to.equal(\"11999990000\"));",
+                  "  pm.test(\"instagram atualizado\", () => pm.expect(r.instagram).to.equal(\"@barbearia\"));",
+                  "  pm.test(\"modified_fields contém phone e instagram\", () => {",
+                  "    pm.expect(r.modified_fields).to.include(\"phone\");",
+                  "    pm.expect(r.modified_fields).to.include(\"instagram\");",
+                  "  });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"phone\":\"11999990000\",\"instagram\":\"@barbearia\"}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
           "name": "update general-infos → services",
           "event": [
             {

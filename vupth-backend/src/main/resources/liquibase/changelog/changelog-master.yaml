@@ -134,6 +134,11 @@ databaseChangeLog:
       file: changesets/50-establishment/018-backfill-service-type.yaml
       relativeToChangeLogFile: true
 
+  # Add phone + instagram columns to establishment
+  - include:
+      file: changesets/50-establishment/019-add-phone-instagram-columns.yaml
+      relativeToChangeLogFile: true
+
   # Affiliation request table
   - include:
       file: changesets/90-affiliation/001-create-affiliation-request.yaml

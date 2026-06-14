@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 019-add-phone-to-establishment
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: establishment
+                columnName: phone
+      changes:
+        - addColumn:
+            tableName: establishment
+            columns:
+              - column:
+                  name: phone
+                  type: VARCHAR(20)
+
+  - changeSet:
+      id: 019-add-instagram-to-establishment
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: establishment
+                columnName: instagram
+      changes:
+        - addColumn:
+            tableName: establishment
+            columns:
+              - column:
+                  name: instagram
+                  type: VARCHAR(100)

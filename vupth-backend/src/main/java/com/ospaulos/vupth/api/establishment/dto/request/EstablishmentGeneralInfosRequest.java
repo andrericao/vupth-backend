@@ -16,5 +16,9 @@ public record EstablishmentGeneralInfosRequest(
         @JsonProperty("service_type")
         ServiceType serviceType,
 
-        Set<ServiceType> services
+        Set<ServiceType> services,
+
+        String phone,
+
+        String instagram
 ) {}

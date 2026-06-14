@@ -1134,6 +1134,50 @@ class EstablishmentIntegrationTest {
                 .andDo(print());
     }
 
+    @Test
+    @Order(80)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 atualiza phone e instagram (#13)")
+    void updateGeneralInfos_phoneInstagram() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_phoneInstagram — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"phone\":\"11999990000\",\"instagram\":\"@barbearia\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.phone").value("11999990000"))
+                .andExpect(jsonPath("$.instagram").value("@barbearia"))
+                .andExpect(jsonPath("$.modified_fields").value(org.hamcrest.Matchers.hasItems("phone", "instagram")))
+                .andDo(print());
+
+        // phone/instagram também aparecem na busca pública (GET /establishment/id/{id})
+        mvc.perform(get("/establishment/id/{id}", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.phone").value("11999990000"))
+                .andExpect(jsonPath("$.instagram").value("@barbearia"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(81)
+    @DisplayName("PATCH /establishment/{id}/general-infos — 200 phone em branco limpa o campo (#13)")
+    void updateGeneralInfos_blankPhoneClears() throws Exception {
+        Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
+        log.info("[Establishment] updateGeneralInfos_blankPhoneClears — id={}", establishmentId);
+
+        mvc.perform(patch("/establishment/{id}/general-infos", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"phone\":\"  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.phone").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.modified_fields[0]").value("phone"))
+                .andDo(print());
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[Establishment] tearDown — limpando dados de teste");

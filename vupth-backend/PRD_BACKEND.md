@@ -582,6 +582,8 @@ Lista establishments ativos com filtros opcionais.
     "serviceType": "BARBER",
     "urlImage": "https://...",
     "ownerId": "uuid",
+    "phone": "11999990000 | null",
+    "instagram": "@barbearia | null",
     "open_status": "OPEN",
     "status": "ACTIVE"
   }
@@ -683,9 +685,20 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "name": "Barbearia Premium",
   "url_image": "https://nova-imagem.jpg",
   "service_type": "BARBER",
-  "services": ["BARBER", "BEAUTY_SALON"]
+  "services": ["BARBER", "BEAUTY_SALON"],
+  "phone": "11999990000",
+  "instagram": "@barbearia"
 }
 ```
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| name | String | null/em branco ignorado |
+| url_image | String | null/em branco ignorado |
+| service_type | Enum | — |
+| services | Set<Enum> | substitui o conjunto atual |
+| phone | String | opcional (max 20). String em branco **limpa** o campo (vira null) |
+| instagram | String | opcional (max 100). String em branco **limpa** o campo (vira null) |
 
 **Response (200):**
 ```json
@@ -695,12 +708,16 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "url_image": "https://nova-imagem.jpg",
   "service_type": "BARBER",
   "services": ["BARBER", "BEAUTY_SALON"],
+  "phone": "11999990000",
+  "instagram": "@barbearia",
   "open_status": "OPEN",
   "status": "ACTIVE",
   "owner_id": "uuid",
   "modified_fields": ["name", "url_image"]
 }
 ```
+
+> `phone` e `instagram` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
 
 **Testes:** Integracao
 
