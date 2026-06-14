@@ -1669,6 +1669,56 @@ Lista intervalos ativos para uma data (default: hoje).
 
 ---
 
+## 18b. Tempo Real (WebSocket / STOMP)
+
+Canal de tempo real para a **fila ao vivo** e **notificacoes pessoais**. Protocolo STOMP sobre WebSocket.
+
+**Handshake:** `GET /ws` (publico) — suporta cliente nativo (apps mobile) e SockJS (browser).
+
+**Autenticacao:** opcional, no frame **CONNECT** via header `Authorization: Bearer <jwt>`.
+- Com token valido → sessao autenticada; o `Principal` da sessao = `userId` (subject do JWT). Necessario para receber notificacoes pessoais.
+- Sem token / invalido → sessao anonima; recebe apenas topicos publicos.
+
+A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` RSA), nao no HTTP. O endpoint `/ws/**` e `permitAll` na cadeia HTTP.
+
+### Destinos (subscriptions)
+
+| Destino | Acesso | Conteudo |
+|---------|--------|----------|
+| `/topic/establishment/{id}/queue` | Publico | Snapshot completo da fila (mesmo payload de `GET /establishment/id/{id}/professionals-with-queue`), reenviado a cada mudanca |
+| `/user/queue/notifications` | Autenticado | Notificacao pessoal direcionada ao `userId` da sessao |
+
+### Quando o backend publica
+
+| Acao (REST) | Broadcast `/topic/.../queue` | Notificacao pessoal `/user/queue/notifications` |
+|-------------|:---:|---|
+| `POST /attendances` (entrar na fila) | ✅ | — |
+| `PUT /attendances/{id}/cancel` | ✅ | — |
+| `DELETE /attendances/{id}/leave-queue` | ✅ | — |
+| `PATCH /attendances/{id}/start` | ✅ | ✅ `ATTENDANCE_STARTED` ("É a sua vez!") |
+| `PATCH /attendances/{id}/finish` | ✅ | ✅ `ATTENDANCE_FINISHED` |
+| `PATCH /attendances/{id}/pause` | ✅ | — |
+| `PATCH /attendances/{id}/resume` | ✅ | — |
+
+O broadcast e disparado pela camada web **apos a transacao commitada**, entao o snapshot reflete o estado persistido. Envio e best-effort: falha de WS e logada e nunca quebra a resposta HTTP.
+
+**Payload de notificacao pessoal (`QueueNotification`):**
+```json
+{
+  "type": "ATTENDANCE_STARTED",
+  "attendanceId": "uuid",
+  "establishmentId": "uuid",
+  "message": "É a sua vez! Seu atendimento começou.",
+  "timestamp": "2026-06-14T14:00:00Z"
+}
+```
+
+> **MVP / escala:** broker simples em memoria (1 instancia). Para multi-instancia (staging/prod escalado) trocar por broker externo (RabbitMQ/Redis STOMP) — ver backlog. O broadcast e sincrono no fluxo HTTP; tornar assincrono e otimizacao futura.
+
+**Testes:** Integracao (`WebSocketIntegrationTest`) — broadcast a subscriber anonimo + notificacao pessoal a subscriber autenticado.
+
+---
+
 ## 19. Fluxos de Usuario
 
 ### Fluxo 1: Owner cria estabelecimento e trabalha nele (Solo Shop)
@@ -1975,6 +2025,8 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 31 | Status ATIVA do establishment condicionado a servico | **[Backend concluido]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ✅ Filtro no listing: profissional **sem servico nao aparece** em `GET /establishment/id/{id}/professionals-with-queue`, mesmo com a loja aberta. | **Backend** (✅ validacao no open-status / ✅ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
 | 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
 | 33 | Busca por proximidade (GPS) | `GET /establishment?lat=&lng=&radiusKm=` ordenando por distancia e retornando `distance_km`. **MVP nao tem.** Pre-requisito: **geocodificar endereco no cadastro** (preencher `lat/lng`, hoje opcionais). Caminho recomendado: **Haversine nativo** (sem dependencia nova) agora; **PostGIS** (coluna `geography` + indice GiST + `ST_DWithin`) quando escalar. Busca por bairro (`?neighborhood=`) ja existe e cobre o MVP. | **Backend** (geocoding no cadastro + query Haversine) / **Front-Client** (pedir permissao de localizacao, ordenar por distancia) |
+| 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
+| 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 

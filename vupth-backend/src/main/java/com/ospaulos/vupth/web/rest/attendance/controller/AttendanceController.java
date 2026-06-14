@@ -3,10 +3,13 @@ package com.ospaulos.vupth.web.rest.attendance.controller;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
+import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
+import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
+import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,7 @@ public class AttendanceController {
 
     private final AttendanceService attendanceService;
     private final ProfessionalService professionalService;
+    private final QueueWebSocketPublisher queuePublisher;
 
     @GetMapping
     public ResponseEntity<List<AttendanceListResponse>> listAttendances(
@@ -99,6 +103,10 @@ public class AttendanceController {
         );
 
         var response = attendanceService.createAttendance(secureRequest);
+
+        // WS: cliente entrou na fila → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -119,6 +127,10 @@ public class AttendanceController {
         log.info("ATTENDANCE CONTROLLER CANCEL {} by client={}", attendanceId, principal.getUserId());
 
         AttendanceInQueueResponse response = attendanceService.cancelAttendance(attendanceId, principal.getUserId());
+
+        // WS: saiu da fila → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
         return ResponseEntity.ok(response);
     }
 
@@ -137,6 +149,10 @@ public class AttendanceController {
         log.info("ATTENDANCE CONTROLLER LEAVE QUEUE {} by client={}", attendanceId, principal.getUserId());
 
         AttendanceInQueueResponse response = attendanceService.leaveQueue(attendanceId, principal.getUserId());
+
+        // WS: saiu da fila → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
         return ResponseEntity.ok(response);
     }
 
@@ -156,9 +172,16 @@ public class AttendanceController {
 
         // Pass principal.getUserId() directly — ProfessionalServiceImpl validates ownership.
         // Avoids triggering a lazy proxy load on attendance.getProfessional() outside a TX.
-        return ResponseEntity.ok(
-                professionalService.startAttendance(principal.getUserId(), attendanceId)
-        );
+        QueueResponse response = professionalService.startAttendance(principal.getUserId(), attendanceId);
+
+        // WS: fila ao vivo + avisa o cliente que chegou a vez dele
+        AttendanceInQueueResponse att = attendanceService.getById(attendanceId);
+        queuePublisher.broadcastQueue(response.establishmentId());
+        queuePublisher.notifyClient(att.clientId(), QueueNotification.of(
+                "ATTENDANCE_STARTED", attendanceId, att.establishmentId(),
+                "É a sua vez! Seu atendimento começou."));
+
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -175,9 +198,16 @@ public class AttendanceController {
 
         log.info("ATTENDANCE CONTROLLER FINISH {} by user={}", attendanceId, principal.getUserId());
 
-        return ResponseEntity.ok(
-                professionalService.finishAttendance(principal.getUserId(), attendanceId)
-        );
+        AttendanceInQueueResponse att = attendanceService.getById(attendanceId);
+        QueueResponse response = professionalService.finishAttendance(principal.getUserId(), attendanceId);
+
+        // WS: fila ao vivo + avisa o cliente que o atendimento foi concluido
+        queuePublisher.broadcastQueue(response.establishmentId());
+        queuePublisher.notifyClient(att.clientId(), QueueNotification.of(
+                "ATTENDANCE_FINISHED", attendanceId, att.establishmentId(),
+                "Seu atendimento foi concluído."));
+
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -194,9 +224,10 @@ public class AttendanceController {
 
         log.info("ATTENDANCE CONTROLLER PAUSE {} by user={}", attendanceId, principal.getUserId());
 
-        return ResponseEntity.ok(
-                professionalService.pauseAttendance(attendanceId, principal.getUserId())
-        );
+        QueueResponse response = professionalService.pauseAttendance(attendanceId, principal.getUserId());
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -213,9 +244,10 @@ public class AttendanceController {
 
         log.info("ATTENDANCE CONTROLLER RESUME {} by user={}", attendanceId, principal.getUserId());
 
-        return ResponseEntity.ok(
-                professionalService.resumeAttendance(attendanceId, principal.getUserId())
-        );
+        QueueResponse response = professionalService.resumeAttendance(attendanceId, principal.getUserId());
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
     }
 }
 

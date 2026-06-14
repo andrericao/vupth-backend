@@ -57,6 +57,10 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
 
+                        // WebSocket handshake — autenticacao da sessao STOMP e feita
+                        // no StompAuthChannelInterceptor (frame CONNECT), nao no HTTP.
+                        .requestMatchers("/ws/**").permitAll()
+
                         // ── Public ───────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
