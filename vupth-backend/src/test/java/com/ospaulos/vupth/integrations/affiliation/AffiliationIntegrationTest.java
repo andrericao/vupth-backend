@@ -643,6 +643,39 @@ class AffiliationIntegrationTest {
                 .andDo(print());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // #8b — Pendencia unica GLOBAL (PENDING bloqueia qualquer outro establishment)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(80)
+    @DisplayName("POST /professional/me/affiliations — 409 pendencia global: PENDING em estab1 bloqueia estab2")
+    void requestAffiliation_globalPending_409() throws Exception {
+        log.info("[Affiliation-IT] requestAffiliation_globalPending_409");
+
+        var prof = registerProfessionalWithoutEstablishment("Prof Global " + faker.number().digits(4));
+
+        // 1a solicitacao ao estab1 → 201 PENDING
+        mvc.perform(post("/professional/me/affiliations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", prof.token())
+                        .content(mapper.writeValueAsString(
+                                new CreateAffiliationRequestDTO(UUID.fromString(estab1Id)))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andDo(print());
+
+        // 2a solicitacao a OUTRO establishment (estab2) → 409 pela regra global
+        mvc.perform(post("/professional/me/affiliations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", prof.token())
+                        .content(mapper.writeValueAsString(
+                                new CreateAffiliationRequestDTO(UUID.fromString(estab2Id)))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("AFFILIATION_ALREADY_PENDING"))
+                .andDo(print());
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[Affiliation-IT] tearDown");

@@ -1052,7 +1052,11 @@ Profissional solicita afiliacao a um establishment.
 }
 ```
 
-**Testes:** Unitario
+**Erros:**
+- 409 `PROFESSIONAL_ALREADY_AFFILIATED` — profissional ja vinculado a um establishment
+- 409 `AFFILIATION_ALREADY_PENDING` — **pendencia unica global**: o profissional ja tem uma solicitacao (REQUEST) PENDING para qualquer establishment; precisa resolver ou cancelar antes de solicitar outro
+
+**Testes:** Unitario + Integracao
 
 ---
 
@@ -2144,7 +2148,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 
 | # | Item | Descricao | Ambientes |
 |---|------|-----------|-----------|
-| 29 | Cancelar solicitacao de afiliacao + pendencia unica global | `PATCH /affiliations/{id}/cancel` (status `CANCELLED` ja existe). Alem disso, validar **pendencia unica global**: profissional com afiliacao `PENDING` nao pode solicitar a nenhum outro establishment. Hoje o `409` so cobre o mesmo establishment | **Backend** (endpoint cancel + validacao global de PENDING) / **Front-Partner** (botao cancelar solicitacao) |
+| 29 | Cancelar solicitacao de afiliacao + pendencia unica global | **[Backend concluido]** ✅ `DELETE /affiliations/{id}` (cancel, status `CANCELLED`) ja existia. ✅ Pendencia unica global: profissional com solicitacao (REQUEST) `PENDING` recebe `409 AFFILIATION_ALREADY_PENDING` ao solicitar qualquer outro establishment. | **Backend** ✅ / **Front-Partner** (botao cancelar solicitacao) |
 | 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
 | 31 | Status ATIVA do establishment condicionado a servico | **[Backend concluido]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ✅ Filtro no listing: profissional **sem servico nao aparece** em `GET /establishment/id/{id}/professionals-with-queue`, mesmo com a loja aberta. | **Backend** (✅ validacao no open-status / ✅ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
 | 32 | Buscar profissionais (owner convidar) | **[Backend concluido]** ✅ `GET /professional?name=&specialty=` (OWNER, filtros parciais case-insensitive, response `{id,name,specialty,is_available}`). Falta o Front-Partner (busca + convite). | **Backend** ✅ / **Front-Partner** (busca + convite) |

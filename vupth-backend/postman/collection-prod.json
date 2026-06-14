@@ -3004,6 +3004,53 @@
           ]
         },
         {
+          "name": "professional requests affiliation again → 409 (pendencia unica #8b)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/professional/me/affiliations",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me",
+                "affiliations"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\"}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409 - pendencia unica (profissional ja tem PENDING)\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code AFFILIATION_ALREADY_PENDING\", () => pm.expect(pm.response.json().code).to.equal(\"AFFILIATION_ALREADY_PENDING\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "professional lists pending affiliations",
           "request": {
             "method": "GET",
