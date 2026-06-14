@@ -1831,6 +1831,53 @@
               }
             }
           ]
+        },
+        {
+          "name": "PATCH professional me (editar nome e especialidade)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Joao Editado\",\"specialty\":\"Barbeiro Senior\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/professional/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "professional",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Nome e especialidade atualizados\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.name).to.eql(\"Joao Editado\");",
+                  "  pm.expect(r.specialty).to.eql(\"Barbeiro Senior\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     },

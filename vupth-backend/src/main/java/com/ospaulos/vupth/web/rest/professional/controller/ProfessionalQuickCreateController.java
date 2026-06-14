@@ -3,11 +3,13 @@ package com.ospaulos.vupth.web.rest.professional.controller;
 import com.ospaulos.vupth.api.professional.dto.request.AffiliateToEstablishmentRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
+import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalRequest;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.professional.usecase.AffiliateToEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
+import com.ospaulos.vupth.api.professional.usecase.UpdateMyProfileUseCase;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -64,6 +66,7 @@ public class ProfessionalQuickCreateController {
     private final RegisterProfessionalUseCase    registerUseCase;
     private final AffiliateToEstablishmentUseCase affiliateUseCase;
     private final LeaveEstablishmentUseCase       leaveUseCase;
+    private final UpdateMyProfileUseCase          updateMyProfileUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
 
@@ -91,6 +94,24 @@ public class ProfessionalQuickCreateController {
                 professional.getIsAvailable(),
                 null
         ));
+    }
+
+    /**
+     * PATCH /professional/me
+     *
+     * Atualizacao parcial do proprio perfil (nome e/ou especialidade).
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @PatchMapping("/me")
+    public ResponseEntity<ProfessionalQuickCreateResponse> updateMyProfile(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid UpdateProfessionalRequest request) {
+
+        log.info("PATCH /professional/me — user={}", principal.getUserId());
+
+        ProfessionalQuickCreateResponse response =
+                updateMyProfileUseCase.execute(principal.getUserId(), request);
+        return ResponseEntity.ok(response);
     }
 
     /**

@@ -24,6 +24,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -345,6 +347,96 @@ class ProfessionalPartnerFlowIntegrationTest {
                 .andDo(print());
 
         log.info("[PartnerFlow] fullFlow — regra MVP confirmada: profissional só em um establishment");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // FLUXO D — PATCH /professional/me (editar nome e especialidade)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(40)
+    @DisplayName("PATCH /professional/me — 200 atualiza nome e especialidade")
+    void updateMyProfile_nameAndSpecialty() throws Exception {
+        Assumptions.assumeTrue(profToken != null, "Depende do register (Order 10)");
+        log.info("[PartnerFlow] updateMyProfile_nameAndSpecialty");
+
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken)
+                        .content("{\"name\":\"Joao Editado\",\"specialty\":\"Barbeiro Senior\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(profId))
+                .andExpect(jsonPath("$.name").value("Joao Editado"))
+                .andExpect(jsonPath("$.specialty").value("Barbeiro Senior"))
+                .andDo(print());
+
+        // confirma persistencia via GET /professional/me
+        mvc.perform(get("/professional/me")
+                        .header("Authorization", profToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Joao Editado"))
+                .andExpect(jsonPath("$.specialty").value("Barbeiro Senior"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(41)
+    @DisplayName("PATCH /professional/me — 200 update parcial: so specialty, nome preservado")
+    void updateMyProfile_partialKeepsName() throws Exception {
+        Assumptions.assumeTrue(profToken != null);
+        log.info("[PartnerFlow] updateMyProfile_partialKeepsName");
+
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken)
+                        .content("{\"specialty\":\"Colorista\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Joao Editado")) // preservado do Order 40
+                .andExpect(jsonPath("$.specialty").value("Colorista"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(42)
+    @DisplayName("PATCH /professional/me — 401 sem token")
+    void updateMyProfile_noToken_401() throws Exception {
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"X\"}"))
+                .andExpect(status().isUnauthorized())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(43)
+    @DisplayName("PATCH /professional/me — 403 token CLIENT (sem ROLE_PROFESSIONAL)")
+    void updateMyProfile_clientToken_403() throws Exception {
+        Assumptions.assumeTrue(clientToken != null);
+        log.info("[PartnerFlow] updateMyProfile_clientToken_403");
+
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content("{\"name\":\"X\"}"))
+                .andExpect(status().isForbidden())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(44)
+    @DisplayName("PATCH /professional/me — 422 specialty acima de 100 chars")
+    void updateMyProfile_specialtyTooLong_422() throws Exception {
+        Assumptions.assumeTrue(profToken != null);
+        log.info("[PartnerFlow] updateMyProfile_specialtyTooLong_422");
+
+        String longSpecialty = "a".repeat(101);
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken)
+                        .content("{\"specialty\":\"" + longSpecialty + "\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andDo(print());
     }
 
     @AfterAll

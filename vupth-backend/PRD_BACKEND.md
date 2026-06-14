@@ -84,7 +84,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
 | **OWNER** | `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
 
@@ -839,6 +839,34 @@ Retorna os dados do profissional autenticado.
 **Erros:** 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
 
 **Testes:** Postman
+
+---
+
+### PATCH /professional/me
+Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
+
+**Acesso:** PROFESSIONAL
+
+**Request (envie apenas o que deseja alterar):**
+```json
+{
+  "name": "Joao Editado",
+  "specialty": "Barbeiro Senior"
+}
+```
+
+| Campo | Tipo | Obrigatorio | Notas |
+|-------|------|-------------|-------|
+| name | String | Nao | Max 100 chars. Atualiza o `firstName` do usuario. null/em branco e ignorado |
+| specialty | String | Nao | Max 100 chars. String em branco limpa a especialidade (vira null) |
+
+**Response (200):** mesmo formato do `GET /professional/me` (com `message: null`).
+
+**Erros:**
+- 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
+- 422 `VALIDATION_ERROR` — name/specialty acima de 100 chars
+
+**Testes:** Integracao
 
 ---
 
@@ -1868,6 +1896,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | PATCH /establishment/{id}/owner | ✅ |
 | POST /establishment/{id}/service-items | 🟡 Integracao |
 | POST /professional/register | ✅ |
+| PATCH /professional/me | ✅ |
 | POST /professional/quick-create | ✅ |
 | POST /professional/affiliate | ✅ |
 | DELETE /professional/me/establishment | ✅ |
