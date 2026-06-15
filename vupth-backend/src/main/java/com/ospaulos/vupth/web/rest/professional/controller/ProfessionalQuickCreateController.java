@@ -11,20 +11,24 @@ import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.UpdateMyProfileUseCase;
+import com.ospaulos.vupth.api.report.dto.response.ProfessionalReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.report.service.ReportService;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -70,6 +74,7 @@ public class ProfessionalQuickCreateController {
     private final UpdateMyProfileUseCase          updateMyProfileUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
+    private final ReportService                  reportService;
 
     /**
      * GET /professional?name=&specialty=
@@ -140,6 +145,30 @@ public class ProfessionalQuickCreateController {
 
         ProfessionalQuickCreateResponse response =
                 updateMyProfileUseCase.execute(principal.getUserId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /professional/me/reports?dateFrom=&dateTo=
+     *
+     * Relatorio agregado do proprio profissional: totais do periodo (atendimentos
+     * FINALIZADOS) — para as telas de relatorio dia/semana/mes do app parceiro.
+     * Periodo opcional (dateFrom/dateTo em ISO yyyy-MM-dd, ambos inclusivos);
+     * sem periodo = desde sempre.
+     *
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @GetMapping("/me/reports")
+    public ResponseEntity<ProfessionalReportResponse> getMyReports(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+
+        log.info("GET /professional/me/reports — user={} dateFrom={} dateTo={}",
+                principal.getUserId(), dateFrom, dateTo);
+
+        ProfessionalReportResponse response =
+                reportService.getProfessionalReport(principal.getUserId(), dateFrom, dateTo);
         return ResponseEntity.ok(response);
     }
 

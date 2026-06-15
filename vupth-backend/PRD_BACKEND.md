@@ -84,8 +84,8 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
-| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
 
 ---
@@ -833,6 +833,42 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
 
 ---
 
+### GET /establishment/{id}/reports?dateFrom=&dateTo=
+Relatorio **agregado** do establishment (atendimentos `FINISHED` no periodo) +
+breakdown de receita por profissional (para calculo de comissoes). Nenhuma lista de
+atendimentos volta — o backend ja entrega os totais, evitando agregacao client-side.
+
+**Acesso:** OWNER (somente o dono do establishment; outro owner recebe 403).
+
+**Query params (opcionais):** `dateFrom` e `dateTo` em ISO `yyyy-MM-dd`, ambos
+**inclusivos** (`dateTo` cobre o dia inteiro). Sem periodo = desde sempre.
+Convencao consistente com `GET /attendances`.
+
+**Response (200):**
+```json
+{
+  "totalAttendances": 12,
+  "totalRevenue": 540.00,
+  "avgDurationMinutes": 27.5,
+  "topService": "CORTE_MAQUINA",
+  "topProfessional": "Joao",
+  "professionals": [
+    { "id": "uuid", "name": "Joao", "revenue": 320.00, "attendances": 7 },
+    { "id": "uuid", "name": "Maria", "revenue": 220.00, "attendances": 5 }
+  ]
+}
+```
+
+> Agregados sobre `total_value` (receita), `duration_minutes` (media) e
+> `serviceItemType` (`topService` = mais frequente). `topProfessional` = profissional
+> com mais atendimentos. `professionals` ordenado por receita desc. Periodo sem
+> atendimentos retorna `totalAttendances: 0`, `topService`/`topProfessional` nulos e
+> `professionals` vazio.
+
+**Testes:** Integracao (`ReportIntegrationTest`)
+
+---
+
 ## 9. Endpoints — Professional
 
 ### GET /professional?name=&specialty=
@@ -913,6 +949,35 @@ Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
 - 422 `VALIDATION_ERROR` — name/specialty acima de 100 chars
 
 **Testes:** Integracao
+
+---
+
+### GET /professional/me/reports?dateFrom=&dateTo=
+Relatorio **agregado** do proprio profissional autenticado (atendimentos `FINISHED`
+no periodo) — para as telas de relatorio dia/semana/mes do app parceiro.
+
+**Acesso:** PROFESSIONAL (escopo `/me` — so os proprios atendimentos).
+
+**Query params (opcionais):** `dateFrom` e `dateTo` em ISO `yyyy-MM-dd`, ambos
+**inclusivos**. Sem periodo = desde sempre.
+
+**Response (200):**
+```json
+{
+  "totalAttendances": 7,
+  "totalRevenue": 320.00,
+  "avgDurationMinutes": 28.0,
+  "topService": "CORTE_MAQUINA"
+}
+```
+
+> Mesmos agregados do relatorio do establishment, restritos ao profissional logado.
+> Periodo sem atendimentos retorna `totalAttendances: 0` e `topService` nulo.
+
+**Erros:**
+- 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
+
+**Testes:** Integracao (`ReportIntegrationTest`)
 
 ---
 

@@ -15,8 +15,10 @@ import com.ospaulos.vupth.api.establishment.usecase.RemoveProfessionalFromEstabl
 import com.ospaulos.vupth.api.establishment.usecase.TransferEstablishmentOwnershipUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralInfosUseCase;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
+import com.ospaulos.vupth.api.report.dto.response.EstablishmentReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
+import com.ospaulos.vupth.domain.report.service.ReportService;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
@@ -27,11 +29,13 @@ import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -68,6 +72,7 @@ public class EstablishmentController {
     private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
     private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
+    private final ReportService                          reportService;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -236,6 +241,31 @@ public class EstablishmentController {
 
         removeProfessionalUseCase.execute(user.getUserId(), establishmentId, professionalId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * GET /establishment/{id}/reports?dateFrom=&dateTo=
+     *
+     * Relatorio agregado do establishment (#4 + #5): totais do periodo
+     * (atendimentos FINALIZADOS) + breakdown de receita por profissional.
+     * Periodo opcional (dateFrom/dateTo em ISO yyyy-MM-dd, ambos inclusivos);
+     * sem periodo = desde sempre. Apenas o owner.
+     *
+     * Requer: ROLE_OWNER.
+     */
+    @GetMapping("/{id}/reports")
+    public ResponseEntity<EstablishmentReportResponse> getReports(
+            @PathVariable UUID id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] getReports — id={} owner={} dateFrom={} dateTo={}",
+                id, user.getUserId(), dateFrom, dateTo);
+
+        EstablishmentReportResponse response =
+                reportService.getEstablishmentReport(user.getUserId(), id, dateFrom, dateTo);
+        return ResponseEntity.ok(response);
     }
 
     @PatchMapping("/{id}/owner")
