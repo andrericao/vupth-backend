@@ -84,8 +84,8 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
-| **OWNER** | `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
 
 ---
@@ -560,8 +560,17 @@ Lista establishments ativos com filtros opcionais.
 **Query params opcionais:**
 | Param | Tipo | Descricao |
 |-------|------|-----------|
-| name | String | Busca parcial, case-insensitive |
+| name | String | Busca parcial por nome, case-insensitive |
+| neighborhood | String | Busca parcial por bairro do endereco, case-insensitive (`LIKE`). So retorna establishments que tem endereco no bairro |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
+
+> **Combinacao e precedencia:**
+> - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
+> - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais).
+> - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
+> - Sem filtro, lista todos os ativos. Ordenacao sempre por `createdAt DESC`.
+>
+> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog (secao de pendencias). No MVP nao ha ordenacao por distancia.
 
 **Response (200):**
 ```json
@@ -573,6 +582,8 @@ Lista establishments ativos com filtros opcionais.
     "serviceType": "BARBER",
     "urlImage": "https://...",
     "ownerId": "uuid",
+    "phone": "11999990000 | null",
+    "instagram": "@barbearia | null",
     "open_status": "OPEN",
     "status": "ACTIVE"
   }
@@ -655,6 +666,10 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
 > **service_items** retorna os servicos oferecidos por cada profissional (id, tipo, nome, preco, duracao estimada).
 > O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
 
+> **Filtro #31 (2a metade):** profissional **sem nenhum servico** nao e exibido neste snapshot,
+> mesmo com a loja aberta. Apenas profissionais com `service_items` nao vazio entram em `professionals`.
+> O cliente nunca ve um profissional que ainda nao pode atender.
+
 **Testes:** Integracao
 
 ---
@@ -670,9 +685,20 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "name": "Barbearia Premium",
   "url_image": "https://nova-imagem.jpg",
   "service_type": "BARBER",
-  "services": ["BARBER", "BEAUTY_SALON"]
+  "services": ["BARBER", "BEAUTY_SALON"],
+  "phone": "11999990000",
+  "instagram": "@barbearia"
 }
 ```
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| name | String | null/em branco ignorado |
+| url_image | String | null/em branco ignorado |
+| service_type | Enum | — |
+| services | Set<Enum> | substitui o conjunto atual |
+| phone | String | opcional (max 20). String em branco **limpa** o campo (vira null) |
+| instagram | String | opcional (max 100). String em branco **limpa** o campo (vira null) |
 
 **Response (200):**
 ```json
@@ -682,12 +708,16 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "url_image": "https://nova-imagem.jpg",
   "service_type": "BARBER",
   "services": ["BARBER", "BEAUTY_SALON"],
+  "phone": "11999990000",
+  "instagram": "@barbearia",
   "open_status": "OPEN",
   "status": "ACTIVE",
   "owner_id": "uuid",
   "modified_fields": ["name", "url_image"]
 }
 ```
+
+> `phone` e `instagram` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
 
 **Testes:** Integracao
 
@@ -748,6 +778,8 @@ Owner remove um profissional do establishment.
 
 **Response:** 204 No Content
 
+**Bloqueio:** retorna 409 `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` se o profissional tiver atendimentos ativos (`SCHEDULED`, `IN_PROGRESS` ou `PAUSED`). O owner deve concluir/cancelar a fila antes de desvincular.
+
 **Testes:** Unitario + Integracao
 
 ---
@@ -782,28 +814,50 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
   "serviceItemType": "CORTE_MAQUINA",
   "customName": "Corte degradê",
   "price": 50.00,
-  "estimatedMinutes": 30
+  "estimatedMinutes": 30,
+  "client_price": 52.90,
+  "uses_platform_pricing": true
 }
 ```
 
-**Response (201):**
-```json
-{
-  "establishmentId": "uuid",
-  "establishmentName": "Barbearia do Ze",
-  "id": "uuid",
-  "serviceItemType": "CORTE_MAQUINA",
-  "customName": "Corte degradê",
-  "price": 50.00,
-  "weeklyAverageDurationInMinutes": null
-}
-```
+> **client_price** (total pago pelo cliente, ja com Taxas Vupth) e **uses_platform_pricing** sao **calculados no front** e apenas persistidos pelo backend (fonte da verdade para o app cliente). O backend nao recalcula a formula no MVP — ver backlog. Ambos opcionais.
+
+**Response (201):** `ServiceItemResponse` (inclui `client_price` e `uses_platform_pricing`).
 
 **Testes:** Integracao
 
 ---
 
 ## 9. Endpoints — Professional
+
+### GET /professional?name=&specialty=
+Busca profissionais por nome e/ou especialidade (filtros opcionais, parciais, case-insensitive). O owner usa para localizar profissionais e enviar convite de afiliacao via `POST /establishment/{id}/affiliations`.
+
+**Acesso:** OWNER
+
+**Query params opcionais:**
+| Param | Tipo | Notas |
+|-------|------|-------|
+| name | String | LIKE parcial no nome (firstName), case-insensitive |
+| specialty | String | LIKE parcial na especialidade, case-insensitive |
+
+Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Maria",
+    "specialty": "Colorista",
+    "is_available": true
+  }
+]
+```
+
+**Testes:** Integracao
+
+---
 
 ### GET /professional/me
 Retorna os dados do profissional autenticado.
@@ -826,6 +880,34 @@ Retorna os dados do profissional autenticado.
 **Erros:** 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
 
 **Testes:** Postman
+
+---
+
+### PATCH /professional/me
+Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
+
+**Acesso:** PROFESSIONAL
+
+**Request (envie apenas o que deseja alterar):**
+```json
+{
+  "name": "Joao Editado",
+  "specialty": "Barbeiro Senior"
+}
+```
+
+| Campo | Tipo | Obrigatorio | Notas |
+|-------|------|-------------|-------|
+| name | String | Nao | Max 100 chars. Atualiza o `firstName` do usuario. null/em branco e ignorado |
+| specialty | String | Nao | Max 100 chars. String em branco limpa a especialidade (vira null) |
+
+**Response (200):** mesmo formato do `GET /professional/me` (com `message: null`).
+
+**Erros:**
+- 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
+- 422 `VALIDATION_ERROR` — name/specialty acima de 100 chars
+
+**Testes:** Integracao
 
 ---
 
@@ -915,7 +997,7 @@ Profissional sai do establishment atual.
 
 **Acesso:** PROFESSIONAL
 
-**Bloqueio:** Retorna 409 `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` se houver atendimentos ativos (SCHEDULED ou IN_PROGRESS).
+**Bloqueio:** Retorna 409 `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` se houver atendimentos ativos (SCHEDULED, IN_PROGRESS ou PAUSED).
 
 **Response:** 204 No Content
 
@@ -965,7 +1047,11 @@ Profissional solicita afiliacao a um establishment.
 }
 ```
 
-**Testes:** Unitario
+**Erros:**
+- 409 `PROFESSIONAL_ALREADY_AFFILIATED` — profissional ja vinculado a um establishment
+- 409 `AFFILIATION_ALREADY_PENDING` — **pendencia unica global**: o profissional ja tem uma solicitacao (REQUEST) PENDING para qualquer establishment; precisa resolver ou cancelar antes de solicitar outro
+
+**Testes:** Unitario + Integracao
 
 ---
 
@@ -1441,6 +1527,54 @@ Service items sao criados via dois caminhos:
 - `POST /establishment/{id}/service-items` (OWNER)
 - `POST /professional-queue/{professionalId}/add-service-items` (PROFESSIONAL)
 
+E gerenciados pelo proprio profissional:
+- `PATCH /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — edita nome, preco e/ou duracao
+- `DELETE /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — remove
+
+### PATCH /professional-queue/{professionalId}/service-items/{itemId}
+Edicao parcial de um servico do profissional. So o proprio profissional (JWT) pode editar seus servicos.
+
+**Acesso:** PROFESSIONAL
+
+**Request (campos opcionais):**
+```json
+{
+  "customName": "Corte Degradê Premium",
+  "price": 45.00,
+  "estimatedMinutes": 40
+}
+```
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| customName | String | null/em branco ignorado |
+| price | BigDecimal | quando enviado, deve ser > 0 |
+| estimatedMinutes | Integer | quando enviado, deve ser > 0 |
+| client_price | BigDecimal | quando enviado, deve ser > 0 |
+| uses_platform_pricing | Boolean | opcional |
+
+**Response (200):** `ServiceItemResponse`
+
+**Erros:**
+- 404 `SERVICE_ITEM_NOT_FOUND` — item nao existe
+- 403 `ESTABLISHMENT_ACCESS_DENIED` — item nao pertence ao profissional autenticado
+- 422 `VALIDATION_ERROR` — price/estimatedMinutes <= 0
+
+---
+
+### DELETE /professional-queue/{professionalId}/service-items/{itemId}
+Remove um servico do profissional. So o proprio profissional (JWT) pode remover.
+
+**Acesso:** PROFESSIONAL
+
+**Response (204):** sem corpo.
+
+**Erros:** 404 `SERVICE_ITEM_NOT_FOUND`, 403 `ESTABLISHMENT_ACCESS_DENIED`.
+
+> A remocao e fisica; o vinculo com atendimentos passados (`attendance_service_item`) e removido em cascata (FK ON DELETE CASCADE).
+
+---
+
 ### ServiceItemResponse
 
 ```json
@@ -1451,9 +1585,13 @@ Service items sao criados via dois caminhos:
   "serviceItemType": "CORTE_MAQUINA",
   "customName": "Corte degradê",
   "price": 50.00,
+  "client_price": 52.90,
+  "uses_platform_pricing": true,
   "weeklyAverageDurationInMinutes": null
 }
 ```
+
+> `price` = valor base digitado pelo profissional. `client_price` = total pago pelo cliente (preco + Taxas Vupth), calculado no front. `uses_platform_pricing` = se aplica a absorcao das Taxas Vupth. Os dois ultimos sao opcionais (podem vir `null` em itens antigos).
 
 **Testes:** Unitario + Integracao
 
@@ -1656,6 +1794,56 @@ Lista intervalos ativos para uma data (default: hoje).
 
 ---
 
+## 18b. Tempo Real (WebSocket / STOMP)
+
+Canal de tempo real para a **fila ao vivo** e **notificacoes pessoais**. Protocolo STOMP sobre WebSocket.
+
+**Handshake:** `GET /ws` (publico) — suporta cliente nativo (apps mobile) e SockJS (browser).
+
+**Autenticacao:** opcional, no frame **CONNECT** via header `Authorization: Bearer <jwt>`.
+- Com token valido → sessao autenticada; o `Principal` da sessao = `userId` (subject do JWT). Necessario para receber notificacoes pessoais.
+- Sem token / invalido → sessao anonima; recebe apenas topicos publicos.
+
+A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` RSA), nao no HTTP. O endpoint `/ws/**` e `permitAll` na cadeia HTTP.
+
+### Destinos (subscriptions)
+
+| Destino | Acesso | Conteudo |
+|---------|--------|----------|
+| `/topic/establishment/{id}/queue` | Publico | Snapshot completo da fila (mesmo payload de `GET /establishment/id/{id}/professionals-with-queue`), reenviado a cada mudanca |
+| `/user/queue/notifications` | Autenticado | Notificacao pessoal direcionada ao `userId` da sessao |
+
+### Quando o backend publica
+
+| Acao (REST) | Broadcast `/topic/.../queue` | Notificacao pessoal `/user/queue/notifications` |
+|-------------|:---:|---|
+| `POST /attendances` (entrar na fila) | ✅ | — |
+| `PUT /attendances/{id}/cancel` | ✅ | — |
+| `DELETE /attendances/{id}/leave-queue` | ✅ | — |
+| `PATCH /attendances/{id}/start` | ✅ | ✅ `ATTENDANCE_STARTED` ("É a sua vez!") |
+| `PATCH /attendances/{id}/finish` | ✅ | ✅ `ATTENDANCE_FINISHED` |
+| `PATCH /attendances/{id}/pause` | ✅ | — |
+| `PATCH /attendances/{id}/resume` | ✅ | — |
+
+O broadcast e disparado pela camada web **apos a transacao commitada**, entao o snapshot reflete o estado persistido. Envio e best-effort: falha de WS e logada e nunca quebra a resposta HTTP.
+
+**Payload de notificacao pessoal (`QueueNotification`):**
+```json
+{
+  "type": "ATTENDANCE_STARTED",
+  "attendanceId": "uuid",
+  "establishmentId": "uuid",
+  "message": "É a sua vez! Seu atendimento começou.",
+  "timestamp": "2026-06-14T14:00:00Z"
+}
+```
+
+> **MVP / escala:** broker simples em memoria (1 instancia). Para multi-instancia (staging/prod escalado) trocar por broker externo (RabbitMQ/Redis STOMP) — ver backlog. O broadcast e sincrono no fluxo HTTP; tornar assincrono e otimizacao futura.
+
+**Testes:** Integracao (`WebSocketIntegrationTest`) — broadcast a subscriber anonimo + notificacao pessoal a subscriber autenticado.
+
+---
+
 ## 19. Fluxos de Usuario
 
 ### Fluxo 1: Owner cria estabelecimento e trabalha nele (Solo Shop)
@@ -1804,7 +1992,9 @@ Lista intervalos ativos para uma data (default: hoje).
 | DELETE /establishment/{id}/professionals/{pid} | ✅ |
 | PATCH /establishment/{id}/owner | ✅ |
 | POST /establishment/{id}/service-items | 🟡 Integracao |
+| GET /professional (busca) | ✅ |
 | POST /professional/register | ✅ |
+| PATCH /professional/me | ✅ |
 | POST /professional/quick-create | ✅ |
 | POST /professional/affiliate | ✅ |
 | DELETE /professional/me/establishment | ✅ |
@@ -1830,6 +2020,8 @@ Lista intervalos ativos para uma data (default: hoje).
 | POST /professional-queue/add-quest-attendance | 🟡 Integracao |
 | DELETE /professional-queue/{id}/remove | 🟡 Integracao |
 | POST /professional-queue/{id}/add-service-items | 🟡 Integracao |
+| PATCH /professional-queue/{profId}/service-items/{itemId} | ✅ |
+| DELETE /professional-queue/{profId}/service-items/{itemId} | ✅ |
 | GET /client-queue/{profId}/queue | 🟡 Integracao |
 | GET /client-queue/{id}/wait-time | 🟡 Integracao |
 | GET /clients/{id} | 🟡 Integracao |
@@ -1957,10 +2149,14 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 
 | # | Item | Descricao | Ambientes |
 |---|------|-----------|-----------|
-| 29 | Cancelar solicitacao de afiliacao + pendencia unica global | `PATCH /affiliations/{id}/cancel` (status `CANCELLED` ja existe). Alem disso, validar **pendencia unica global**: profissional com afiliacao `PENDING` nao pode solicitar a nenhum outro establishment. Hoje o `409` so cobre o mesmo establishment | **Backend** (endpoint cancel + validacao global de PENDING) / **Front-Partner** (botao cancelar solicitacao) |
-| 30 | Owner desvincular profissional | `DELETE /establishment/{id}/professionals/{profId}`. Bloquear se houver atendimento em andamento (IN_PROGRESS/PAUSED); cancelar ou realocar a fila do profissional removido | **Backend** (endpoint + validacao de atendimento ativo + tratamento da fila) / **Front-Partner** (botao desvincular) |
-| 31 | Status ATIVA do establishment condicionado a servico | **[Backend parcial]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ⏳ Pendente: profissional **sem servico nao deve aparecer para clientes** (filtro no listing). | **Backend** (✅ validacao no open-status / ⏳ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
-| 32 | Buscar profissionais (owner convidar) | `GET /professional?name=X&specialty=Y` para o owner localizar profissionais e enviar convite de afiliacao | **Backend** (endpoint de busca com filtros) / **Front-Partner** (busca + convite) |
+| 29 | Cancelar solicitacao de afiliacao + pendencia unica global | **[Backend concluido]** ✅ `DELETE /affiliations/{id}` (cancel, status `CANCELLED`) ja existia. ✅ Pendencia unica global: profissional com solicitacao (REQUEST) `PENDING` recebe `409 AFFILIATION_ALREADY_PENDING` ao solicitar qualquer outro establishment. | **Backend** ✅ / **Front-Partner** (botao cancelar solicitacao) |
+| 30 | Owner desvincular profissional | **[Backend concluido]** ✅ `DELETE /establishment/{id}/professionals/{profId}` + bloqueio `409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` com atendimento ativo (`SCHEDULED`/`IN_PROGRESS`/`PAUSED`). ⏳ Realocacao automatica da fila do profissional removido fica como evolucao (hoje exige concluir/cancelar antes). | **Backend** (✅ endpoint + validacao / ⏳ realocacao da fila) / **Front-Partner** (botao desvincular) |
+| 31 | Status ATIVA do establishment condicionado a servico | **[Backend concluido]** ✅ Gate no open-status: so abre (`OPEN`) com >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`. ✅ Filtro no listing: profissional **sem servico nao aparece** em `GET /establishment/id/{id}/professionals-with-queue`, mesmo com a loja aberta. | **Backend** (✅ validacao no open-status / ✅ filtro de profissionais sem servico no listing) / **Front-Partner** (tratar 422) / **Front-Client** (nao exibir prof sem servico) |
+| 32 | Buscar profissionais (owner convidar) | **[Backend concluido]** ✅ `GET /professional?name=&specialty=` (OWNER, filtros parciais case-insensitive, response `{id,name,specialty,is_available}`). Falta o Front-Partner (busca + convite). | **Backend** ✅ / **Front-Partner** (busca + convite) |
+| 33 | Busca por proximidade (GPS) | `GET /establishment?lat=&lng=&radiusKm=` ordenando por distancia e retornando `distance_km`. **MVP nao tem.** Pre-requisito: **geocodificar endereco no cadastro** (preencher `lat/lng`, hoje opcionais). Caminho recomendado: **Haversine nativo** (sem dependencia nova) agora; **PostGIS** (coluna `geography` + indice GiST + `ST_DWithin`) quando escalar. Busca por bairro (`?neighborhood=`) ja existe e cobre o MVP. | **Backend** (geocoding no cadastro + query Haversine) / **Front-Client** (pedir permissao de localizacao, ordenar por distancia) |
+| 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
+| 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
+| 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 

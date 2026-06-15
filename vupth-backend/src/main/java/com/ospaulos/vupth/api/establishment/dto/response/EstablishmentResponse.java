@@ -16,6 +16,9 @@ public record EstablishmentResponse(
         String urlImage,
         @NotNull UUID ownerId,
 
+        String phone,
+        String instagram,
+
         @JsonProperty("open_status")
         String openStatus,
 
@@ -30,6 +33,8 @@ public record EstablishmentResponse(
                 establishment.getServiceType(),
                 establishment.getUrlImage(),
                 establishment.getOwner().getId(),
+                establishment.getPhone(),
+                establishment.getInstagram(),
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
                 establishment.getStatus() != null ? establishment.getStatus().name() : null
         );

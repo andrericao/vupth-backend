@@ -44,9 +44,11 @@ public class RequestAffiliationUseCase {
         Establishment establishment = establishmentRepository.findByIdEager(establishmentId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
 
-        if (affiliationRepository.existsByProfessional_IdAndEstablishment_IdAndStatus(
-                professionalId, establishmentId, AffiliationStatus.PENDING)) {
-            throw new AffiliationAlreadyPendingException(professionalId, establishmentId);
+        // Pendencia unica global: profissional com qualquer solicitacao (REQUEST) PENDING
+        // nao pode solicitar a nenhum establishment ate resolver/cancelar a atual.
+        if (affiliationRepository.existsByProfessional_IdAndTypeAndStatus(
+                professionalId, AffiliationType.REQUEST, AffiliationStatus.PENDING)) {
+            throw new AffiliationAlreadyPendingException(professionalId);
         }
 
         AffiliationRequest request = new AffiliationRequest(professional, establishment, AffiliationType.REQUEST);

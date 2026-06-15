@@ -315,7 +315,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("success: finds professional by professionalId (not by establishmentId from the request)")
         void createServiceItem_success_usesProfessionalId() {
             ServiceItemRequest request = new ServiceItemRequest(
-                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), 30);
+                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), 30, null, null);
 
             // professional has 0 service items, no duplicate
             establishment.setProfessionals(new ArrayList<>(List.of(professional)));
@@ -324,7 +324,7 @@ class ProfessionalServiceImplTest {
 
             // ServiceItemResponse(establishmentId, establishmentName, id, type, customName, price, weeklyAvg)
             ServiceItemResponse fakeResponse = new ServiceItemResponse(
-                    establishmentId, establishment.getName(), null, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), null);
+                    establishmentId, establishment.getName(), null, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), null, null, null);
             when(serviceItemService.createServiceItem(professional, request)).thenReturn(fakeResponse);
 
             ServiceItemResponse result = professionalService.createServiceItem(professionalId, request);
@@ -340,7 +340,7 @@ class ProfessionalServiceImplTest {
         @DisplayName("service item with same name already exists → throws ServiceItemAlreadyExistsException")
         void createServiceItem_duplicate_throws() {
             ServiceItemRequest request = new ServiceItemRequest(
-                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), 30);
+                    establishmentId, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), 30, null, null);
 
             ServiceItem existing = new ServiceItem();
             existing.setCustomName("Corte"); // mesmo nome

@@ -16,6 +16,10 @@ public interface AffiliationRequestRepository extends JpaRepository<AffiliationR
     boolean existsByProfessional_IdAndEstablishment_IdAndStatus(
             UUID professionalId, UUID establishmentId, AffiliationStatus status);
 
+    // Pendencia unica global: existe alguma solicitacao (REQUEST) PENDING deste profissional?
+    boolean existsByProfessional_IdAndTypeAndStatus(
+            UUID professionalId, AffiliationType type, AffiliationStatus status);
+
     @Query("""
         SELECT ar FROM AffiliationRequest ar
         JOIN FETCH ar.professional p

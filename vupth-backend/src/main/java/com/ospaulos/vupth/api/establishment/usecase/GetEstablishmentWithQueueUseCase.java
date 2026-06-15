@@ -46,8 +46,12 @@ public class GetEstablishmentWithQueueUseCase {
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Establishment not found: " + establishmentId));
 
+        // Item #31 (2a metade): profissional sem servico nao aparece para o cliente,
+        // mesmo com a loja aberta. So entra na fila quem tem >= 1 servico.
         List<Professional> professionals = professionalRepository
-                .findByEstablishmentIdWithServices(establishmentId);
+                .findByEstablishmentIdWithServices(establishmentId).stream()
+                .filter(prof -> prof.getServices() != null && !prof.getServices().isEmpty())
+                .toList();
 
         List<ProfessionalWithQueueResponse> professionalDtos = professionals.stream()
                 .map(prof -> buildProfessionalSnapshot(prof, establishmentId))

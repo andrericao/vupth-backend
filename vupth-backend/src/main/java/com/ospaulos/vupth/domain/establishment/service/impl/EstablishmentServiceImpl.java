@@ -89,6 +89,24 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     @Override
+    public List<EstablishmentResponse> searchByNeighborhood(String neighborhood) {
+        log.info("[Establishment] searchByNeighborhood — neighborhood={}", neighborhood);
+        return establishmentRepository.findActiveByNeighborhood(neighborhood).stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
+    public List<EstablishmentResponse> searchByServiceTypeAndNeighborhood(ServiceType serviceType, String neighborhood) {
+        log.info("[Establishment] searchByServiceTypeAndNeighborhood — type={} neighborhood={}",
+                serviceType, neighborhood);
+        return establishmentRepository
+                .findActiveByServiceTypeAndNeighborhood(serviceType, neighborhood).stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
     public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID ownerId, OpenStatus newStatus) {
         log.info("[Establishment] updateOpenStatus — id={} owner={} newStatus={}",
                 establishmentId, ownerId, newStatus);

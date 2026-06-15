@@ -52,6 +52,12 @@ public class Establishment implements Serializable {
     @Column(columnDefinition = "text")
     private String urlImage;
 
+    @Column(name = "phone", length = 20)
+    private String phone;
+
+    @Column(name = "instagram", length = 100)
+    private String instagram;
+
     @CreationTimestamp
     @JsonProperty("created_at")
     @Column(name = "created_at", nullable = false)

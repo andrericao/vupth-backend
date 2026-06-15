@@ -20,6 +20,10 @@ public record EstablishmentGeneralInfosResponse(
 
         Set<ServiceType> services,
 
+        String phone,
+
+        String instagram,
+
         @JsonProperty("open_status")
         String openStatus,
 
@@ -38,6 +42,8 @@ public record EstablishmentGeneralInfosResponse(
                 e.getUrlImage(),
                 e.getServiceType(),
                 e.getServices() != null ? Set.copyOf(e.getServices()) : Set.of(),
+                e.getPhone(),
+                e.getInstagram(),
                 e.getOpenStatus() != null ? e.getOpenStatus().name() : null,
                 e.getStatus() != null ? e.getStatus().name() : null,
                 e.getOwner().getId(),

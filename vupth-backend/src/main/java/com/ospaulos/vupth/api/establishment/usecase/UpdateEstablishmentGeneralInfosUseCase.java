@@ -65,6 +65,18 @@ public class UpdateEstablishmentGeneralInfosUseCase {
             modified.add("services");
         }
 
+        if (request.phone() != null) {
+            String trimmed = request.phone().trim();
+            establishment.setPhone(trimmed.isBlank() ? null : trimmed);
+            modified.add("phone");
+        }
+
+        if (request.instagram() != null) {
+            String trimmed = request.instagram().trim();
+            establishment.setInstagram(trimmed.isBlank() ? null : trimmed);
+            modified.add("instagram");
+        }
+
         return modified;
     }
 }

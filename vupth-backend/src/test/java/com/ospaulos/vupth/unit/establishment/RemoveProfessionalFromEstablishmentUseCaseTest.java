@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -139,6 +140,23 @@ class RemoveProfessionalFromEstablishmentUseCaseTest {
             when(professionalRepository.findById(PROF_ID)).thenReturn(Optional.of(professional));
             when(attendanceRepository.existsByProfessional_IdAndStatusIn(eq(PROF_ID), any()))
                     .thenReturn(true);
+
+            assertThatThrownBy(() -> useCase.execute(OWNER_ID, ESTAB_ID, PROF_ID))
+                    .isInstanceOf(ProfessionalHasActiveAttendancesException.class);
+
+            verify(professionalRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("#9: a checagem de atendimentos ativos inclui SCHEDULED, IN_PROGRESS e PAUSED")
+        void execute_activeStatusesIncludePaused() {
+            when(establishmentRepository.findByIdEager(ESTAB_ID)).thenReturn(Optional.of(establishment));
+            when(professionalRepository.findById(PROF_ID)).thenReturn(Optional.of(professional));
+            when(attendanceRepository.existsByProfessional_IdAndStatusIn(eq(PROF_ID), argThat(
+                    statuses -> statuses.containsAll(List.of(
+                            AttendanceStatus.SCHEDULED,
+                            AttendanceStatus.IN_PROGRESS,
+                            AttendanceStatus.PAUSED))))).thenReturn(true);
 
             assertThatThrownBy(() -> useCase.execute(OWNER_ID, ESTAB_ID, PROF_ID))
                     .isInstanceOf(ProfessionalHasActiveAttendancesException.class);

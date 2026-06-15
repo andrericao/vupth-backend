@@ -1,9 +1,12 @@
 package com.ospaulos.vupth.domain.serviceItem.service.impl;
 
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
+import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -12,6 +15,7 @@ import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ServiceItemServiceImpl implements ServiceItemService {
@@ -37,12 +42,68 @@ public class ServiceItemServiceImpl implements ServiceItemService {
         serviceItem.setServiceItemType(request.serviceItemType());
         serviceItem.setCustomName(request.customName());
         serviceItem.setPrice(request.price());
+        serviceItem.setClientPrice(request.clientPrice());
+        serviceItem.setUsesPlatformPricing(request.usesPlatformPricing());
         serviceItem.setEstimatedMinutes(request.estimatedMinutes());
         serviceItem.setProfessional(professional);
 
         ServiceItem saved = serviceItemRepository.save(serviceItem);
 
         return ServiceItemResponse.fromEntity(saved);
+    }
+
+    @Override
+    @Transactional
+    public ServiceItemResponse updateServiceItem(UUID requesterId, UUID professionalId, UUID itemId,
+                                                 UpdateServiceItemRequest request) {
+        log.info("[ServiceItem] update — requester={} professional={} item={}", requesterId, professionalId, itemId);
+
+        ServiceItem item = loadOwnedItem(requesterId, professionalId, itemId);
+
+        if (request.customName() != null && !request.customName().isBlank()) {
+            item.setCustomName(request.customName().trim());
+        }
+        if (request.price() != null) {
+            item.setPrice(request.price());
+        }
+        if (request.estimatedMinutes() != null) {
+            item.setEstimatedMinutes(request.estimatedMinutes());
+        }
+        if (request.clientPrice() != null) {
+            item.setClientPrice(request.clientPrice());
+        }
+        if (request.usesPlatformPricing() != null) {
+            item.setUsesPlatformPricing(request.usesPlatformPricing());
+        }
+
+        return ServiceItemResponse.fromEntity(serviceItemRepository.save(item));
+    }
+
+    @Override
+    @Transactional
+    public void deleteServiceItem(UUID requesterId, UUID professionalId, UUID itemId) {
+        log.info("[ServiceItem] delete — requester={} professional={} item={}", requesterId, professionalId, itemId);
+
+        ServiceItem item = loadOwnedItem(requesterId, professionalId, itemId);
+        serviceItemRepository.delete(item);
+    }
+
+    /**
+     * Carrega o ServiceItem garantindo que pertence ao profissional autenticado.
+     * O requester (JWT) tem de ser o proprio profissional dono do item.
+     */
+    private ServiceItem loadOwnedItem(UUID requesterId, UUID professionalId, UUID itemId) {
+        if (!requesterId.equals(professionalId)) {
+            throw new EstablishmentAccessDeniedException(
+                    "Professional " + requesterId + " cannot manage service items of " + professionalId);
+        }
+        ServiceItem item = serviceItemRepository.findById(itemId)
+                .orElseThrow(() -> new ServiceItemNotFoundException(itemId));
+        if (item.getProfessional() == null || !item.getProfessional().getId().equals(requesterId)) {
+            throw new EstablishmentAccessDeniedException(
+                    "Service item " + itemId + " does not belong to professional " + requesterId);
+        }
+        return item;
     }
 
     public double avarageCalculateLastWeek(UUID serviceItemId) {

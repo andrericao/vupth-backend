@@ -69,8 +69,8 @@ class RequestAffiliationUseCaseTest {
         void execute_success() {
             when(professionalRepository.findByIdWithBaseUser(PROF_ID)).thenReturn(Optional.of(professional));
             when(establishmentRepository.findByIdEager(ESTAB_ID)).thenReturn(Optional.of(establishment));
-            when(affiliationRepository.existsByProfessional_IdAndEstablishment_IdAndStatus(
-                    PROF_ID, ESTAB_ID, AffiliationStatus.PENDING)).thenReturn(false);
+            when(affiliationRepository.existsByProfessional_IdAndTypeAndStatus(
+                    PROF_ID, AffiliationType.REQUEST, AffiliationStatus.PENDING)).thenReturn(false);
             when(affiliationRepository.save(any())).thenAnswer(inv -> {
                 AffiliationRequest ar = inv.getArgument(0);
                 ar.setId(UUID.randomUUID());
@@ -124,12 +124,12 @@ class RequestAffiliationUseCaseTest {
         }
 
         @Test
-        @DisplayName("already pending → AffiliationAlreadyPendingException")
+        @DisplayName("already pending (global) → AffiliationAlreadyPendingException")
         void execute_alreadyPending() {
             when(professionalRepository.findByIdWithBaseUser(PROF_ID)).thenReturn(Optional.of(professional));
             when(establishmentRepository.findByIdEager(ESTAB_ID)).thenReturn(Optional.of(establishment));
-            when(affiliationRepository.existsByProfessional_IdAndEstablishment_IdAndStatus(
-                    PROF_ID, ESTAB_ID, AffiliationStatus.PENDING)).thenReturn(true);
+            when(affiliationRepository.existsByProfessional_IdAndTypeAndStatus(
+                    PROF_ID, AffiliationType.REQUEST, AffiliationStatus.PENDING)).thenReturn(true);
 
             assertThatThrownBy(() -> useCase.execute(PROF_ID, ESTAB_ID))
                     .isInstanceOf(AffiliationAlreadyPendingException.class);

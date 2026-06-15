@@ -57,12 +57,17 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
 
+                        // WebSocket handshake — autenticacao da sessao STOMP e feita
+                        // no StompAuthChannelInterceptor (frame CONNECT), nao no HTTP.
+                        .requestMatchers("/ws/**").permitAll()
+
                         // ── Public ───────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
@@ -98,9 +103,11 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional-queue/**").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional-queue/**").hasRole("PROFESSIONAL")
 
                         // Profissional se afilia/desafilia de um establishment
+                        .requestMatchers(HttpMethod.PATCH, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/professional/affiliate").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/establishment").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/professional/me/affiliations").hasRole("PROFESSIONAL")

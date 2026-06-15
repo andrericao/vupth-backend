@@ -36,7 +36,7 @@ public class LeaveEstablishmentUseCase {
 
         boolean hasActive = attendanceRepository.existsByProfessional_IdAndStatusIn(
                 professionalId,
-                List.of(AttendanceStatus.SCHEDULED, AttendanceStatus.IN_PROGRESS));
+                List.of(AttendanceStatus.SCHEDULED, AttendanceStatus.IN_PROGRESS, AttendanceStatus.PAUSED));
 
         if (hasActive) {
             throw new ProfessionalHasActiveAttendancesException(professionalId);

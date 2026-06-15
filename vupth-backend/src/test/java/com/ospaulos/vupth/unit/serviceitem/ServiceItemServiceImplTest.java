@@ -105,7 +105,7 @@ class ServiceItemServiceImplTest {
                     ServiceItemType.CORTE_MAQUINA,
                     "Fade Haircut",
                     BigDecimal.valueOf(35),
-                    30);
+                    30, null, null);
 
             ServiceItem savedItem = new ServiceItem();
             savedItem.setCustomName("Fade Haircut");
@@ -136,7 +136,7 @@ class ServiceItemServiceImplTest {
         void create_linkedToProfessional() {
             // CORTE_MAQUINA used as stand-in — see @compat above
             ServiceItemRequest request = new ServiceItemRequest(
-                    establishment.getId(), ServiceItemType.CORTE_MAQUINA, "Beard Trim", BigDecimal.valueOf(20), 30);
+                    establishment.getId(), ServiceItemType.CORTE_MAQUINA, "Beard Trim", BigDecimal.valueOf(20), 30, null, null);
 
             when(serviceItemRepository.save(any())).thenAnswer(inv -> {
                 ServiceItem si = inv.getArgument(0);

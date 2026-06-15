@@ -30,6 +30,14 @@ public class ServiceItem {
     @Column(name = "price", nullable = false)
     private BigDecimal price;
 
+    // Total pago pelo cliente (preco + taxas, calculado no front). Fonte da verdade p/ o app cliente.
+    @Column(name = "client_price")
+    private BigDecimal clientPrice;
+
+    // Se o servico usa a precificacao da plataforma (absorcao das Taxas Vupth).
+    @Column(name = "uses_platform_pricing")
+    private Boolean usesPlatformPricing;
+
     @Column(nullable = false)
     private Integer estimatedMinutes;
 

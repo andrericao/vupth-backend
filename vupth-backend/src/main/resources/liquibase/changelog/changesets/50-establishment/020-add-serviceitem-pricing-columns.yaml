@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 020-add-client-price-to-service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: service_item
+                columnName: client_price
+      changes:
+        - addColumn:
+            tableName: service_item
+            columns:
+              - column:
+                  name: client_price
+                  type: DECIMAL(10,2)
+
+  - changeSet:
+      id: 020-add-uses-platform-pricing-to-service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: service_item
+                columnName: uses_platform_pricing
+      changes:
+        - addColumn:
+            tableName: service_item
+            columns:
+              - column:
+                  name: uses_platform_pricing
+                  type: BOOLEAN

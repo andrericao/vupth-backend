@@ -23,6 +23,10 @@ public interface EstablishmentService {
 
     List<EstablishmentResponse> findByServiceType(ServiceType serviceType);
 
+    List<EstablishmentResponse> searchByNeighborhood(String neighborhood);
+
+    List<EstablishmentResponse> searchByServiceTypeAndNeighborhood(ServiceType serviceType, String neighborhood);
+
     EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID ownerId, OpenStatus newStatus);
 
     List<ServiceItem> getServicesItemByEstablishment(UUID establishmentId);
