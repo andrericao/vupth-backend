@@ -2354,7 +2354,18 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - (a) ✅ **[CONCLUIDO]** **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente, `isActive=false`) na criacao do profissional (`register` e `quick-create`), via `ProfessionalIntervalService.seedDefaultMeals` chamando `createLunchInterval`/`createDinnerInterval` (janta ajustada de 45 para 60min). Cobertura: unit (`QuickCreateProfessionalUseCaseTest`) + integracao (`ProfessionalMealSeedIntegrationTest`). **Obs:** como nascem inativos, ainda nao aparecem no `GET .../intervals` (filtra `isActive=true`) — resolvido no item (d).
 - (b) ✅ **[CONCLUIDO]** **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` (semantica PATCH — so campos non-null aplicados): `durationMinutes` (`@Positive`), `fixedStartTime`, `description`. Valida ownership pelo path (intervalo de outro profissional → `404 INTERVAL_NOT_FOUND`). Cobertura: integracao (`IntervalUpdateIntegrationTest`).
 - (c) ✅ **[CONCLUIDO]** **Ajustar previsao de inicio do dia** — mesmo PATCH de (b) sobre `fixedStartTime`. Leve para uso diario.
-- (d) **Iniciar manual**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. **Regra-chave:** o intervalo recorrente NAO pode entrar no calculo de espera pelo `fixedStartTime` antes do clique — hoje `advanceAfterInterval` usa `getStartTime()` e aplicaria o intervalo sozinho as 12:00, contradizendo a regra 3. Diferenciar **"previsto"** (entra na estimativa como bloco deslocavel/cancelavel) de **"iniciado"** (ativo de fato).
+- (d) **Iniciar manual + estimativa recorrente-aware**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. Diferenciar **"previsto"** (recorrente nao iniciado) de **"iniciado"** (ativo de fato) no calculo de espera. **Detalhe da estimativa abaixo.**
+
+  **Calculator vivo:** `QueueUtils.calculateWaitingTimeForPosition` (usado por `QueueServiceImpl`). O `AttendanceWaitTimeCalculator` e uma **copia dead code** (zero usos) — deletar ou manter em paridade.
+
+  **Bug atual:** ambos ordenam/usam `interval.getStartTime()` (OffsetDateTime), que e **null para recorrente** (usa `fixedStartTime` OffsetTime). Com o seed (item a) dando recorrentes a todo profissional, qualquer recorrente que chegue ao calculator → **NPE/500**. O run de Postman escapou so por ordenacao (o profissional com atendimento ativo nao tinha refeicao semeada).
+
+  **Semantica da estimativa (definida pelo Andre):**
+  1. **Iniciado** (`isActive && actualStartTime != null`): bloco real, usa `actualStartTime`.
+  2. **Previsto** (recorrente nao iniciado): inicio efetivo = hoje@`fixedStartTime`, **deslocado pra frente sempre** (nunca no passado em relacao ao cursor da fila) — soma a duracao em algum ponto a frente e e empurrado pelos atendimentos. A estimativa **nunca esquece** a refeicao prevista.
+  3. **Refeicao previa some na proxima** (porém do Andre): se uma refeicao prevista (ex.: almoco) for empurrada ate **alcancar o horario da proxima refeicao** (ex.: janta) sem ser iniciada, ela **desaparece** da estimativa — nao empilha; permanece so a proxima.
+  4. **Unexpected**: inalterado, usa `getStartTime()`.
+  5. **Sem mutar entidade**: o calculo nao pode escrever `setStartTime` na entidade (hoje o algoritmo faz isso como scratch) — usar projecao local.
 - (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
   - **(e1) Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) com um intervalo ativo do profissional, encerrar o intervalo automaticamente (`reason="SERVED_NEXT"`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).
   - **(e2) Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem.
