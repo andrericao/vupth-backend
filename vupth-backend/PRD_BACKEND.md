@@ -2366,6 +2366,13 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
   3. **Refeicao previa some na proxima** (porém do Andre): se uma refeicao prevista (ex.: almoco) for empurrada ate **alcancar o horario da proxima refeicao** (ex.: janta) sem ser iniciada, ela **desaparece** da estimativa — nao empilha; permanece so a proxima.
   4. **Unexpected**: inalterado, usa `getStartTime()`.
   5. **Sem mutar entidade**: o calculo nao pode escrever `setStartTime` na entidade (hoje o algoritmo faz isso como scratch) — usar projecao local.
+
+  **Decisoes de modelagem (2026-06-16):**
+  - **Autonomia do dono > restricao.** O profissional/dono inicia a refeicao **quando quiser** (cedo, tarde, ±20min) e pode **pular** almoco e/ou janta. **Sem 422 de janela de horario.** Unico bloqueio no `start`: nao iniciar duas vezes a mesma refeicao no mesmo dia (`IllegalState` ja existe). Pular = simplesmente nao iniciar (sem erro).
+  - **Estado de execucao day-scoped (reset por dia).** Mantem 1 registro recorrente (sem migracao). O estado "iniciado" so vale para hoje: `isStartedToday() = isActive && actualStartTime != null && actualStartTime.toLocalDate() == hoje`. Se `actualStartTime` for de outro dia, trata como NAO iniciado (reset implicito). Elimina carryover e "duplo-almoco". Historico por dia (tabela de ocorrencias) fica pos-MVP.
+  - **Janelas relativas vivem so na ESTIMATIVA** (nao travam o inicio): o previsto projeta hoje@`fixedStartTime`, desloca pra frente, e **some quando alcanca a proxima refeicao** (almoco some no inicio da janta; janta some no fim do dia). Isso muda **so o numero que o cliente ve**, nunca a liberdade do dono.
+  - **Seed mantem almoco + janta** (cobre turnos diferentes; profissional edita/remove o que nao usar).
+  - Uma refeicao que "some" da estimativa nao altera o registro recorrente — ele continua intacto e volta amanha.
 - (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
   - **(e1) Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) com um intervalo ativo do profissional, encerrar o intervalo automaticamente (`reason="SERVED_NEXT"`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).
   - **(e2) Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem.
