@@ -2338,6 +2338,10 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - Modelo `ProfessionalInterval` ja tem `actualStartTime`, `actualEndTime`, `plannedEndTime`, `isActive`, `finishedEarly`, `extendedMinutes`, `maxExtensionMinutes`, `autoFinishReason` e os helpers `createLunchInterval` (60min, 12:00, WEEKDAYS) e `createDinnerInterval` (45min, 18:00) — **que existem mas nunca sao chamados**.
 - Acesso: `@PreAuthorize hasRole('PROFESSIONAL') or hasRole('ADMIN')`. **Obs:** este e o UNICO controller com prefixo `/api/v1`.
 
+**Bugs latentes encontrados ao cobrir os endpoints (2026-06-16):**
+- ✅ **[CORRIGIDO]** `existsRecurringIntervalConflict` estava `nativeQuery=true` mas escrita em JPQL (nomes de entidade/propriedade) → `POST /recurring` dava **500**. Nunca exercitada (nao estava no Postman; teste de integracao so cobria `unexpected`). Trocada por `findActiveByProfessionalAndType` (JPQL) + overlap em Java no service. Agora coberto por integracao (`ProfessionalIntervalIntegrationTest.createRecurringInterval_success`) e Postman (folder 12).
+- ⏳ **[DORMENTE]** `existsActiveIntervalAt` usa `FROM professional_interval` (singular; tabela real e `professional_intervals`). So e chamada por `isProfessionalInInterval`, que e **dead code** (sem callers) — por isso nao explode hoje. Corrigir ao mexer no calculo de espera (item d/e).
+
 **Regras do fluxo:**
 1. **Nascem com o profissional.** Ao criar o profissional, ja vem almoco (12:00) e janta (18:00), **60min cada** (padronizado em 1h; o helper de janta hoje usa 45min — alinhar para 60).
 2. **Editaveis nas Configuracoes**, de forma simples, podendo variar todo dia (horario e duracao de cada refeicao).

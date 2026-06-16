@@ -148,9 +148,22 @@ public class ProfessionalIntervalService {
     }
 
     private void validateRecurringIntervalCreation(Professional professional, CreateRecurringIntervalCommand command) {
-        // Check if an interval already exists at the same time
-        boolean hasConflict = intervalRepository.existsRecurringIntervalConflict(
-                professional.getId(), command.fixedStartTime(), command.durationMinutes());
+        // Overlap calculado em Java (a antiga query nativa estava escrita em JPQL — invalida).
+        // Mantem a semantica original: so colide com recorrentes ATIVOS do profissional.
+        OffsetTime newStart = command.fixedStartTime();
+        OffsetTime newEnd = newStart.plusMinutes(command.durationMinutes());
+
+        boolean hasConflict = intervalRepository
+                .findActiveByProfessionalAndType(professional.getId(), IntervalType.RECURRENT)
+                .stream()
+                .anyMatch(existing -> {
+                    OffsetTime exStart = existing.getFixedStartTime();
+                    if (exStart == null) {
+                        return false;
+                    }
+                    OffsetTime exEnd = exStart.plusMinutes(existing.getDurationMinutes());
+                    return newStart.isBefore(exEnd) && exStart.isBefore(newEnd);
+                });
 
         if (hasConflict) {
             throw new IntervalConflictException("There is already a break at this time!");
