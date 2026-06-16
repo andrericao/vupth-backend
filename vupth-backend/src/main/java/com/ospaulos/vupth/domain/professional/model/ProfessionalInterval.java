@@ -194,7 +194,7 @@ public class ProfessionalInterval {
     public static ProfessionalInterval createDinnerInterval(Professional professional) {
         return createRecurring(
                 professional,
-                45,
+                60, // padronizado em 1h (spec item #11, regra 1)
                 OffsetTime.of(18, 0, 0, 0, ZoneOffset.UTC),
                 "WEEKDAYS",
                 "Dinner Break"

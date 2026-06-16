@@ -77,6 +77,26 @@ public class ProfessionalIntervalService {
         return saved;
     }
 
+    /**
+     * Seed das refeicoes padrao (spec item #11a): ao criar um profissional, ja
+     * nascem almoco (12:00) e janta (18:00), recorrentes em dias uteis, 60min cada.
+     *
+     * Sao apenas PREVISAO — nascem com {@code isActive = false} e so comecam de fato
+     * quando o profissional inicia manualmente (regra 3 da spec; item (d) ainda pendente).
+     * Sem validacao de conflito: o profissional acabou de ser criado, nao ha intervalos.
+     */
+    public List<ProfessionalInterval> seedDefaultMeals(Professional professional) {
+        List<ProfessionalInterval> meals = List.of(
+                ProfessionalInterval.createLunchInterval(professional),
+                ProfessionalInterval.createDinnerInterval(professional)
+        );
+
+        List<ProfessionalInterval> saved = intervalRepository.saveAll(meals);
+        log.info("[Interval] seeded default meals for professional={} ({} intervals)",
+                professional.getId(), saved.size());
+        return saved;
+    }
+
     @Transactional
     public List<ProfessionalInterval> getActiveIntervalsForProfessional(UUID professionalId, LocalDate date) {
         //return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, date);

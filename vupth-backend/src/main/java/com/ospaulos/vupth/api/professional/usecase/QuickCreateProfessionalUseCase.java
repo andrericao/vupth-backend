@@ -8,6 +8,7 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -46,6 +47,7 @@ public class QuickCreateProfessionalUseCase {
     private final UserRepository userRepository;
     private final ProfessionalRepository professionalRepository;
     private final EstablishmentRepository establishmentRepository;
+    private final ProfessionalIntervalService intervalService;
 
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, ProfessionalQuickCreateRequest request) {
@@ -84,6 +86,9 @@ public class QuickCreateProfessionalUseCase {
         professional.setSpecialty(request.specialty());     // set BEFORE cascade persist
         professional.setEstablishment(establishment);       // set BEFORE cascade persist
         userRepository.save(user);                          // cascade persists Professional with all fields set
+
+        // Seed refeicoes padrao (almoco/janta) — spec item #11a
+        intervalService.seedDefaultMeals(professional);
 
         log.info("Professional created — id={} name={} estab={}",
                 professional.getId(), user.getFirstName(), establishment.getName());

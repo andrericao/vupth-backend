@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -55,9 +56,10 @@ class QuickCreateProfessionalUseCaseTest {
     private static final UUID USER_ID  = UUID.randomUUID();
     private static final UUID ESTAB_ID = UUID.randomUUID();
 
-    @Mock UserRepository          userRepository;
-    @Mock ProfessionalRepository  professionalRepository;
-    @Mock EstablishmentRepository establishmentRepository;
+    @Mock UserRepository             userRepository;
+    @Mock ProfessionalRepository     professionalRepository;
+    @Mock EstablishmentRepository    establishmentRepository;
+    @Mock ProfessionalIntervalService intervalService;
 
     @InjectMocks QuickCreateProfessionalUseCase useCase;
 
@@ -96,6 +98,7 @@ class QuickCreateProfessionalUseCaseTest {
         assertThat(user.isProfessional()).isTrue();
         assertThat(user.isClient()).isTrue(); // CLIENT role preserved
         verify(userRepository).save(any(BaseUser.class));
+        verify(intervalService).seedDefaultMeals(any(Professional.class)); // refeicoes padrao (item #11a)
     }
 
     @Test

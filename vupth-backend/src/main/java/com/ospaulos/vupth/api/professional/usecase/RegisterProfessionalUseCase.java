@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateR
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -33,6 +34,7 @@ import java.util.UUID;
 public class RegisterProfessionalUseCase {
 
     private final UserRepository userRepository;
+    private final ProfessionalIntervalService intervalService;
 
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, ProfessionalRegisterRequest request) {
@@ -64,6 +66,9 @@ public class RegisterProfessionalUseCase {
         // professional.establishment intentionally left null
 
         userRepository.save(user);
+
+        // Seed refeicoes padrao (almoco/janta) — spec item #11a
+        intervalService.seedDefaultMeals(professional);
 
         log.info("[RegisterProfessional] professional created — id={} name={} (no establishment yet)",
                 professional.getId(), user.getFirstName());

@@ -2319,7 +2319,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 6. **Conta na espera.** Enquanto previsto/ativo, a duracao soma na estimativa de espera dos clientes (✅ ja existe).
 
 **O que FALTA implementar:**
-- (a) **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente) na criacao do profissional (`register` e `quick-create`), chamando `createLunchInterval`/`createDinnerInterval` (ajustar janta para 60min).
+- (a) ✅ **[CONCLUIDO]** **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente, `isActive=false`) na criacao do profissional (`register` e `quick-create`), via `ProfessionalIntervalService.seedDefaultMeals` chamando `createLunchInterval`/`createDinnerInterval` (janta ajustada de 45 para 60min). Cobertura: unit (`QuickCreateProfessionalUseCaseTest`) + integracao (`ProfessionalMealSeedIntegrationTest`). **Obs:** como nascem inativos, ainda nao aparecem no `GET .../intervals` (filtra `isActive=true`) — resolvido no item (d).
 - (b) **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` para `fixedStartTime` e `durationMinutes`.
 - (c) **Ajustar previsao de inicio do dia** — pode ser o mesmo PATCH de (b) sobre `fixedStartTime`. Precisa ser leve (uso diario).
 - (d) **Iniciar manual**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. **Regra-chave:** o intervalo recorrente NAO pode entrar no calculo de espera pelo `fixedStartTime` antes do clique — hoje `advanceAfterInterval` usa `getStartTime()` e aplicaria o intervalo sozinho as 12:00, contradizendo a regra 3. Diferenciar **"previsto"** (entra na estimativa como bloco deslocavel/cancelavel) de **"iniciado"** (ativo de fato).
