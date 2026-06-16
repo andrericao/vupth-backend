@@ -131,6 +131,37 @@ public class ProfessionalIntervalService {
         return saved;
     }
 
+    /**
+     * Inicia manualmente um intervalo (spec item #11d-start) — o "botao iniciar almoco/janta".
+     * Marca {@code actualStartTime}/{@code isActive}/{@code plannedEndTime}.
+     *
+     * Autonomia do dono: pode iniciar a qualquer hora (sem janela de horario). Unico bloqueio:
+     * a mesma refeicao ja foi iniciada OU encerrada HOJE → {@link IntervalConflictException} (409).
+     * Estado ativo remanescente de outro dia (stale) e resetado antes de iniciar (day-scoped).
+     */
+    public ProfessionalInterval startInterval(UUID professionalId, UUID intervalId) {
+        ProfessionalInterval interval = intervalRepository.findById(intervalId)
+                .orElseThrow(() -> new IntervalNotFoundException(intervalId));
+
+        if (!interval.getProfessional().getId().equals(professionalId)) {
+            throw new IntervalNotFoundException(intervalId);
+        }
+
+        LocalDate today = OffsetDateTime.now().toLocalDate();
+        if (interval.isStartedOn(today) || interval.isDoneOn(today)) {
+            throw new IntervalConflictException("This interval was already started/taken today.");
+        }
+
+        // reset de estado ativo remanescente de outro dia (nunca encerrado) — day-scoped
+        interval.setIsActive(false);
+        interval.startInterval();
+
+        ProfessionalInterval saved = intervalRepository.save(interval);
+        log.info("[Interval] started — id={} professional={} actualStart={}",
+                intervalId, professionalId, saved.getActualStartTime());
+        return saved;
+    }
+
     @Transactional
     public List<ProfessionalInterval> getActiveIntervalsForProfessional(UUID professionalId, LocalDate date) {
         //return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, date);

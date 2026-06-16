@@ -1913,6 +1913,19 @@ Edita um intervalo (refeicao recorrente). Semantica PATCH: envie apenas os campo
 
 ---
 
+### PATCH .../intervals/{intervalId}/start
+Inicia manualmente o intervalo (o "botao iniciar almoco/janta", spec item #11d). Marca `actualStartTime`/`isActive`/`plannedEndTime` — a refeicao deixa de ser previsao e vira "iniciada" (passa a aparecer no GET e conta como bloco real na estimativa).
+
+**Sem body.** Autonomia do dono: pode iniciar a qualquer hora (sem janela de horario).
+
+**Response (200):** `IntervalResponse` (status `ACTIVE`)
+
+**Erros:** 409 `INTERVAL_CONFLICT` (refeicao ja iniciada OU encerrada hoje — nao faz 2x no dia) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalStartIntegrationTest`)
+
+---
+
 ### GET .../intervals?date=2026-05-26
 Lista intervalos ativos para uma data (default: hoje).
 
@@ -2356,7 +2369,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - (c) ✅ **[CONCLUIDO]** **Ajustar previsao de inicio do dia** — mesmo PATCH de (b) sobre `fixedStartTime`. Leve para uso diario.
 - (d) **Iniciar manual + estimativa recorrente-aware**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. Diferenciar **"previsto"** (recorrente nao iniciado) de **"iniciado"** (ativo de fato) no calculo de espera. **Detalhe da estimativa abaixo.**
   - ✅ **[d-calc CONCLUIDO]** `QueueUtils` reescrito recorrente-aware/null-safe/day-scoped/sem-mutar-entidade, com as regras da estimativa (previsto projeta hoje, desloca pra frente, some na proxima, refeicao ja feita hoje nao reconta). Helpers `ProfessionalInterval.isStartedOn`/`isDoneOn`. `AttendanceWaitTimeCalculator` (dead code) deletado. Cobertura: unit `QueueUtilsTest` (10 cenarios).
-  - ⏳ **[d-start PENDENTE]** endpoint `PATCH .../intervals/{id}/start`.
+  - ✅ **[d-start CONCLUIDO]** `PATCH .../intervals/{intervalId}/start` (`startInterval`): marca `actualStartTime`/`isActive`/`plannedEndTime`. Autonomia do dono — inicia a qualquer hora (sem janela). Bloqueio: ja iniciada OU encerrada hoje → `409 INTERVAL_CONFLICT`. Ativo remanescente de outro dia e resetado (day-scoped). Cobertura: integracao (`IntervalStartIntegrationTest`) + Postman (folder 12).
 
   **Calculator vivo:** `QueueUtils.calculateWaitingTimeForPosition` (usado por `QueueServiceImpl`). A copia `AttendanceWaitTimeCalculator` (dead code) foi **deletada** no d-calc.
 
@@ -2387,7 +2400,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
 **Front-Partner — pronto para consumir / alinhar:**
 - **Apelido (nickname):** `PATCH /profile/general-infos` agora escreve `nickname`; `GET /profile/me` e a fonte canonica (first/last/nickname/email/phone/roles); as projecoes `GET /professional` (busca do owner) e professionals-with-queue trazem `nickname`. → Alinhar o item #16 (estava "BaseUser NAO tem nickname" — agora **tem**).
-- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**. **Ainda falta no backend:** `PATCH .../start` (iniciar manual), encerrar (ao atender + `PATCH .../finish`), `DELETE`, validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); o seed/edicao **ja existem**.
+- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje). **Ainda falta no backend:** encerrar (ao atender + `PATCH .../finish`), `DELETE`, validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
 
 **Front-Client — pronto para consumir / alinhar:**
 - **Apelido do profissional** aparece em `professionals-with-queue` e na busca de profissional — pode exibir no card.

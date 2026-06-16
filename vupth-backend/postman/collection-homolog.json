@@ -6768,6 +6768,103 @@
           ]
         },
         {
+          "name": "PATCH start (iniciar refeicao) #11d",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id}}/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "{{interval_id}}",
+                "start"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"status ACTIVE\", () => pm.expect(r.status).to.eql(\"ACTIVE\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "[ERRO] PATCH start 2x no mesmo dia -> 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id}}/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "{{interval_id}}",
+                "start"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code INTERVAL_CONFLICT\", () => pm.expect(pm.response.json().code).to.eql(\"INTERVAL_CONFLICT\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "[ERRO] PATCH intervalo inexistente -> 404",
           "request": {
             "method": "PATCH",
