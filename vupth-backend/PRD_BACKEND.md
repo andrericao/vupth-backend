@@ -2229,7 +2229,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
-| 11 | Recurrent intervals (horario de almoco) | `ProfessionalIntervalController` ja tem `POST /recurring`. Falta UI no partner-app para configurar. Tempo de espera mais preciso para clientes | **Front-Partner** (tela de configuracao de intervalos) — Backend ja implementado |
+| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend PARCIAL]** Hoje existe so a *criacao* (`POST .../intervals/recurring`, `POST .../intervals/unexpected`), `GET .../intervals` e o calculo de espera (`AttendanceWaitTimeCalculator.advanceAfterInterval`). O fluxo real (inicio manual, fim ao atender, seed na criacao do profissional, edicao/exclusao) **nao existe** — descricao anterior ("backend ja implementado, falta so UI") era imprecisa. **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | **Backend** (seed + PATCH + start manual + encerrar-ao-atender + DELETE + diferenciar previsto/iniciado no calculo) / **Front-Partner** (editar refeicoes em settings + botoes iniciar/encerrar na fila) |
 
 ### MEDIA PRIORIDADE — v2
 
@@ -2295,3 +2295,34 @@ Decisao 2026-06-13. **Status: especificado, nao implementado.**
 **Endpoint:** `POST /attendances/{id}/rating` — apenas o `clientId` dono do attendance, apenas com `status = FINISHED`, bloqueia segundo voto (409). Atendimento guest (`guestName`, sem `client`) nao avalia.
 
 **Exibicao:** media geral no card do profissional; media por servico/tipo na lista de servicos do profissional.
+
+### Item 11 — Refeicoes/intervalos do profissional (especificacao detalhada)
+
+Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2 do PRD Front-Partner. **Status: parcialmente implementado.** Esta secao e a fonte da verdade; o front-partner segue ela.
+
+**Conceito:** todo profissional tem duas refeicoes recorrentes — **almoco** e **janta** — que entram na estimativa de espera dos clientes, mas comecam e terminam **manualmente** (o horario cadastrado e so previsao).
+
+**O que JA existe (confirmado no codigo):**
+- `POST /api/v1/professionals/{professionalId}/intervals/recurring` (body: `durationMinutes`, `fixedStartTime` OffsetTime, `recurrencePattern` String, `description`).
+- `POST /api/v1/professionals/{professionalId}/intervals/unexpected` (body: `durationMinutes`, `startTime` OffsetDateTime, `description`).
+- `GET /api/v1/professionals/{professionalId}/intervals?date=YYYY-MM-DD`.
+- `AttendanceWaitTimeCalculator.advanceAfterInterval` — a duracao do intervalo **soma na espera** e a previsao do intervalo **desloca para depois** de atendimentos que a ultrapassam. ✅
+- Modelo `ProfessionalInterval` ja tem `actualStartTime`, `actualEndTime`, `plannedEndTime`, `isActive`, `finishedEarly`, `extendedMinutes`, `maxExtensionMinutes`, `autoFinishReason` e os helpers `createLunchInterval` (60min, 12:00, WEEKDAYS) e `createDinnerInterval` (45min, 18:00) — **que existem mas nunca sao chamados**.
+- Acesso: `@PreAuthorize hasRole('PROFESSIONAL') or hasRole('ADMIN')`. **Obs:** este e o UNICO controller com prefixo `/api/v1`.
+
+**Regras do fluxo:**
+1. **Nascem com o profissional.** Ao criar o profissional, ja vem almoco (12:00) e janta (18:00), **60min cada** (padronizado em 1h; o helper de janta hoje usa 45min — alinhar para 60).
+2. **Editaveis nas Configuracoes**, de forma simples, podendo variar todo dia (horario e duracao de cada refeicao).
+3. **Inicio MANUAL** (igual ao intervalo avulso). O horario e so previsao; o intervalo so comeca quando o profissional clica "iniciar almoco/janta". Se em vez de iniciar ele **atender um cliente**, a previsao desloca para depois desse atendimento. Se nunca clicar, nao inicia.
+4. **Previsao dinamica.** A qualquer hora o profissional pode mudar a previsao de inicio.
+5. **Fim manual.** O intervalo termina quando o profissional clica em "atender cliente", antes ou depois do tempo previsto.
+6. **Conta na espera.** Enquanto previsto/ativo, a duracao soma na estimativa de espera dos clientes (✅ ja existe).
+
+**O que FALTA implementar:**
+- (a) **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente) na criacao do profissional (`register` e `quick-create`), chamando `createLunchInterval`/`createDinnerInterval` (ajustar janta para 60min).
+- (b) **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` para `fixedStartTime` e `durationMinutes`.
+- (c) **Ajustar previsao de inicio do dia** — pode ser o mesmo PATCH de (b) sobre `fixedStartTime`. Precisa ser leve (uso diario).
+- (d) **Iniciar manual**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. **Regra-chave:** o intervalo recorrente NAO pode entrar no calculo de espera pelo `fixedStartTime` antes do clique — hoje `advanceAfterInterval` usa `getStartTime()` e aplicaria o intervalo sozinho as 12:00, contradizendo a regra 3. Diferenciar **"previsto"** (entra na estimativa como bloco deslocavel/cancelavel) de **"iniciado"** (ativo de fato).
+- (e) **Encerrar ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) durante intervalo ativo, encerrar o intervalo (`finishedEarly=true`, `actualEndTime=now`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).
+- (f) **DELETE/desativar** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}`.
+- (g) Validar `recurrencePattern` (hoje string livre; so "WEEKDAYS" exercitado) e os horarios do intervalo (secao 21, `ProfessionalIntervalService:137-138`).
