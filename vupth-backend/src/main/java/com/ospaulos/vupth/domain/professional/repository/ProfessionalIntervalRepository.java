@@ -14,16 +14,27 @@ import java.util.UUID;
 @Repository
 public interface ProfessionalIntervalRepository extends JpaRepository<ProfessionalInterval, UUID> {
 
+    /**
+     * Intervalos de um profissional para um dia. Inclui as refeicoes recorrentes
+     * tanto PREVISTAS (ainda nao iniciadas, {@code isActive=false}) quanto INICIADAS,
+     * para que o front possa listar/editar almoco e janta e mostrar o botao "iniciar".
+     * Exclui as recorrentes ja ENCERRADAS dentro do dia consultado ({@code actualEndTime}
+     * no intervalo do dia) — refeicao ja feita hoje nao reaparece como previsto.
+     * Para UNEXPECTED mantem o filtro original (ativo e dentro do dia).
+     */
     @Query("""
                 SELECT pi FROM ProfessionalInterval pi
                 WHERE pi.professional.id = :professionalId
-                AND pi.isActive = true
-                AND (pi.intervalType = 'RECURRENT' OR
-                     (pi.intervalType = 'UNEXPECTED' AND
-                      pi.startTime >= :startOfDay AND pi.startTime < :startOfNextDay))
+                AND (
+                     (pi.intervalType = 'RECURRENT'
+                      AND (pi.actualEndTime IS NULL
+                           OR pi.actualEndTime < :startOfDay
+                           OR pi.actualEndTime >= :startOfNextDay))
+                     OR
+                     (pi.intervalType = 'UNEXPECTED' AND pi.isActive = true
+                      AND pi.startTime >= :startOfDay AND pi.startTime < :startOfNextDay))
             ORDER BY pi.fixedStartTime ASC, pi.startTime ASC
             """)
-    //@Query("SELECT pi FROM ProfessionalInterval pi WHERE pi.professional.id = :professionalId")
     List<ProfessionalInterval> findActiveIntervalsForProfessionalAndDate(
             @Param("professionalId") UUID professionalId,
             @Param("startOfDay") java.time.OffsetDateTime startOfDay,
@@ -61,6 +72,13 @@ public interface ProfessionalIntervalRepository extends JpaRepository<Profession
     List<ProfessionalInterval> findActiveByProfessionalAndType(
             @Param("professionalId") UUID professionalId,
             @Param("intervalType") IntervalType intervalType);
+
+    /**
+     * Intervalos ativos (is_active = true) de um profissional, qualquer tipo. Usado pelo
+     * "encerrar ao atender" (spec item #11e): ao iniciar um atendimento, encerramos a
+     * refeicao que o profissional iniciou manualmente e que ainda esta em curso.
+     */
+    List<ProfessionalInterval> findByProfessionalIdAndIsActiveTrue(UUID professionalId);
 
     // Claude v3
     @Query(value = """

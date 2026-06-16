@@ -31,8 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Ao criar um profissional (por quick-create OU register) ja nascem almoco (12:00)
  * e janta (18:00), recorrentes, 60min cada, como PREVISAO (isActive=false).
  *
- * Verificacao direto no repositorio: como sao recorrentes inativos, ainda nao
- * aparecem no GET .../intervals (que filtra isActive=true — vira item (d)).
+ * Verificacao direto no repositorio. (A exibicao das previstas no GET .../intervals
+ * e coberta por IntervalListIntegrationTest.)
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

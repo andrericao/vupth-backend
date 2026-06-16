@@ -162,6 +162,28 @@ public class ProfessionalIntervalService {
         return saved;
     }
 
+    /**
+     * Encerrar ao atender (spec item #11e): quando o profissional inicia um atendimento,
+     * a refeicao/intervalo que ele iniciou manualmente e ainda esta em curso e encerrada
+     * (reason {@code ATTEND_NEXT_CLIENT}; {@code finishedEarly} conforme o horario).
+     *
+     * So encerra intervalos efetivamente INICIADOS (com {@code actualStartTime} e
+     * {@code plannedEndTime}); intervalos apenas previstos — refeicoes recorrentes que
+     * nunca foram iniciadas — nao sao afetados (regra 3 da spec). Idempotente: sem
+     * intervalo ativo, nao faz nada.
+     */
+    public void finishActiveIntervalsOnAttend(UUID professionalId) {
+        for (ProfessionalInterval interval : intervalRepository.findByProfessionalIdAndIsActiveTrue(professionalId)) {
+            if (interval.getActualStartTime() == null || interval.getPlannedEndTime() == null) {
+                continue; // apenas previsto / sem inicio real — nada a encerrar
+            }
+            interval.finishInterval("ATTEND_NEXT_CLIENT");
+            intervalRepository.save(interval);
+            log.info("[Interval] auto-finished on attend — id={} professional={} finishedEarly={}",
+                    interval.getId(), professionalId, interval.getFinishedEarly());
+        }
+    }
+
     @Transactional
     public List<ProfessionalInterval> getActiveIntervalsForProfessional(UUID professionalId, LocalDate date) {
         //return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, date);
@@ -234,5 +256,6 @@ public class ProfessionalIntervalService {
     
     // TODO: Validate ProfessionalInterval start time vs end time
     // TODO: poder adicionar mais 5 minutos (inclusive ter um campo para isso
-    // TODO: Add action to serve next attendance, finishing the interval
+    // "Encerrar ao atender" (spec #11e) feito: finishActiveIntervalsOnAttend, chamado em
+    // ProfessionalServiceImpl.startAttendance.
 }

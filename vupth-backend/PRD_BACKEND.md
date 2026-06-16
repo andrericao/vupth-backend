@@ -1927,23 +1927,32 @@ Inicia manualmente o intervalo (o "botao iniciar almoco/janta", spec item #11d).
 ---
 
 ### GET .../intervals?date=2026-05-26
-Lista intervalos ativos para uma data (default: hoje).
+Lista os intervalos do profissional para uma data (default: hoje). Inclui as refeicoes recorrentes **previstas** (ainda nao iniciadas) **e** as iniciadas; exclui apenas as recorrentes ja **encerradas dentro do dia** consultado e os intervalos `UNEXPECTED` inativos/fora do dia.
 
 **Response (200):** `IntervalResponse[]`
 
+Exemplo de uma refeicao recorrente **prevista** (seed, ainda nao iniciada):
 ```json
 {
   "intervalId": "uuid",
-  "type": "RECURRING",
-  "status": "ACTIVE",
+  "type": "RECURRENT",
+  "status": "SCHEDULED",
   "durationMinutes": 60,
-  "startTime": "2026-05-26T12:00:00Z",
-  "endTime": "2026-05-26T13:00:00Z",
-  "description": "Almoco",
-  "fixedStartTime": "12:00:00Z",
+  "startTime": null,
+  "endTime": null,
+  "description": "Lunch Break",
+  "fixedStartTime": "12:00Z",
   "recurrencePattern": "WEEKDAYS"
 }
 ```
+
+**Semantica dos campos (serializacao real — alinhar o front por aqui):**
+- `type`: enum serializado pelo **nome** → `RECURRENT` (refeicao recorrente) ou `UNEXPECTED` (pausa avulsa). **Nao** e "RECURRING".
+- `status`: calculado no mapper — `ACTIVE` se `isActive`, senao `SCHEDULED`. **So esses dois valores** sao emitidos hoje (o enum tem `FINISHED`/`CANCELLED`, mas o mapper nao os usa).
+- `startTime` (OffsetDateTime): preenchido **apenas para `UNEXPECTED`**. Para `RECURRENT` e sempre `null` (use `fixedStartTime`).
+- `endTime` (OffsetDateTime): mapeado de `plannedEndTime` — **null** enquanto a refeicao recorrente nao for iniciada; preenchido apos o `start`.
+- `fixedStartTime` (OffsetTime): horario previsto da recorrente. **Serializa com segundos omitidos quando zero** → `"12:00Z"`, `"11:30Z"` (nao `"12:00:00Z"`). O front deve parsear segundos como opcionais.
+- ⚠️ **Gap conhecido:** o `actualStartTime` (horario real em que a refeicao iniciou) **nao e exposto** no `IntervalResponse`. Apos `start`, o front so tem `endTime` (= inicio + `durationMinutes`); o inicio real teria de ser derivado. Avaliar expor `actualStartTime` se o front precisar mostrar "almoco iniciado as HH:MM".
 
 **Testes:** Integracao
 
@@ -2206,7 +2215,6 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | Calcular tempo de fila para agendados | Media | Estimativa de tempo inclui IN_PROGRESS, nao so SCHEDULED | `Professional:110` — Backend |
 | Aceitar ID como parametro no ProfessionalController | Baixa | Suportar roteamento especifico por caller | `ProfessionalController:32` — Backend |
 | Validar horarios do ProfessionalInterval | Baixa | Validar start > end, permitir estender +5min | `ProfessionalIntervalService:137-138` — Backend |
-| Finalizar intervalo atendendo proximo | Baixa | Acao de servir proximo attendance ao terminar intervalo | `ProfessionalIntervalService:139` — Backend |
 | Melhorar excecoes em BaseUser e SetMainAddress | Baixa | Trocar RuntimeException por excecoes especificas | `BaseUser:245` / `SetMainAddressUseCase:21` — Backend |
 | Verificar metodo updateStatus | Baixa | Revisar logica de atualizacao de status do establishment | `EstablishmentOpenStatusServiceImpl:121` — Backend |
 | Mover codigo para ProfessionalService | Baixa | Refatoracao interna — logica no lugar errado | `QueueServiceImpl:178` — Backend |
@@ -2313,6 +2321,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
 | 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
 | 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
+| 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | **[Pos-MVP]** Hoje a estimativa recalcula do zero a cada consulta; conforme a fila acelera/desacelera, a refeicao **entra/sai** do calculo do cliente, causando salto brusco de ±duracao (ex.: 13:00 -> 11:50, ~70min) — ruim para quem se programa para a **locomocao** (adiantar bruscamente faz perder a vez). Regra: **no momento em que o cliente entra na fila**, trava-se se a(s) refeicao(oes) prevista(s) estao no calculo dele; se estavam, a duracao fica **somada permanentemente** (o numero so varia com o ritmo da fila, a refeicao nunca some); se nao estavam, fica **sem**. Vale para os dois lados (aumento e diminuicao de tempo). **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** (snapshot/lock da refeicao por atendimento no ingresso) / **Front-Client** (estimativa estavel) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 
@@ -2348,7 +2357,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - `POST /api/v1/professionals/{professionalId}/intervals/unexpected` (body: `durationMinutes`, `startTime` OffsetDateTime, `description`).
 - `GET /api/v1/professionals/{professionalId}/intervals?date=YYYY-MM-DD`.
 - `QueueUtils.calculateWaitingTimeForPosition` — calculo de espera **recorrente-aware** (item d-calc): previsto projeta hoje, desloca pra frente, some na proxima; iniciado conta o restante. (A copia `AttendanceWaitTimeCalculator` foi deletada.)
-- Modelo `ProfessionalInterval` ja tem `actualStartTime`, `actualEndTime`, `plannedEndTime`, `isActive`, `finishedEarly`, `extendedMinutes`, `maxExtensionMinutes`, `autoFinishReason` e os helpers `createLunchInterval` (60min, 12:00, WEEKDAYS) e `createDinnerInterval` (45min, 18:00) — **que existem mas nunca sao chamados**.
+- Modelo `ProfessionalInterval` ja tem `actualStartTime`, `actualEndTime`, `plannedEndTime`, `isActive`, `finishedEarly`, `extendedMinutes`, `maxExtensionMinutes`, `autoFinishReason` e os helpers `createLunchInterval` (60min, 12:00, WEEKDAYS) e `createDinnerInterval` (60min, 18:00, WEEKDAYS) — **chamados pelo seed** (`seedDefaultMeals`) na criacao do profissional.
 - Acesso: `@PreAuthorize hasRole('PROFESSIONAL') or hasRole('ADMIN')`. **Obs:** este e o UNICO controller com prefixo `/api/v1`.
 
 **Bugs latentes encontrados ao cobrir os endpoints (2026-06-16):**
@@ -2364,7 +2373,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 6. **Conta na espera.** Enquanto previsto/ativo, a duracao soma na estimativa de espera dos clientes (✅ ja existe).
 
 **O que FALTA implementar:**
-- (a) ✅ **[CONCLUIDO]** **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente, `isActive=false`) na criacao do profissional (`register` e `quick-create`), via `ProfessionalIntervalService.seedDefaultMeals` chamando `createLunchInterval`/`createDinnerInterval` (janta ajustada de 45 para 60min). Cobertura: unit (`QuickCreateProfessionalUseCaseTest`) + integracao (`ProfessionalMealSeedIntegrationTest`). **Obs:** como nascem inativos, ainda nao aparecem no `GET .../intervals` (filtra `isActive=true`) — resolvido no item (d).
+- (a) ✅ **[CONCLUIDO]** **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente, `isActive=false`) na criacao do profissional (`register` e `quick-create`), via `ProfessionalIntervalService.seedDefaultMeals` chamando `createLunchInterval`/`createDinnerInterval` (janta ajustada de 45 para 60min). Cobertura: unit (`QuickCreateProfessionalUseCaseTest`) + integracao (`ProfessionalMealSeedIntegrationTest`). ✅ **GAP RESOLVIDO (2026-06-16):** o `GET .../intervals` passou a retornar as recorrentes **previstas** (`isActive=false`) **e** iniciadas do dia (so exclui as ja encerradas dentro do dia consultado — `actualEndTime` no range). Assim o front lista/edita almoco e janta e mostra o botao "iniciar" mesmo antes de iniciar. Cobertura: integracao (`IntervalListIntegrationTest`) + Postman (folder 12, "GET previstas aparecem (SCHEDULED)").
 - (b) ✅ **[CONCLUIDO]** **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` (semantica PATCH — so campos non-null aplicados): `durationMinutes` (`@Positive`), `fixedStartTime`, `description`. Valida ownership pelo path (intervalo de outro profissional → `404 INTERVAL_NOT_FOUND`). Cobertura: integracao (`IntervalUpdateIntegrationTest`).
 - (c) ✅ **[CONCLUIDO]** **Ajustar previsao de inicio do dia** — mesmo PATCH de (b) sobre `fixedStartTime`. Leve para uso diario.
 - (d) **Iniciar manual + estimativa recorrente-aware**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. Diferenciar **"previsto"** (recorrente nao iniciado) de **"iniciado"** (ativo de fato) no calculo de espera. **Detalhe da estimativa abaixo.**
@@ -2389,7 +2398,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
   - **Seed mantem almoco + janta** (cobre turnos diferentes; profissional edita/remove o que nao usar).
   - Uma refeicao que "some" da estimativa nao altera o registro recorrente — ele continua intacto e volta amanha.
 - (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
-  - **(e1) Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) com um intervalo ativo do profissional, encerrar o intervalo automaticamente (`reason="SERVED_NEXT"`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).
+  - ✅ **[e1 CONCLUIDO]** **Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`), qualquer refeicao/intervalo **efetivamente iniciado** (com `actualStartTime`/`plannedEndTime`) do profissional e encerrado automaticamente (`reason="ATTEND_NEXT_CLIENT"`, `finishedEarly` calculado vs `plannedEndTime`). Refeicoes apenas previstas (nunca iniciadas) nao sao tocadas. Impl: `ProfessionalIntervalService.finishActiveIntervalsOnAttend(professionalId)`, chamado em `ProfessionalServiceImpl.startAttendance` (mesma TX). Cobertura: integracao (`IntervalFinishOnAttendIntegrationTest`).
   - **(e2) Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem.
 - (f) **DELETE/desativar** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}`.
 - (g) Validar `recurrencePattern` (hoje string livre; so "WEEKDAYS" exercitado) e os horarios do intervalo (secao 21, `ProfessionalIntervalService:137-138`).
@@ -2400,8 +2409,45 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
 **Front-Partner — pronto para consumir / alinhar:**
 - **Apelido (nickname):** `PATCH /profile/general-infos` agora escreve `nickname`; `GET /profile/me` e a fonte canonica (first/last/nickname/email/phone/roles); as projecoes `GET /professional` (busca do owner) e professionals-with-queue trazem `nickname`. → Alinhar o item #16 (estava "BaseUser NAO tem nickname" — agora **tem**).
-- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje). **Ainda falta no backend:** encerrar (ao atender + `PATCH .../finish`), `DELETE`, validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
+- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje); (e1) **encerrar ao atender** — iniciar atendimento encerra automaticamente a refeicao em curso (`reason=ATTEND_NEXT_CLIENT`). **Ainda falta no backend:** (e2) `PATCH .../finish` (encerramento manual), (f) `DELETE`, (g) validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
 
 **Front-Client — pronto para consumir / alinhar:**
 - **Apelido do profissional** aparece em `professionals-with-queue` e na busca de profissional — pode exibir no card.
 - **Estimativa de espera** passou a considerar refeicoes recorrentes (previsto desloca pra frente / some na proxima / nao carrega de ontem). A nota antiga de "adiantar/atrasar o intervalo em ate 15 min" **nao vale mais** — a logica e a nova projecao por refeicao.
+
+### Item 37 — Estabilizacao da estimativa de espera (lock da refeicao no ingresso)
+
+Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
+
+**Problema.** O `QueueUtils` recalcula a estimativa do zero a cada consulta. Conforme a fila acelera ou desacelera, a refeicao prevista **entra ou sai** do calculo de um mesmo cliente, fazendo a previsao **saltar bruscamente** pela duracao inteira da refeicao (ex.: de 13:00 para 11:50 quando os atendimentos correm mais rapido e o almoco "some"). Isso e ruim para o cliente que se programa para a **locomocao**: adiantar bruscamente a previsao pode faze-lo **perder a vez**.
+
+**O que o cliente ve hoje (e ja esta correto):** so o **numero final** (minutos ate o inicio do atendimento). Tanto faz se o tempo vem de almoco ou de outros clientes a frente — isso ja funciona.
+
+**Regra de estabilizacao (a implementar):**
+- **Lock no ingresso.** No instante em que o cliente **entra na fila**, calcula-se a estimativa. Se a(s) refeicao(oes) prevista(s) caem **antes** do inicio de atendimento dele (ou seja, a duracao da refeicao **esta** no calculo dele naquele momento), essa inclusao fica **travada** para ele.
+- **Permanencia.** A partir do lock, o numero continua variando com o ritmo da fila (clientes a frente mais rapidos/lentos, entradas/saidas), mas a **duracao da refeicao travada permanece somada** — nunca some do calculo dele.
+- **Exclusao simetrica.** Se no ingresso a refeicao **nao** estava no calculo dele (seria atendido antes da refeicao), ele permanece **sem** ela.
+- **Dois lados.** A regra vale tanto quando o tempo total **aumenta** quanto quando **diminui** (a refeicao travada nao entra nem sai depois do ingresso).
+- Isso **refina** a regra atual `previsto_servedBeforeMeal_notCounted`, que hoje vale por recalculo (a refeicao some se a fila adianta) — passa a valer so **ate** o cliente entrar; depois disso, congela.
+
+**Previsao de INICIO da refeicao (separado do lock — comportamento ja existente, mantido):**
+- A previsao de inicio **desloca para frente** conforme os atendimentos a empurram (ex.: profissional comeca a atender 11:45, atendimento de 30min -> almoco previsto passa a 12:15). Ja implementado no `QueueUtils` ("empurra pra frente").
+- O sistema **nunca adianta** a refeicao para antes do `fixedStartTime` por conta propria. **Quem inicia de fato e o profissional** (botao "iniciar almoco/janta"); a contagem real so comeca no clique.
+- **Restricao:** a previsao deslocada do almoco **nao pode colidir com a janta** (o almoco "some" ao alcancar o horario da janta — regra "some na proxima" ja existente).
+
+**Mudancas estruturais da fila — cancelamentos (definido 2026-06-16):** o gatilho que tira a refeicao do calculo e **estrutural**, nao de ritmo.
+- A refeicao e contada enquanto houver **pelo menos um atendimento posicionado depois dela** na fila.
+- **Cancelamento de um cliente intermediario** (ainda resta alguem apos a refeicao): subtrai **apenas o tempo daquele cliente**; a refeicao **permanece** somada. Ex.: dois marcados apos o almoco, o penultimo sai -> some so o tempo dele, o almoco continua.
+- **Sai todo mundo apos a refeicao** (ex.: so havia um cliente apos o almoco e ele cancelou): a refeicao **cai**, sujeita ao horario — se a fila restante ainda cruza o horario projetado da refeicao, conta; senao, nao.
+- **Variacao de ritmo/estimativa** (atendimentos terminando mais rapido/devagar que o previsto) **nunca** tira a refeicao — so mudanca estrutural (cancelamento/saida) tira. E aqui que mora a estabilizacao.
+
+**Nudge / popup de inicio (gatilho do `start`):** no horario previsto, o front-partner mostra um aviso ao profissional (com a consequencia: "voce tem N clientes na fila; iniciar agora adia o proximo em ~Xmin"). **Duas acoes** (decisao 2026-06-16):
+- **"Iniciar almoco"** -> chama `PATCH .../intervals/{id}/start`; a refeicao vira `ACTIVE` e trava o horario real.
+- **"Nao almocar"** -> **pular explicito**: **derruba a refeicao prevista do calculo para TODOS os clientes na hora**, inclusive os que ja tinham travado (`lock` do Item 37). E uma acao deliberada do dono, entao o **adiantamento brusco e aceito** (a ETA dos clientes cai pela duracao da refeicao). Sobrepoe a estabilizacao do lock.
+- Detalhes visuais (timing do popup, nao interromper atendimento ativo, anti-nag) vivem no PRD-Front-Partner. Aviso com app em background depende do item #3 (push). Popup com app aberto e computavel com os dados atuais (`GET .../intervals` + fila), sem backend novo.
+
+**Refeicao prevista que o profissional nunca interage com o popup (nem inicia, nem clica "nao almocar"):** nao trava para sempre. O bloco previsto vai sendo **empurrado pra frente** pelos atendimentos e **some ao alcancar a proxima refeicao / fim do dia** (regra "some na proxima", ja existente). Diferente do "nao almocar" explicito (que derruba na hora), aqui a ETA do cliente se corrige **gradualmente**.
+
+**Decisoes pendentes (definir antes de implementar):**
+1. **Onde persistir o lock:** provavel snapshot no `Attendance` no momento da criacao (ex.: `lockedIntervalMinutes` ou flag por refeicao) — a estimativa passa a ser `(soma das duracoes a frente, recalculada) + (minutos de refeicao travados, respeitando a regra estrutural acima)`.
+2. **Janta:** aplica a mesma logica de lock que o almoco.
