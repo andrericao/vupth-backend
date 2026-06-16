@@ -2257,7 +2257,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
-| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend PARCIAL]** Hoje existe so a *criacao* (`POST .../intervals/recurring`, `POST .../intervals/unexpected`), `GET .../intervals` e o calculo de espera (`AttendanceWaitTimeCalculator.advanceAfterInterval`). O fluxo real (inicio manual, fim ao atender, seed na criacao do profissional, edicao/exclusao) **nao existe** — descricao anterior ("backend ja implementado, falta so UI") era imprecisa. **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | **Backend** (seed + PATCH + start manual + encerrar-ao-atender + DELETE + diferenciar previsto/iniciado no calculo) / **Front-Partner** (editar refeicoes em settings + botoes iniciar/encerrar na fila) |
+| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend EM ANDAMENTO]** ✅ Feito: (a) seed almoco/janta na criacao, (b/c) `PATCH` editar/ajustar previsao, (d-calc) estimativa recorrente-aware (`QueueUtils` reescrito, day-scoped, desloca pra frente, some na proxima). ⏳ Falta: (d-start) `PATCH .../start`, (e) encerrar (ao atender + botao), (f) DELETE, (g) validacoes. **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | **Backend** (d-start + encerrar + DELETE + validacoes) / **Front-Partner** (editar refeicoes em settings + botoes iniciar/encerrar na fila) |
 
 ### MEDIA PRIORIDADE — v2
 
@@ -2334,7 +2334,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - `POST /api/v1/professionals/{professionalId}/intervals/recurring` (body: `durationMinutes`, `fixedStartTime` OffsetTime, `recurrencePattern` String, `description`).
 - `POST /api/v1/professionals/{professionalId}/intervals/unexpected` (body: `durationMinutes`, `startTime` OffsetDateTime, `description`).
 - `GET /api/v1/professionals/{professionalId}/intervals?date=YYYY-MM-DD`.
-- `AttendanceWaitTimeCalculator.advanceAfterInterval` — a duracao do intervalo **soma na espera** e a previsao do intervalo **desloca para depois** de atendimentos que a ultrapassam. ✅
+- `QueueUtils.calculateWaitingTimeForPosition` — calculo de espera **recorrente-aware** (item d-calc): previsto projeta hoje, desloca pra frente, some na proxima; iniciado conta o restante. (A copia `AttendanceWaitTimeCalculator` foi deletada.)
 - Modelo `ProfessionalInterval` ja tem `actualStartTime`, `actualEndTime`, `plannedEndTime`, `isActive`, `finishedEarly`, `extendedMinutes`, `maxExtensionMinutes`, `autoFinishReason` e os helpers `createLunchInterval` (60min, 12:00, WEEKDAYS) e `createDinnerInterval` (45min, 18:00) — **que existem mas nunca sao chamados**.
 - Acesso: `@PreAuthorize hasRole('PROFESSIONAL') or hasRole('ADMIN')`. **Obs:** este e o UNICO controller com prefixo `/api/v1`.
 
@@ -2358,9 +2358,9 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
   - ✅ **[d-calc CONCLUIDO]** `QueueUtils` reescrito recorrente-aware/null-safe/day-scoped/sem-mutar-entidade, com as regras da estimativa (previsto projeta hoje, desloca pra frente, some na proxima, refeicao ja feita hoje nao reconta). Helpers `ProfessionalInterval.isStartedOn`/`isDoneOn`. `AttendanceWaitTimeCalculator` (dead code) deletado. Cobertura: unit `QueueUtilsTest` (10 cenarios).
   - ⏳ **[d-start PENDENTE]** endpoint `PATCH .../intervals/{id}/start`.
 
-  **Calculator vivo:** `QueueUtils.calculateWaitingTimeForPosition` (usado por `QueueServiceImpl`). O `AttendanceWaitTimeCalculator` e uma **copia dead code** (zero usos) — deletar ou manter em paridade.
+  **Calculator vivo:** `QueueUtils.calculateWaitingTimeForPosition` (usado por `QueueServiceImpl`). A copia `AttendanceWaitTimeCalculator` (dead code) foi **deletada** no d-calc.
 
-  **Bug atual:** ambos ordenam/usam `interval.getStartTime()` (OffsetDateTime), que e **null para recorrente** (usa `fixedStartTime` OffsetTime). Com o seed (item a) dando recorrentes a todo profissional, qualquer recorrente que chegue ao calculator → **NPE/500**. O run de Postman escapou so por ordenacao (o profissional com atendimento ativo nao tinha refeicao semeada).
+  **Bug que motivou o d-calc (✅ corrigido):** o calculator antigo ordenava/usava `interval.getStartTime()` (OffsetDateTime), **null para recorrente** (usa `fixedStartTime` OffsetTime). Com o seed (item a) dando recorrentes a todo profissional, qualquer recorrente que chegasse ao calculator dava **NPE/500**. Resolvido pela reescrita do `QueueUtils` (projecao por bloco, null-safe).
 
   **Semantica da estimativa (definida pelo Andre):**
   1. **Iniciado** (`isActive && actualStartTime != null`): bloco real, usa `actualStartTime`.
@@ -2380,3 +2380,15 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
   - **(e2) Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem.
 - (f) **DELETE/desativar** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}`.
 - (g) Validar `recurrencePattern` (hoje string livre; so "WEEKDAYS" exercitado) e os horarios do intervalo (secao 21, `ProfessionalIntervalService:137-138`).
+
+#### Handoff para os fronts (cada front alinha o proprio PRD — este e o backend, fonte da verdade)
+
+> O backend so edita este PRD. As pendencias abaixo sao para o time de cada front consumir e refletir no PRD do respectivo app. O backend nao edita os PRDs dos fronts.
+
+**Front-Partner — pronto para consumir / alinhar:**
+- **Apelido (nickname):** `PATCH /profile/general-infos` agora escreve `nickname`; `GET /profile/me` e a fonte canonica (first/last/nickname/email/phone/roles); as projecoes `GET /professional` (busca do owner) e professionals-with-queue trazem `nickname`. → Alinhar o item #16 (estava "BaseUser NAO tem nickname" — agora **tem**).
+- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**. **Ainda falta no backend:** `PATCH .../start` (iniciar manual), encerrar (ao atender + `PATCH .../finish`), `DELETE`, validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); o seed/edicao **ja existem**.
+
+**Front-Client — pronto para consumir / alinhar:**
+- **Apelido do profissional** aparece em `professionals-with-queue` e na busca de profissional — pode exibir no card.
+- **Estimativa de espera** passou a considerar refeicoes recorrentes (previsto desloca pra frente / some na proxima / nao carrega de ontem). A nota antiga de "adiantar/atrasar o intervalo em ate 15 min" **nao vale mais** — a logica e a nova projecao por refeicao.
