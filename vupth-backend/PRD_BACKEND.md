@@ -2315,7 +2315,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 2. **Editaveis nas Configuracoes**, de forma simples, podendo variar todo dia (horario e duracao de cada refeicao).
 3. **Inicio MANUAL** (igual ao intervalo avulso). O horario e so previsao; o intervalo so comeca quando o profissional clica "iniciar almoco/janta". Se em vez de iniciar ele **atender um cliente**, a previsao desloca para depois desse atendimento. Se nunca clicar, nao inicia.
 4. **Previsao dinamica.** A qualquer hora o profissional pode mudar a previsao de inicio.
-5. **Fim manual.** O intervalo termina quando o profissional clica em "atender cliente", antes ou depois do tempo previsto.
+5. **Fim por dois gatilhos.** O intervalo termina (a) automaticamente quando o profissional **atende o proximo cliente** (`PATCH /attendances/{id}/start`) OU (b) manualmente por um **botao dedicado de encerrar** (`PATCH .../intervals/{id}/finish`) — antes ou depois do tempo previsto. O fim NUNCA e automatico por tempo decorrido (so previsao).
 6. **Conta na espera.** Enquanto previsto/ativo, a duracao soma na estimativa de espera dos clientes (✅ ja existe).
 
 **O que FALTA implementar:**
@@ -2323,6 +2323,8 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - (b) **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` para `fixedStartTime` e `durationMinutes`.
 - (c) **Ajustar previsao de inicio do dia** — pode ser o mesmo PATCH de (b) sobre `fixedStartTime`. Precisa ser leve (uso diario).
 - (d) **Iniciar manual**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. **Regra-chave:** o intervalo recorrente NAO pode entrar no calculo de espera pelo `fixedStartTime` antes do clique — hoje `advanceAfterInterval` usa `getStartTime()` e aplicaria o intervalo sozinho as 12:00, contradizendo a regra 3. Diferenciar **"previsto"** (entra na estimativa como bloco deslocavel/cancelavel) de **"iniciado"** (ativo de fato).
-- (e) **Encerrar ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) durante intervalo ativo, encerrar o intervalo (`finishedEarly=true`, `actualEndTime=now`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).
+- (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
+  - **(e1) Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) com um intervalo ativo do profissional, encerrar o intervalo automaticamente (`reason="SERVED_NEXT"`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).
+  - **(e2) Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem.
 - (f) **DELETE/desativar** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}`.
 - (g) Validar `recurrencePattern` (hoje string livre; so "WEEKDAYS" exercitado) e os horarios do intervalo (secao 21, `ProfessionalIntervalService:137-138`).
