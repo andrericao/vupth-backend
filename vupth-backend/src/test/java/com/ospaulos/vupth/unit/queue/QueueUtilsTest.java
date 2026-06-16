@@ -1,0 +1,155 @@
+package com.ospaulos.vupth.unit.queue;
+
+import com.ospaulos.vupth.domain.attendance.model.Attendance;
+import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
+import com.ospaulos.vupth.domain.queue.service.QueueUtils;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+/**
+ * Unit tests — QueueUtils.calculateWaitingTimeForPosition (spec item #11d).
+ *
+ * Funcao pura: queue de atendimentos + intervalos do profissional + agora + posicao.
+ * Cobre intervalos recorrentes previstos (projecao em hoje, desloca pra frente,
+ * some na proxima), iniciados hoje (day-scoped), unexpected, e null-safety.
+ */
+class QueueUtilsTest {
+
+    private static final OffsetDateTime NOW = OffsetDateTime.parse("2026-06-16T11:00:00Z");
+
+    // ── helpers ──────────────────────────────────────────────────
+
+    private Attendance att(int minutes) {
+        Attendance a = mock(Attendance.class);
+        when(a.getEstimatedTotalMinutes()).thenReturn(minutes);
+        return a;
+    }
+
+    /** Recorrente previsto (nao iniciado): startTime null, usa fixedStartTime. */
+    private ProfessionalInterval recurring(String time, int dur) {
+        return ProfessionalInterval.createRecurring(null, dur, OffsetTime.parse(time), "WEEKDAYS", "meal");
+    }
+
+    private ProfessionalInterval startedAt(OffsetDateTime actualStart, int dur) {
+        ProfessionalInterval iv = recurring("12:00:00Z", dur);
+        iv.setActualStartTime(actualStart);
+        iv.setIsActive(true);
+        iv.setPlannedEndTime(actualStart.plusMinutes(dur));
+        return iv;
+    }
+
+    private ProfessionalInterval unexpected(OffsetDateTime start, int dur) {
+        return ProfessionalInterval.createUnexpected(null, dur, start, "break");
+    }
+
+    /** Refeicao recorrente iniciada e ENCERRADA hoje (ja consumida). */
+    private ProfessionalInterval doneToday(OffsetDateTime start, OffsetDateTime end) {
+        ProfessionalInterval iv = recurring("12:00:00Z", 60);
+        iv.setActualStartTime(start);
+        iv.setActualEndTime(end);
+        iv.setIsActive(false);
+        return iv;
+    }
+
+    // ── testes ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("sem intervalos: espera = soma das duracoes a frente")
+    void noIntervals_sumsDurations() {
+        var queue = List.of(att(30), att(30), att(30));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(), NOW, 3)).isEqualTo(90);
+    }
+
+    @Test
+    @DisplayName("posicao 0 e fila vazia retornam 0")
+    void zeroPositionOrEmpty() {
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(att(30)), List.of(), NOW, 0)).isZero();
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(), List.of(), NOW, 0)).isZero();
+    }
+
+    @Test
+    @DisplayName("recorrente null-safe: nao lanca NPE (usa fixedStartTime, nao startTime)")
+    void recurring_nullStartTime_doesNotThrow() {
+        var queue = List.of(att(30), att(30), att(30));
+        var intervals = List.of(recurring("12:00:00Z", 60));
+        assertThatCode(() -> QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 3))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("previsto dentro da janela: soma a duracao da refeicao (cliente atendido apos 12:00)")
+    void previsto_withinWindow_counts() {
+        var queue = List.of(att(30), att(30), att(30)); // 11:00→11:30→12:00→12:30
+        var intervals = List.of(recurring("12:00:00Z", 60));
+        // pos 3: atendimentos cruzam 12:00 → almoco (60) entra
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 3)).isEqualTo(150);
+    }
+
+    @Test
+    @DisplayName("previsto nao alcancado: cliente atendido antes do horario → refeicao nao conta")
+    void previsto_servedBeforeMeal_notCounted() {
+        var queue = List.of(att(30)); // servido 11:30, antes do almoco 12:00
+        var intervals = List.of(recurring("12:00:00Z", 60));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 1)).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("some na proxima: agora 18:30, almoco (12:00) ja passou da janta (18:00) → some; so a janta conta")
+    void previsto_disappearsAtNextMeal() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-06-16T18:30:00Z");
+        var queue = List.of(att(30));
+        var intervals = List.of(recurring("12:00:00Z", 60), recurring("18:00:00Z", 60));
+        // almoco some (projetado 18:30 >= janta 18:00); janta (60) conta
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, 1)).isEqualTo(90);
+    }
+
+    @Test
+    @DisplayName("iniciado hoje (em pausa agora): conta so o tempo restante da refeicao")
+    void startedToday_countsRemaining() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-06-16T12:30:00Z");
+        // iniciou 12:00, 60min → termina 13:00 → restam 30
+        var intervals = List.of(startedAt(OffsetDateTime.parse("2026-06-16T12:00:00Z"), 60));
+        var queue = List.of(att(30));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, 1)).isEqualTo(60);
+    }
+
+    @Test
+    @DisplayName("day-scoped: intervalo iniciado ONTEM nao carrega (tratado como previsto hoje)")
+    void startedYesterday_noCarryover() {
+        // actualStartTime ontem, isActive=true, fixedStartTime 12:00 → hoje vira previsto
+        var stale = startedAt(OffsetDateTime.parse("2026-06-15T12:00:00Z"), 60);
+        var queue = List.of(att(30)); // servido 11:30 < 12:00 → previsto nao conta
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(stale), NOW, 1)).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("refeicao ja feita hoje (encerrada) nao reaparece como previsto")
+    void doneToday_notRecounted() {
+        OffsetDateTime now = OffsetDateTime.parse("2026-06-16T13:00:00Z");
+        // almoco iniciado 12:00 e encerrado 12:45 hoje
+        var done = doneToday(OffsetDateTime.parse("2026-06-16T12:00:00Z"),
+                OffsetDateTime.parse("2026-06-16T12:45:00Z"));
+        var queue = List.of(att(30));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(done), now, 1)).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("unexpected agendado durante o atendimento: empurrado para depois e somado")
+    void unexpected_pushedAndCounted() {
+        // pausa avulsa 11:15/20min, atendimento 30min comeca 11:00
+        var intervals = List.of(unexpected(OffsetDateTime.parse("2026-06-16T11:15:00Z"), 20));
+        var queue = List.of(att(30), att(30));
+        // i=0: att 11:00→11:30 (pausa 11:15 empurrada p/ 11:30); i=1 drena pausa(20)+att(30)
+        // total = 30 + 20 + 30 = 80
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 2)).isEqualTo(80);
+    }
+}
