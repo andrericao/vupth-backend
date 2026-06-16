@@ -56,6 +56,9 @@ public class BaseUser implements Serializable {
     @Column(name = "last_name", length = 100)
     private String lastName;
 
+    @Column(name = "nickname", length = 50)
+    private String nickname;
+
     @Email
     @Column(name = "email", unique = true, nullable = false, length = 150)
     private String email;
@@ -138,6 +141,13 @@ public class BaseUser implements Serializable {
         if (request.lastName() != null && !request.lastName().isBlank()) {
             this.lastName = request.lastName();
             modified.add("last_name");
+        }
+
+        // nickname (apelido): provido (non-null) atualiza; em branco limpa para null
+        if (request.nickname() != null) {
+            String trimmed = request.nickname().trim();
+            this.nickname = trimmed.isBlank() ? null : trimmed;
+            modified.add("nickname");
         }
 
         if (request.phone() != null && !request.phone().isBlank()) {

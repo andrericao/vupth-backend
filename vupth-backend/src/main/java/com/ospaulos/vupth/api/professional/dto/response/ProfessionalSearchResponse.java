@@ -13,6 +13,7 @@ public record ProfessionalSearchResponse(
         UUID id,
         String name,
         String specialty,
+        String nickname,
 
         @JsonProperty("is_available")
         Boolean isAvailable
@@ -22,6 +23,7 @@ public record ProfessionalSearchResponse(
                 p.getId(),
                 p.getBaseUser() != null ? p.getBaseUser().getFirstName() : null,
                 p.getSpecialty(),
+                p.getBaseUser() != null ? p.getBaseUser().getNickname() : null,
                 p.getIsAvailable()
         );
     }

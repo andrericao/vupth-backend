@@ -108,11 +108,12 @@
                   "pm.test(\"Status 200 ou 204 - Profile atualizado\", () => {",
                   "  pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
                   "});",
-                  "pm.test(\"Schema: first_name e last_name presentes\", () => {",
+                  "pm.test(\"Schema: first_name, last_name e nickname presentes\", () => {",
                   "  if (pm.response.code === 200) {",
                   "    const r = pm.response.json();",
                   "    pm.expect(r).to.have.property(\"first_name\");",
                   "    pm.expect(r).to.have.property(\"last_name\");",
+                  "    pm.expect(r.nickname).to.eql(\"Dedeco\");",
                   "  }",
                   "});"
                 ],
@@ -135,7 +136,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"first_name\": \"Prof\", \"last_name\": \"Teste\", \"phone\": \"11999990001\"}"
+              "raw": "{\"first_name\": \"Prof\", \"last_name\": \"Teste\", \"nickname\": \"Dedeco\", \"phone\": \"11999990001\"}"
             },
             "url": "{{base_url}}/profile/general-infos",
             "auth": {
@@ -152,6 +153,38 @@
                 "type": "string"
               }
             ]
+          }
+        },
+        {
+          "name": "GET profile me (owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Retorna first_name/last_name/nickname/email\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r).to.have.property(\"first_name\");",
+                  "  pm.expect(r).to.have.property(\"last_name\");",
+                  "  pm.expect(r).to.have.property(\"nickname\");",
+                  "  pm.expect(r).to.have.property(\"email\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/profile/me"
           }
         },
         {
@@ -1978,6 +2011,7 @@
                   "    pm.expect(p).to.have.property(\"id\");",
                   "    pm.expect(p).to.have.property(\"name\");",
                   "    pm.expect(p).to.have.property(\"specialty\");",
+                  "    pm.expect(p).to.have.property(\"nickname\");",
                   "    pm.expect(p).to.have.property(\"is_available\");",
                   "  });",
                   "});"
@@ -4403,6 +4437,11 @@
                   "  const r = pm.response.json();",
                   "  pm.expect(r).to.have.property(\"professionals\");",
                   "  pm.expect(r.professionals).to.be.an(\"array\").that.is.not.empty;",
+                  "});",
+                  "",
+                  "pm.test(\"Cada professional expoe nickname (apelido)\", () => {",
+                  "  const r = pm.response.json();",
+                  "  r.professionals.forEach(p => pm.expect(p).to.have.property(\"nickname\"));",
                   "});",
                   "",
                   "pm.test(\"Item #31: todo professional exibido tem service_items NÃO vazio\", () => {",

@@ -29,6 +29,20 @@ public class ProfileController {
     private final UpdateEmailUseCase updateEmailUseCase;
     private final UpdatePasswordUseCase updatePasswordUseCase;
     private final UpdateProfileGeneralInfosUseCase updateProfileGeneralInfosUseCase;
+    private final GetMyProfileUseCase getMyProfileUseCase;
+
+    /**
+     * GET /profile/me
+     * Fonte canonica do perfil do usuario autenticado (first/last/nickname/email/phone/roles).
+     * Acesso: qualquer usuario autenticado.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileGeneralInfosResponse> getMyProfile(
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("CONTROLLER PROFILE GET /me — userId={}", user.getUserId());
+        return ResponseEntity.ok(getMyProfileUseCase.execute(user.getUserId()));
+    }
 
     @PostMapping("/register")
     public ResponseEntity<UserRegisterResponse> register(

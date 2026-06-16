@@ -86,7 +86,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
 | **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
-| **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
+| **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
 ---
 
@@ -348,6 +348,41 @@ Invalida o refresh token.
 
 ## 6. Endpoints — Profile
 
+> **`nickname` (apelido)** e um atributo da **pessoa** (`BaseUser`), compartilhado por
+> todos os papeis (client/professional/owner). O **unico ponto de escrita** e
+> `PATCH /profile/general-infos`; a **fonte canonica de leitura** e `GET /profile/me`.
+> Os endpoints de profissional **nao** escrevem apelido.
+
+### GET /profile/me
+Retorna o perfil do usuario autenticado — fonte canonica para pre-preencher
+formularios nos dois apps (client e partner).
+
+**Acesso:** qualquer usuario autenticado
+
+**Response (200):** mesmo formato do `PATCH /profile/general-infos` (com `modified_fields: []`):
+```json
+{
+  "id": "uuid",
+  "first_name": "Andre",
+  "last_name": "Ricao",
+  "nickname": "Dedeco",
+  "email": "user@example.com",
+  "phone": "11999998888",
+  "birth_date": "1990-01-15",
+  "gender": "MALE",
+  "profile_image_url": "https://...",
+  "created_at": "2026-05-26T12:00:00Z",
+  "user_roles": [...],
+  "modified_fields": []
+}
+```
+
+**Erros:** 404 `USER_NOT_FOUND` — usuario inexistente
+
+**Testes:** Integracao (`ProfileNicknameIntegrationTest`)
+
+---
+
 ### PATCH /profile/general-infos
 Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar.
 
@@ -358,6 +393,7 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
 {
   "first_name": "Andre",
   "last_name": "Ricao",
+  "nickname": "Dedeco",
   "phone": "11999998888",
   "birth_date": "1990-01-15",
   "gender": "MALE",
@@ -369,6 +405,7 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
 |-------|------|-------------|-------|
 | first_name | String | Nao | — |
 | last_name | String | Nao | — |
+| nickname | String | Nao | Apelido (max 50 chars). String em branco limpa o apelido (vira null). null e ignorado |
 | phone | String | Nao | — |
 | birth_date | LocalDate | Nao | Formato: `YYYY-MM-DD` |
 | gender | Enum | Nao | `FEMALE`, `MALE`, `NON_BINARY`, `OTHERS` |
@@ -380,6 +417,7 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
   "id": "uuid",
   "first_name": "Andre",
   "last_name": "Ricao",
+  "nickname": "Dedeco",
   "email": "user@example.com",
   "phone": "11999998888",
   "birth_date": "1990-01-15",
@@ -387,11 +425,13 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
   "profile_image_url": "https://...",
   "created_at": "2026-05-26T12:00:00Z",
   "user_roles": [...],
-  "modified_fields": ["first_name", "last_name", "phone"]
+  "modified_fields": ["first_name", "last_name", "nickname"]
 }
 ```
 
-**Testes:** Unitario + Integracao
+**Erros:** 422 `VALIDATION_ERROR` — nickname acima de 50 chars
+
+**Testes:** Unitario + Integracao (`ProfileNicknameIntegrationTest`)
 
 ---
 
@@ -631,6 +671,7 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
       "id": "uuid",
       "name": "Joao",
       "specialty": "Corte masculino",
+      "nickname": "Joca | null",
       "is_available": true,
       "current_attendance": null,
       "waiting_list": [
@@ -891,10 +932,13 @@ Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
     "id": "uuid",
     "name": "Maria",
     "specialty": "Colorista",
+    "nickname": "Mari | null",
     "is_available": true
   }
 ]
 ```
+
+> `nickname` (apelido) e projetado da `BaseUser` — leitura apenas. Para escrever, use `PATCH /profile/general-infos`.
 
 **Testes:** Integracao
 
@@ -2130,6 +2174,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | ~~GET /professional/me~~ | ~~Alta~~ | ~~Retornar dados do profissional autenticado~~ | **IMPLEMENTADO** |
 | Regra owner unico nao pode se desafiliar | Baixa | Owner unico deve adicionar outro owner (transferir) antes de sair, ou deletar o establishment. Desafiliacao de owner por outro owner exige confirmacao da contraparte. Ao perder ultimo establishment, usuario perde role OWNER | `Establishment` / `AffiliationController` — Backend |
 | Adicao de servico por funcionario da mesma loja | Media | Profissional afiliado pode adicionar ServiceItem ao establishment onde trabalha (hoje so owner pode). Novo endpoint ou permissao adicional em POST /establishment/{id}/service-items | Backend + **Front-Partner** |
+| Busca de establishment por nome/apelido do funcionario (cliente) | Media | Cliente que nao sabe o nome da loja busca pelo `firstName` OU `nickname` do profissional e recebe os establishments dele (ordenado por fila). Desenho recomendado: novo param `?professional=<termo>` no `GET /establishment` (LIKE parcial, case-insensitive, casa firstName/nickname). Apelido ja exposto na tela do estabelecimento e na busca do owner. | Backend + **Front-Client** |
 
 
 ### Bugs reportados pelo Front-Partner (2026-06-09)
