@@ -81,6 +81,15 @@ public class ProfessionalIntervalController {
         return intervalMapper.toResponse(interval);
     }
 
+    @PatchMapping("/{intervalId}/finish")
+    public IntervalResponse finishInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId) {
+
+        ProfessionalInterval interval = intervalService.finishIntervalManually(professionalId, intervalId);
+        return intervalMapper.toResponse(interval);
+    }
+
     @GetMapping
     public List<IntervalResponse> getActiveIntervals(
             @PathVariable UUID professionalId,

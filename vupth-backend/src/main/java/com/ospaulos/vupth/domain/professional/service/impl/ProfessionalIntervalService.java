@@ -184,6 +184,33 @@ public class ProfessionalIntervalService {
         }
     }
 
+    /**
+     * Encerra manualmente um intervalo (spec item #11e2) — o "botao encerrar refeicao",
+     * sem precisar atender ninguem. Marca {@code actualEndTime}/{@code isActive=false}/
+     * {@code finishedEarly}, reason {@code MANUAL}.
+     *
+     * Valida ownership pelo path (404). So encerra intervalos ATIVOS (iniciados); encerrar
+     * uma refeicao que nao esta em curso → {@link IntervalConflictException} (409).
+     */
+    public ProfessionalInterval finishIntervalManually(UUID professionalId, UUID intervalId) {
+        ProfessionalInterval interval = intervalRepository.findById(intervalId)
+                .orElseThrow(() -> new IntervalNotFoundException(intervalId));
+
+        if (!interval.getProfessional().getId().equals(professionalId)) {
+            throw new IntervalNotFoundException(intervalId);
+        }
+
+        if (!Boolean.TRUE.equals(interval.getIsActive())) {
+            throw new IntervalConflictException("Interval is not active — nothing to finish.");
+        }
+
+        interval.finishInterval("MANUAL");
+        ProfessionalInterval saved = intervalRepository.save(interval);
+        log.info("[Interval] finished manually — id={} professional={} finishedEarly={}",
+                intervalId, professionalId, saved.getFinishedEarly());
+        return saved;
+    }
+
     @Transactional
     public List<ProfessionalInterval> getActiveIntervalsForProfessional(UUID professionalId, LocalDate date) {
         //return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, date);

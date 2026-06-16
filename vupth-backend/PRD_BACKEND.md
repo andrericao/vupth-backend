@@ -1926,6 +1926,19 @@ Inicia manualmente o intervalo (o "botao iniciar almoco/janta", spec item #11d).
 
 ---
 
+### PATCH .../intervals/{intervalId}/finish
+Encerra manualmente o intervalo (o "botao encerrar refeicao", spec item #11e2), sem precisar atender ninguem. Marca `actualEndTime`/`isActive=false`/`finishedEarly` (vs `plannedEndTime`), `autoFinishReason="MANUAL"`.
+
+**Sem body.** So encerra intervalos **ativos** (iniciados).
+
+**Response (200):** `IntervalResponse` (status `SCHEDULED` — `isActive=false` apos encerrar)
+
+**Erros:** 409 `INTERVAL_CONFLICT` (refeicao nao esta ativa — nada a encerrar; tambem ao encerrar 2x) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalFinishIntegrationTest`) + Postman (folder 12)
+
+---
+
 ### GET .../intervals?date=2026-05-26
 Lista os intervalos do profissional para uma data (default: hoje). Inclui as refeicoes recorrentes **previstas** (ainda nao iniciadas) **e** as iniciadas; exclui apenas as recorrentes ja **encerradas dentro do dia** consultado e os intervalos `UNEXPECTED` inativos/fora do dia.
 
@@ -2278,7 +2291,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
-| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend EM ANDAMENTO]** ✅ Feito: (a) seed almoco/janta na criacao, (b/c) `PATCH` editar/ajustar previsao, (d-calc) estimativa recorrente-aware (`QueueUtils` reescrito, day-scoped, desloca pra frente, some na proxima). ⏳ Falta: (d-start) `PATCH .../start`, (e) encerrar (ao atender + botao), (f) DELETE, (g) validacoes. **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | **Backend** (d-start + encerrar + DELETE + validacoes) / **Front-Partner** (editar refeicoes em settings + botoes iniciar/encerrar na fila) |
+| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend EM ANDAMENTO]** ✅ Feito: (a) seed almoco/janta na criacao, (b/c) `PATCH` editar/ajustar previsao, (d-calc) estimativa recorrente-aware (`QueueUtils` reescrito, day-scoped, desloca pra frente, some na proxima), (d-start) `PATCH .../start`, (e1) encerrar ao atender, (e2) `PATCH .../finish` encerrar manual, fix do GET (retorna previstas). ⏳ Falta: (f) DELETE, (g) validacoes. **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | **Backend** (DELETE + validacoes) / **Front-Partner** (editar refeicoes em settings + botoes iniciar/encerrar na fila) |
 
 ### MEDIA PRIORIDADE — v2
 
@@ -2399,7 +2412,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
   - Uma refeicao que "some" da estimativa nao altera o registro recorrente — ele continua intacto e volta amanha.
 - (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
   - ✅ **[e1 CONCLUIDO]** **Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`), qualquer refeicao/intervalo **efetivamente iniciado** (com `actualStartTime`/`plannedEndTime`) do profissional e encerrado automaticamente (`reason="ATTEND_NEXT_CLIENT"`, `finishedEarly` calculado vs `plannedEndTime`). Refeicoes apenas previstas (nunca iniciadas) nao sao tocadas. Impl: `ProfessionalIntervalService.finishActiveIntervalsOnAttend(professionalId)`, chamado em `ProfessionalServiceImpl.startAttendance` (mesma TX). Cobertura: integracao (`IntervalFinishOnAttendIntegrationTest`).
-  - **(e2) Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem.
+  - ✅ **[e2 CONCLUIDO]** **Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` (`finishIntervalManually`) — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem. So encerra ativos (409 `INTERVAL_CONFLICT` se nao estiver em curso / ja encerrada); 404 ownership; 403 CLIENT. `finishInterval` do modelo ficou null-safe no `plannedEndTime`. Cobertura: integracao (`IntervalFinishIntegrationTest`) + Postman (folder 12).
 - (f) **DELETE/desativar** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}`.
 - (g) Validar `recurrencePattern` (hoje string livre; so "WEEKDAYS" exercitado) e os horarios do intervalo (secao 21, `ProfessionalIntervalService:137-138`).
 
@@ -2409,7 +2422,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
 **Front-Partner — pronto para consumir / alinhar:**
 - **Apelido (nickname):** `PATCH /profile/general-infos` agora escreve `nickname`; `GET /profile/me` e a fonte canonica (first/last/nickname/email/phone/roles); as projecoes `GET /professional` (busca do owner) e professionals-with-queue trazem `nickname`. → Alinhar o item #16 (estava "BaseUser NAO tem nickname" — agora **tem**).
-- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje); (e1) **encerrar ao atender** — iniciar atendimento encerra automaticamente a refeicao em curso (`reason=ATTEND_NEXT_CLIENT`). **Ainda falta no backend:** (e2) `PATCH .../finish` (encerramento manual), (f) `DELETE`, (g) validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
+- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje); (e1) **encerrar ao atender** — iniciar atendimento encerra automaticamente a refeicao em curso (`reason=ATTEND_NEXT_CLIENT`); (e2) `PATCH .../intervals/{intervalId}/finish` — **encerrar manual** (`reason=MANUAL`, botao dedicado). **Ainda falta no backend:** (f) `DELETE`, (g) validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
 
 **Front-Client — pronto para consumir / alinhar:**
 - **Apelido do profissional** aparece em `professionals-with-queue` e na busca de profissional — pode exibir no card.

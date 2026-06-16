@@ -140,7 +140,7 @@ public class ProfessionalInterval {
 
         this.actualEndTime = OffsetDateTime.now();
         this.isActive = false;
-        this.finishedEarly = this.actualEndTime.isBefore(this.plannedEndTime);
+        this.finishedEarly = this.plannedEndTime != null && this.actualEndTime.isBefore(this.plannedEndTime);
         this.autoFinishReason = reason;
     }
 
