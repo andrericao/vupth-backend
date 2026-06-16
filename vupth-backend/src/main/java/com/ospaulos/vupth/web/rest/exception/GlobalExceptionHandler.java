@@ -14,6 +14,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeni
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
+import com.ospaulos.vupth.domain.interval.exception.IntervalNotFoundException;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
 import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
@@ -192,6 +193,13 @@ public class GlobalExceptionHandler {
             InvalidIntervalTimeException ex, HttpServletRequest req) {
         log.warn("[400] InvalidIntervalTime | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INTERVAL_INVALID_TIME");
+    }
+
+    @ExceptionHandler(IntervalNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleIntervalNotFound(
+            IntervalNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] IntervalNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "INTERVAL_NOT_FOUND");
     }
 
     @ExceptionHandler(EmailsAreTheSameException.class)

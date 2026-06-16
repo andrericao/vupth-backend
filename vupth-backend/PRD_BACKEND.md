@@ -1885,6 +1885,32 @@ Cria intervalo inesperado (pausa avulsa).
 
 ---
 
+### PATCH .../intervals/{intervalId}
+Edita um intervalo (refeicao recorrente). Semantica PATCH: envie apenas os campos a alterar. Usado para mudar horario previsto/duracao das refeicoes e o ajuste diario da previsao de inicio (spec item #11b/c).
+
+**Request:**
+```json
+{
+  "durationMinutes": 90,
+  "fixedStartTime": "11:30:00Z",
+  "description": "Almoco estendido"
+}
+```
+
+| Campo | Tipo | Obrigatorio | Notas |
+|-------|------|-------------|-------|
+| durationMinutes | Integer | Nao | `@Positive`; null preserva |
+| fixedStartTime | OffsetTime | Nao | Horario previsto; null preserva |
+| description | String | Nao | null preserva |
+
+**Response (200):** `IntervalResponse`
+
+**Erros:** 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional — ownership pelo path) · 422 `VALIDATION_ERROR` (duracao nao positiva) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalUpdateIntegrationTest`)
+
+---
+
 ### GET .../intervals?date=2026-05-26
 Lista intervalos ativos para uma data (default: hoje).
 
@@ -2320,8 +2346,8 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
 **O que FALTA implementar:**
 - (a) ✅ **[CONCLUIDO]** **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente, `isActive=false`) na criacao do profissional (`register` e `quick-create`), via `ProfessionalIntervalService.seedDefaultMeals` chamando `createLunchInterval`/`createDinnerInterval` (janta ajustada de 45 para 60min). Cobertura: unit (`QuickCreateProfessionalUseCaseTest`) + integracao (`ProfessionalMealSeedIntegrationTest`). **Obs:** como nascem inativos, ainda nao aparecem no `GET .../intervals` (filtra `isActive=true`) — resolvido no item (d).
-- (b) **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` para `fixedStartTime` e `durationMinutes`.
-- (c) **Ajustar previsao de inicio do dia** — pode ser o mesmo PATCH de (b) sobre `fixedStartTime`. Precisa ser leve (uso diario).
+- (b) ✅ **[CONCLUIDO]** **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` (semantica PATCH — so campos non-null aplicados): `durationMinutes` (`@Positive`), `fixedStartTime`, `description`. Valida ownership pelo path (intervalo de outro profissional → `404 INTERVAL_NOT_FOUND`). Cobertura: integracao (`IntervalUpdateIntegrationTest`).
+- (c) ✅ **[CONCLUIDO]** **Ajustar previsao de inicio do dia** — mesmo PATCH de (b) sobre `fixedStartTime`. Leve para uso diario.
 - (d) **Iniciar manual**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. **Regra-chave:** o intervalo recorrente NAO pode entrar no calculo de espera pelo `fixedStartTime` antes do clique — hoje `advanceAfterInterval` usa `getStartTime()` e aplicaria o intervalo sozinho as 12:00, contradizendo a regra 3. Diferenciar **"previsto"** (entra na estimativa como bloco deslocavel/cancelavel) de **"iniciado"** (ativo de fato).
 - (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
   - **(e1) Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`) com um intervalo ativo do profissional, encerrar o intervalo automaticamente (`reason="SERVED_NEXT"`). Ja listado na secao 21 (`ProfessionalIntervalService:139`).

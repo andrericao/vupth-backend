@@ -6,6 +6,7 @@ import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
 import com.ospaulos.vupth.domain.events.CreateRecurringIntervalCommand;
 import com.ospaulos.vupth.domain.events.CreateUnexpectedIntervalCommand;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
+import com.ospaulos.vupth.domain.interval.exception.IntervalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.domain.events.IntervalCreatedEvent;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -94,6 +96,38 @@ public class ProfessionalIntervalService {
         List<ProfessionalInterval> saved = intervalRepository.saveAll(meals);
         log.info("[Interval] seeded default meals for professional={} ({} intervals)",
                 professional.getId(), saved.size());
+        return saved;
+    }
+
+    /**
+     * Edita um intervalo (spec item #11b/c). Semantica PATCH: aplica apenas os
+     * campos non-null. Valida que o intervalo pertence ao profissional do path.
+     * Nao re-valida conflito aqui (refeicoes nascem inativas e a query de conflito
+     * so olha ativos — fica para o item (g)).
+     */
+    public ProfessionalInterval updateInterval(UUID professionalId, UUID intervalId,
+                                               Integer durationMinutes, OffsetTime fixedStartTime,
+                                               String description) {
+
+        ProfessionalInterval interval = intervalRepository.findById(intervalId)
+                .orElseThrow(() -> new IntervalNotFoundException(intervalId));
+
+        if (!interval.getProfessional().getId().equals(professionalId)) {
+            throw new IntervalNotFoundException(intervalId);
+        }
+
+        if (durationMinutes != null) {
+            interval.setDurationMinutes(durationMinutes);
+        }
+        if (fixedStartTime != null) {
+            interval.setFixedStartTime(fixedStartTime);
+        }
+        if (description != null) {
+            interval.setDescription(description);
+        }
+
+        ProfessionalInterval saved = intervalRepository.save(interval);
+        log.info("[Interval] updated — id={} professional={}", intervalId, professionalId);
         return saved;
     }
 

@@ -4,6 +4,7 @@ import com.ospaulos.vupth.domain.events.CreateRecurringIntervalCommand;
 import com.ospaulos.vupth.domain.events.CreateUnexpectedIntervalCommand;
 import com.ospaulos.vupth.api.interval.dto.request.CreateRecurringIntervalRequest;
 import com.ospaulos.vupth.api.interval.dto.request.CreateUnexpectedIntervalRequest;
+import com.ospaulos.vupth.api.interval.dto.request.UpdateIntervalRequest;
 import com.ospaulos.vupth.api.interval.dto.response.IntervalResponse;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
@@ -54,6 +55,19 @@ public class ProfessionalIntervalController {
 
         CreateUnexpectedIntervalCommand command = intervalMapper.toCommand(professionalId, request);
         ProfessionalInterval interval = intervalService.createUnexpectedInterval(command);
+
+        return intervalMapper.toResponse(interval);
+    }
+
+    @PatchMapping("/{intervalId}")
+    public IntervalResponse updateInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId,
+            @RequestBody @Valid UpdateIntervalRequest request) {
+
+        ProfessionalInterval interval = intervalService.updateInterval(
+                professionalId, intervalId,
+                request.durationMinutes(), request.fixedStartTime(), request.description());
 
         return intervalMapper.toResponse(interval);
     }
