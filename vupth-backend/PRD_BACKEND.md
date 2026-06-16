@@ -1846,6 +1846,8 @@ Gerenciamento de intervalos/pausas programadas dos profissionais.
 
 **Acesso:** PROFESSIONAL ou ADMIN
 
+**Postman:** folder `12 - intervals (refeicoes/pausas)` (recurring, unexpected, GET, PATCH editar + erros 404/403). Reusa `prof_token` e `prof_professional_id` dos folders anteriores.
+
 ---
 
 ### POST .../intervals/recurring

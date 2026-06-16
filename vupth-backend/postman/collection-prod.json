@@ -6236,6 +6236,329 @@
       ]
     },
     {
+      "name": "12 - intervals (refeicoes/pausas)",
+      "item": [
+        {
+          "name": "POST recurring (cria intervalo recorrente)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/recurring",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "recurring"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"durationMinutes\":60,\"fixedStartTime\":\"14:00:00Z\",\"recurrencePattern\":\"WEEKDAYS\",\"description\":\"Cafe da tarde\"}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"intervalId presente\", () => pm.expect(r.intervalId).to.be.a(\"string\"));",
+                  "  pm.test(\"type RECURRENT\", () => pm.expect(r.type).to.eql(\"RECURRENT\"));",
+                  "  pm.collectionVariables.set(\"interval_id\", r.intervalId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST unexpected (pausa avulsa)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/unexpected",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "unexpected"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"durationMinutes\":15,\"startTime\":\"{{interval_unexpected_start}}\",\"description\":\"Cafe\"}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// startTime precisa estar no futuro",
+                  "const d = new Date(Date.now() + 10*60000);",
+                  "pm.collectionVariables.set(\"interval_unexpected_start\", d.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"type UNEXPECTED\", () => pm.expect(r.type).to.eql(\"UNEXPECTED\"));",
+                  "  pm.collectionVariables.set(\"interval_id_unexpected\", r.intervalId);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET intervals (lista do dia)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"resposta e array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH edit recurring (editar refeicao) #11b",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "{{interval_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"durationMinutes\":90,\"fixedStartTime\":\"13:30:00Z\",\"description\":\"Cafe estendido\"}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const r = pm.response.json();",
+                  "  pm.test(\"durationMinutes atualizado\", () => pm.expect(r.durationMinutes).to.eql(90));",
+                  "  pm.test(\"description atualizada\", () => pm.expect(r.description).to.eql(\"Cafe estendido\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "[ERRO] PATCH intervalo inexistente -> 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "00000000-0000-0000-0000-000000000000"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"durationMinutes\":60}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"code INTERVAL_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"INTERVAL_NOT_FOUND\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "[ERRO] PATCH como CLIENT -> 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "professionals",
+                "{{prof_professional_id}}",
+                "intervals",
+                "{{interval_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"durationMinutes\":60}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "error tests",
       "item": [
         {
@@ -8427,6 +8750,18 @@
     },
     {
       "key": "affiliation_invitation_id_2",
+      "value": ""
+    },
+    {
+      "key": "interval_id",
+      "value": ""
+    },
+    {
+      "key": "interval_id_unexpected",
+      "value": ""
+    },
+    {
+      "key": "interval_unexpected_start",
       "value": ""
     }
   ],
