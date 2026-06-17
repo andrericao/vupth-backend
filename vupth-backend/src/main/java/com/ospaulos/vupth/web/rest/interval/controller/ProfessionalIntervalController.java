@@ -90,6 +90,15 @@ public class ProfessionalIntervalController {
         return intervalMapper.toResponse(interval);
     }
 
+    @DeleteMapping("/{intervalId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId) {
+
+        intervalService.deleteInterval(professionalId, intervalId);
+    }
+
     @GetMapping
     public List<IntervalResponse> getActiveIntervals(
             @PathVariable UUID professionalId,

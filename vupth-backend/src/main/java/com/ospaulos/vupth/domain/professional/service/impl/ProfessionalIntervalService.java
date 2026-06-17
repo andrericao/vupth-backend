@@ -211,6 +211,25 @@ public class ProfessionalIntervalService {
         return saved;
     }
 
+    /**
+     * Remove uma refeicao/intervalo (spec item #11f) — o profissional apaga uma refeicao
+     * que nao usa (ex.: nao janta). Hard delete: o registro recorrente some. Para voltar a
+     * ter a refeicao, basta cria-la de novo (`POST .../recurring`).
+     *
+     * Valida ownership pelo path (404). Permitido em qualquer estado (e o dado do dono).
+     */
+    public void deleteInterval(UUID professionalId, UUID intervalId) {
+        ProfessionalInterval interval = intervalRepository.findById(intervalId)
+                .orElseThrow(() -> new IntervalNotFoundException(intervalId));
+
+        if (!interval.getProfessional().getId().equals(professionalId)) {
+            throw new IntervalNotFoundException(intervalId);
+        }
+
+        intervalRepository.delete(interval);
+        log.info("[Interval] deleted — id={} professional={}", intervalId, professionalId);
+    }
+
     @Transactional
     public List<ProfessionalInterval> getActiveIntervalsForProfessional(UUID professionalId, LocalDate date) {
         //return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, date);
