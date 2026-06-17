@@ -122,7 +122,7 @@ public class QueueUtils {
 
     /** Constroi os blocos efetivos de hoje a partir dos intervalos do profissional. */
     private static List<Block> buildBlocks(List<ProfessionalInterval> intervals, OffsetDateTime now) {
-        LocalDate today = now.toLocalDate();
+        LocalDate today = now.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
         OffsetDateTime endOfDay = today.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC);
 
         // Recorrentes previstos (nao iniciados hoje), ordenados pelo horario projetado —

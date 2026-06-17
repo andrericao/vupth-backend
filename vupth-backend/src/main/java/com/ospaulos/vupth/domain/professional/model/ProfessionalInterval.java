@@ -100,7 +100,7 @@ public class ProfessionalInterval {
     public boolean isStartedOn(java.time.LocalDate date) {
         return Boolean.TRUE.equals(this.isActive)
                 && this.actualStartTime != null
-                && this.actualStartTime.toLocalDate().equals(date);
+                && this.actualStartTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
     }
 
     /**
@@ -109,7 +109,7 @@ public class ProfessionalInterval {
      */
     public boolean isDoneOn(java.time.LocalDate date) {
         return this.actualEndTime != null
-                && this.actualEndTime.toLocalDate().equals(date);
+                && this.actualEndTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
     }
 
     public void startInterval() {
@@ -117,7 +117,7 @@ public class ProfessionalInterval {
             throw new IllegalStateException("Interval is already is_active");
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.actualStartTime = now;
 
         if (this.intervalType == IntervalType.RECURRENT && this.fixedStartTime != null) {
