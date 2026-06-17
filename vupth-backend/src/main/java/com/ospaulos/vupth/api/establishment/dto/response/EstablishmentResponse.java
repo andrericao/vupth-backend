@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import jakarta.validation.constraints.NotNull;
 
+import java.time.OffsetTime;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +19,12 @@ public record EstablishmentResponse(
 
         String phone,
         String instagram,
+
+        @JsonProperty("opening_time")
+        OffsetTime openingTime,
+
+        @JsonProperty("closing_time")
+        OffsetTime closingTime,
 
         // Menor tempo de espera (min) entre os profissionais da loja, em minutos.
         // null quando a loja nao tem profissional com servico (sem disponibilidade).
@@ -45,6 +52,8 @@ public record EstablishmentResponse(
                 establishment.getOwner().getId(),
                 establishment.getPhone(),
                 establishment.getInstagram(),
+                establishment.getOpeningTime(),
+                establishment.getClosingTime(),
                 estimatedWaitMinutes,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
                 establishment.getStatus() != null ? establishment.getStatus().name() : null

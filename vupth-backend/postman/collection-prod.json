@@ -1509,6 +1509,60 @@
      }
     },
     {
+     "name": "update general-infos → opening/closing time (#11g2)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"opening_time 08:30Z\", () => pm.expect(pm.response.json().opening_time).to.eql(\"08:30Z\"));",
+         "pm.test(\"closing_time 19:00Z\", () => pm.expect(pm.response.json().closing_time).to.eql(\"19:00Z\"));",
+         "pm.test(\"modified_fields inclui opening/closing\", () => {",
+         "  const mf = pm.response.json().modified_fields || [];",
+         "  pm.expect(mf).to.include(\"opening_time\");",
+         "  pm.expect(mf).to.include(\"closing_time\");",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"opening_time\":\"08:30:00Z\",\"closing_time\":\"19:00:00Z\"}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
      "name": "update general-infos → services",
      "event": [
       {
@@ -3993,6 +4047,58 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "set horario de funcionamento (general-infos) #11g2c",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"opening_time 09:00Z\", () => pm.expect(pm.response.json().opening_time).to.eql(\"09:00Z\"));",
+         "pm.test(\"closing_time 18:00Z\", () => pm.expect(pm.response.json().closing_time).to.eql(\"18:00Z\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"opening_time\":\"09:00:00Z\",\"closing_time\":\"18:00:00Z\"}"
+      },
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "general-infos"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
     },
     {
      "name": "update open status → OPEN (gate #31, com serviço)",
@@ -7499,6 +7605,106 @@
         "exec": [
          "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
          "pm.test(\"code INTERVAL_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"INTERVAL_NOT_FOUND\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] POST recurring duracao > 240 -> 422",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/recurring",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "recurring"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"durationMinutes\":300,\"fixedStartTime\":\"15:00:00Z\",\"recurrencePattern\":\"WEEKDAYS\"}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] POST recurring recurrencePattern invalido -> 422",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/recurring",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "recurring"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"durationMinutes\":30,\"fixedStartTime\":\"15:00:00Z\",\"recurrencePattern\":\"MONTHLY\"}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
         ]
        }
       }

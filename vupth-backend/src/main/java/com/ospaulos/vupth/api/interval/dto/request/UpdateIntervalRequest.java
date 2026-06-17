@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.interval.dto.request;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 
 import java.time.OffsetTime;
@@ -11,7 +12,7 @@ import java.time.OffsetTime;
  * da previsao de inicio.
  */
 public record UpdateIntervalRequest(
-        @Positive Integer durationMinutes,
+        @Positive @Max(value = 240, message = "durationMinutes must be at most 240") Integer durationMinutes,
         OffsetTime fixedStartTime,
         String description) {
 }

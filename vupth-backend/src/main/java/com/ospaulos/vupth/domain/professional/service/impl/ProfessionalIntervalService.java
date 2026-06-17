@@ -42,6 +42,7 @@ public class ProfessionalIntervalService {
                 .orElseThrow(() -> new ProfessionalNotFoundException(command.professionalId()));
 
         validateRecurringIntervalCreation(professional, command);
+        validateWithinBusinessHours(professional, command.fixedStartTime(), command.durationMinutes());
 
         ProfessionalInterval interval = ProfessionalInterval.createRecurring(
                 professional,
@@ -126,6 +127,12 @@ public class ProfessionalIntervalService {
             interval.setDescription(description);
         }
 
+        // Apos aplicar o patch, a refeicao (recorrente) ainda precisa caber na janela de funcionamento.
+        if (interval.getFixedStartTime() != null && interval.getDurationMinutes() != null) {
+            validateWithinBusinessHours(interval.getProfessional(),
+                    interval.getFixedStartTime(), interval.getDurationMinutes());
+        }
+
         ProfessionalInterval saved = intervalRepository.save(interval);
         log.info("[Interval] updated — id={} professional={}", intervalId, professionalId);
         return saved;
@@ -147,7 +154,7 @@ public class ProfessionalIntervalService {
             throw new IntervalNotFoundException(intervalId);
         }
 
-        LocalDate today = OffsetDateTime.now().toLocalDate();
+        LocalDate today = OffsetDateTime.now(ZoneOffset.UTC).toLocalDate();
         if (interval.isStartedOn(today) || interval.isDoneOn(today)) {
             throw new IntervalConflictException("This interval was already started/taken today.");
         }
@@ -244,6 +251,31 @@ public class ProfessionalIntervalService {
     @Transactional
     public boolean isProfessionalInInterval(UUID professionalId, OffsetDateTime dateTime) {
         return intervalRepository.existsActiveIntervalAt(professionalId, dateTime);
+    }
+
+    /**
+     * Valida que a refeicao recorrente cabe na janela de funcionamento do estabelecimento
+     * (spec #11g2): {@code fixedStartTime >= abertura} e {@code fixedStartTime + duracao <= fechamento}
+     * (ex.: janta de 60min nao inicia <60min antes de fechar). So valida quando o estabelecimento
+     * tem horario definido — sem horario (null), nao restringe (assume-se dia inteiro).
+     */
+    private void validateWithinBusinessHours(Professional professional, OffsetTime start, Integer durationMinutes) {
+        if (professional == null || professional.getEstablishment() == null
+                || start == null || durationMinutes == null) {
+            return;
+        }
+        OffsetTime opening = professional.getEstablishment().getOpeningTime();
+        OffsetTime closing = professional.getEstablishment().getClosingTime();
+        if (opening == null || closing == null) {
+            return; // sem horario de funcionamento definido — nao valida
+        }
+
+        OffsetTime end = start.plusMinutes(durationMinutes);
+        if (start.isBefore(opening) || end.isAfter(closing)) {
+            throw new InvalidIntervalTimeException(
+                    "Interval must fit within business hours (" + opening + " to " + closing
+                            + "); requested " + start + " for " + durationMinutes + "min.");
+        }
     }
 
     private void validateRecurringIntervalCreation(Professional professional, CreateRecurringIntervalCommand command) {

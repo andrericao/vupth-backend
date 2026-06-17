@@ -1,0 +1,34 @@
+databaseChangeLog:
+  - changeSet:
+      id: 021-add-opening-time-to-establishment
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: establishment
+                columnName: opening_time
+      changes:
+        - addColumn:
+            tableName: establishment
+            columns:
+              - column:
+                  name: opening_time
+                  type: TIME
+
+  - changeSet:
+      id: 021-add-closing-time-to-establishment
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: establishment
+                columnName: closing_time
+      changes:
+        - addColumn:
+            tableName: establishment
+            columns:
+              - column:
+                  name: closing_time
+                  type: TIME

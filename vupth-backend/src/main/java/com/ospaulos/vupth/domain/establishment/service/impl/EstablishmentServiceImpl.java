@@ -6,6 +6,7 @@ import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.ProfessionalWithQueueResponse;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
@@ -136,9 +137,16 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 .findByIdAndOwnerId(establishmentId, ownerId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
 
-        // Gate: só pode abrir se estiver "ativo" — ao menos um profissional com ao menos um serviço.
-        if (newStatus == OpenStatus.OPEN && !hasProfessionalWithService(establishment)) {
-            throw new EstablishmentNotReadyException(establishmentId);
+        // Gate de abertura (só ao virar OPEN):
+        if (newStatus == OpenStatus.OPEN) {
+            // (#31) ao menos um profissional com ao menos um serviço.
+            if (!hasProfessionalWithService(establishment)) {
+                throw new EstablishmentNotReadyException(establishmentId);
+            }
+            // (#11g2c) horário de funcionamento definido (abertura + fechamento).
+            if (establishment.getOpeningTime() == null || establishment.getClosingTime() == null) {
+                throw new EstablishmentHoursRequiredException(establishmentId);
+            }
         }
 
         establishment.setOpenStatus(newStatus);

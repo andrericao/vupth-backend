@@ -733,7 +733,9 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "service_type": "BARBER",
   "services": ["BARBER", "BEAUTY_SALON"],
   "phone": "11999990000",
-  "instagram": "@barbearia"
+  "instagram": "@barbearia",
+  "opening_time": "09:00:00Z",
+  "closing_time": "18:00:00Z"
 }
 ```
 
@@ -745,6 +747,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 | services | Set<Enum> | substitui o conjunto atual |
 | phone | String | opcional (max 20). String em branco **limpa** o campo (vira null) |
 | instagram | String | opcional (max 100). String em branco **limpa** o campo (vira null) |
+| opening_time | OffsetTime | horario de abertura (#11g2). null preserva. Serializa "HH:mmZ" |
+| closing_time | OffsetTime | horario de fechamento (#11g2). null preserva. Serializa "HH:mmZ" |
 
 **Response (200):**
 ```json
@@ -756,6 +760,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "services": ["BARBER", "BEAUTY_SALON"],
   "phone": "11999990000",
   "instagram": "@barbearia",
+  "opening_time": "09:00Z",
+  "closing_time": "18:00Z",
   "open_status": "OPEN",
   "status": "ACTIVE",
   "owner_id": "uuid",
@@ -763,7 +769,7 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 }
 ```
 
-> `phone` e `instagram` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
+> `phone`, `instagram`, `opening_time` e `closing_time` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
 
 **Testes:** Integracao
 
@@ -783,14 +789,17 @@ Atualiza status de abertura.
 
 Valores: `OPEN`, `CLOSED`, `TEMPORARILY_CLOSED`
 
-**Gate #31:** so permite abrir (`OPEN`) se o establishment tiver **>=1 profissional com >=1 servico**. Caso contrario retorna `422 ESTABLISHMENT_NOT_READY`. `CLOSED` e `TEMPORARILY_CLOSED` nao tem essa restricao.
+**Gates de abertura** (so ao virar `OPEN`; `CLOSED`/`TEMPORARILY_CLOSED` sem restricao), nesta ordem:
+1. **#31** — >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`.
+2. **#11g2c** — horario de funcionamento definido (`opening_time` e `closing_time` non-null), senao `422 ESTABLISHMENT_HOURS_REQUIRED`. O front usa esse 422 pra encaminhar a tela de horario (configuracoes) antes de abrir.
 
-**Response (200):** `EstablishmentResponse`
+**Response (200):** `EstablishmentResponse` (inclui `opening_time`/`closing_time`)
 
 **Erros:**
 | Status | Code | Quando |
 |--------|------|--------|
 | 422 | `ESTABLISHMENT_NOT_READY` | Tentou abrir sem nenhum profissional com servico |
+| 422 | `ESTABLISHMENT_HOURS_REQUIRED` | Tentou abrir sem horario de funcionamento definido |
 | 401 | — | Sem token |
 | 403 | — | Token nao-owner |
 | 404 | `ESTABLISHMENT_NOT_FOUND` | Establishment inexistente ou de outro owner |
@@ -1863,9 +1872,17 @@ Cria intervalo recorrente.
 }
 ```
 
+| Campo | Validacao |
+|-------|-----------|
+| durationMinutes | `@NotNull @Positive @Max(240)` |
+| fixedStartTime | `@NotNull` (OffsetTime) |
+| recurrencePattern | `@NotBlank`, restrito a **`WEEKDAYS` \| `DAILY` \| `WEEKENDS`** |
+
 **Response (201):** `IntervalResponse`
 
-**Testes:** Integracao
+**Erros:** 422 `VALIDATION_ERROR` (duracao nula/≤0/>240, recurrencePattern fora do conjunto) · 409 `INTERVAL_CONFLICT` (sobreposicao com recorrente ativo) · 403 (CLIENT)
+
+**Testes:** Integracao (`ProfessionalIntervalIntegrationTest`, `IntervalValidationIntegrationTest`)
 
 ---
 
@@ -1881,7 +1898,14 @@ Cria intervalo inesperado (pausa avulsa).
 }
 ```
 
+| Campo | Validacao |
+|-------|-----------|
+| durationMinutes | `@NotNull @Positive @Max(240)` |
+| startTime | `@NotNull` (OffsetDateTime); nao pode ser no passado |
+
 **Response (201):** `IntervalResponse`
+
+**Erros:** 422 `VALIDATION_ERROR` (duracao nula/≤0/>240) · 400 `INTERVAL_INVALID_TIME` (no passado) · 409 `INTERVAL_CONFLICT` · 403 (CLIENT)
 
 **Testes:** Integracao
 
@@ -2304,7 +2328,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
-| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend EM ANDAMENTO]** ✅ Feito: (a) seed almoco/janta na criacao, (b/c) `PATCH` editar/ajustar previsao, (d-calc) estimativa recorrente-aware (`QueueUtils` reescrito, day-scoped, desloca pra frente, some na proxima), (d-start) `PATCH .../start`, (e1) encerrar ao atender, (e2) `PATCH .../finish` encerrar manual, (f) `DELETE` remover refeicao, fix do GET (retorna previstas). ⏳ Falta: (g) validacoes. **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | **Backend** (validacoes) / **Front-Partner** (editar refeicoes em settings + botoes iniciar/encerrar na fila) |
+| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend EM ANDAMENTO]** ✅ Feito: (a) seed almoco/janta na criacao, (b/c) `PATCH` editar/ajustar previsao, (d-calc) estimativa recorrente-aware (`QueueUtils` reescrito, day-scoped, desloca pra frente, some na proxima), (d-start) `PATCH .../start`, (e1) encerrar ao atender, (e2) `PATCH .../finish` encerrar manual, (f) `DELETE` remover refeicao, (g1) validacoes de campo (recurrencePattern enum + teto 240min), (g2) horario de funcionamento + refeicao cabe na janela + gate de abertura, fix do GET (retorna previstas). ✅ **Backend COMPLETO.** **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | ~~**Backend**~~ ✅ / **Front-Partner** (editar refeicoes + horario de funcionamento em settings; botoes iniciar/encerrar na fila; tratar 422 ESTABLISHMENT_HOURS_REQUIRED) |
 
 ### MEDIA PRIORIDADE — v2
 
@@ -2421,7 +2445,8 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
   **Decisoes de modelagem (2026-06-16):**
   - **Autonomia do dono > restricao.** O profissional/dono inicia a refeicao **quando quiser** (cedo, tarde, ±20min) e pode **pular** almoco e/ou janta. **Sem 422 de janela de horario.** Unico bloqueio no `start`: nao iniciar duas vezes a mesma refeicao no mesmo dia (`IllegalState` ja existe). Pular = simplesmente nao iniciar (sem erro).
-  - **Estado de execucao day-scoped (reset por dia).** Mantem 1 registro recorrente (sem migracao). O estado "iniciado" so vale para hoje: `isStartedToday() = isActive && actualStartTime != null && actualStartTime.toLocalDate() == hoje`. Se `actualStartTime` for de outro dia, trata como NAO iniciado (reset implicito). Elimina carryover e "duplo-almoco". Historico por dia (tabela de ocorrencias) fica pos-MVP.
+  - **Estado de execucao day-scoped (reset por dia).** Mantem 1 registro recorrente (sem migracao). O estado "iniciado" so vale para hoje: `isStartedToday() = isActive && actualStartTime != null && actualStartTime(UTC).toLocalDate() == hoje(UTC)`. Se `actualStartTime` for de outro dia, trata como NAO iniciado (reset implicito). Elimina carryover e "duplo-almoco". Historico por dia (tabela de ocorrencias) fica pos-MVP.
+  - **Day-scoping em UTC (correcao 2026-06-16).** A comparacao de "hoje" usa **UTC consistente** (`isStartedOn`/`isDoneOn` normalizam `actualStartTime`/`actualEndTime` com `withOffsetSameInstant(UTC)`; `startInterval` e `QueueUtils` usam `now(UTC)`). Antes misturava hora local com timestamps gravados em UTC — perto da meia-noite UTC (ex.: 22h no fuso -03) o conflito de "iniciar 2x no dia" nao disparava. Agora e robusto a fuso/hora.
   - **Janelas relativas vivem so na ESTIMATIVA** (nao travam o inicio): o previsto projeta hoje@`fixedStartTime`, desloca pra frente, e **some quando alcanca a proxima refeicao** (almoco some no inicio da janta; janta some no fim do dia). Isso muda **so o numero que o cliente ve**, nunca a liberdade do dono.
   - **Seed mantem almoco + janta** (cobre turnos diferentes; profissional edita/remove o que nao usar).
   - Uma refeicao que "some" da estimativa nao altera o registro recorrente — ele continua intacto e volta amanha.
@@ -2429,7 +2454,13 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
   - ✅ **[e1 CONCLUIDO]** **Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`), qualquer refeicao/intervalo **efetivamente iniciado** (com `actualStartTime`/`plannedEndTime`) do profissional e encerrado automaticamente (`reason="ATTEND_NEXT_CLIENT"`, `finishedEarly` calculado vs `plannedEndTime`). Refeicoes apenas previstas (nunca iniciadas) nao sao tocadas. Impl: `ProfessionalIntervalService.finishActiveIntervalsOnAttend(professionalId)`, chamado em `ProfessionalServiceImpl.startAttendance` (mesma TX). Cobertura: integracao (`IntervalFinishOnAttendIntegrationTest`).
   - ✅ **[e2 CONCLUIDO]** **Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` (`finishIntervalManually`) — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem. So encerra ativos (409 `INTERVAL_CONFLICT` se nao estiver em curso / ja encerrada); 404 ownership; 403 CLIENT. `finishInterval` do modelo ficou null-safe no `plannedEndTime`. Cobertura: integracao (`IntervalFinishIntegrationTest`) + Postman (folder 12).
 - (f) ✅ **[CONCLUIDO]** **DELETE** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}` (`deleteInterval`) — hard delete, ownership pelo path (404), 403 CLIENT, `204`. Cobertura: integracao (`IntervalDeleteIntegrationTest`) + Postman (folder 12).
-- (g) Validar `recurrencePattern` (hoje string livre; so "WEEKDAYS" exercitado) e os horarios do intervalo (secao 21, `ProfessionalIntervalService:137-138`).
+- (g) **Validacoes**:
+  - ✅ **[g1 CONCLUIDO]** `recurrencePattern` restrito a `WEEKDAYS|DAILY|WEEKENDS` (`@Pattern` → 422); `durationMinutes` com teto `@Max(240)` (recurring, unexpected e update). Cobertura: integracao (`IntervalValidationIntegrationTest`) + Postman (folder 12).
+  - ✅ **[g2 CONCLUIDO]** Horario de funcionamento estruturado + refeicao cabe na janela:
+    - **(g2a)** `Establishment.openingTime`/`closingTime` (`OffsetTime`, nullable, migration `021-add-establishment-hours`). Editaveis via `PATCH /establishment/{id}/general-infos` (`opening_time`/`closing_time`, semantica PATCH). Expostos em `EstablishmentResponse` e `EstablishmentGeneralInfosResponse`.
+    - **(g2b)** Refeicao recorrente tem de **caber na janela** ao criar/editar: `fixedStartTime ≥ abertura` e `fixedStartTime + duracao ≤ fechamento` (ex.: janta 60min nao inicia <60min antes de fechar). So valida quando o establishment tem horario definido; senao nao restringe. Fora da janela → `400 INTERVAL_INVALID_TIME`. Cobertura: `IntervalValidationIntegrationTest`.
+    - **(g2c)** **Gate de abertura**: `PATCH /establishment/{id}/open-status → OPEN` exige horario definido; se `null` → `422 ESTABLISHMENT_HOURS_REQUIRED` (codigo proprio, separado do `ESTABLISHMENT_NOT_READY` do #31; o front usa pra encaminhar a tela de horario). Ordem do gate: primeiro #31 (prof+servico), depois horario. Cobertura: `EstablishmentIntegrationTest` (Order 68).
+    - **Conflito horario × refeicao existente:** o backend **nao mexe** em refeicoes ja criadas; so impede criar/editar fora da janela. Refeicoes seed (almoco/janta) nascem antes do horario e nao sao revalidadas — o front avisa se ficarem fora.
 
 #### Handoff para os fronts (cada front alinha o proprio PRD — este e o backend, fonte da verdade)
 
@@ -2437,7 +2468,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
 **Front-Partner — pronto para consumir / alinhar:**
 - **Apelido (nickname):** `PATCH /profile/general-infos` agora escreve `nickname`; `GET /profile/me` e a fonte canonica (first/last/nickname/email/phone/roles); as projecoes `GET /professional` (busca do owner) e professionals-with-queue trazem `nickname`. → Alinhar o item #16 (estava "BaseUser NAO tem nickname" — agora **tem**).
-- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje); (e1) **encerrar ao atender** — iniciar atendimento encerra automaticamente a refeicao em curso (`reason=ATTEND_NEXT_CLIENT`); (e2) `PATCH .../intervals/{intervalId}/finish` — **encerrar manual** (`reason=MANUAL`, botao dedicado); (f) `DELETE .../intervals/{intervalId}` — remover refeicao (hard delete, `204`). **Ainda falta no backend:** (g) validacoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
+- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje); (e1) **encerrar ao atender** — iniciar atendimento encerra automaticamente a refeicao em curso (`reason=ATTEND_NEXT_CLIENT`); (e2) `PATCH .../intervals/{intervalId}/finish` — **encerrar manual** (`reason=MANUAL`, botao dedicado); (f) `DELETE .../intervals/{intervalId}` — remover refeicao (hard delete, `204`); (g1) validacoes de campo (recurrencePattern `WEEKDAYS|DAILY|WEEKENDS`, teto `@Max(240)`); (g2) **horario de funcionamento** (`opening_time`/`closing_time` no establishment, editaveis via general-infos), refeicao tem de **caber na janela** (`400 INTERVAL_INVALID_TIME`), e **gate de abertura** (`422 ESTABLISHMENT_HOURS_REQUIRED` se abrir sem horario). ✅ **#14 backend COMPLETO.** → Front-Partner: tela de configuracoes com horario de funcionamento (the open manda pra ela via 422); tratar a janela nas refeicoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
 
 **Front-Client — pronto para consumir / alinhar:**
 - **Apelido do profissional** aparece em `professionals-with-queue` e na busca de profissional — pode exibir no card.

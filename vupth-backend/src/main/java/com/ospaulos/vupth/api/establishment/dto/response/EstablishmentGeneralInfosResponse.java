@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 
+import java.time.OffsetTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +24,12 @@ public record EstablishmentGeneralInfosResponse(
         String phone,
 
         String instagram,
+
+        @JsonProperty("opening_time")
+        OffsetTime openingTime,
+
+        @JsonProperty("closing_time")
+        OffsetTime closingTime,
 
         @JsonProperty("open_status")
         String openStatus,
@@ -44,6 +51,8 @@ public record EstablishmentGeneralInfosResponse(
                 e.getServices() != null ? Set.copyOf(e.getServices()) : Set.of(),
                 e.getPhone(),
                 e.getInstagram(),
+                e.getOpeningTime(),
+                e.getClosingTime(),
                 e.getOpenStatus() != null ? e.getOpenStatus().name() : null,
                 e.getStatus() != null ? e.getStatus().name() : null,
                 e.getOwner().getId(),

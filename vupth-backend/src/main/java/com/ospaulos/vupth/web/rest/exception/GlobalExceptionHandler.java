@@ -12,6 +12,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFo
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalNotFoundException;
@@ -112,6 +113,13 @@ public class GlobalExceptionHandler {
             EstablishmentNotReadyException ex, HttpServletRequest req) {
         log.warn("[422] EstablishmentNotReady | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_NOT_READY");
+    }
+
+    @ExceptionHandler(EstablishmentHoursRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentHoursRequired(
+            EstablishmentHoursRequiredException ex, HttpServletRequest req) {
+        log.warn("[422] EstablishmentHoursRequired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)

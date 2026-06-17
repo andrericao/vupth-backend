@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 
+import java.time.OffsetTime;
 import java.util.Set;
 
 @JsonIgnoreProperties(ignoreUnknown = false)
@@ -20,5 +21,12 @@ public record EstablishmentGeneralInfosRequest(
 
         String phone,
 
-        String instagram
+        String instagram,
+
+        // Horario de funcionamento (#11g2). Ex.: "09:00Z". null preserva (semantica PATCH).
+        @JsonProperty("opening_time")
+        OffsetTime openingTime,
+
+        @JsonProperty("closing_time")
+        OffsetTime closingTime
 ) {}
