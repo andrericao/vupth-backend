@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateR
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -41,6 +42,7 @@ class RegisterProfessionalUseCaseTest {
     private static final UUID USER_ID = UUID.randomUUID();
 
     @Mock UserRepository userRepository;
+    @Mock ProfessionalIntervalService intervalService;
     @InjectMocks RegisterProfessionalUseCase useCase;
 
     private BaseUser user;
