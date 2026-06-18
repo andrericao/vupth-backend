@@ -77,6 +77,16 @@ public class UpdateEstablishmentGeneralInfosUseCase {
             modified.add("instagram");
         }
 
+        if (request.openingTime() != null) {
+            establishment.setOpeningTime(request.openingTime());
+            modified.add("opening_time");
+        }
+
+        if (request.closingTime() != null) {
+            establishment.setClosingTime(request.closingTime());
+            modified.add("closing_time");
+        }
+
         return modified;
     }
 }

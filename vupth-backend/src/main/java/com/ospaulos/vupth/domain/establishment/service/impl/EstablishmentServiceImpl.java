@@ -3,7 +3,10 @@ package com.ospaulos.vupth.domain.establishment.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
+import com.ospaulos.vupth.api.establishment.dto.response.ProfessionalWithQueueResponse;
+import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
@@ -20,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -32,6 +36,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final OwnerRepository ownerRepository;
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
+    private final GetEstablishmentWithQueueUseCase getWithQueueUseCase;
 
     @Override
     public EstablishmentResponse registerEstablishment(EstablishmentRequest request){
@@ -65,45 +70,62 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     @Override
     public List<EstablishmentResponse> findAllActive() {
         log.info("[Establishment] findAllActive");
-        return establishmentRepository.findAllActive().stream()
-                .map(EstablishmentResponse::fromEntity)
-                .toList();
+        return toResponsesSortedByWait(establishmentRepository.findAllActive());
     }
 
     @Override
     public List<EstablishmentResponse> searchByName(String name) {
         log.info("[Establishment] searchByName — name={}", name);
-        return establishmentRepository
-                .findByNameContainingIgnoreCaseAndStatusNot(name)
-                .stream()
-                .map(EstablishmentResponse::fromEntity)
-                .toList();
+        return toResponsesSortedByWait(
+                establishmentRepository.findByNameContainingIgnoreCaseAndStatusNot(name));
     }
 
     @Override
     public List<EstablishmentResponse> findByServiceType(ServiceType serviceType) {
         log.info("[Establishment] findByServiceType — type={}", serviceType);
-        return establishmentRepository.findActiveByServiceType(serviceType).stream()
-                .map(EstablishmentResponse::fromEntity)
-                .toList();
+        return toResponsesSortedByWait(establishmentRepository.findActiveByServiceType(serviceType));
     }
 
     @Override
     public List<EstablishmentResponse> searchByNeighborhood(String neighborhood) {
         log.info("[Establishment] searchByNeighborhood — neighborhood={}", neighborhood);
-        return establishmentRepository.findActiveByNeighborhood(neighborhood).stream()
-                .map(EstablishmentResponse::fromEntity)
-                .toList();
+        return toResponsesSortedByWait(establishmentRepository.findActiveByNeighborhood(neighborhood));
     }
 
     @Override
     public List<EstablishmentResponse> searchByServiceTypeAndNeighborhood(ServiceType serviceType, String neighborhood) {
         log.info("[Establishment] searchByServiceTypeAndNeighborhood — type={} neighborhood={}",
                 serviceType, neighborhood);
-        return establishmentRepository
-                .findActiveByServiceTypeAndNeighborhood(serviceType, neighborhood).stream()
-                .map(EstablishmentResponse::fromEntity)
+        return toResponsesSortedByWait(
+                establishmentRepository.findActiveByServiceTypeAndNeighborhood(serviceType, neighborhood));
+    }
+
+    /**
+     * Mapeia os establishments para a resposta enriquecida com o menor tempo de espera
+     * (min entre os profissionais com servico) e ordena por menor fila (asc, nulls last).
+     *
+     * @apiNote Calcula a fila por establishment (reusa o snapshot da fila), o que gera
+     *          varias queries em listas grandes. Aceitavel no MVP — ver backlog de performance.
+     */
+    private List<EstablishmentResponse> toResponsesSortedByWait(List<Establishment> establishments) {
+        return establishments.stream()
+                .map(e -> EstablishmentResponse.fromEntity(e, minWaitMinutes(e.getId())))
+                .sorted(Comparator.comparing(EstablishmentResponse::estimatedWaitMinutes,
+                        Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
+    }
+
+    /** Menor tempo de espera (min) entre os profissionais com servico da loja; null se nenhum. */
+    private Integer minWaitMinutes(UUID establishmentId) {
+        try {
+            return getWithQueueUseCase.execute(establishmentId).professionals().stream()
+                    .map(ProfessionalWithQueueResponse::estimatedWaitMinutes)
+                    .min(Integer::compareTo)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.warn("[Establishment] minWaitMinutes falhou para {}: {}", establishmentId, e.getMessage());
+            return null;
+        }
     }
 
     @Override
@@ -115,9 +137,16 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 .findByIdAndOwnerId(establishmentId, ownerId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
 
-        // Gate: só pode abrir se estiver "ativo" — ao menos um profissional com ao menos um serviço.
-        if (newStatus == OpenStatus.OPEN && !hasProfessionalWithService(establishment)) {
-            throw new EstablishmentNotReadyException(establishmentId);
+        // Gate de abertura (só ao virar OPEN):
+        if (newStatus == OpenStatus.OPEN) {
+            // (#31) ao menos um profissional com ao menos um serviço.
+            if (!hasProfessionalWithService(establishment)) {
+                throw new EstablishmentNotReadyException(establishmentId);
+            }
+            // (#11g2c) horário de funcionamento definido (abertura + fechamento).
+            if (establishment.getOpeningTime() == null || establishment.getClosingTime() == null) {
+                throw new EstablishmentHoursRequiredException(establishmentId);
+            }
         }
 
         establishment.setOpenStatus(newStatus);

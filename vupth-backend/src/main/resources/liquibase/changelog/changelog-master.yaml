@@ -144,6 +144,16 @@ databaseChangeLog:
       file: changesets/50-establishment/020-add-serviceitem-pricing-columns.yaml
       relativeToChangeLogFile: true
 
+  # Add opening_time + closing_time (horario de funcionamento) to establishment
+  - include:
+      file: changesets/50-establishment/021-add-establishment-hours.yaml
+      relativeToChangeLogFile: true
+
+  # Add nickname (apelido) column to base_user
+  - include:
+      file: changesets/20-auth/021-add-nickname-to-base_user.yaml
+      relativeToChangeLogFile: true
+
   # Affiliation request table
   - include:
       file: changesets/90-affiliation/001-create-affiliation-request.yaml

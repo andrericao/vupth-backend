@@ -4,6 +4,7 @@ import com.ospaulos.vupth.domain.events.CreateRecurringIntervalCommand;
 import com.ospaulos.vupth.domain.events.CreateUnexpectedIntervalCommand;
 import com.ospaulos.vupth.api.interval.dto.request.CreateRecurringIntervalRequest;
 import com.ospaulos.vupth.api.interval.dto.request.CreateUnexpectedIntervalRequest;
+import com.ospaulos.vupth.api.interval.dto.request.UpdateIntervalRequest;
 import com.ospaulos.vupth.api.interval.dto.response.IntervalResponse;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
@@ -56,6 +57,46 @@ public class ProfessionalIntervalController {
         ProfessionalInterval interval = intervalService.createUnexpectedInterval(command);
 
         return intervalMapper.toResponse(interval);
+    }
+
+    @PatchMapping("/{intervalId}")
+    public IntervalResponse updateInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId,
+            @RequestBody @Valid UpdateIntervalRequest request) {
+
+        ProfessionalInterval interval = intervalService.updateInterval(
+                professionalId, intervalId,
+                request.durationMinutes(), request.fixedStartTime(), request.description());
+
+        return intervalMapper.toResponse(interval);
+    }
+
+    @PatchMapping("/{intervalId}/start")
+    public IntervalResponse startInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId) {
+
+        ProfessionalInterval interval = intervalService.startInterval(professionalId, intervalId);
+        return intervalMapper.toResponse(interval);
+    }
+
+    @PatchMapping("/{intervalId}/finish")
+    public IntervalResponse finishInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId) {
+
+        ProfessionalInterval interval = intervalService.finishIntervalManually(professionalId, intervalId);
+        return intervalMapper.toResponse(interval);
+    }
+
+    @DeleteMapping("/{intervalId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId) {
+
+        intervalService.deleteInterval(professionalId, intervalId);
     }
 
     @GetMapping

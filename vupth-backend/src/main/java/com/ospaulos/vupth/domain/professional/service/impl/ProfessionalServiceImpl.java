@@ -43,6 +43,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
     private final QueueService queueService;
     private final AttendanceService attendanceService;
+    private final ProfessionalIntervalService intervalService;
     private final ServiceItemService serviceItemService;
     private final EstablishmentService establishmentService;
     private final ProfessionalRepository professionalRepository;
@@ -127,6 +128,9 @@ public class ProfessionalServiceImpl implements ProfessionalService {
             log.warn("[Professional] startAttendance — professional={} already has attendance IN_PROGRESS", professionalId);
             throw new AttendanceAlreadyInProgressException(professionalId);
         }
+
+        // Encerrar ao atender (spec #11e): a refeicao em curso termina ao iniciar o atendimento.
+        intervalService.finishActiveIntervalsOnAttend(professionalId);
 
         attendanceService.startAttendance(attendance, professional);
         queueService.updateQueueEstimates(professional);

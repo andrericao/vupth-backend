@@ -244,4 +244,43 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo
     );
+
+    /**
+     * Atendimentos FINALIZADOS de um establishment num periodo — base dos relatorios
+     * agregados do owner (#4/#5). JOIN FETCH de professional + serviceItems para
+     * agregacao por profissional e por tipo de servico fora da sessao.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.establishment.id = :establishmentId
+          AND a.status = 'FINISHED'
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Attendance> findFinishedByEstablishmentBetween(
+            @Param("establishmentId") UUID establishmentId,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo
+    );
+
+    /**
+     * Atendimentos FINALIZADOS de um profissional num periodo — base do relatorio
+     * proprio do profissional (GET /professional/me/reports).
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.professional.id = :professionalId
+          AND a.status = 'FINISHED'
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Attendance> findFinishedByProfessionalBetween(
+            @Param("professionalId") UUID professionalId,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo
+    );
 }

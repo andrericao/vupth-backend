@@ -20,6 +20,8 @@ public record UserProfileGeneralInfosResponse(
         @JsonProperty("last_name")
         String lastName,
 
+        String nickname,
+
         String email,
 
         String phone,

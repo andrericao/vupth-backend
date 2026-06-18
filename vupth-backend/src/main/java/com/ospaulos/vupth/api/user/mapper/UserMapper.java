@@ -42,6 +42,7 @@ public interface UserMapper {
                 base.id(),
                 base.firstName(),
                 base.lastName(),
+                base.nickname(),
                 base.email(),
                 base.phone(),
                 base.birthDate(),

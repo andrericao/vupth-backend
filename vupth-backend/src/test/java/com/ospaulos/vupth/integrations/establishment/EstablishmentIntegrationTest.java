@@ -542,6 +542,13 @@ class EstablishmentIntegrationTest {
         JSONArray array = new JSONArray(result.getResponse().getContentAsString());
         log.info("[Establishment] findAllActive_returnsOnlyActive — {} retornados", array.length());
         assertThat(array.length()).isGreaterThanOrEqualTo(0);
+
+        // #11: cada item da listagem traz a chave estimated_wait_minutes (pode ser null)
+        for (int i = 0; i < array.length(); i++) {
+            assertThat(array.getJSONObject(i).has("estimated_wait_minutes"))
+                    .as("item %d deve conter estimated_wait_minutes", i)
+                    .isTrue();
+        }
     }
 
     @Test
@@ -923,6 +930,25 @@ class EstablishmentIntegrationTest {
                         .header("Authorization", ownerProfToken)
                         .content(serviceItemBody))
                 .andExpect(status().isCreated())
+                .andDo(print());
+
+        // (#11g2c) tem profissional+servico, mas ainda SEM horario de funcionamento → 422
+        mvc.perform(patch("/establishment/{id}/open-status", ownerProfEstablishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"openStatus\":\"OPEN\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HOURS_REQUIRED"))
+                .andDo(print());
+
+        // define o horario de funcionamento (tela de configuracoes)
+        mvc.perform(patch("/establishment/{id}/general-infos", ownerProfEstablishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"opening_time\":\"09:00:00Z\",\"closing_time\":\"18:00:00Z\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.opening_time").value("09:00Z"))
+                .andExpect(jsonPath("$.closing_time").value("18:00Z"))
                 .andDo(print());
 
         // agora pode abrir

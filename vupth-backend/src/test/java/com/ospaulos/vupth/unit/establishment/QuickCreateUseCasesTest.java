@@ -14,6 +14,7 @@ import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.owner.repository.OwnerRepository;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -171,6 +172,7 @@ class QuickCreateUseCasesTest {
         @Mock UserRepository userRepository;
         @Mock ProfessionalRepository professionalRepository;
         @Mock EstablishmentRepository establishmentRepository;
+        @Mock ProfessionalIntervalService intervalService;
 
         @InjectMocks QuickCreateProfessionalUseCase useCase;
 

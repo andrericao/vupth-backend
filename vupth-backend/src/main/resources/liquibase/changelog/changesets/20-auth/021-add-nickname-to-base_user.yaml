@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 021-add-nickname-to-base_user
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: base_user
+                columnName: nickname
+      changes:
+        - addColumn:
+            tableName: base_user
+            columns:
+              - column:
+                  name: nickname
+                  type: VARCHAR(50)

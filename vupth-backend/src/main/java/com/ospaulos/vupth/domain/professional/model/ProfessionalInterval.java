@@ -92,12 +92,32 @@ public class ProfessionalInterval {
         this.updatedAt = OffsetDateTime.now(ZoneOffset.UTC);
     }
 
+    /**
+     * Estado de execucao day-scoped (spec item #11d): so e considerado "iniciado"
+     * se o inicio real foi na data informada. Estado de outro dia NAO carrega
+     * (evita carryover e "duplo-almoco"); o registro recorrente volta amanha como previsto.
+     */
+    public boolean isStartedOn(java.time.LocalDate date) {
+        return Boolean.TRUE.equals(this.isActive)
+                && this.actualStartTime != null
+                && this.actualStartTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
+    }
+
+    /**
+     * True se o intervalo ja foi ENCERRADO na data informada (refeicao ja acontecida
+     * hoje). Usado para nao reprojetar como "previsto" uma refeicao ja consumida no dia.
+     */
+    public boolean isDoneOn(java.time.LocalDate date) {
+        return this.actualEndTime != null
+                && this.actualEndTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
+    }
+
     public void startInterval() {
         if (this.isActive) {
             throw new IllegalStateException("Interval is already is_active");
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         this.actualStartTime = now;
 
         if (this.intervalType == IntervalType.RECURRENT && this.fixedStartTime != null) {
@@ -120,7 +140,7 @@ public class ProfessionalInterval {
 
         this.actualEndTime = OffsetDateTime.now();
         this.isActive = false;
-        this.finishedEarly = this.actualEndTime.isBefore(this.plannedEndTime);
+        this.finishedEarly = this.plannedEndTime != null && this.actualEndTime.isBefore(this.plannedEndTime);
         this.autoFinishReason = reason;
     }
 
@@ -194,7 +214,7 @@ public class ProfessionalInterval {
     public static ProfessionalInterval createDinnerInterval(Professional professional) {
         return createRecurring(
                 professional,
-                45,
+                60, // padronizado em 1h (spec item #11, regra 1)
                 OffsetTime.of(18, 0, 0, 0, ZoneOffset.UTC),
                 "WEEKDAYS",
                 "Dinner Break"

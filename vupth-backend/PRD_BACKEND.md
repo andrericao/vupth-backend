@@ -84,9 +84,9 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
-| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
-| **Autenticado (qualquer)** | `GET /attendances/{id}`, todos os demais endpoints nao listados |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
+| **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
 ---
 
@@ -348,6 +348,41 @@ Invalida o refresh token.
 
 ## 6. Endpoints — Profile
 
+> **`nickname` (apelido)** e um atributo da **pessoa** (`BaseUser`), compartilhado por
+> todos os papeis (client/professional/owner). O **unico ponto de escrita** e
+> `PATCH /profile/general-infos`; a **fonte canonica de leitura** e `GET /profile/me`.
+> Os endpoints de profissional **nao** escrevem apelido.
+
+### GET /profile/me
+Retorna o perfil do usuario autenticado — fonte canonica para pre-preencher
+formularios nos dois apps (client e partner).
+
+**Acesso:** qualquer usuario autenticado
+
+**Response (200):** mesmo formato do `PATCH /profile/general-infos` (com `modified_fields: []`):
+```json
+{
+  "id": "uuid",
+  "first_name": "Andre",
+  "last_name": "Ricao",
+  "nickname": "Dedeco",
+  "email": "user@example.com",
+  "phone": "11999998888",
+  "birth_date": "1990-01-15",
+  "gender": "MALE",
+  "profile_image_url": "https://...",
+  "created_at": "2026-05-26T12:00:00Z",
+  "user_roles": [...],
+  "modified_fields": []
+}
+```
+
+**Erros:** 404 `USER_NOT_FOUND` — usuario inexistente
+
+**Testes:** Integracao (`ProfileNicknameIntegrationTest`)
+
+---
+
 ### PATCH /profile/general-infos
 Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar.
 
@@ -358,6 +393,7 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
 {
   "first_name": "Andre",
   "last_name": "Ricao",
+  "nickname": "Dedeco",
   "phone": "11999998888",
   "birth_date": "1990-01-15",
   "gender": "MALE",
@@ -369,6 +405,7 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
 |-------|------|-------------|-------|
 | first_name | String | Nao | — |
 | last_name | String | Nao | — |
+| nickname | String | Nao | Apelido (max 50 chars). String em branco limpa o apelido (vira null). null e ignorado |
 | phone | String | Nao | — |
 | birth_date | LocalDate | Nao | Formato: `YYYY-MM-DD` |
 | gender | Enum | Nao | `FEMALE`, `MALE`, `NON_BINARY`, `OTHERS` |
@@ -380,6 +417,7 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
   "id": "uuid",
   "first_name": "Andre",
   "last_name": "Ricao",
+  "nickname": "Dedeco",
   "email": "user@example.com",
   "phone": "11999998888",
   "birth_date": "1990-01-15",
@@ -387,11 +425,13 @@ Atualiza informacoes gerais do perfil. Envia apenas os campos que deseja alterar
   "profile_image_url": "https://...",
   "created_at": "2026-05-26T12:00:00Z",
   "user_roles": [...],
-  "modified_fields": ["first_name", "last_name", "phone"]
+  "modified_fields": ["first_name", "last_name", "nickname"]
 }
 ```
 
-**Testes:** Unitario + Integracao
+**Erros:** 422 `VALIDATION_ERROR` — nickname acima de 50 chars
+
+**Testes:** Unitario + Integracao (`ProfileNicknameIntegrationTest`)
 
 ---
 
@@ -568,9 +608,11 @@ Lista establishments ativos com filtros opcionais.
 > - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
 > - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais).
 > - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
-> - Sem filtro, lista todos os ativos. Ordenacao sempre por `createdAt DESC`.
+> - Sem filtro, lista todos os ativos.
 >
-> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog (secao de pendencias). No MVP nao ha ordenacao por distancia.
+> **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja.
+>
+> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog. No MVP nao ha ordenacao por distancia.
 
 **Response (200):**
 ```json
@@ -584,11 +626,14 @@ Lista establishments ativos com filtros opcionais.
     "ownerId": "uuid",
     "phone": "11999990000 | null",
     "instagram": "@barbearia | null",
+    "estimated_wait_minutes": 25,
     "open_status": "OPEN",
     "status": "ACTIVE"
   }
 ]
 ```
+
+> `estimated_wait_minutes` e preenchido **apenas na listagem** (`GET /establishment`). Em `GET /establishment/id/{id}` e nos demais usos do `EstablishmentResponse` vem `null`.
 
 **Testes:** Integracao
 
@@ -626,6 +671,7 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
       "id": "uuid",
       "name": "Joao",
       "specialty": "Corte masculino",
+      "nickname": "Joca | null",
       "is_available": true,
       "current_attendance": null,
       "waiting_list": [
@@ -687,7 +733,9 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "service_type": "BARBER",
   "services": ["BARBER", "BEAUTY_SALON"],
   "phone": "11999990000",
-  "instagram": "@barbearia"
+  "instagram": "@barbearia",
+  "opening_time": "09:00:00Z",
+  "closing_time": "18:00:00Z"
 }
 ```
 
@@ -699,6 +747,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 | services | Set<Enum> | substitui o conjunto atual |
 | phone | String | opcional (max 20). String em branco **limpa** o campo (vira null) |
 | instagram | String | opcional (max 100). String em branco **limpa** o campo (vira null) |
+| opening_time | OffsetTime | horario de abertura (#11g2). null preserva. Serializa "HH:mmZ" |
+| closing_time | OffsetTime | horario de fechamento (#11g2). null preserva. Serializa "HH:mmZ" |
 
 **Response (200):**
 ```json
@@ -710,6 +760,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "services": ["BARBER", "BEAUTY_SALON"],
   "phone": "11999990000",
   "instagram": "@barbearia",
+  "opening_time": "09:00Z",
+  "closing_time": "18:00Z",
   "open_status": "OPEN",
   "status": "ACTIVE",
   "owner_id": "uuid",
@@ -717,7 +769,7 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 }
 ```
 
-> `phone` e `instagram` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
+> `phone`, `instagram`, `opening_time` e `closing_time` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
 
 **Testes:** Integracao
 
@@ -737,14 +789,17 @@ Atualiza status de abertura.
 
 Valores: `OPEN`, `CLOSED`, `TEMPORARILY_CLOSED`
 
-**Gate #31:** so permite abrir (`OPEN`) se o establishment tiver **>=1 profissional com >=1 servico**. Caso contrario retorna `422 ESTABLISHMENT_NOT_READY`. `CLOSED` e `TEMPORARILY_CLOSED` nao tem essa restricao.
+**Gates de abertura** (so ao virar `OPEN`; `CLOSED`/`TEMPORARILY_CLOSED` sem restricao), nesta ordem:
+1. **#31** — >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`.
+2. **#11g2c** — horario de funcionamento definido (`opening_time` e `closing_time` non-null), senao `422 ESTABLISHMENT_HOURS_REQUIRED`. O front usa esse 422 pra encaminhar a tela de horario (configuracoes) antes de abrir.
 
-**Response (200):** `EstablishmentResponse`
+**Response (200):** `EstablishmentResponse` (inclui `opening_time`/`closing_time`)
 
 **Erros:**
 | Status | Code | Quando |
 |--------|------|--------|
 | 422 | `ESTABLISHMENT_NOT_READY` | Tentou abrir sem nenhum profissional com servico |
+| 422 | `ESTABLISHMENT_HOURS_REQUIRED` | Tentou abrir sem horario de funcionamento definido |
 | 401 | — | Sem token |
 | 403 | — | Token nao-owner |
 | 404 | `ESTABLISHMENT_NOT_FOUND` | Establishment inexistente ou de outro owner |
@@ -828,6 +883,42 @@ Adiciona um service item (servico oferecido pelo profissional autenticado).
 
 ---
 
+### GET /establishment/{id}/reports?dateFrom=&dateTo=
+Relatorio **agregado** do establishment (atendimentos `FINISHED` no periodo) +
+breakdown de receita por profissional (para calculo de comissoes). Nenhuma lista de
+atendimentos volta — o backend ja entrega os totais, evitando agregacao client-side.
+
+**Acesso:** OWNER (somente o dono do establishment; outro owner recebe 403).
+
+**Query params (opcionais):** `dateFrom` e `dateTo` em ISO `yyyy-MM-dd`, ambos
+**inclusivos** (`dateTo` cobre o dia inteiro). Sem periodo = desde sempre.
+Convencao consistente com `GET /attendances`.
+
+**Response (200):**
+```json
+{
+  "totalAttendances": 12,
+  "totalRevenue": 540.00,
+  "avgDurationMinutes": 27.5,
+  "topService": "CORTE_MAQUINA",
+  "topProfessional": "Joao",
+  "professionals": [
+    { "id": "uuid", "name": "Joao", "revenue": 320.00, "attendances": 7 },
+    { "id": "uuid", "name": "Maria", "revenue": 220.00, "attendances": 5 }
+  ]
+}
+```
+
+> Agregados sobre `total_value` (receita), `duration_minutes` (media) e
+> `serviceItemType` (`topService` = mais frequente). `topProfessional` = profissional
+> com mais atendimentos. `professionals` ordenado por receita desc. Periodo sem
+> atendimentos retorna `totalAttendances: 0`, `topService`/`topProfessional` nulos e
+> `professionals` vazio.
+
+**Testes:** Integracao (`ReportIntegrationTest`)
+
+---
+
 ## 9. Endpoints — Professional
 
 ### GET /professional?name=&specialty=
@@ -850,10 +941,13 @@ Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
     "id": "uuid",
     "name": "Maria",
     "specialty": "Colorista",
+    "nickname": "Mari | null",
     "is_available": true
   }
 ]
 ```
+
+> `nickname` (apelido) e projetado da `BaseUser` — leitura apenas. Para escrever, use `PATCH /profile/general-infos`.
 
 **Testes:** Integracao
 
@@ -908,6 +1002,35 @@ Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
 - 422 `VALIDATION_ERROR` — name/specialty acima de 100 chars
 
 **Testes:** Integracao
+
+---
+
+### GET /professional/me/reports?dateFrom=&dateTo=
+Relatorio **agregado** do proprio profissional autenticado (atendimentos `FINISHED`
+no periodo) — para as telas de relatorio dia/semana/mes do app parceiro.
+
+**Acesso:** PROFESSIONAL (escopo `/me` — so os proprios atendimentos).
+
+**Query params (opcionais):** `dateFrom` e `dateTo` em ISO `yyyy-MM-dd`, ambos
+**inclusivos**. Sem periodo = desde sempre.
+
+**Response (200):**
+```json
+{
+  "totalAttendances": 7,
+  "totalRevenue": 320.00,
+  "avgDurationMinutes": 28.0,
+  "topService": "CORTE_MAQUINA"
+}
+```
+
+> Mesmos agregados do relatorio do establishment, restritos ao profissional logado.
+> Periodo sem atendimentos retorna `totalAttendances: 0` e `topService` nulo.
+
+**Erros:**
+- 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
+
+**Testes:** Integracao (`ReportIntegrationTest`)
 
 ---
 
@@ -1732,6 +1855,8 @@ Gerenciamento de intervalos/pausas programadas dos profissionais.
 
 **Acesso:** PROFESSIONAL ou ADMIN
 
+**Postman:** folder `12 - intervals (refeicoes/pausas)` (recurring, unexpected, GET, PATCH editar + erros 404/403). Reusa `prof_token` e `prof_professional_id` dos folders anteriores.
+
 ---
 
 ### POST .../intervals/recurring
@@ -1747,9 +1872,17 @@ Cria intervalo recorrente.
 }
 ```
 
+| Campo | Validacao |
+|-------|-----------|
+| durationMinutes | `@NotNull @Positive @Max(240)` |
+| fixedStartTime | `@NotNull` (OffsetTime) |
+| recurrencePattern | `@NotBlank`, restrito a **`WEEKDAYS` \| `DAILY` \| `WEEKENDS`** |
+
 **Response (201):** `IntervalResponse`
 
-**Testes:** Integracao
+**Erros:** 422 `VALIDATION_ERROR` (duracao nula/≤0/>240, recurrencePattern fora do conjunto) · 409 `INTERVAL_CONFLICT` (sobreposicao com recorrente ativo) · 403 (CLIENT)
+
+**Testes:** Integracao (`ProfessionalIntervalIntegrationTest`, `IntervalValidationIntegrationTest`)
 
 ---
 
@@ -1765,30 +1898,111 @@ Cria intervalo inesperado (pausa avulsa).
 }
 ```
 
+| Campo | Validacao |
+|-------|-----------|
+| durationMinutes | `@NotNull @Positive @Max(240)` |
+| startTime | `@NotNull` (OffsetDateTime); nao pode ser no passado |
+
 **Response (201):** `IntervalResponse`
+
+**Erros:** 422 `VALIDATION_ERROR` (duracao nula/≤0/>240) · 400 `INTERVAL_INVALID_TIME` (no passado) · 409 `INTERVAL_CONFLICT` · 403 (CLIENT)
 
 **Testes:** Integracao
 
 ---
 
+### PATCH .../intervals/{intervalId}
+Edita um intervalo (refeicao recorrente). Semantica PATCH: envie apenas os campos a alterar. Usado para mudar horario previsto/duracao das refeicoes e o ajuste diario da previsao de inicio (spec item #11b/c).
+
+**Request:**
+```json
+{
+  "durationMinutes": 90,
+  "fixedStartTime": "11:30:00Z",
+  "description": "Almoco estendido"
+}
+```
+
+| Campo | Tipo | Obrigatorio | Notas |
+|-------|------|-------------|-------|
+| durationMinutes | Integer | Nao | `@Positive`; null preserva |
+| fixedStartTime | OffsetTime | Nao | Horario previsto; null preserva |
+| description | String | Nao | null preserva |
+
+**Response (200):** `IntervalResponse`
+
+**Erros:** 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional — ownership pelo path) · 422 `VALIDATION_ERROR` (duracao nao positiva) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalUpdateIntegrationTest`)
+
+---
+
+### PATCH .../intervals/{intervalId}/start
+Inicia manualmente o intervalo (o "botao iniciar almoco/janta", spec item #11d). Marca `actualStartTime`/`isActive`/`plannedEndTime` — a refeicao deixa de ser previsao e vira "iniciada" (passa a aparecer no GET e conta como bloco real na estimativa).
+
+**Sem body.** Autonomia do dono: pode iniciar a qualquer hora (sem janela de horario).
+
+**Response (200):** `IntervalResponse` (status `ACTIVE`)
+
+**Erros:** 409 `INTERVAL_CONFLICT` (refeicao ja iniciada OU encerrada hoje — nao faz 2x no dia) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalStartIntegrationTest`)
+
+---
+
+### PATCH .../intervals/{intervalId}/finish
+Encerra manualmente o intervalo (o "botao encerrar refeicao", spec item #11e2), sem precisar atender ninguem. Marca `actualEndTime`/`isActive=false`/`finishedEarly` (vs `plannedEndTime`), `autoFinishReason="MANUAL"`.
+
+**Sem body.** So encerra intervalos **ativos** (iniciados).
+
+**Response (200):** `IntervalResponse` (status `SCHEDULED` — `isActive=false` apos encerrar)
+
+**Erros:** 409 `INTERVAL_CONFLICT` (refeicao nao esta ativa — nada a encerrar; tambem ao encerrar 2x) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalFinishIntegrationTest`) + Postman (folder 12)
+
+---
+
+### DELETE .../intervals/{intervalId}
+Remove uma refeicao/intervalo (spec item #11f) — o profissional apaga uma refeicao que nao usa (ex.: nao janta). **Hard delete**: o registro recorrente some; para te-la de volta, criar de novo via `POST .../recurring`.
+
+**Sem body.** Permitido em qualquer estado.
+
+**Response:** `204 No Content`
+
+**Erros:** 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional — ownership pelo path) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalDeleteIntegrationTest`) + Postman (folder 12)
+
+---
+
 ### GET .../intervals?date=2026-05-26
-Lista intervalos ativos para uma data (default: hoje).
+Lista os intervalos do profissional para uma data (default: hoje). Inclui as refeicoes recorrentes **previstas** (ainda nao iniciadas) **e** as iniciadas; exclui apenas as recorrentes ja **encerradas dentro do dia** consultado e os intervalos `UNEXPECTED` inativos/fora do dia.
 
 **Response (200):** `IntervalResponse[]`
 
+Exemplo de uma refeicao recorrente **prevista** (seed, ainda nao iniciada):
 ```json
 {
   "intervalId": "uuid",
-  "type": "RECURRING",
-  "status": "ACTIVE",
+  "type": "RECURRENT",
+  "status": "SCHEDULED",
   "durationMinutes": 60,
-  "startTime": "2026-05-26T12:00:00Z",
-  "endTime": "2026-05-26T13:00:00Z",
-  "description": "Almoco",
-  "fixedStartTime": "12:00:00Z",
+  "startTime": null,
+  "endTime": null,
+  "description": "Lunch Break",
+  "fixedStartTime": "12:00Z",
   "recurrencePattern": "WEEKDAYS"
 }
 ```
+
+**Semantica dos campos (serializacao real — alinhar o front por aqui):**
+- `type`: enum serializado pelo **nome** → `RECURRENT` (refeicao recorrente) ou `UNEXPECTED` (pausa avulsa). **Nao** e "RECURRING".
+- `status`: calculado no mapper — `ACTIVE` se `isActive`, senao `SCHEDULED`. **So esses dois valores** sao emitidos hoje (o enum tem `FINISHED`/`CANCELLED`, mas o mapper nao os usa).
+- `startTime` (OffsetDateTime): preenchido **apenas para `UNEXPECTED`**. Para `RECURRENT` e sempre `null` (use `fixedStartTime`).
+- `endTime` (OffsetDateTime): mapeado de `plannedEndTime` — **null** enquanto a refeicao recorrente nao for iniciada; preenchido apos o `start`.
+- `fixedStartTime` (OffsetTime): horario previsto da recorrente. **Serializa com segundos omitidos quando zero** → `"12:00Z"`, `"11:30Z"` (nao `"12:00:00Z"`). O front deve parsear segundos como opcionais.
+- ⚠️ **Gap conhecido:** o `actualStartTime` (horario real em que a refeicao iniciou) **nao e exposto** no `IntervalResponse`. Apos `start`, o front so tem `endTime` (= inicio + `durationMinutes`); o inicio real teria de ser derivado. Avaliar expor `actualStartTime` se o front precisar mostrar "almoco iniciado as HH:MM".
 
 **Testes:** Integracao
 
@@ -2051,7 +2265,6 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | Calcular tempo de fila para agendados | Media | Estimativa de tempo inclui IN_PROGRESS, nao so SCHEDULED | `Professional:110` — Backend |
 | Aceitar ID como parametro no ProfessionalController | Baixa | Suportar roteamento especifico por caller | `ProfessionalController:32` — Backend |
 | Validar horarios do ProfessionalInterval | Baixa | Validar start > end, permitir estender +5min | `ProfessionalIntervalService:137-138` — Backend |
-| Finalizar intervalo atendendo proximo | Baixa | Acao de servir proximo attendance ao terminar intervalo | `ProfessionalIntervalService:139` — Backend |
 | Melhorar excecoes em BaseUser e SetMainAddress | Baixa | Trocar RuntimeException por excecoes especificas | `BaseUser:245` / `SetMainAddressUseCase:21` — Backend |
 | Verificar metodo updateStatus | Baixa | Revisar logica de atualizacao de status do establishment | `EstablishmentOpenStatusServiceImpl:121` — Backend |
 | Mover codigo para ProfessionalService | Baixa | Refatoracao interna — logica no lugar errado | `QueueServiceImpl:178` — Backend |
@@ -2060,6 +2273,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | ~~GET /professional/me~~ | ~~Alta~~ | ~~Retornar dados do profissional autenticado~~ | **IMPLEMENTADO** |
 | Regra owner unico nao pode se desafiliar | Baixa | Owner unico deve adicionar outro owner (transferir) antes de sair, ou deletar o establishment. Desafiliacao de owner por outro owner exige confirmacao da contraparte. Ao perder ultimo establishment, usuario perde role OWNER | `Establishment` / `AffiliationController` — Backend |
 | Adicao de servico por funcionario da mesma loja | Media | Profissional afiliado pode adicionar ServiceItem ao establishment onde trabalha (hoje so owner pode). Novo endpoint ou permissao adicional em POST /establishment/{id}/service-items | Backend + **Front-Partner** |
+| Busca de establishment por nome/apelido do funcionario (cliente) | Media | Cliente que nao sabe o nome da loja busca pelo `firstName` OU `nickname` do profissional e recebe os establishments dele (ordenado por fila). Desenho recomendado: novo param `?professional=<termo>` no `GET /establishment` (LIKE parcial, case-insensitive, casa firstName/nickname). Apelido ja exposto na tela do estabelecimento e na busca do owner. | Backend + **Front-Client** |
 
 
 ### Bugs reportados pelo Front-Partner (2026-06-09)
@@ -2114,7 +2328,7 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 | 8 | Historico de atendimentos do cliente | ✅ **Backend concluido** — `GET /attendances/client/me` lista os atendimentos do cliente logado com filtros opcionais `status`, `dateFrom`, `dateTo` (ver secao do endpoint). Coberto por testes de integracao e Postman. Util para "voltar ao mesmo profissional". **Pendente: Front-Client** (tela de historico) | ~~**Backend**~~ / **Front-Client** (tela de historico) |
 | 9 | Dashboard do owner (metricas) | Total de atendimentos por dia/semana/mes. Tempo medio por profissional. Profissional mais solicitado. Horario de pico | **Backend** (endpoints de agregacao) / **Front-Partner** (tela dashboard) |
 | 10 | Multiplos servicos num unico atendimento | Hoje o front envia so 1 serviceItemId. Backend ja suporta `List<UUID> serviceItemIds`. UX: selecionar combo (corte + barba = 1 atendimento) | **Front-Client** (selecao multipla na UI) / **Front-Partner** (exibir combo no atendimento) — Backend ja suporta |
-| 11 | Recurrent intervals (horario de almoco) | `ProfessionalIntervalController` ja tem `POST /recurring`. Falta UI no partner-app para configurar. Tempo de espera mais preciso para clientes | **Front-Partner** (tela de configuracao de intervalos) — Backend ja implementado |
+| 11 | Refeicoes/intervalos do profissional (almoco e janta) — fluxo completo | **[Backend EM ANDAMENTO]** ✅ Feito: (a) seed almoco/janta na criacao, (b/c) `PATCH` editar/ajustar previsao, (d-calc) estimativa recorrente-aware (`QueueUtils` reescrito, day-scoped, desloca pra frente, some na proxima), (d-start) `PATCH .../start`, (e1) encerrar ao atender, (e2) `PATCH .../finish` encerrar manual, (f) `DELETE` remover refeicao, (g1) validacoes de campo (recurrencePattern enum + teto 240min), (g2) horario de funcionamento + refeicao cabe na janela + gate de abertura, fix do GET (retorna previstas). ✅ **Backend COMPLETO.** **Spec detalhada na secao "Item 11 — Refeicoes/intervalos" abaixo do backlog.** | ~~**Backend**~~ ✅ / **Front-Partner** (editar refeicoes + horario de funcionamento em settings; botoes iniciar/encerrar na fila; tratar 422 ESTABLISHMENT_HOURS_REQUIRED) |
 
 ### MEDIA PRIORIDADE — v2
 
@@ -2157,6 +2371,9 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
 | 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
 | 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
+| 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | **[Pos-MVP]** Hoje a estimativa recalcula do zero a cada consulta; conforme a fila acelera/desacelera, a refeicao **entra/sai** do calculo do cliente, causando salto brusco de ±duracao (ex.: 13:00 -> 11:50, ~70min) — ruim para quem se programa para a **locomocao** (adiantar bruscamente faz perder a vez). Regra: **no momento em que o cliente entra na fila**, trava-se se a(s) refeicao(oes) prevista(s) estao no calculo dele; se estavam, a duracao fica **somada permanentemente** (o numero so varia com o ritmo da fila, a refeicao nunca some); se nao estavam, fica **sem**. Vale para os dois lados (aumento e diminuicao de tempo). **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** (snapshot/lock da refeicao por atendimento no ingresso) / **Front-Client** (estimativa estavel) |
+| 38 | Encaixe com equalizacao de tempo | **[Pos-MVP]** Profissional **encaixa** um cliente no meio da fila (ex.: posicao 4 de 8). Os clientes apos a posicao precisam absorver o tempo do encaixe (ex.: +30min), mas **sem salto brusco** e sem "saber" do encaixe. Mecanica: **amortizar** o tempo do encaixe entre os N atendimentos seguintes (30min / 4 = +7,5min cada) e fazer o acrescimo entrar **gradualmente** (a cada atendimento concluido), de modo que nenhum update mostre o salto inteiro. Quanto mais clientes a frente, menos cada um sente. O profissional assume o risco de satisfacao (decisao dele). Mesma familia do Item 37 (suavizacao da estimativa). **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend** (insercao em posicao + tempo amortizado pendente por atendimento) / **Front-Partner** (acao de encaixar) / **Front-Client** (estimativa suavizada) |
+| 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 
@@ -2180,3 +2397,154 @@ Decisao 2026-06-13. **Status: especificado, nao implementado.**
 **Endpoint:** `POST /attendances/{id}/rating` — apenas o `clientId` dono do attendance, apenas com `status = FINISHED`, bloqueia segundo voto (409). Atendimento guest (`guestName`, sem `client`) nao avalia.
 
 **Exibicao:** media geral no card do profissional; media por servico/tipo na lista de servicos do profissional.
+
+### Item 11 — Refeicoes/intervalos do profissional (especificacao detalhada)
+
+Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2 do PRD Front-Partner. **Status: parcialmente implementado.** Esta secao e a fonte da verdade; o front-partner segue ela.
+
+**Conceito:** todo profissional tem duas refeicoes recorrentes — **almoco** e **janta** — que entram na estimativa de espera dos clientes, mas comecam e terminam **manualmente** (o horario cadastrado e so previsao).
+
+**O que JA existe (confirmado no codigo):**
+- `POST /api/v1/professionals/{professionalId}/intervals/recurring` (body: `durationMinutes`, `fixedStartTime` OffsetTime, `recurrencePattern` String, `description`).
+- `POST /api/v1/professionals/{professionalId}/intervals/unexpected` (body: `durationMinutes`, `startTime` OffsetDateTime, `description`).
+- `GET /api/v1/professionals/{professionalId}/intervals?date=YYYY-MM-DD`.
+- `QueueUtils.calculateWaitingTimeForPosition` — calculo de espera **recorrente-aware** (item d-calc): previsto projeta hoje, desloca pra frente, some na proxima; iniciado conta o restante. (A copia `AttendanceWaitTimeCalculator` foi deletada.)
+- Modelo `ProfessionalInterval` ja tem `actualStartTime`, `actualEndTime`, `plannedEndTime`, `isActive`, `finishedEarly`, `extendedMinutes`, `maxExtensionMinutes`, `autoFinishReason` e os helpers `createLunchInterval` (60min, 12:00, WEEKDAYS) e `createDinnerInterval` (60min, 18:00, WEEKDAYS) — **chamados pelo seed** (`seedDefaultMeals`) na criacao do profissional.
+- Acesso: `@PreAuthorize hasRole('PROFESSIONAL') or hasRole('ADMIN')`. **Obs:** este e o UNICO controller com prefixo `/api/v1`.
+
+**Bugs latentes encontrados ao cobrir os endpoints (2026-06-16):**
+- ✅ **[CORRIGIDO]** `existsRecurringIntervalConflict` estava `nativeQuery=true` mas escrita em JPQL (nomes de entidade/propriedade) → `POST /recurring` dava **500**. Nunca exercitada (nao estava no Postman; teste de integracao so cobria `unexpected`). Trocada por `findActiveByProfessionalAndType` (JPQL) + overlap em Java no service. Agora coberto por integracao (`ProfessionalIntervalIntegrationTest.createRecurringInterval_success`) e Postman (folder 12).
+- ⏳ **[DORMENTE]** `existsActiveIntervalAt` usa `FROM professional_interval` (singular; tabela real e `professional_intervals`). So e chamada por `isProfessionalInInterval`, que e **dead code** (sem callers) — por isso nao explode hoje. Corrigir ao mexer no calculo de espera (item d/e).
+
+**Regras do fluxo:**
+1. **Nascem com o profissional.** Ao criar o profissional, ja vem almoco (12:00) e janta (18:00), **60min cada** (padronizado em 1h; o helper de janta hoje usa 45min — alinhar para 60).
+2. **Editaveis nas Configuracoes**, de forma simples, podendo variar todo dia (horario e duracao de cada refeicao).
+3. **Inicio MANUAL** (igual ao intervalo avulso). O horario e so previsao; o intervalo so comeca quando o profissional clica "iniciar almoco/janta". Se em vez de iniciar ele **atender um cliente**, a previsao desloca para depois desse atendimento. Se nunca clicar, nao inicia.
+4. **Previsao dinamica.** A qualquer hora o profissional pode mudar a previsao de inicio.
+5. **Fim por dois gatilhos.** O intervalo termina (a) automaticamente quando o profissional **atende o proximo cliente** (`PATCH /attendances/{id}/start`) OU (b) manualmente por um **botao dedicado de encerrar** (`PATCH .../intervals/{id}/finish`) — antes ou depois do tempo previsto. O fim NUNCA e automatico por tempo decorrido (so previsao).
+6. **Conta na espera.** Enquanto previsto/ativo, a duracao soma na estimativa de espera dos clientes (✅ ja existe).
+
+**O que FALTA implementar:**
+- (a) ✅ **[CONCLUIDO]** **Seed automatico** de almoco + janta (12:00/18:00, 60min, recorrente, `isActive=false`) na criacao do profissional (`register` e `quick-create`), via `ProfessionalIntervalService.seedDefaultMeals` chamando `createLunchInterval`/`createDinnerInterval` (janta ajustada de 45 para 60min). Cobertura: unit (`QuickCreateProfessionalUseCaseTest`) + integracao (`ProfessionalMealSeedIntegrationTest`). ✅ **GAP RESOLVIDO (2026-06-16):** o `GET .../intervals` passou a retornar as recorrentes **previstas** (`isActive=false`) **e** iniciadas do dia (so exclui as ja encerradas dentro do dia consultado — `actualEndTime` no range). Assim o front lista/edita almoco e janta e mostra o botao "iniciar" mesmo antes de iniciar. Cobertura: integracao (`IntervalListIntegrationTest`) + Postman (folder 12, "GET previstas aparecem (SCHEDULED)").
+- (b) ✅ **[CONCLUIDO]** **Editar refeicao**: `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}` (semantica PATCH — so campos non-null aplicados): `durationMinutes` (`@Positive`), `fixedStartTime`, `description`. Valida ownership pelo path (intervalo de outro profissional → `404 INTERVAL_NOT_FOUND`). Cobertura: integracao (`IntervalUpdateIntegrationTest`).
+- (c) ✅ **[CONCLUIDO]** **Ajustar previsao de inicio do dia** — mesmo PATCH de (b) sobre `fixedStartTime`. Leve para uso diario.
+- (d) **Iniciar manual + estimativa recorrente-aware**: `PATCH .../intervals/{intervalId}/start` marca `actualStartTime`/`isActive`. Diferenciar **"previsto"** (recorrente nao iniciado) de **"iniciado"** (ativo de fato) no calculo de espera. **Detalhe da estimativa abaixo.**
+  - ✅ **[d-calc CONCLUIDO]** `QueueUtils` reescrito recorrente-aware/null-safe/day-scoped/sem-mutar-entidade, com as regras da estimativa (previsto projeta hoje, desloca pra frente, some na proxima, refeicao ja feita hoje nao reconta). Helpers `ProfessionalInterval.isStartedOn`/`isDoneOn`. `AttendanceWaitTimeCalculator` (dead code) deletado. Cobertura: unit `QueueUtilsTest` (10 cenarios).
+  - ✅ **[d-start CONCLUIDO]** `PATCH .../intervals/{intervalId}/start` (`startInterval`): marca `actualStartTime`/`isActive`/`plannedEndTime`. Autonomia do dono — inicia a qualquer hora (sem janela). Bloqueio: ja iniciada OU encerrada hoje → `409 INTERVAL_CONFLICT`. Ativo remanescente de outro dia e resetado (day-scoped). Cobertura: integracao (`IntervalStartIntegrationTest`) + Postman (folder 12).
+
+  **Calculator vivo:** `QueueUtils.calculateWaitingTimeForPosition` (usado por `QueueServiceImpl`). A copia `AttendanceWaitTimeCalculator` (dead code) foi **deletada** no d-calc.
+
+  **Bug que motivou o d-calc (✅ corrigido):** o calculator antigo ordenava/usava `interval.getStartTime()` (OffsetDateTime), **null para recorrente** (usa `fixedStartTime` OffsetTime). Com o seed (item a) dando recorrentes a todo profissional, qualquer recorrente que chegasse ao calculator dava **NPE/500**. Resolvido pela reescrita do `QueueUtils` (projecao por bloco, null-safe).
+
+  **Semantica da estimativa (definida pelo Andre):**
+  1. **Iniciado** (`isActive && actualStartTime != null`): bloco real, usa `actualStartTime`.
+  2. **Previsto** (recorrente nao iniciado): inicio efetivo = hoje@`fixedStartTime`, **deslocado pra frente sempre** (nunca no passado em relacao ao cursor da fila) — soma a duracao em algum ponto a frente e e empurrado pelos atendimentos. A estimativa **nunca esquece** a refeicao prevista.
+  3. **Refeicao previa some na proxima** (porém do Andre): se uma refeicao prevista (ex.: almoco) for empurrada ate **alcancar o horario da proxima refeicao** (ex.: janta) sem ser iniciada, ela **desaparece** da estimativa — nao empilha; permanece so a proxima.
+  4. **Unexpected**: inalterado, usa `getStartTime()`.
+  5. **Sem mutar entidade**: o calculo nao pode escrever `setStartTime` na entidade (hoje o algoritmo faz isso como scratch) — usar projecao local.
+
+  **Decisoes de modelagem (2026-06-16):**
+  - **Autonomia do dono > restricao.** O profissional/dono inicia a refeicao **quando quiser** (cedo, tarde, ±20min) e pode **pular** almoco e/ou janta. **Sem 422 de janela de horario.** Unico bloqueio no `start`: nao iniciar duas vezes a mesma refeicao no mesmo dia (`IllegalState` ja existe). Pular = simplesmente nao iniciar (sem erro).
+  - **Estado de execucao day-scoped (reset por dia).** Mantem 1 registro recorrente (sem migracao). O estado "iniciado" so vale para hoje: `isStartedToday() = isActive && actualStartTime != null && actualStartTime(UTC).toLocalDate() == hoje(UTC)`. Se `actualStartTime` for de outro dia, trata como NAO iniciado (reset implicito). Elimina carryover e "duplo-almoco". Historico por dia (tabela de ocorrencias) fica pos-MVP.
+  - **Day-scoping em UTC (correcao 2026-06-16).** A comparacao de "hoje" usa **UTC consistente** (`isStartedOn`/`isDoneOn` normalizam `actualStartTime`/`actualEndTime` com `withOffsetSameInstant(UTC)`; `startInterval` e `QueueUtils` usam `now(UTC)`). Antes misturava hora local com timestamps gravados em UTC — perto da meia-noite UTC (ex.: 22h no fuso -03) o conflito de "iniciar 2x no dia" nao disparava. Agora e robusto a fuso/hora.
+  - **Janelas relativas vivem so na ESTIMATIVA** (nao travam o inicio): o previsto projeta hoje@`fixedStartTime`, desloca pra frente, e **some quando alcanca a proxima refeicao** (almoco some no inicio da janta; janta some no fim do dia). Isso muda **so o numero que o cliente ve**, nunca a liberdade do dono.
+  - **Seed mantem almoco + janta** (cobre turnos diferentes; profissional edita/remove o que nao usar).
+  - Uma refeicao que "some" da estimativa nao altera o registro recorrente — ele continua intacto e volta amanha.
+- (e) **Encerrar — dois gatilhos** (regra 5). Ambos chamam `finishInterval(reason)` no modelo (`actualEndTime=now`, `isActive=false`, `finishedEarly` calculado vs `plannedEndTime`):
+  - ✅ **[e1 CONCLUIDO]** **Ao atender**: ao iniciar atendimento (`PATCH /attendances/{id}/start`), qualquer refeicao/intervalo **efetivamente iniciado** (com `actualStartTime`/`plannedEndTime`) do profissional e encerrado automaticamente (`reason="ATTEND_NEXT_CLIENT"`, `finishedEarly` calculado vs `plannedEndTime`). Refeicoes apenas previstas (nunca iniciadas) nao sao tocadas. Impl: `ProfessionalIntervalService.finishActiveIntervalsOnAttend(professionalId)`, chamado em `ProfessionalServiceImpl.startAttendance` (mesma TX). Cobertura: integracao (`IntervalFinishOnAttendIntegrationTest`).
+  - ✅ **[e2 CONCLUIDO]** **Botao dedicado**: `PATCH .../intervals/{intervalId}/finish` (`finishIntervalManually`) — encerramento manual explicito (`reason="MANUAL"`), sem precisar atender ninguem. So encerra ativos (409 `INTERVAL_CONFLICT` se nao estiver em curso / ja encerrada); 404 ownership; 403 CLIENT. `finishInterval` do modelo ficou null-safe no `plannedEndTime`. Cobertura: integracao (`IntervalFinishIntegrationTest`) + Postman (folder 12).
+- (f) ✅ **[CONCLUIDO]** **DELETE** refeicao: `DELETE /api/v1/professionals/{professionalId}/intervals/{intervalId}` (`deleteInterval`) — hard delete, ownership pelo path (404), 403 CLIENT, `204`. Cobertura: integracao (`IntervalDeleteIntegrationTest`) + Postman (folder 12).
+- (g) **Validacoes**:
+  - ✅ **[g1 CONCLUIDO]** `recurrencePattern` restrito a `WEEKDAYS|DAILY|WEEKENDS` (`@Pattern` → 422); `durationMinutes` com teto `@Max(240)` (recurring, unexpected e update). Cobertura: integracao (`IntervalValidationIntegrationTest`) + Postman (folder 12).
+  - ✅ **[g2 CONCLUIDO]** Horario de funcionamento estruturado + refeicao cabe na janela:
+    - **(g2a)** `Establishment.openingTime`/`closingTime` (`OffsetTime`, nullable, migration `021-add-establishment-hours`). Editaveis via `PATCH /establishment/{id}/general-infos` (`opening_time`/`closing_time`, semantica PATCH). Expostos em `EstablishmentResponse` e `EstablishmentGeneralInfosResponse`.
+    - **(g2b)** Refeicao recorrente tem de **caber na janela** ao criar/editar: `fixedStartTime ≥ abertura` e `fixedStartTime + duracao ≤ fechamento` (ex.: janta 60min nao inicia <60min antes de fechar). So valida quando o establishment tem horario definido; senao nao restringe. Fora da janela → `400 INTERVAL_INVALID_TIME`. Cobertura: `IntervalValidationIntegrationTest`.
+    - **(g2c)** **Gate de abertura**: `PATCH /establishment/{id}/open-status → OPEN` exige horario definido; se `null` → `422 ESTABLISHMENT_HOURS_REQUIRED` (codigo proprio, separado do `ESTABLISHMENT_NOT_READY` do #31; o front usa pra encaminhar a tela de horario). Ordem do gate: primeiro #31 (prof+servico), depois horario. Cobertura: `EstablishmentIntegrationTest` (Order 68).
+    - **Conflito horario × refeicao existente:** o backend **nao mexe** em refeicoes ja criadas; so impede criar/editar fora da janela. Refeicoes seed (almoco/janta) nascem antes do horario e nao sao revalidadas — o front avisa se ficarem fora.
+
+#### Handoff para os fronts (cada front alinha o proprio PRD — este e o backend, fonte da verdade)
+
+> O backend so edita este PRD. As pendencias abaixo sao para o time de cada front consumir e refletir no PRD do respectivo app. O backend nao edita os PRDs dos fronts.
+
+**Front-Partner — pronto para consumir / alinhar:**
+- **Apelido (nickname):** `PATCH /profile/general-infos` agora escreve `nickname`; `GET /profile/me` e a fonte canonica (first/last/nickname/email/phone/roles); as projecoes `GET /professional` (busca do owner) e professionals-with-queue trazem `nickname`. → Alinhar o item #16 (estava "BaseUser NAO tem nickname" — agora **tem**).
+- **Refeicoes/intervalos:** entregue (a) seed almoco+janta na criacao do profissional; (b/c) `PATCH .../intervals/{intervalId}` para editar/ajustar previsao (`durationMinutes`/`fixedStartTime`/`description`); (d-calc) estimativa de espera **recorrente-aware**; (d-start) `PATCH .../intervals/{intervalId}/start` (botao "iniciar almoco/janta" — inicia a qualquer hora; 409 se ja iniciada/encerrada hoje); (e1) **encerrar ao atender** — iniciar atendimento encerra automaticamente a refeicao em curso (`reason=ATTEND_NEXT_CLIENT`); (e2) `PATCH .../intervals/{intervalId}/finish` — **encerrar manual** (`reason=MANUAL`, botao dedicado); (f) `DELETE .../intervals/{intervalId}` — remover refeicao (hard delete, `204`); (g1) validacoes de campo (recurrencePattern `WEEKDAYS|DAILY|WEEKENDS`, teto `@Max(240)`); (g2) **horario de funcionamento** (`opening_time`/`closing_time` no establishment, editaveis via general-infos), refeicao tem de **caber na janela** (`400 INTERVAL_INVALID_TIME`), e **gate de abertura** (`422 ESTABLISHMENT_HOURS_REQUIRED` se abrir sem horario). ✅ **#14 backend COMPLETO.** → Front-Partner: tela de configuracoes com horario de funcionamento (the open manda pra ela via 422); tratar a janela nas refeicoes. → Alinhar item #14 / secao 11.2: as refs a `AttendanceWaitTimeCalculator.advanceAfterInterval` e "janta 45min" estao **obsoletas** (agora e `QueueUtils` e janta 60min); seed/edicao/iniciar **ja existem**.
+
+**Front-Client — pronto para consumir / alinhar:**
+- **Apelido do profissional** aparece em `professionals-with-queue` e na busca de profissional — pode exibir no card.
+- **Estimativa de espera** passou a considerar refeicoes recorrentes (previsto desloca pra frente / some na proxima / nao carrega de ontem). A nota antiga de "adiantar/atrasar o intervalo em ate 15 min" **nao vale mais** — a logica e a nova projecao por refeicao.
+
+### Item 37 — Estabilizacao da estimativa de espera (lock da refeicao no ingresso)
+
+Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
+
+**Problema.** O `QueueUtils` recalcula a estimativa do zero a cada consulta. Conforme a fila acelera ou desacelera, a refeicao prevista **entra ou sai** do calculo de um mesmo cliente, fazendo a previsao **saltar bruscamente** pela duracao inteira da refeicao (ex.: de 13:00 para 11:50 quando os atendimentos correm mais rapido e o almoco "some"). Isso e ruim para o cliente que se programa para a **locomocao**: adiantar bruscamente a previsao pode faze-lo **perder a vez**.
+
+**O que o cliente ve hoje (e ja esta correto):** so o **numero final** (minutos ate o inicio do atendimento). Tanto faz se o tempo vem de almoco ou de outros clientes a frente — isso ja funciona.
+
+**Regra de estabilizacao (a implementar):**
+- **Lock no ingresso.** No instante em que o cliente **entra na fila**, calcula-se a estimativa. Se a(s) refeicao(oes) prevista(s) caem **antes** do inicio de atendimento dele (ou seja, a duracao da refeicao **esta** no calculo dele naquele momento), essa inclusao fica **travada** para ele.
+- **Permanencia.** A partir do lock, o numero continua variando com o ritmo da fila (clientes a frente mais rapidos/lentos, entradas/saidas), mas a **duracao da refeicao travada permanece somada** — nunca some do calculo dele.
+- **Exclusao simetrica.** Se no ingresso a refeicao **nao** estava no calculo dele (seria atendido antes da refeicao), ele permanece **sem** ela.
+- **Dois lados.** A regra vale tanto quando o tempo total **aumenta** quanto quando **diminui** (a refeicao travada nao entra nem sai depois do ingresso).
+- Isso **refina** a regra atual `previsto_servedBeforeMeal_notCounted`, que hoje vale por recalculo (a refeicao some se a fila adianta) — passa a valer so **ate** o cliente entrar; depois disso, congela.
+
+**Previsao de INICIO da refeicao (separado do lock — comportamento ja existente, mantido):**
+- A previsao de inicio **desloca para frente** conforme os atendimentos a empurram (ex.: profissional comeca a atender 11:45, atendimento de 30min -> almoco previsto passa a 12:15). Ja implementado no `QueueUtils` ("empurra pra frente").
+- O sistema **nunca adianta** a refeicao para antes do `fixedStartTime` por conta propria. **Quem inicia de fato e o profissional** (botao "iniciar almoco/janta"); a contagem real so comeca no clique.
+- **Restricao:** a previsao deslocada do almoco **nao pode colidir com a janta** (o almoco "some" ao alcancar o horario da janta — regra "some na proxima" ja existente).
+
+**Mudancas estruturais da fila — cancelamentos (definido 2026-06-16):** o gatilho que tira a refeicao do calculo e **estrutural**, nao de ritmo.
+- A refeicao e contada enquanto houver **pelo menos um atendimento posicionado depois dela** na fila.
+- **Cancelamento de um cliente intermediario** (ainda resta alguem apos a refeicao): subtrai **apenas o tempo daquele cliente**; a refeicao **permanece** somada. Ex.: dois marcados apos o almoco, o penultimo sai -> some so o tempo dele, o almoco continua.
+- **Sai todo mundo apos a refeicao** (ex.: so havia um cliente apos o almoco e ele cancelou): a refeicao **cai**, sujeita ao horario — se a fila restante ainda cruza o horario projetado da refeicao, conta; senao, nao.
+- **Variacao de ritmo/estimativa** (atendimentos terminando mais rapido/devagar que o previsto) **nunca** tira a refeicao — so mudanca estrutural (cancelamento/saida) tira. E aqui que mora a estabilizacao.
+
+**Nudge / popup de inicio (gatilho do `start`):** no horario previsto, o front-partner mostra um aviso ao profissional (com a consequencia: "voce tem N clientes na fila; iniciar agora adia o proximo em ~Xmin"). **Duas acoes** (decisao 2026-06-16):
+- **"Iniciar almoco"** -> chama `PATCH .../intervals/{id}/start`; a refeicao vira `ACTIVE` e trava o horario real.
+- **"Nao almocar"** -> **pular explicito**: **derruba a refeicao prevista do calculo para TODOS os clientes na hora**, inclusive os que ja tinham travado (`lock` do Item 37). E uma acao deliberada do dono, entao o **adiantamento brusco e aceito** (a ETA dos clientes cai pela duracao da refeicao). Sobrepoe a estabilizacao do lock.
+- Detalhes visuais (timing do popup, nao interromper atendimento ativo, anti-nag) vivem no PRD-Front-Partner. Aviso com app em background depende do item #3 (push). Popup com app aberto e computavel com os dados atuais (`GET .../intervals` + fila), sem backend novo.
+
+**Refeicao prevista que o profissional nunca interage com o popup (nem inicia, nem clica "nao almocar"):** nao trava para sempre. O bloco previsto vai sendo **empurrado pra frente** pelos atendimentos e **some ao alcancar a proxima refeicao / fim do dia** (regra "some na proxima", ja existente). Diferente do "nao almocar" explicito (que derruba na hora), aqui a ETA do cliente se corrige **gradualmente**.
+
+**Decisoes pendentes (definir antes de implementar):**
+1. **Onde persistir o lock:** provavel snapshot no `Attendance` no momento da criacao (ex.: `lockedIntervalMinutes` ou flag por refeicao) — a estimativa passa a ser `(soma das duracoes a frente, recalculada) + (minutos de refeicao travados, respeitando a regra estrutural acima)`.
+2. **Janta:** aplica a mesma logica de lock que o almoco.
+
+### Item 38 — Encaixe com equalizacao de tempo
+
+Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP. Mesma familia do Item 37 (suavizacao da estimativa).
+
+**Objetivo.** Permitir ao profissional **encaixar** um cliente que pede para ser atendido antes, no meio da fila (ex.: posicao 4 de 8). Os clientes apos o encaixe passam a esperar mais (o tempo do encaixe, ex.: +30min), mas a estimativa deles **nao deve dar um salto brusco** nem expor que houve encaixe.
+
+**Mecanica (equalizacao):**
+- **Amortizar** o tempo do atendimento encaixado entre os **N atendimentos seguintes**: `acrescimo por cliente = duracao_encaixe / N`. Ex.: encaixe de 30min com 4 clientes apos -> **+7,5min cada**.
+- **Ramp gradual:** o acrescimo entra **aos poucos** (ex.: a cada atendimento concluido a frente), de modo que nenhum update unico mostre o salto inteiro — o tempo sobe "sem que os demais sintam".
+- **Quanto mais clientes a frente, menor o acrescimo** percebido por cada (o divisor N e maior).
+- **Responsabilidade do profissional:** ele sabe que pode comprometer a satisfacao de quem esperava; e decisao dele.
+
+**Melhores praticas (referencia):** sistemas de ETA (mobilidade, delivery, filas de suporte) raramente mostram o recalculo cru — usam **amortizacao + damping + rate-limit de updates** (limitar o quanto o numero exibido muda por intervalo). A equalizacao descrita e exatamente isso. **Ressalva de transparencia:** suavizar a *curva* da estimativa e boa pratica; *esconder ativamente* que alguem furou a fila e decisao de produto com risco de confianca se percebido — manter como escolha consciente do dono.
+
+**Decisoes pendentes:**
+1. **Modelo de fila com posicao explicita:** o encaixe exige inserir um `Attendance` numa posicao especifica (hoje a ordem e por chegada). Definir como representar ordem/posicao.
+2. **Onde guardar o "tempo amortizado pendente":** por atendimento afetado (campo) ou derivado de um marcador de encaixe + cursor de ramp.
+3. **Granularidade do ramp:** por atendimento concluido (recomendado) vs por minuto.
+4. **Teto/limite** de equalizacao e o que acontece se a fila encurtar (cancelamentos) antes de distribuir tudo.
+
+### Item 39 — Multa / aviso de cancelamento tardio
+
+Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
+
+**Objetivo.** Desencorajar cancelamentos de ultima hora: cancelar com **ETA < 1h** para o atendimento desorganiza a fila e afeta o proximo cliente, entao gera uma **"multa"**.
+
+**Faseamento (o MVP nao tem pagamento):**
+- **Fase 1 (sem gateway):** **aviso/disclosure** no momento do cancelamento ("cancelar agora, a <1h, gera penalidade") + **registro do evento** (strikes/reputacao do cliente). Sem cobranca real.
+- **Fase 2 (com gateway, item #21):** cobranca monetaria efetiva (valor fixo ou % do servico), exige meio de pagamento salvo.
+
+**Melhores praticas (referencia):** politica de cancelamento/no-show com **janela de tempo** e padrao em saloes, clinicas e restaurantes. O que as boas implementacoes fazem: (1) **disclosure antecipado** — o cliente ve a politica ao entrar na fila, nao so na hora de cancelar; (2) **grace period** curto apos entrar; (3) **penalidade graduada** — 1o evento e aviso, reincidencia escala (restricao de uso / cobranca); (4) **reputacao/strikes** costuma ser mais justo e viavel que dinheiro no MVP (evita cobrar indevidamente e nao depende de gateway); (5) **isencoes** para motivos legitimos. Recomendacao: comecar por strikes + aviso, dinheiro so na Fase 2.
+
+**Decisoes pendentes:**
+1. **Janela de 1h sobre ETA volatil:** a ETA muda; congela-se a referencia no ingresso (ligado ao lock do Item 37) ou avalia-se no instante do cancelamento?
+2. **Valor/forma:** aviso so, strike, ou cobranca (Fase 2) — fixo vs %?
+3. **Reincidencia e isencoes:** quantos strikes ate restringir; o que conta como motivo legitimo.
+4. **Efeito real na fila:** um cancelamento normalmente **adianta** o proximo; a "multa" aqui e dissuasao/compensacao, nao recalculo — confirmar o proposito (reduzir no-show) vs impacto tecnico.

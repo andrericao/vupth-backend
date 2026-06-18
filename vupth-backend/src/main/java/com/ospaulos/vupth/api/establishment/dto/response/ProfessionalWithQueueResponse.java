@@ -20,6 +20,7 @@ public record ProfessionalWithQueueResponse(
         UUID id,
         String name,
         String specialty,
+        String nickname,
 
         @JsonProperty("is_available")
         Boolean isAvailable,
@@ -88,6 +89,7 @@ public record ProfessionalWithQueueResponse(
                 professional.getId(),
                 professional.getName(),
                 professional.getSpecialty(),
+                professional.getBaseUser() != null ? professional.getBaseUser().getNickname() : null,
                 professional.getIsAvailable(),
                 currentDto,
                 waitingDtos,

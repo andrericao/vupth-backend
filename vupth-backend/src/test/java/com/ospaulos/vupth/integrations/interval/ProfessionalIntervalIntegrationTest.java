@@ -134,6 +134,30 @@ class ProfessionalIntervalIntegrationTest {
                 .andDo(print());
     }
 
+    @Test
+    @Order(15)
+    @DisplayName("POST /recurring — 201 professional cria intervalo recorrente")
+    void createRecurringInterval_success() throws Exception {
+        log.info("[Interval] createRecurringInterval_success — professionalId={}", professionalId);
+
+        mvc.perform(post("/api/v1/professionals/{id}/intervals/recurring", professionalId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken)
+                        .content("""
+                                {
+                                  "durationMinutes": 60,
+                                  "fixedStartTime": "14:00:00Z",
+                                  "recurrencePattern": "WEEKDAYS",
+                                  "description": "Cafe da tarde"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.intervalId").exists())
+                .andExpect(jsonPath("$.type").value("RECURRENT"))
+                .andExpect(jsonPath("$.durationMinutes").value(60))
+                .andDo(print());
+    }
+
     // ─────────────────────────────────────────────────────────────
     // SCENARIO B — GET active intervals
     // ─────────────────────────────────────────────────────────────

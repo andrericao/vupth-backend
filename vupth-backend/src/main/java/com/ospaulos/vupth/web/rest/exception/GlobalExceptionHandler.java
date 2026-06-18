@@ -12,8 +12,10 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFo
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
+import com.ospaulos.vupth.domain.interval.exception.IntervalNotFoundException;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
 import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
@@ -113,6 +115,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_NOT_READY");
     }
 
+    @ExceptionHandler(EstablishmentHoursRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentHoursRequired(
+            EstablishmentHoursRequiredException ex, HttpServletRequest req) {
+        log.warn("[422] EstablishmentHoursRequired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
+    }
+
     @ExceptionHandler(ProfessionalNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleProfessionalNotFound(
             ProfessionalNotFoundException ex, HttpServletRequest req) {
@@ -192,6 +201,13 @@ public class GlobalExceptionHandler {
             InvalidIntervalTimeException ex, HttpServletRequest req) {
         log.warn("[400] InvalidIntervalTime | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INTERVAL_INVALID_TIME");
+    }
+
+    @ExceptionHandler(IntervalNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleIntervalNotFound(
+            IntervalNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] IntervalNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "INTERVAL_NOT_FOUND");
     }
 
     @ExceptionHandler(EmailsAreTheSameException.class)

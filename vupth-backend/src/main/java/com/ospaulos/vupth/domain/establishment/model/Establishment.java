@@ -19,6 +19,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.time.OffsetTime;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -57,6 +58,15 @@ public class Establishment implements Serializable {
 
     @Column(name = "instagram", length = 100)
     private String instagram;
+
+    // Horario de funcionamento (opcional, editavel). Nullable: estabelecimentos
+    // antigos / recem-criados podem nao ter ainda. Usado no gate de abertura e na
+    // validacao de que as refeicoes cabem na janela de funcionamento (#11g2).
+    @Column(name = "opening_time")
+    private OffsetTime openingTime;
+
+    @Column(name = "closing_time")
+    private OffsetTime closingTime;
 
     @CreationTimestamp
     @JsonProperty("created_at")
