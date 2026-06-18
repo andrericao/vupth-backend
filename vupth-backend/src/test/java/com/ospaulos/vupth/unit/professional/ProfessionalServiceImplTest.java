@@ -19,6 +19,7 @@ import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
@@ -76,6 +77,7 @@ class ProfessionalServiceImplTest {
     @Mock ProfessionalRepository professionalRepository;
     @Mock AttendanceRepository attendanceRepository;
     @Mock EstablishmentRepository establishmentRepository;
+    @Mock ProfessionalIntervalService intervalService;
 
     @InjectMocks ProfessionalServiceImpl professionalService;
 
