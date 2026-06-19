@@ -2374,6 +2374,8 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | **[Pos-MVP]** Hoje a estimativa recalcula do zero a cada consulta; conforme a fila acelera/desacelera, a refeicao **entra/sai** do calculo do cliente, causando salto brusco de ±duracao (ex.: 13:00 -> 11:50, ~70min) — ruim para quem se programa para a **locomocao** (adiantar bruscamente faz perder a vez). Regra: **no momento em que o cliente entra na fila**, trava-se se a(s) refeicao(oes) prevista(s) estao no calculo dele; se estavam, a duracao fica **somada permanentemente** (o numero so varia com o ritmo da fila, a refeicao nunca some); se nao estavam, fica **sem**. Vale para os dois lados (aumento e diminuicao de tempo). **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** (snapshot/lock da refeicao por atendimento no ingresso) / **Front-Client** (estimativa estavel) |
 | 38 | Encaixe com equalizacao de tempo | **[Pos-MVP]** Profissional **encaixa** um cliente no meio da fila (ex.: posicao 4 de 8). Os clientes apos a posicao precisam absorver o tempo do encaixe (ex.: +30min), mas **sem salto brusco** e sem "saber" do encaixe. Mecanica: **amortizar** o tempo do encaixe entre os N atendimentos seguintes (30min / 4 = +7,5min cada) e fazer o acrescimo entrar **gradualmente** (a cada atendimento concluido), de modo que nenhum update mostre o salto inteiro. Quanto mais clientes a frente, menos cada um sente. O profissional assume o risco de satisfacao (decisao dele). Mesma familia do Item 37 (suavizacao da estimativa). **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend** (insercao em posicao + tempo amortizado pendente por atendimento) / **Front-Partner** (acao de encaixar) / **Front-Client** (estimativa suavizada) |
 | 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
+| 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | **[Pos-MVP]** Cliente quer ser atendido por volta de um **horario que escolhe** (ex.: 17:00), mas a fila esta com estimativa muito mais cedo (ex.: 11:00). Ele entra como **intencao** (nao confirmado): quem entra na fila depois dele recebe **indice menor** (passa na frente) enquanto o horario previsto de atendimento daquela posicao ainda for **antes** do alvo dele. Quando o previsto **cruza** o alvo (ex.: 17:15), ele para de ceder posicao e a presenca vira **confirmada** (deixa de ser so intencao). Funciona como uma **agenda** sobreposta a fila por ordem de chegada. **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | **Backend** (estado intencao vs confirmado no atendimento + horario-alvo + ordenacao que cede posicao ate o previsto cruzar o alvo, entao confirma) / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado) / **Front-Partner** (ver intencoes/agendados na fila) |
+| 41 | Skip de refeicao por dia ("Nao almocar") | **[Pedido Front-Partner 2026-06-18]** O popup de inicio de refeicao tem a acao **"Nao almocar"**, mas hoje **nao existe endpoint** para isso: `finish` so encerra refeicao **ativa** e `DELETE` remove a refeicao **recorrente de vez**. Falta pular a refeicao **so naquele dia** (sem apagar a recorrencia), derrubando-a do ETA de **todos** os clientes na hora. Endpoint proposto: **`PATCH .../intervals/{intervalId}/skip`** (com data do dia — default hoje), PROFESSIONAL/OWNER. Enquanto nao existir, o "Agora nao" do popup so dispensa o aviso. E a parte concreta e antecipavel do "Nao almocar" do Item 37. **Spec detalhada na secao "Item 41 — Skip de refeicao por dia" abaixo do backlog.** | **Backend** (endpoint skip + marcador de skip por dia consumido pelo `QueueUtils`) / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 
@@ -2548,3 +2550,44 @@ Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
 2. **Valor/forma:** aviso so, strike, ou cobranca (Fase 2) — fixo vs %?
 3. **Reincidencia e isencoes:** quantos strikes ate restringir; o que conta como motivo legitimo.
 4. **Efeito real na fila:** um cancelamento normalmente **adianta** o proximo; a "multa" aqui e dissuasao/compensacao, nao recalculo — confirmar o proposito (reduzir no-show) vs impacto tecnico.
+
+### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
+
+Decisao 2026-06-18 (Andre). **Status: especificado, nao implementado.** Pos-MVP. Vale para os **dois fronts**.
+
+**Problema.** A fila e por ordem de chegada e a estimativa "puxa" o cliente para o **mais cedo possivel**. Mas as vezes o cliente **nao quer** ser atendido agora — ele so pode mais tarde (ex.: a fila preve 11:00, mas ele so consegue chegar as 17:00). Hoje ele teria que ficar entrando na fila na hora certa, competindo com quem chegou antes. A ideia e deixar o cliente **declarar a intencao de ser atendido por volta de um horario-alvo** que ele escolhe.
+
+**Como funciona (fluxo).**
+- O cliente entra na fila escolhendo um **horario-alvo** (ex.: 17:00). Ele entra como **intencao** — esta na fila, mas **ainda nao confirmado**.
+- Enquanto o **horario previsto de atendimento** da posicao dele for **antes** do alvo, ele **cede a vez**: quem entra na fila depois recebe **indice menor** (passa na frente dele). Ou seja, a intencao "segura" a posicao no tempo, nao na ordem de chegada.
+- Isso continua **ate** o horario previsto de atendimento **cruzar** o alvo dele. Ex.: alvo 17:00; quando o previsto da posicao dele bate ~17:15, **para de ceder** — esta no ponto certo.
+- Nesse momento a presenca vira **confirmada** (deixa de ser so intencao): ele esta efetivamente na fila e nao cede mais posicao para entradas posteriores.
+- Comportamento analogo a uma **agenda** sobreposta a fila por ordem de chegada: o cliente "marca" um horario aproximado e o sistema o encaixa quando a fila alcanca aquele horario.
+
+**Pontos a definir (antes de implementar):**
+1. **Modelo de estado:** novo estado/flag no `Attendance` (ex.: `INTENT` vs confirmado) + campo `targetTime` (horario-alvo). Definir se e um novo `AttendanceStatus` ou um flag separado do status atual (SCHEDULED/IN_PROGRESS/...).
+2. **Regra de cruzamento:** o "cruzou o alvo" usa a estimativa do `QueueUtils` (volatil). Definir a tolerancia/janela (ex.: confirma quando previsto >= alvo, ou dentro de ±X min) e se a confirmacao e **automatica** (backend marca) ou **exige aceite** do cliente (push/notificacao "sua vez esta chegando, confirmar?").
+3. **Ordenacao:** como representar a fila quando ha intencoes com alvo no meio de chegadas normais — provavel ordenacao por (horario efetivo/alvo) em vez de so ordem de chegada. Interage com o Item 38 (encaixe/posicao explicita) e Item 37 (estabilizacao da estimativa).
+4. **Presenca/no-show:** se o previsto cruzou o alvo e o cliente nao esta presente, como tratar (vira no-show? cede de novo? entra o Item 39 de cancelamento tardio?).
+5. **Limites:** alvo so dentro do horario de funcionamento da loja (Item #14-g2); quantas intencoes simultaneas por cliente; alvo minimo no futuro.
+6. **Visibilidade no Front-Partner:** o profissional ve as intencoes/agendados distintos dos confirmados na fila ao vivo (interage com o WebSocket, secao 18b).
+
+### Item 41 — Skip de refeicao por dia ("Nao almocar")
+
+Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: especificado, nao implementado.** E a fatia concreta e antecipavel do "Nao almocar" do Item 37 (pode entrar antes do lock).
+
+**Problema.** O popup de inicio de refeicao (Front-Partner) oferece **"Iniciar almoco"** e **"Nao almocar"**. O "iniciar" ja tem endpoint (`PATCH .../intervals/{id}/start`), mas o **"Nao almocar" nao tem** — hoje so existe `finish` (encerra refeicao **ativa**) e `DELETE` (remove a refeicao **recorrente permanentemente**). Nenhum dos dois serve para **pular a refeicao so naquele dia**: o profissional decidiu nao almocar hoje, mas o almoco recorrente deve **continuar existindo amanha**. Por isso, hoje o botao "Agora nao" do popup apenas **dispensa o aviso** — nao mexe no ETA.
+
+**Comportamento esperado.** Ao acionar "Nao almocar", a refeicao prevista daquele dia **cai do calculo de ETA de TODOS os clientes na hora** (adiantamento brusco aceito, pois e acao deliberada do dono — mesma semantica descrita no Item 37). A recorrencia permanece intacta para os proximos dias.
+
+**Endpoint proposto:** `PATCH /api/v1/professionals/{professionalId}/intervals/{intervalId}/skip`
+- Auth: PROFESSIONAL/OWNER (ownership pelo path → `404 INTERVAL_NOT_FOUND`; `403` CLIENT), mesmo padrao de `start`/`finish`.
+- Data: pula **o dia corrente** por padrao; aceitar `?date=YYYY-MM-DD` para pular um dia especifico (opcional).
+- Idempotente: pular um dia ja pulado → `200`/no-op (ou `409 INTERVAL_CONFLICT` se ja iniciada/encerrada hoje — definir).
+
+**Pontos a definir (antes de implementar):**
+1. **Persistencia do skip por dia:** a refeicao e recorrente, entao o skip e por **(intervalo, data)**. Opcoes: tabela/coluna de "dias pulados" (lista de datas) no proprio intervalo, ou uma entidade `interval_skip (interval_id, date)`. O `QueueUtils` (day-scoped) passa a **excluir** a refeicao quando ha skip para a data avaliada.
+2. **Relacao com finish/start:** se a refeicao ja foi **iniciada** hoje, "skip" nao se aplica (usar `finish`); definir o conflito.
+3. **Reversao:** permitir **desfazer** o skip do dia (ex.: `DELETE .../skip?date=`) ou e irreversivel ate o dia seguinte.
+4. **Interacao com o lock (#37):** o "Nao almocar" **sobrepoe** o lock — derruba inclusive clientes que ja tinham travado a refeicao. Se o lock (#37) for implementado depois, este endpoint e o gatilho explicito do override.
+5. **Tempo real:** apos o skip, publicar atualizacao da fila (WebSocket, secao 18b) para os clientes verem o ETA cair.
