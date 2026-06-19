@@ -207,6 +207,8 @@ Todos os erros seguem um dos dois formatos:
 | `BOTOX` | Aplicação de botox | CLINIC |
 | `MICROAGULHAMENTO` | Microagulhamento | CLINIC |
 
+> **Valores legados (removidos):** `NAVALHA` e `PROCEDIMENTO` existiram no enum antigo e foram populados em prod. Removidos no refactor sem migrar o dado, causavam `No enum constant ...` ao materializar `ServiceItem` — derrubando `GET /establishment` (lista) e `professionals-with-queue` com `500 UnexpectedRollbackException` (a falha de 1 loja envenenava a transacao da listagem inteira). Corrigido: migration `022-remap-legacy-serviceitem-types` remapeia `NAVALHA→BARBA` e `PROCEDIMENTO→RECORTE_PONTAS`; e `GetEstablishmentWithQueueUseCase` roda em `REQUIRES_NEW` para isolar a falha de uma loja na listagem.
+
 ### EstablishmentStatus
 `ACTIVE` | `INACTIVE` | `TEMPORARY_CLOSED`
 

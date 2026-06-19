@@ -164,6 +164,11 @@ databaseChangeLog:
       file: changesets/00-foundation/003-fix-default-updated_at-base_user.yaml
       relativeToChangeLogFile: true
 
+  # Remap legacy service_item_type values (NAVALHA/PROCEDIMENTO) absent from enum
+  - include:
+      file: changesets/50-establishment/022-remap-legacy-serviceitem-types.yaml
+      relativeToChangeLogFile: true
+
   # professional_intervals FK
   - changeSet:
       id: master-fk-professional-intervals

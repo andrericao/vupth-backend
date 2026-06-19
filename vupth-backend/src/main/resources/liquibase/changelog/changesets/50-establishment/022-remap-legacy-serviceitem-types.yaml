@@ -1,0 +1,24 @@
+databaseChangeLog:
+  # Remapeia valores legados de service_item_type que NAO existem mais no enum
+  # ServiceItemType. Esses valores foram populados quando o enum ainda os tinha
+  # (commit 89331fa) e nao foram migrados quando o enum foi refatorado (1627896).
+  # Em producao isso fazia o Hibernate lancar "No enum constant ..." ao materializar
+  # o ServiceItem — derrubando GET /establishment (lista) e professionals-with-queue.
+  # Mapeamento pelos labels antigos:
+  #   NAVALHA     ("Barba Completa")    -> BARBA
+  #   PROCEDIMENTO("Recorte das pontas") -> RECORTE_PONTAS  (label identico ao atual)
+  # Idempotente: o WHERE so casa os valores antigos; no-op em bancos ja limpos (test/local).
+  - changeSet:
+      id: 022-remap-legacy-serviceitem-types
+      author: andrericao
+      changes:
+        - sql:
+            sql: >
+              UPDATE service_item
+              SET service_item_type = 'BARBA'
+              WHERE service_item_type = 'NAVALHA';
+        - sql:
+            sql: >
+              UPDATE service_item
+              SET service_item_type = 'RECORTE_PONTAS'
+              WHERE service_item_type = 'PROCEDIMENTO';
