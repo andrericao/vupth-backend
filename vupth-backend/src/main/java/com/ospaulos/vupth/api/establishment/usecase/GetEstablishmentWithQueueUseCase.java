@@ -13,6 +13,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -37,7 +38,12 @@ public class GetEstablishmentWithQueueUseCase {
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
 
-    @Transactional(readOnly = true)
+    // REQUIRES_NEW: o snapshot da fila roda numa transacao propria. Assim, quando este
+    // use case e chamado em lote dentro da listagem (EstablishmentServiceImpl.minWaitMinutes),
+    // uma falha em UM establishment faz rollback so da SUA transacao — sem marcar a transacao
+    // da listagem como rollback-only (que estourava UnexpectedRollbackException e derrubava TODA
+    // a lista com 500). Custo: 1 tx por establishment na listagem (ja era N+1; ver backlog perf).
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public EstablishmentWithProfessionalsResponse execute(UUID establishmentId) {
 
         log.info("GetEstablishmentWithQueueUseCase — establishmentId={}", establishmentId);
