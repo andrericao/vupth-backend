@@ -2070,7 +2070,7 @@
      ]
     },
     {
-     "name": "GET professional search (owner busca por especialidade)",
+     "name": "GET professional search (owner busca candidatos a convite — so nao afiliados)",
      "request": {
       "method": "GET",
       "header": [

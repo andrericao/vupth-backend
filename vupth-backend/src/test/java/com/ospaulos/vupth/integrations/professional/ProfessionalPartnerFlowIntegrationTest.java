@@ -521,6 +521,55 @@ class ProfessionalPartnerFlowIntegrationTest {
                 .andDo(print());
     }
 
+    @Test
+    @Order(54)
+    @DisplayName("GET /professional?name= — 200 nao retorna profissional ja afiliado (so candidatos a convite)")
+    void searchProfessional_excludesAffiliated() throws Exception {
+        log.info("[PartnerFlow] searchProfessional_excludesAffiliated");
+
+        // cria um profissional fresco com nome unico, ainda SEM establishment
+        String uniqueName = "Afiliado" + faker.number().digits(6);
+        var freshProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        MvcResult reg = mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freshProf.token())
+                        .content(mapper.writeValueAsString(
+                                new ProfessionalRegisterRequest(uniqueName, "Corte"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String freshProfId = new JSONObject(reg.getResponse().getContentAsString()).getString("id");
+
+        // antes de afiliar: aparece na busca do owner (candidato a convite)
+        mvc.perform(get("/professional")
+                        .param("name", uniqueName.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(freshProfId));
+
+        // owner afilia o profissional ao seu establishment
+        mvc.perform(post("/establishment/{id}/professionals", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(mapper.writeValueAsString(
+                                new AddProfessionalToEstablishmentRequest(UUID.fromString(freshProfId)))))
+                .andExpect(status().isCreated());
+
+        // depois de afiliar: nao aparece mais (ja vinculado, nao e candidato a convite)
+        MvcResult result = mvc.perform(get("/professional")
+                        .param("name", uniqueName.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        assertThat(new org.json.JSONArray(result.getResponse().getContentAsString()).length())
+                .isZero();
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[PartnerFlow] tearDown");

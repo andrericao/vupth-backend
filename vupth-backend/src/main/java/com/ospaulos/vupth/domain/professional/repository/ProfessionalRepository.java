@@ -54,13 +54,16 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     // Busca de profissionais por nome e/ou especialidade. Os parametros ja vem como
     // padroes LIKE prontos ("%" = sem filtro) — nunca null, para evitar problemas de
     // inferencia de tipo do Postgres (null vira bytea e quebra o LOWER). COALESCE
-    // trata firstName/specialty nulos. Usado pelo owner para convidar.
+    // trata firstName/specialty nulos. Usado pelo owner para convidar — por isso so
+    // retorna profissionais SEM establishment (p.establishment IS NULL): quem ja esta
+    // afiliado nao e candidato a convite (convida-lo daria 409 ALREADY_AFFILIATED).
     @Query("""
         SELECT p FROM Professional p
         JOIN FETCH p.baseUser u
         WHERE LOWER(COALESCE(u.firstName, '')) LIKE LOWER(:nameLike)
           AND LOWER(COALESCE(p.specialty, '')) LIKE LOWER(:specialtyLike)
           AND u.isActive = true
+          AND p.establishment IS NULL
         ORDER BY u.firstName ASC
         """)
     List<Professional> searchByNameAndSpecialty(

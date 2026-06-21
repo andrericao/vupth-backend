@@ -936,6 +936,8 @@ Busca profissionais por nome e/ou especialidade (filtros opcionais, parciais, ca
 
 Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
 
+> **So candidatos a convite (#18):** a busca retorna **apenas profissionais sem establishment** (`p.establishment IS NULL`). Profissionais ja afiliados a alguma loja **nao aparecem** — convida-los daria `409 PROFESSIONAL_ALREADY_AFFILIATED`. Assim que um profissional e afiliado, ele sai da busca na hora.
+
 **Response (200):**
 ```json
 [

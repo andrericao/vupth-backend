@@ -89,16 +89,28 @@ class ProfessionalNicknameProjectionIntegrationTest {
 
     @Test
     @Order(11)
-    @DisplayName("GET /professional — 200 busca do owner expoe o apelido")
+    @DisplayName("GET /professional — 200 busca do owner expoe o apelido (candidato a convite, sem establishment)")
     void ownerSearch_exposesNickname() throws Exception {
-        // A busca e global (todos os profissionais); localizamos o nosso pelo apelido
-        // em vez de depender da ordem do array (outras classes de teste podem deixar
-        // profissionais no banco).
+        // A busca do owner so lista candidatos a convite — profissionais SEM establishment
+        // (ver #18). Registramos um profissional avulso, definimos seu apelido e confirmamos
+        // que a projecao da busca o expoe. Localizamos pelo apelido (busca e global).
+        var freeProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freeProf.token())
+                        .content("{\"name\":\"Solto\",\"specialty\":\"Corte\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(patch("/profile/general-infos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freeProf.token())
+                        .content("{\"nickname\":\"BibbaLivre\"}"))
+                .andExpect(status().isOk());
+
         mvc.perform(get("/professional")
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[?(@.nickname == 'Bibba')]").exists())
+                .andExpect(jsonPath("$[?(@.nickname == 'BibbaLivre')]").exists())
                 .andDo(print());
     }
 
