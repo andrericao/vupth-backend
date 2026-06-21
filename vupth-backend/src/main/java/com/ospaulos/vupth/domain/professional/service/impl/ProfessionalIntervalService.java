@@ -170,6 +170,66 @@ public class ProfessionalIntervalService {
     }
 
     /**
+     * Resultado de um skip/unskip — o intervalo afetado + o establishment do profissional
+     * (para o broadcast da fila via WebSocket, feito pela camada web apos o commit).
+     */
+    public record IntervalSkipResult(ProfessionalInterval interval, UUID establishmentId) {}
+
+    /**
+     * Pula a refeicao SO naquele dia (spec item #41 — "Nao almocar"). A refeicao recorrente
+     * cai do ETA de todos os clientes na hora (consumido por {@code QueueUtils.isSkippedOn}),
+     * mas a recorrencia segue intacta para os proximos dias.
+     *
+     * So vale para refeicoes RECURRENT que ainda nao foram iniciadas/encerradas no dia —
+     * se ja iniciou, usar {@code finish} ({@link IntervalConflictException} 409). Idempotente:
+     * pular um dia ja pulado nao faz nada. Ownership pelo path (404).
+     */
+    public IntervalSkipResult skipMeal(UUID professionalId, UUID intervalId, LocalDate date) {
+        ProfessionalInterval interval = loadOwned(professionalId, intervalId);
+
+        if (interval.getIntervalType() != IntervalType.RECURRENT) {
+            throw new IntervalConflictException("Only recurring meals can be skipped.");
+        }
+        if (interval.isStartedOn(date) || interval.isDoneOn(date)) {
+            throw new IntervalConflictException(
+                    "Meal already started/taken on " + date + " — use finish instead.");
+        }
+
+        interval.skipOn(date);
+        ProfessionalInterval saved = intervalRepository.save(interval);
+        log.info("[Interval] skipped — id={} professional={} date={}", intervalId, professionalId, date);
+        return new IntervalSkipResult(saved, establishmentIdOf(saved));
+    }
+
+    /**
+     * Desfaz o skip do dia (spec item #41) — a refeicao volta a contar no ETA. Idempotente:
+     * desfazer um dia nao pulado nao faz nada. Ownership pelo path (404).
+     */
+    public IntervalSkipResult unskipMeal(UUID professionalId, UUID intervalId, LocalDate date) {
+        ProfessionalInterval interval = loadOwned(professionalId, intervalId);
+        interval.unskipOn(date);
+        ProfessionalInterval saved = intervalRepository.save(interval);
+        log.info("[Interval] unskipped — id={} professional={} date={}", intervalId, professionalId, date);
+        return new IntervalSkipResult(saved, establishmentIdOf(saved));
+    }
+
+    /** Carrega um intervalo garantindo que pertence ao profissional do path (senao 404). */
+    private ProfessionalInterval loadOwned(UUID professionalId, UUID intervalId) {
+        ProfessionalInterval interval = intervalRepository.findById(intervalId)
+                .orElseThrow(() -> new IntervalNotFoundException(intervalId));
+        if (!interval.getProfessional().getId().equals(professionalId)) {
+            throw new IntervalNotFoundException(intervalId);
+        }
+        return interval;
+    }
+
+    private UUID establishmentIdOf(ProfessionalInterval interval) {
+        return interval.getProfessional().getEstablishment() != null
+                ? interval.getProfessional().getEstablishment().getId()
+                : null;
+    }
+
+    /**
      * Encerrar ao atender (spec item #11e): quando o profissional inicia um atendimento,
      * a refeicao/intervalo que ele iniciou manualmente e ainda esta em curso e encerrada
      * (reason {@code ATTEND_NEXT_CLIENT}; {@code finishedEarly} conforme o horario).

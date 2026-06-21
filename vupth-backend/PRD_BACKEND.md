@@ -2012,6 +2012,32 @@ Encerra manualmente o intervalo (o "botao encerrar refeicao", spec item #11e2), 
 
 ---
 
+### PATCH .../intervals/{intervalId}/skip
+"Nao almocar" do dia (spec item #41): pula a refeicao recorrente **so naquele dia**, derrubando-a do **ETA de todos os clientes na hora**. A recorrencia permanece intacta para os proximos dias (diferente do `DELETE`, que remove de vez). Persiste o skip por `(intervalo, data)` na tabela `professional_interval_skips`; o `QueueUtils` (day-scoped) passa a excluir a refeicao no dia pulado. Apos o skip, rebroadcast da fila via WebSocket (best-effort, secao 18b).
+
+**Query:** `date` (opcional, ISO `YYYY-MM-DD`, default **hoje** UTC). **Sem body.** So vale para refeicoes **RECURRENT** ainda nao iniciadas/encerradas no dia. Idempotente (pular dia ja pulado = 200, no-op).
+
+**Response (200):** `IntervalResponse`
+
+**Erros:** 409 `INTERVAL_CONFLICT` (refeicao ja iniciada/encerrada no dia — usar `finish`; ou intervalo nao-recorrente) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest` — exclusao do ETA) + Postman (folder 12)
+
+---
+
+### DELETE .../intervals/{intervalId}/skip
+Desfaz o skip do dia (spec item #41) — a refeicao volta a contar no ETA. **Query:** `date` (opcional, default hoje UTC). Idempotente. Rebroadcast da fila apos a operacao.
+
+**Response (200):** `IntervalResponse`
+
+**Erros:** 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+> **Atencao:** `DELETE .../intervals/{intervalId}/skip` desfaz o **skip do dia**; `DELETE .../intervals/{intervalId}` (sem `/skip`) **remove a refeicao recorrente de vez**. Sao operacoes distintas.
+
+**Testes:** Integracao (`IntervalSkipIntegrationTest`) + Postman (folder 12)
+
+---
+
 ### DELETE .../intervals/{intervalId}
 Remove uma refeicao/intervalo (spec item #11f) — o profissional apaga uma refeicao que nao usa (ex.: nao janta). **Hard delete**: o registro recorrente some; para te-la de volta, criar de novo via `POST .../recurring`.
 
@@ -2424,7 +2450,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 38 | Encaixe com equalizacao de tempo | **[Pos-MVP]** Profissional **encaixa** um cliente no meio da fila (ex.: posicao 4 de 8). Os clientes apos a posicao precisam absorver o tempo do encaixe (ex.: +30min), mas **sem salto brusco** e sem "saber" do encaixe. Mecanica: **amortizar** o tempo do encaixe entre os N atendimentos seguintes (30min / 4 = +7,5min cada) e fazer o acrescimo entrar **gradualmente** (a cada atendimento concluido), de modo que nenhum update mostre o salto inteiro. Quanto mais clientes a frente, menos cada um sente. O profissional assume o risco de satisfacao (decisao dele). Mesma familia do Item 37 (suavizacao da estimativa). **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend** (insercao em posicao + tempo amortizado pendente por atendimento) / **Front-Partner** (acao de encaixar) / **Front-Client** (estimativa suavizada) |
 | 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
 | 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | **[Pos-MVP]** Cliente quer ser atendido por volta de um **horario que escolhe** (ex.: 17:00), mas a fila esta com estimativa muito mais cedo (ex.: 11:00). Ele entra como **intencao** (nao confirmado): quem entra na fila depois dele recebe **indice menor** (passa na frente) enquanto o horario previsto de atendimento daquela posicao ainda for **antes** do alvo dele. Quando o previsto **cruza** o alvo (ex.: 17:15), ele para de ceder posicao e a presenca vira **confirmada** (deixa de ser so intencao). Funciona como uma **agenda** sobreposta a fila por ordem de chegada. **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | **Backend** (estado intencao vs confirmado no atendimento + horario-alvo + ordenacao que cede posicao ate o previsto cruzar o alvo, entao confirma) / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado) / **Front-Partner** (ver intencoes/agendados na fila) |
-| 41 | Skip de refeicao por dia ("Nao almocar") | **[Pedido Front-Partner 2026-06-18]** O popup de inicio de refeicao tem a acao **"Nao almocar"**, mas hoje **nao existe endpoint** para isso: `finish` so encerra refeicao **ativa** e `DELETE` remove a refeicao **recorrente de vez**. Falta pular a refeicao **so naquele dia** (sem apagar a recorrencia), derrubando-a do ETA de **todos** os clientes na hora. Endpoint proposto: **`PATCH .../intervals/{intervalId}/skip`** (com data do dia — default hoje), PROFESSIONAL/OWNER. Enquanto nao existir, o "Agora nao" do popup so dispensa o aviso. E a parte concreta e antecipavel do "Nao almocar" do Item 37. **Spec detalhada na secao "Item 41 — Skip de refeicao por dia" abaixo do backlog.** | **Backend** (endpoint skip + marcador de skip por dia consumido pelo `QueueUtils`) / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
+| 41 | Skip de refeicao por dia ("Nao almocar") | ✅ **[BACKEND CONCLUIDO 2026-06-21]** Entregue `PATCH .../intervals/{intervalId}/skip` (pula a refeicao recorrente so naquele dia, default hoje) + `DELETE .../intervals/{intervalId}/skip` (desfaz). Skip por `(intervalo, data)` na tabela `professional_interval_skips` (migration 024), consumido pelo `QueueUtils` (day-scoped) — refeicao pulada cai do ETA de todos na hora, recorrencia intacta. Rebroadcast WS apos a operacao. 409 se ja iniciada/encerrada no dia (usar `finish`). Testes integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest`) + Postman folder 12 + PRD secao 18. **Resta:** Front-Partner ligar a acao "Nao almocar" do popup (eles chamam de "backend #17"). | **Backend** ✅ / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 

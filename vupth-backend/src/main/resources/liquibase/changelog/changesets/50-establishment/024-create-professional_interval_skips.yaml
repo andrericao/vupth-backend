@@ -1,0 +1,32 @@
+databaseChangeLog:
+  # Dias em que uma refeicao recorrente foi PULADA ("Nao almocar" do dia — item #41).
+  # Skip por (intervalo, data): a recorrencia segue intacta nos outros dias. Consumido
+  # pelo QueueUtils (day-scoped) para derrubar a refeicao do ETA so naquele dia.
+  - changeSet:
+      id: 024-create-professional_interval_skips
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: professional_interval_skips
+            columns:
+              - column:
+                  name: interval_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: skip_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: professional_interval_skips
+            columnNames: interval_id, skip_date
+            constraintName: pk_professional_interval_skips
+        - addForeignKeyConstraint:
+            baseTableName: professional_interval_skips
+            baseColumnNames: interval_id
+            constraintName: fk_interval_skip_interval
+            referencedTableName: professional_intervals
+            referencedColumnNames: id
+            onDelete: CASCADE

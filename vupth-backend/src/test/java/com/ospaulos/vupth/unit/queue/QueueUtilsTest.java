@@ -95,6 +95,26 @@ class QueueUtilsTest {
     }
 
     @Test
+    @DisplayName("refeicao pulada hoje (Nao almocar — item #41) nao conta no ETA")
+    void skippedToday_notCounted() {
+        var queue = List.of(att(30), att(30), att(30)); // mesmo cenario do previsto_withinWindow (150)
+        var meal = recurring("12:00:00Z", 60);
+        meal.skipOn(java.time.LocalDate.parse("2026-06-16")); // dia do NOW
+        // sem o almoco (pulado), so as 3 duracoes contam
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(meal), NOW, 3)).isEqualTo(90);
+    }
+
+    @Test
+    @DisplayName("skip de OUTRO dia nao afeta o ETA de hoje (skip e day-scoped)")
+    void skippedAnotherDay_stillCounts() {
+        var queue = List.of(att(30), att(30), att(30));
+        var meal = recurring("12:00:00Z", 60);
+        meal.skipOn(java.time.LocalDate.parse("2026-06-15")); // ontem
+        // pulou ontem, hoje a refeicao volta a contar → 150
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(meal), NOW, 3)).isEqualTo(150);
+    }
+
+    @Test
     @DisplayName("previsto nao alcancado: cliente atendido antes do horario → refeicao nao conta")
     void previsto_servedBeforeMeal_notCounted() {
         var queue = List.of(att(30)); // servido 11:30, antes do almoco 12:00
