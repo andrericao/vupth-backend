@@ -2070,7 +2070,7 @@
      ]
     },
     {
-     "name": "GET professional search (owner busca candidatos a convite — so nao afiliados)",
+     "name": "GET professional search (owner busca candidatos a convite — sem afiliado nem convite pendente)",
      "request": {
       "method": "GET",
       "header": [

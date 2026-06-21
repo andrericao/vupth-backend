@@ -934,9 +934,13 @@ Busca profissionais por nome e/ou especialidade (filtros opcionais, parciais, ca
 | name | String | LIKE parcial no nome (firstName), case-insensitive |
 | specialty | String | LIKE parcial na especialidade, case-insensitive |
 
-Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
+Sem filtros, lista todos os profissionais candidatos a convite. Ordenado por nome.
 
-> **So candidatos a convite (#18):** a busca retorna **apenas profissionais sem establishment** (`p.establishment IS NULL`). Profissionais ja afiliados a alguma loja **nao aparecem** — convida-los daria `409 PROFESSIONAL_ALREADY_AFFILIATED`. Assim que um profissional e afiliado, ele sai da busca na hora.
+> **So candidatos a convite (#18):** a busca retorna **apenas quem pode ser convidado**:
+> 1. **sem establishment** (`p.establishment IS NULL`) — quem ja esta afiliado nao aparece (convida-lo daria `409 PROFESSIONAL_ALREADY_AFFILIATED`);
+> 2. **sem afiliacao `PENDING`** (em qualquer loja) — quem ja tem convite/pedido pendente nao aparece, pois nao pode aceitar um novo enquanto nao resolver o atual (pendencia unica global, ver #8b); convida-lo daria `AFFILIATION_ALREADY_PENDING`.
+>
+> Assim que o profissional e afiliado **ou** recebe um convite pendente, ele sai da busca na hora; volta a aparecer se o vinculo/pendencia for desfeito (recusado/cancelado).
 
 **Response (200):**
 ```json
