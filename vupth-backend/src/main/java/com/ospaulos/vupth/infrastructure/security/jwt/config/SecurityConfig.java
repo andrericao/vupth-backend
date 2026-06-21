@@ -75,6 +75,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/service-types/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
 
                         // ── ROLE_CLIENT (qualquer autenticado) ────────────────────────────
@@ -126,6 +127,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/professionals/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/*/affiliations").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.POST, "/service-types/*/keywords").hasRole("PROFESSIONAL")
 
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())

@@ -4196,6 +4196,101 @@
        }
       ]
      }
+    },
+    {
+     "name": "GET service-types search (cliente busca sinonimo regional — ex: luzes)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"luzes resolve para PINTURA + matched_keyword\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r).to.be.an(\"array\");",
+         "  const pintura = r.find(t => t.type === \"PINTURA\");",
+         "  pm.expect(pintura, \"PINTURA presente\").to.exist;",
+         "  pm.expect(pintura.display_name).to.eql(\"Pintura\");",
+         "  pm.expect(pintura.matched_keyword).to.eql(\"luzes\");",
+         "  pm.expect(pintura.keywords).to.be.an(\"array\");",
+         "  pm.expect(pintura.service_types).to.be.an(\"array\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/service-types?q=luzes",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "service-types"
+       ],
+       "query": [
+        {
+         "key": "q",
+         "value": "luzes"
+        }
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "POST service-types add keyword (profissional)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 (criado) ou 409 (ja existe em re-run)\", () => {",
+         "  pm.expect([201, 409]).to.include(pm.response.code);",
+         "});",
+         "if (pm.response.code === 201) {",
+         "  pm.test(\"Schema: type, display_name, keywords, matched_keyword\", () => {",
+         "    const r = pm.response.json();",
+         "    pm.expect(r.type).to.eql(\"PINTURA\");",
+         "    pm.expect(r).to.have.property(\"display_name\");",
+         "    pm.expect(r.keywords).to.be.an(\"array\");",
+         "    pm.expect(r.matched_keyword).to.eql(\"luzeira\");",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"keyword\":\"luzeira\"}"
+      },
+      "url": "{{base_url}}/service-types/PINTURA/keywords",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

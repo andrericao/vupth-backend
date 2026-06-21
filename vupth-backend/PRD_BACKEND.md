@@ -81,10 +81,10 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 
 | Acesso | Endpoints |
 |--------|-----------|
-| **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
+| **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
@@ -159,6 +159,7 @@ Todos os erros seguem um dos dois formatos:
 | 409 | `ATTENDANCE_ALREADY_IN_PROGRESS` | Profissional ja tem attendance em andamento |
 | 409 | `ATTENDANCE_ALREADY_CANCELLED` | Attendance ja foi cancelado |
 | 409 | `SERVICE_ITEM_ALREADY_EXISTS` | Service item duplicado |
+| 409 | `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS` | Sinonimo ja existe para o tipo de servico (base ou adicionado) |
 | 409 | `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` | Profissional tem atendimentos ativos (impede sair do establishment) |
 | 409 | `INTERVAL_CONFLICT` | Conflito de horario de intervalo |
 | 422 | `VALIDATION_ERROR` | Campos obrigatorios faltando ou formato invalido |
@@ -178,6 +179,8 @@ Todos os erros seguem um dos dois formatos:
 `BARBER` | `BEAUTY_SALON` | `EYEBROW` | `NAIL_SALON` | `SPA` | `CLINIC`
 
 ### ServiceItemType (tipo de servico — 25 valores)
+
+> Cada tipo carrega **keywords/sinonimos** (base no enum + adicionados por profissionais) para busca por sinonimo regional — ver [Service Types — keywords](#service-types--keywordssinonimos-item-34) (item 34). Valores legados `NAVALHA`/`PROCEDIMENTO` (prod) foram remapeados para `BARBA`/`RECORTE_PONTAS` (migration 022).
 
 | ServiceItemType | displayName | ServiceType compativel |
 |---|---|---|
@@ -1725,6 +1728,44 @@ Remove um servico do profissional. So o proprio profissional (JWT) pode remover.
 > `price` = valor base digitado pelo profissional. `client_price` = total pago pelo cliente (preco + Taxas Vupth), calculado no front. `uses_platform_pricing` = se aplica a absorcao das Taxas Vupth. Os dois ultimos sao opcionais (podem vir `null` em itens antigos).
 
 **Testes:** Unitario + Integracao
+
+---
+
+### Service Types — keywords/sinonimos (item 34)
+
+Resolve o **sinonimo regional** que o cliente conhece (ex.: "luzes") para o **tipo canonico** de servico (ex.: PINTURA). Cada `ServiceItemType` tem sinonimos-**base** (vivem no proprio enum, curadoria inicial) que os **profissionais** podem **estender** em runtime (tabela `service_type_keyword`). Busca e o "i" de informacao usam a **uniao** (base + adicionados). Sinonimos sao do **servico** (globais — valem para todas as lojas), nao por estabelecimento. `keyword` e sempre **normalizada** (minuscula, sem acento) para casar a busca e garantir unicidade.
+
+#### GET /service-types
+Lista/resolve tipos de servico. **Acesso:** Publico.
+
+| Query | Tipo | Notas |
+|-------|------|-------|
+| q | String | termo de busca (sinonimo ou nome). Casa por `contains` normalizado contra keywords, `displayName` e o nome do enum. **Sem `q`**: lista **todos** os tipos (para o "i" / navegacao). |
+
+**Response (200):**
+```json
+[
+  {
+    "type": "PINTURA",
+    "display_name": "Pintura",
+    "service_types": ["BARBER", "BEAUTY_SALON"],
+    "keywords": ["coloracao", "luzes", "mechas", "pintura", "platinado", "reflexo", "tintura"],
+    "matched_keyword": "luzes"
+  }
+]
+```
+> `matched_keyword` = qual sinonimo casou com `q` (`null` quando lista sem `q` ou quando casou pelo proprio nome do servico). `service_types` = categorias para o front entao filtrar estabelecimentos (`GET /establishment?serviceType=`). `keywords` = lista completa (base + adicionados) para o "i".
+
+#### POST /service-types/{type}/keywords
+Profissional adiciona um sinonimo a um tipo. **Acesso:** PROFESSIONAL.
+
+`{type}` = nome do `ServiceItemType` (ex.: `PINTURA`). Body: `{ "keyword": "luzeira" }` (obrigatorio, max 60). O valor e normalizado antes de gravar.
+
+- **201:** retorna o tipo com a keyword ja incluida (`matched_keyword` = a recem-criada).
+- **409 `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS`:** a palavra ja existe para o tipo (base do enum ou adicionada) — **nao pode repetir**. Dedup considera a normalizacao (`APARO` == `aparo`).
+- **403:** cliente/owner sem role PROFESSIONAL.
+
+**Testes:** Integracao (`ServiceTypeKeywordIntegrationTest`)
 
 ---
 

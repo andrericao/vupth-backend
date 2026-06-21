@@ -181,3 +181,8 @@ databaseChangeLog:
             referencedTableName: professional
             referencedColumnNames: id
             onDelete: CASCADE
+
+  # Service type keywords (sinonimos por tipo de servico, adicionados pelos profissionais)
+  - include:
+      file: changesets/50-establishment/023-create-service_type_keyword.yaml
+      relativeToChangeLogFile: true
