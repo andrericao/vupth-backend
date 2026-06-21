@@ -4,10 +4,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
+import com.ospaulos.vupth.domain.queue.service.QueueUtils;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,6 +67,15 @@ public record ProfessionalWithQueueResponse(
             Professional professional,
             Attendance currentAttendance,
             List<Attendance> waitingList) {
+        return fromEntity(professional, currentAttendance, waitingList, List.of(), OffsetDateTime.now());
+    }
+
+    public static ProfessionalWithQueueResponse fromEntity(
+            Professional professional,
+            Attendance currentAttendance,
+            List<Attendance> waitingList,
+            List<ProfessionalInterval> intervals,
+            OffsetDateTime now) {
 
         AttendanceInQueueResponse currentDto = currentAttendance != null
                 ? AttendanceInQueueResponse.fromEntity(currentAttendance)
@@ -73,10 +85,10 @@ public record ProfessionalWithQueueResponse(
                 .map(AttendanceInQueueResponse::fromEntity)
                 .toList();
 
-        // Tempo estimado = soma dos estimatedMinutes dos agendados + restante do em progresso
-        int estimatedWait = waitingList.stream()
-                .mapToInt(a -> a.getEstimatedTotalMinutes() > 0 ? a.getEstimatedTotalMinutes() : 20)
-                .sum();
+        // Tempo estimado = espera da fila inteira (meal-aware, item #37 pre-req: inclui as
+        // refeicoes previstas/iniciadas do profissional via QueueUtils) + restante do em progresso.
+        int estimatedWait = QueueUtils.calculateWaitingTimeForPosition(
+                waitingList, intervals, now, waitingList.size());
         if (currentAttendance != null) {
             estimatedWait += currentAttendance.getRemainingMinutes();
         }

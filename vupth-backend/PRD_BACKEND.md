@@ -717,6 +717,13 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
 > **service_items** retorna os servicos oferecidos por cada profissional (id, tipo, nome, preco, duracao estimada).
 > O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
 
+> **`estimated_wait_minutes` e meal-aware (item #37 pre-req):** o calculo inclui as **refeicoes**
+> previstas/iniciadas do profissional (via `QueueUtils`), nao so a soma dos atendimentos. A mesma
+> base alimenta o `estimated_wait_minutes` da listagem `GET /establishment` e o ETA individual do
+> cliente (`ClientInQueueResponse`). Um **skip** (#41) reflete aqui na hora (refeicao sai do ETA do
+> cliente). Ainda **sem o lock** do #37: por enquanto a refeicao entra/sai conforme o ritmo (recalculo
+> a cada consulta); o lock (estabilizacao no ingresso) entra em seguida.
+
 > **Filtro #31 (2a metade):** profissional **sem nenhum servico** nao e exibido neste snapshot,
 > mesmo com a loja aberta. Apenas profissionais com `service_items` nao vazio entram em `professionals`.
 > O cliente nunca ve um profissional que ainda nao pode atender.

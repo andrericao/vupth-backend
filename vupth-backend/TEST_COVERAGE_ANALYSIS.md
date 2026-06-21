@@ -1,497 +1,191 @@
 # 📊 Análise de Cobertura de Testes — Vupth Backend
 
-**Última atualização**: 14 de março de 2026 (Sessão 2)  
-**Status Anterior**: 94% de sucesso (31/33 testes passando)  
-**Status Atual**: ✅ **+15 novos testes criados** (AttendanceStatusTransitionTest) = 64+ testes rodando  
-**Objetivo**: Identificar gaps e oportunidades de melhoria
+**Última atualização**: 2026-06-21
+**Meta**: 🎯 **100%** — todo endpoint/regra coberto por teste **unitário e/ou de integração**, sempre com **caminho feliz + erros** (401/403/404/409/422).
+**Inventário atual**: ~**175** testes unitários + ~**405** testes de integração (~**580** métodos `@Test`), 15 controllers, ~70 endpoints.
 
-## 🆕 MELHORIAS DESTA SESSÃO (14/03/2026)
-
-### Testes Criados
-1. **`AttendanceStatusTransitionTest`** (unit test, 15 testes)
-   - Localização: `/src/test/java/com/ospaulos/vupth/unit/attendance/`
-   - Status: ✅ **15/15 PASSANDO**
-   - Cobertura:
-     - ✅ Valid transitions: SCHEDULED→IN_PROGRESS, IN_PROGRESS→PAUSED, PAUSED↔IN_PROGRESS, IN_PROGRESS→FINISHED
-     - ✅ Invalid transitions: SCHEDULED→FINISHED, SCHEDULED→PAUSED (model allows, service should prevent)
-     - ✅ Terminal state protection: FINISHED/CANCELED cannot transition
-     - ✅ Timer state consistency: startAttendance, hasStarted(), getRemainingMinutes()
-
-### Testes Melhorados
-- `ProfessionalServiceImplTest`: Adicionados 2 mocks para `findByIdWithBaseUser()` (linha 170, 184)
-- Padrão estabelecido: Todos os testes de integração novo testam via MockMvc com TestUserUtils
-
-### Baseline Atual
-- **Total de testes rodados**: 64+ (49 ServiceImpl + 15 Attendance + outros)
-- **Taxa de sucesso**: 100% para ServiceImplTests + AttendanceStatusTransitionTest
+> Este documento é **vivo**. Atualize-o **na mesma sessão** em que adicionar/alterar endpoint ou regra. Ver §0 (protocolo de manutenção).
 
 ---
 
-## 1. RESUMO EXECUTIVO
+## 0. PROTOCOLO DE MANUTENÇÃO (como manter em 100%)
 
-✅ **Bem coberto**: Auth, User profiles, Quick Create flows  
-⚠️ **Parcialmente coberto**: Attendance, Queue logic, Professional management  
-❌ **Não coberto**: WebSocket/tempo real, QueueService (muitos TODOs)  
-🔴 **Crítico**: QueueService.getQueueForProfessional marcado como "incorreto" (line 278)
+A cada feature/endpoint novo ou alterado:
+1. **Unitário** da regra de negócio (service/use case/util) — caminho feliz **+** cada exceção lançada.
+2. **Integração** (MockMvc) do endpoint — `2xx` feliz **+** cada erro do contrato (`401` sem token, `403` role errada, `404` inexistente/ownership, `409` conflito, `422` validação).
+3. Atualizar a **matriz** (§2) e o **changelog** (§6) deste arquivo.
+4. Definição de pronto: a linha do endpoint na matriz tem ✅ em *Feliz* **e** *Erros*.
 
----
-
-## 2. ANÁLISE POR MÓDULO
-
-### 2.1 AUTH & USER MANAGEMENT
-**Status**: ✅ BEM COBERTO
-
-#### Testes Unitários
-- `LoginUseCaseTest`: Cobre login success + erros (senha errada, email não existe)
-- `RegisterUseCaseTest`: Cobre registro success + erros (email duplicado, campos null)
-- `RefreshTokenUseCaseTest`: Cobre token refresh success + expiration
-- `UpdateProfileUseCasesTest`: Cobre atualização de senha e email
-
-#### Testes de Integração
-- `AuthIntegrationTest`: Cobertura completa (register, login, refresh)
-- `ProfileIntegrationTest`: Cobertura de profile updates
-
-#### **LACUNAS IDENTIFICADAS**:
-1. ❌ **Validação de senha fraca** (< 6 chars)
-   - Nenhum teste valida rejeição de senhas muito curtas
-   - Recomendação: Adicionar teste `register_passwordTooShort` em RegisterUseCaseTest
-
-2. ❌ **Formato de email inválido**
-   - AuthIntegrationTest menciona "email as number" mas não valida emails malformados
-   - Recomendação: Adicionar testes para:
-     - `register_invalidEmailFormat` (ex: "noatsign.com")
-     - `register_emailWithSpaces`
-
-3. ❌ **Usuário inativo tentando fazer login**
-   - Não há teste para `isActive = false`
-   - Recomendação: `LoginUseCaseTest.login_inactiveUser_throws`
-
-4. ❌ **Concorrência em registro de email**
-   - Testes assumem condições ideais, não simulam race condition
-   - Recomendação: Teste com dois registros simultâneos
-
-5. ⚠️ **Rate limiting ausente**
-   - Não há proteção contra brute force na integração
-   - PRD não menciona isso, mas é crítico para produção
+Convenções: ✅ coberto · ⚠️ parcial (falta um lado) · ❌ ausente · — não se aplica.
 
 ---
 
-### 2.2 ESTABLISHMENT & OWNERSHIP
-**Status**: ⚠️ PARCIALMENTE COBERTO
+## 1. RESUMO POR MÓDULO
 
-#### Testes Unitários
-- `QuickCreateEstablishmentUseCaseTest`: 4 testes
-  - ✅ Success case
-  - ✅ Multiple establishments
-  - ✅ OWNER role created automatically
-  - ❌ Falta: validação de nome vazio, campos obrigatórios
+| Módulo | Unit | Integração | Feliz | Erros | Status |
+|---|---|---|---|---|---|
+| Auth & Token | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| User / Profile | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| User Address | — | ✅ | ✅ | ✅ | ✅ Forte |
+| Establishment (CRUD + status + infos + owner) | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| Establishment Address | — | ✅ | ✅ | ⚠️ | ✅ Bom |
+| Establishment — listagem/busca (nome/bairro/tipo/combinação) | — | ✅ | ✅ | ✅ | ✅ Forte |
+| Service Item (establishment + professional-queue) | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| Service Types — keywords/sinônimos (#34) | — | ✅ | ✅ | ✅ | ✅ Forte |
+| Professional (CRUD, busca convite, me, reports) | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| Afiliação (convite/pedido/aceite/rejeite/pendência única) | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| Attendance (ciclo SCHEDULED→…→FINISHED/CANCELLED) | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| Queue — ETA (QueueUtils, meal-aware) | ✅ | ✅ | ✅ | ⚠️ | ✅ Bom |
+| Client Queue (posição/wait-time do cliente) | — | ✅ | ✅ | ⚠️ | ✅ Bom |
+| Intervals/Refeições (#11, #41) | ✅ | ✅ | ✅ | ✅ | ✅ Forte |
+| Reports (owner + professional) | — | ✅ | ✅ | ⚠️ | ✅ Bom |
+| WebSocket (STOMP fila/notif) | — | ✅ | ✅ | ❌ | ⚠️ Parcial |
 
-#### Testes de Integração
-- `EstablishmentIntegrationTest`: 30+ testes
-- `EstablishmentAddressIntegrationTest`: Endereço de establishment
-
-#### **LACUNAS IDENTIFICADAS**:
-1. ❌ **Operações CRUD completas**
-   - Não há testes para UPDATE de establishment (nome, status, serviços)
-   - Não há testes para DELETE/desativação
-   - Recomendação: `EstablishmentIntegrationTest` adicionar:
-     - `updateEstablishment_success`
-     - `updateEstablishment_nonExistent_404`
-     - `deleteEstablishment_success`
-     - `deactivateEstablishment_changeStatus`
-
-2. ❌ **Validação de servicios**
-   - Não há validação se establishment criado SEM serviceType
-   - Recomendação: `quickCreate_withoutServiceType_validates`
-
-3. ⚠️ **OpenStatus transitions**
-   - Há comment: `TODO: verificar metodo de updateStatus` em EstablishmentOpenStatusServiceImpl
-   - Recomendação: Testar:
-     - `openEstablishment_success` (CLOSED → OPEN)
-     - `closeEstablishment_success` (OPEN → CLOSED)
-     - `closeEstablishment_withOngoingAttendances_behavior`
-
-4. ❌ **Múltiplos endereços**
-   - Testes cobrem "addresses", mas não testam "set main address"
-   - Recomendação: `setMainAddress_success` + `setMainAddress_notFound_404`
-
-5. ⚠️ **Permissões granulares**
-   - Testa OWNER vs CLIENT, mas não testa:
-     - PROFESSIONAL tentando criar establishment
-     - OWNER tentando modificar outro OWNER's establishment
-   - Recomendação: Testes de autorização cruzada
+> "Forte" = feliz + erros cobertos nos principais endpoints. "Bom" = feliz sólido, falta um ou outro erro. "Parcial" = fluxo principal coberto, faltam cenários.
 
 ---
 
-### 2.3 PROFESSIONAL MANAGEMENT
-**Status**: ⚠️ PARCIALMENTE COBERTO
+## 2. MATRIZ ENDPOINT → TESTE
 
-#### Testes Unitários
-- `ProfessionalServiceImplTest`: 18 testes (TODOS PASSANDO após fixes)
-  - ✅ Start/pause/resume/finish attendance
-  - ✅ Service item creation
-  - ✅ Exception handling
+### 2.1 Auth & Token
+Testes: `unit/user/LoginUseCaseTest`, `RegisterUseCaseTest`, `RefreshTokenUseCaseTest`; `integrations/user/AuthIntegrationTest` (19), `RefreshTokenIntegrationTest` (7), `BaseUserIntegrationTest` (10).
 
-#### Testes de Integração
-- `ProfessionalIntegrationTest`: ~40 testes
+| Endpoint | Feliz | Erros | Notas |
+|---|---|---|---|
+| POST /auth/register | ✅ | ✅ | email duplicado, campos null/inválidos |
+| POST /auth/login | ✅ | ✅ | senha errada, email inexistente |
+| POST /auth/refresh | ✅ | ✅ | token inválido/expirado |
+| POST /auth/logout | ✅ | ⚠️ | falta logout sem token |
 
-#### **LACUNAS IDENTIFICADAS**:
-1. ❌ **ProfessionalInterval não testado**
-   - Entidade existe, mas `ProfessionalIntervalIntegrationTest` foi criado mas pode estar incompleto
-   - `ProfessionalIntervalService` tem 3 TODOs (linhas 121-123):
-     - `TODO: Validate start time vs end time`
-     - `TODO: Add 5 minute option`
-     - `TODO: Add action to serve next attendance`
-   - Recomendação:
-     - `createInterval_success`
-     - `createInterval_invalidTimeRange_throws`
-     - `createInterval_overlapWithExisting_throws`
-     - `finishInterval_triggersNextAttendance`
+### 2.2 User / Profile / Address
+Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegrationTest` (24), `ProfileNicknameIntegrationTest` (8), `useraddress/UserAddressIntegrationTest` (8), `client/ClientIntegrationTest` (7).
 
-2. ❌ **Specialty management**
-   - Não há testes para adicionar/remover specialties
-   - Recomendação: 
-     - `addSpecialty_success`
-     - `removeSpecialty_success`
-     - `professionalWithoutSpecialty_cannotAcceptAttendance`
+| Endpoint | Feliz | Erros |
+|---|---|---|
+| GET /profile/me · PATCH update-password/email | ✅ | ✅ |
+| DELETE /profile/delete/me | ✅ | ✅ |
+| POST/PATCH/DELETE /users/me/addresses, /{id}/main | ✅ | ✅ |
+| GET /users/email/{email} | ✅ | ⚠️ |
 
-3. ⚠️ **Availability toggle**
-   - `isAvailable` existe, mas não há teste de lógica:
-     - "Professional indisponível recebe attendance → rejeta?"
-   - Recomendação: `createAttendance_withInactiveProfessional_throws`
+### 2.3 Establishment
+Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (9), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
 
-4. ❌ **Professional schedule (horários)**
-   - Não há conceito de "horário de funcionamento" testado
-   - Recomendação (futuro): Criar `ProfessionalSchedule` entity + testes
+| Endpoint | Feliz | Erros | Notas |
+|---|---|---|---|
+| POST /establishment/create · /quick-create | ✅ | ✅ | |
+| PATCH /{id}/general-infos (+ phone/instagram/horário) | ✅ | ✅ | |
+| PATCH /{id}/open-status | ✅ | ✅ | 422 ESTABLISHMENT_NOT_READY / HOURS_REQUIRED |
+| PATCH /{id}/owner (transfer) | ✅ (unit) | ⚠️ | falta integração de erro |
+| POST/DELETE /{id}/professionals | ✅ | ✅ | |
+| GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação |
+| GET /establishment/id/{id} · /mine | ✅ | ⚠️ | |
+| GET /establishment/id/{id}/professionals-with-queue | ✅ | — | ETA **meal-aware** (#37 pré-req) |
+| GET /{id}/reports | ✅ | ⚠️ | `ReportIntegrationTest` |
+| 500 legado NAVALHA/PROCEDIMENTO | ✅ | ✅ | resiliência (hotfix) |
 
-5. ⚠️ **Quick create validação**
-   - `QuickCreateProfessionalUseCaseTest` tem 5 testes, faltam:
-     - `quickCreate_profWithoutEstablishment_throws`
-     - `quickCreate_sameUserTwice_throws` (já é prof?)
+### 2.4 Service Item & Service Types
+Testes: `unit/serviceitem/ServiceItemServiceImplTest` (6); `integrations/service_item/ServiceItemIntegrationTest` (15), `serviceItem/ServiceTypeKeywordIntegrationTest` (10).
 
----
+| Endpoint | Feliz | Erros |
+|---|---|---|
+| POST /establishment/{id}/service-items | ✅ | ✅ (duplicado, validação) |
+| POST/PATCH/DELETE professional-queue service-items | ✅ | ✅ |
+| GET /service-types[?q=] (#34) | ✅ | ✅ (vazio/normalização) |
+| POST /service-types/{type}/keywords (#34) | ✅ | ✅ (409 duplicado, 403 client) |
 
-### 2.4 ATTENDANCE & QUEUE
-**Status**: 🔴 CRÍTICO — MUITOS GAPS
+### 2.5 Professional & Afiliação
+Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Leave), `unit/affiliation/*` (Invite, Request, Resolve); `integrations/professional/ProfessionalIntegrationTest` (12), `ProfessionalPartnerFlowIntegrationTest` (25), `AffiliateToEstablishmentIntegrationTest` (9), `ProfessionalNicknameProjectionIntegrationTest` (4), `affiliation/AffiliationIntegrationTest` (38).
 
-#### Testes Unitários
-- `AttendanceServiceImplTest`: 34 testes (TESTES PASSANDO)
-  - ✅ Create attendance
-  - ✅ Create guest attendance
-  - ✅ Start/finish/cancel flows
-  - ✅ Exception handling
+| Endpoint | Feliz | Erros | Notas |
+|---|---|---|---|
+| POST /professional/register · /quick-create | ✅ | ✅ | |
+| GET /professional (busca p/ convite, OWNER) | ✅ | ✅ | só candidatos sem establishment e sem PENDING (#18) |
+| GET/PATCH /professional/me · /me/reports | ✅ | ✅ | |
+| POST /professional/affiliate · DELETE /me/establishment | ✅ | ✅ | 409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES |
+| Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 
-#### Testes de Integração
-- `AttendanceIntegrationTest`: Entidade existe mas pode não ter rodado ainda
+### 2.6 Attendance & Queue
+Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (12), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5).
 
-#### **LACUNAS IDENTIFICADAS** (CRÍTICAS):
+| Endpoint / Regra | Feliz | Erros | Notas |
+|---|---|---|---|
+| POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente |
+| PATCH /attendances/{id}/start·pause·resume·finish | ✅ | ✅ | transições inválidas cobertas (unit) |
+| PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | |
+| GET /attendances · /{id} · /client/me | ✅ | ⚠️ | histórico do cliente + filtros |
+| GET /client-queue/{id}/wait-time (posição/ETA do cliente) | ✅ | ⚠️ | ETA agora **meal-aware** |
+| QueueUtils ETA (previsto/iniciado/unexpected/skip/day-scoped) | ✅ | — | 12 cenários unit (inclui skip #41) |
 
-##### A) QueueService — CÓDIGO MARCADO COMO INCORRETO
-```
-Line 278: TODO: the "getQueueForProfessional" method is incorrect
-```
-- Função que calcula fila para um profissional tem TODO crítico
-- Não há testes de integração validando lógica de fila
-- **Recomendação (URGENTE)**:
-  - `QueueServiceIntegrationTest` com:
-    - `getQueueForProfessional_singleProfessional_correctOrder`
-    - `getQueueForProfessional_withPausedAttendance_skipped`
-    - `getQueueForProfessional_withCanceledAttendance_excluded`
-    - `getQueueForProfessional_withIntervals_recalculateWaitTime`
+### 2.7 Intervals / Refeições (#11, #41)
+Testes (unit): `RegisterProfessionalUseCaseTest`/`QuickCreateProfessionalUseCaseTest` (seed), `QueueUtilsTest` (ETA). Integração: `ProfessionalIntervalIntegrationTest` (10), `IntervalList` (4), `Update` (8), `Start` (7), `Finish` (7), `FinishOnAttend` (5), `Delete` (6), `Validation` (9), `Skip` (8), `ProfessionalMealSeedIntegrationTest` (4).
 
-##### B) Wait Time Calculation
-- Há TODO em linha 107: `TODO: Create function to define attendance start time`
-- Não há testes validando:
-  - Cálculo correto de `scheduledTime` quando profissional tem 5 atendimentos na fila
-  - Impacto de `ProfessionalInterval` no tempo de espera
-  - **Recomendação**:
-    - `calculateWaitTime_success`
-    - `calculateWaitTime_withIntervals_addsTime`
-    - `calculateWaitTime_multipleServiceItems_sumsDuration`
+| Endpoint | Feliz | Erros |
+|---|---|---|
+| POST /intervals/recurring · /unexpected | ✅ | ✅ (conflito, validação, fora do horário) |
+| PATCH /intervals/{id} (editar) | ✅ | ✅ (404 ownership) |
+| PATCH /intervals/{id}/start · /finish | ✅ | ✅ (409, 404, 403) |
+| PATCH/DELETE /intervals/{id}/skip (#41) | ✅ | ✅ (409 iniciada, 404, 403) |
+| DELETE /intervals/{id} | ✅ | ✅ |
+| GET /intervals?date= | ✅ | ⚠️ |
 
-##### C) Guest Attendance Logic
-- `AttendanceServiceImplTest` cobre guest attendance, mas:
-  - ❌ Não há validação se guest SEM nome é permitido (anonymous guest)
-  - ❌ Não há teste de guest entrando na fila SEM service items
-  - Recomendação:
-    - `createGuestAttendance_anonymous_success`
-    - `createGuestAttendance_withoutServiceItems_success`
-    - `createGuestAttendance_invalidStatus_throws`
+### 2.8 WebSocket
+Testes: `integrations/websocket/WebSocketIntegrationTest` (2).
 
-##### D) Attendance Status Transitions
-- Há comment: `Fluxo completo: SCHEDULED → IN_PROGRESS → FINISHED`
-- Faltam transições não-felizes:
-  - ❌ SCHEDULED → PAUSED (sem passar por IN_PROGRESS)
-  - ❌ IN_PROGRESS → SCHEDULED (invalido, deve falhar)
-  - ❌ FINISHED → IN_PROGRESS (invalido, deve falhar)
-  - Recomendação:
-    - `startAttendance_fromScheduled_success`
-    - `startAttendance_fromPaused_success`
-    - `startAttendance_fromFinished_throws`
-    - `pauseAttendance_fromInProgress_success`
-    - `pauseAttendance_fromScheduled_throws`
-
-##### E) Service Item Association
-- Não há teste validando:
-  - Attendance criado SEM service items → cria vazio?
-  - Service item de outro profissional → rejeta?
-  - Service item com preço negativo → rejeta?
-  - Recomendação:
-    - `createAttendance_withoutServiceItems_throws`
-    - `createAttendance_withServiceItemFromOtherProf_throws`
-    - `createAttendance_validateServiceItemPrices`
-
-##### F) Client Attendance Tracking
-- TODO em ClientQueueController (linha 22):
-```
-TODO: Create client methods -> CLIENT should see their wait time
-```
-- Não há testes para:
-  - Cliente visualizar sua posição na fila
-  - Cliente visualizar tempo estimado de espera
-  - Cliente receber atualização em tempo real (WebSocket)
-  - Recomendação:
-    - `getMyAttendance_success`
-    - `getMyWaitTime_calculatedCorrectly`
-    - `getMyPosition_inQueue_correctNumber`
+| Fluxo | Feliz | Erros |
+|---|---|---|
+| STOMP connect + broadcast fila | ✅ | ❌ (falta auth inválida / canal negado) |
+| Notificação pessoal | ⚠️ | ❌ |
 
 ---
 
-### 2.5 SERVICE ITEMS
-**Status**: ⚠️ PARCIALMENTE COBERTO
+## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)
 
-#### Testes Unitários
-- `ServiceItemServiceImplTest`: Cobre criação e validações
+### 🟠 Alta (fecha o "Erros" pendente da matriz)
+- [ ] `PATCH /establishment/{id}/owner` — teste de integração de erro (não-owner → 403; novo owner inválido → 404).
+- [ ] `POST /auth/logout` sem token → 401 (integração).
+- [ ] Client Queue / wait-time — erro: cliente fora da fila → 404 `CLIENT_NOT_IN_QUEUE` (integração explícita).
+- [ ] Reports — erros: período inválido, role errada (OWNER vs PROFESSIONAL), establishment de outro owner → 403.
+- [ ] WebSocket — conexão sem JWT / inscrição em canal de outra loja negada.
 
-#### Testes de Integração
-- `ServiceItemIntegrationTest`: Existe
+### 🟡 Média
+- [ ] GET /attendances filtros (status, período) — asserts de conteúdo, não só presença.
+- [ ] GET /establishment/id/{id} e /mine — caminhos de erro (404, sem establishment).
+- [ ] Validação global: UUID malformado no path → 400 (amostra por controller).
+- [ ] Autorização cruzada: acessar recurso de outro usuário (amostra por módulo).
 
-#### **LACUNAS IDENTIFICADAS**:
-1. ❌ **Preço e duração**
-   - Não há validação explícita:
-     - Preço negativo → 400?
-     - Duração zero → 400?
-     - Duração > 8 horas → warning?
-   - Recomendação:
-     - `createServiceItem_negativePrince_throws`
-     - `createServiceItem_zeroDuration_throws`
-     - `createServiceItem_unreasonableDuration_warning`
-
-2. ❌ **Categoria de serviço**
-   - ServiceType enum existe, mas não há teste de validação
-   - Recomendação: `createServiceItem_invalidType_throws`
-
-3. ⚠️ **Atualização e deleção**
-   - Não há testes para UPDATE ou DELETE de service items
-   - Recomendation:
-     - `updateServiceItem_success`
-     - `deleteServiceItem_success`
-     - `deleteServiceItem_usedInAttendance_throws`
-
-4. ❌ **Service item por establishment**
-   - Não há validação se service item de um prof está sendo vinculado a outro prof
-   - Recomendação: `createAttendance_withWrongProfsServiceItem_throws`
+### 🟢 Baixa / futuro
+- [ ] Cobertura de linha real via **JaCoCo** (hoje a métrica é endpoint/comportamental, não linha).
+- [ ] Testes de carga (fila 100+), time zone/clock skew.
+- [ ] Rate limiting / brute force (depende de feature de produção).
 
 ---
 
-### 2.6 ADDRESSES
-**Status**: ✅ BEM COBERTO
+## 4. NOTAS DE ESTADO REAL (correções vs versão anterior)
 
-#### Testes de Integração
-- `UserAddressIntegrationTest`: ✅ Cobertura completa
-- `EstablishmentAddressIntegrationTest`: ✅ Cobertura completa
+A versão anterior (mar/2026) listava como "críticos" itens **já resolvidos**:
+- ✅ `QueueUtils` reescrito (recorrente-aware, day-scoped, null-safe) — coberto por `QueueUtilsTest` (12) + integrações de interval.
+- ✅ Intervals/refeições **completos** (#11) — seed, editar, start, finish, finish-on-attend, delete, validação, skip (#41).
+- ✅ Client wait time/posição implementado e testado (`ClientQueueIntegrationTest`).
+- ✅ Attendance status transitions cobertas (unit 15 + integração 51).
+- ✅ Establishment CRUD/status/owner/infos cobertos.
 
-#### **LACUNAS IDENTIFICADAS** (MENORES):
-1. ⚠️ **Múltiplos endereços**
-   - Testa adicionar, mas não testa ordem/priorização
-   - Recomendação: `setMainAddress_success` test
-
-2. ⚠️ **Endereço inválido**
-   - Não há validação de CEP/estado/cidade válidos
-   - Recomendação (futuro): Integração com API de CEP
+Os "TODOs críticos" do código citados na versão antiga não correspondem mais ao estado atual; esta seção evita re-trabalho de análise.
 
 ---
 
-## 3. INTEGRAÇÃO & FLUXOS END-TO-END
+## 5. COMO MEDIR (futuro)
 
-### Missing E2E Tests
-1. ❌ **Fluxo completo: Cliente entra na fila até finalização**
-   - Register → Login → Ver estabelecimentos → Entrar na fila → Acompanhar → Notificação
-   - Recomendação: `CompleteQueueFlowIntegrationTest`
-
-2. ❌ **Fluxo profissional: Gerenciar fila**
-   - Login → Ver fila → Iniciar → Pausar → Retomar → Finalizar
-   - Recomendação: `ProfessionalQueueManagementIntegrationTest`
-
-3. ❌ **Fluxo dono: Dashboard**
-   - Login como OWNER → Ver estatísticas → Gerenciar profissionais → Abrir/fechar
-   - Recomendação: `OwnerDashboardIntegrationTest`
-
-4. ❌ **Guest flow: QR Code**
-   - Scan QR → Entrada anônima na fila → Acompanhamento sem conta
-   - Recomendação: `GuestQueueFlowIntegrationTest`
+Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para cobertura de **linha/branch** real, adicionar JaCoCo ao `pom.xml` e rodar `mvn test jacoco:report` (relatório em `target/site/jacoco/index.html`). Enquanto não houver JaCoCo, a matriz §1/§2 é a fonte de verdade.
 
 ---
 
-## 4. TESTES DE ERRO & VALIDAÇÃO
+## 6. CHANGELOG DE COBERTURA
 
-### Validações Faltando (globalmente)
-1. ❌ **UUID inválido no path**
-   - Testes usam UUIDs válidos, não testam "not a uuid"
-   - GlobalExceptionHandler suporta `MethodArgumentTypeMismatchException` (403 handler adicionado em v9)
-   - Recomendação: Testar em cada controller:
-     - `getProfessional_invalidUUID_400`
-     - `getEstablishment_invalidUUID_400`
+### 2026-06-21
+- **#34 keywords/sinônimos**: `ServiceTypeKeywordIntegrationTest` (10) — busca/normalização, 409 duplicado, 403 client.
+- **#41 skip de refeição**: `IntervalSkipIntegrationTest` (8) + 2 casos novos em `QueueUtilsTest` (pulado hoje não conta / skip de outro dia não afeta).
+- **#37 pré-req (ETA client-facing meal-aware)**: ✅ `ClientEtaMealAwareIntegrationTest` (5) — prova determinística (ETA com refeição − após skip = duração; unskip restaura). Verde (André rodou).
+- Documento **reescrito** do zero a partir do inventário real (estava desatualizado desde mar/2026).
 
-2. ❌ **Campos null vs vazio**
-   - Alguns testes cobrem null, mas não testes de whitespace-only strings
-   - Recomendação: `register_emailAsWhitespace_throws`
-
-3. ❌ **Overflow/tamanho de campo**
-   - Não há teste de email > 255 caracteres
-   - Não há teste de nome > 255 caracteres
-   - Recomendação: Adicionar validação @Size em DTOs + testes
-
-4. ⚠️ **Desserialização JSON**
-   - AuthIntegrationTest menciona "Jackson coercion", mas é superficial
-   - Recomendação: Testes para:
-     - Número como string (JSON: `123` vs `"123"`)
-     - Boolean como string ("true" vs true)
-     - Array vs object
-
----
-
-## 5. TESTES DE SEGURANÇA & AUTORIZAÇÃO
-
-### Missing Security Tests
-1. ❌ **Token expirado**
-   - RefreshTokenUseCaseTest cobre, mas integração não testa
-   - Recomendação: `AuthIntegrationTest.login_expiredToken_401`
-
-2. ❌ **Tentativa de acesso sem token**
-   - Alguns testes cobrem, não todos endpoints
-   - Recomendação: Audit todos GETs/PATCHs/PUTs para 401 sem Bearer
-
-3. ❌ **Tentativa de acessar recurso de outro usuário**
-   - Recomendação:
-     - `getProfessional_anotherUsersProfessional_403`
-     - `updateEstablishment_anotherOwnersEstablishment_403`
-     - `getMyAttendance_anotherClientAttendance_403`
-
-4. ❌ **Modificação de roles via API**
-   - Não há teste negativo validando que CLIENT não pode se promover a OWNER
-   - Recomendation: `promoteToOwner_unauthorized_403`
-
-5. ⚠️ **CORS & CSRF**
-   - Não há testes de CORS
-   - PRD não menciona CSRF, mas é importante para produção
-
----
-
-## 6. TESTES DE PERFORMANCE & LOAD
-
-### Missing Performance Tests
-1. ❌ **Fila com 100+ attendances**
-   - Não há teste de performance para `getQueueForProfessional`
-   - Recomendação: `PerformanceIntegrationTest`
-
-2. ❌ **Bulk operations**
-   - Não há teste de criar 50 service items simultâneos
-
-3. ❌ **Time-based tests**
-   - Não há teste de clock skew ou time zone issues
-   - Recomendação (futuro): MockClock para testes de scheduledTime
-
----
-
-## 7. CÓDIGO COM TODOs CRÍTICOS (Resumo)
-
-| Arquivo | Linha | TODO | Prioridade | Teste Sugerido |
-|---------|-------|------|------------|----------------|
-| QueueServiceImpl | 278 | `getQueueForProfessional` incorreto | 🔴 CRÍTICA | `QueueServiceIntegrationTest` |
-| QueueServiceImpl | 107 | Define attendance start time | 🔴 CRÍTICA | `calculateWaitTime_*` |
-| QueueServiceImpl | 247 | Sum wait interval | 🔴 CRÍTICA | `calculateWaitTime_withIntervals` |
-| ProfessionalIntervalService | 121-123 | Validate time, add 5min option | 🟠 ALTA | `ProfessionalIntervalIntegrationTest` |
-| ClientQueueController | 22 | Client wait time view | 🟠 ALTA | `getMyAttendance_success` |
-| EstablishmentOpenStatusServiceImpl | 119 | Verify update status | 🟠 ALTA | `openEstablishment_*` tests |
-| ProfessionalService | 110 | Incomplete method | 🟠 ALTA | Review code |
-| ClientService | 136 | Trocar lugar na fila | 🟡 MÉDIA | `moveClientInQueue_*` |
-
----
-
-## 8. RESUMO DE RECOMENDAÇÕES POR PRIORIDADE
-
-### 🔴 CRÍTICO (Bloqueia MVP)
-1. **QueueService validation** — Code marked as "incorrect"
-   - [ ] Create `QueueServiceIntegrationTest` com 10+ cenários
-   - [ ] Validar cálculo de fila com intervals
-   - [ ] Validar wait time calculation
-
-2. **Wait time calculation** — Todo crítico
-   - [ ] Testar `scheduledTime` com multiplos profissionais
-   - [ ] Testar impact of intervals on wait time
-
-3. **Guest attendance** — Fila anônima
-   - [ ] Testar anonymous guest (sem nome)
-   - [ ] Testar guest sem service items
-
-### 🟠 ALTA (Para MVP completo)
-1. **Professional intervals** — 3 TODOs no código
-2. **Attendance status transitions** — Faltam transições inválidas
-3. **Establishment CRUD** — Falta UPDATE/DELETE
-4. **Service item validation** — Preços, durações, tipos
-5. **Client attendance view** — Wait time, position, updates
-
-### 🟡 MÉDIA (Para v1 pós-MVP)
-1. **Cross-user authorization** — Testes de acesso negado
-2. **E2E flows** — Fluxos completos por persona
-3. **Token expiration** — Testes de segurança
-4. **Performance tests** — Filas grandes
-
-### 🟢 BAIXA (Nice-to-have)
-1. **Time zone handling**
-2. **Internationalization**
-3. **Rate limiting**
-4. **Analytics**
-
----
-
-## 9. ROADMAP DE COBERTURA
-
-### Sprint 1 (Próximo)
-- [ ] Fix QueueService tests (crítico)
-- [ ] Add Attendance transition tests
-- [ ] Add Professional interval tests
-- [ ] Add validation tests (null, empty, invalid)
-
-### Sprint 2
-- [ ] Establishment CRUD tests
-- [ ] Service item validation tests
-- [ ] Client attendance view tests
-- [ ] Authorization tests
-
-### Sprint 3
-- [ ] E2E flow tests
-- [ ] Guest queue flow tests
-- [ ] Performance tests
-- [ ] Security tests (expiration, cross-user)
-
----
-
-## 10. MÉTRICAS ATUAIS
-
-| Categoria | Cobertura | Status |
-|-----------|-----------|--------|
-| Auth & User | 85% | ✅ Bom |
-| Establishment | 70% | ⚠️ Razoável |
-| Professional | 75% | ⚠️ Razoável |
-| Attendance | 60% | 🔴 Fraco |
-| Queue | 30% | 🔴 Muito fraco |
-| Service Items | 65% | ⚠️ Razoável |
-| Addresses | 90% | ✅ Bom |
-| **GERAL** | **68%** | **⚠️ RAZOÁVEL** |
-
----
-
-**Próximo passo**: Revisar este documento e escolher quais gaps corrigir primeiro.  
-**Não foi implementado nada** — apenas identificadas oportunidades.
+### Histórico (resumo)
+- mar/2026: baseline + `AttendanceStatusTransitionTest`.
