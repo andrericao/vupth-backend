@@ -1,0 +1,41 @@
+databaseChangeLog:
+  # Sinonimos/palavras-chave adicionados pelos PROFISSIONAIS a um tipo de servico
+  # (ServiceItemType). Globais por tipo (valem para a busca de todos), complementam
+  # os sinonimos-base que vivem no proprio enum (item 34). keyword e armazenada
+  # NORMALIZADA (minuscula, sem acento) para casar a busca e garantir unicidade.
+  - changeSet:
+      id: 023-create-service_type_keyword
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: service_type_keyword
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: service_item_type
+                  type: VARCHAR(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: keyword
+                  type: VARCHAR(60)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_by_user_id
+                  type: UUID
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: service_type_keyword
+            columnNames: service_item_type, keyword
+            constraintName: uk_service_type_keyword

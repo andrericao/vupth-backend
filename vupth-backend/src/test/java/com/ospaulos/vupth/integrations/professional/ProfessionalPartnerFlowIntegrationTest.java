@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.professional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.api.affiliation.dto.request.CreateAffiliationInvitationDTO;
 import com.ospaulos.vupth.api.establishment.dto.request.AddProfessionalToEstablishmentRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
@@ -519,6 +520,104 @@ class ProfessionalPartnerFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
                 .andDo(print());
+    }
+
+    @Test
+    @Order(54)
+    @DisplayName("GET /professional?name= — 200 nao retorna profissional ja afiliado (so candidatos a convite)")
+    void searchProfessional_excludesAffiliated() throws Exception {
+        log.info("[PartnerFlow] searchProfessional_excludesAffiliated");
+
+        // cria um profissional fresco com nome unico, ainda SEM establishment
+        String uniqueName = "Afiliado" + faker.number().digits(6);
+        var freshProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        MvcResult reg = mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freshProf.token())
+                        .content(mapper.writeValueAsString(
+                                new ProfessionalRegisterRequest(uniqueName, "Corte"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String freshProfId = new JSONObject(reg.getResponse().getContentAsString()).getString("id");
+
+        // antes de afiliar: aparece na busca do owner (candidato a convite)
+        mvc.perform(get("/professional")
+                        .param("name", uniqueName.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(freshProfId));
+
+        // owner afilia o profissional ao seu establishment
+        mvc.perform(post("/establishment/{id}/professionals", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(mapper.writeValueAsString(
+                                new AddProfessionalToEstablishmentRequest(UUID.fromString(freshProfId)))))
+                .andExpect(status().isCreated());
+
+        // depois de afiliar: nao aparece mais (ja vinculado, nao e candidato a convite)
+        MvcResult result = mvc.perform(get("/professional")
+                        .param("name", uniqueName.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        assertThat(new org.json.JSONArray(result.getResponse().getContentAsString()).length())
+                .isZero();
+    }
+
+    @Test
+    @Order(55)
+    @DisplayName("GET /professional?name= — 200 nao retorna profissional com convite PENDING (so candidatos)")
+    void searchProfessional_excludesPendingInvite() throws Exception {
+        log.info("[PartnerFlow] searchProfessional_excludesPendingInvite");
+
+        // profissional fresco com nome unico, sem establishment e sem convite
+        String uniqueName = "Convidado" + faker.number().digits(6);
+        var freshProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        MvcResult reg = mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freshProf.token())
+                        .content(mapper.writeValueAsString(
+                                new ProfessionalRegisterRequest(uniqueName, "Corte"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String freshProfId = new JSONObject(reg.getResponse().getContentAsString()).getString("id");
+
+        // antes do convite: aparece na busca (candidato)
+        mvc.perform(get("/professional")
+                        .param("name", uniqueName.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(freshProfId));
+
+        // owner envia convite (cria afiliacao PENDING, sem vincular ainda)
+        mvc.perform(post("/establishment/{id}/affiliations", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(mapper.writeValueAsString(
+                                new CreateAffiliationInvitationDTO(UUID.fromString(freshProfId)))))
+                .andExpect(status().isCreated());
+
+        // depois do convite: nao aparece mais (PENDING — nao pode aceitar outro)
+        MvcResult result = mvc.perform(get("/professional")
+                        .param("name", uniqueName.toLowerCase())
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andDo(print())
+                .andReturn();
+
+        assertThat(new org.json.JSONArray(result.getResponse().getContentAsString()).length())
+                .isZero();
     }
 
     @AfterAll

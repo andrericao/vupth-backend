@@ -81,10 +81,10 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 
 | Acesso | Endpoints |
 |--------|-----------|
-| **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `POST /professional-queue/add-quest-attendance` |
+| **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
@@ -159,6 +159,7 @@ Todos os erros seguem um dos dois formatos:
 | 409 | `ATTENDANCE_ALREADY_IN_PROGRESS` | Profissional ja tem attendance em andamento |
 | 409 | `ATTENDANCE_ALREADY_CANCELLED` | Attendance ja foi cancelado |
 | 409 | `SERVICE_ITEM_ALREADY_EXISTS` | Service item duplicado |
+| 409 | `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS` | Sinonimo ja existe para o tipo de servico (base ou adicionado) |
 | 409 | `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` | Profissional tem atendimentos ativos (impede sair do establishment) |
 | 409 | `INTERVAL_CONFLICT` | Conflito de horario de intervalo |
 | 422 | `VALIDATION_ERROR` | Campos obrigatorios faltando ou formato invalido |
@@ -178,6 +179,8 @@ Todos os erros seguem um dos dois formatos:
 `BARBER` | `BEAUTY_SALON` | `EYEBROW` | `NAIL_SALON` | `SPA` | `CLINIC`
 
 ### ServiceItemType (tipo de servico — 25 valores)
+
+> Cada tipo carrega **keywords/sinonimos** (base no enum + adicionados por profissionais) para busca por sinonimo regional — ver [Service Types — keywords](#service-types--keywordssinonimos-item-34) (item 34). Valores legados `NAVALHA`/`PROCEDIMENTO` (prod) foram remapeados para `BARBA`/`RECORTE_PONTAS` (migration 022).
 
 | ServiceItemType | displayName | ServiceType compativel |
 |---|---|---|
@@ -714,6 +717,13 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
 > **service_items** retorna os servicos oferecidos por cada profissional (id, tipo, nome, preco, duracao estimada).
 > O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
 
+> **`estimated_wait_minutes` e meal-aware (item #37 pre-req):** o calculo inclui as **refeicoes**
+> previstas/iniciadas do profissional (via `QueueUtils`), nao so a soma dos atendimentos. A mesma
+> base alimenta o `estimated_wait_minutes` da listagem `GET /establishment` e o ETA individual do
+> cliente (`ClientInQueueResponse`). Um **skip** (#41) reflete aqui na hora (refeicao sai do ETA do
+> cliente). Ainda **sem o lock** do #37: por enquanto a refeicao entra/sai conforme o ritmo (recalculo
+> a cada consulta); o lock (estabilizacao no ingresso) entra em seguida.
+
 > **Filtro #31 (2a metade):** profissional **sem nenhum servico** nao e exibido neste snapshot,
 > mesmo com a loja aberta. Apenas profissionais com `service_items` nao vazio entram em `professionals`.
 > O cliente nunca ve um profissional que ainda nao pode atender.
@@ -934,7 +944,13 @@ Busca profissionais por nome e/ou especialidade (filtros opcionais, parciais, ca
 | name | String | LIKE parcial no nome (firstName), case-insensitive |
 | specialty | String | LIKE parcial na especialidade, case-insensitive |
 
-Sem filtros, lista todos os profissionais ativos. Ordenado por nome.
+Sem filtros, lista todos os profissionais candidatos a convite. Ordenado por nome.
+
+> **So candidatos a convite (#18):** a busca retorna **apenas quem pode ser convidado**:
+> 1. **sem establishment** (`p.establishment IS NULL`) — quem ja esta afiliado nao aparece (convida-lo daria `409 PROFESSIONAL_ALREADY_AFFILIATED`);
+> 2. **sem afiliacao `PENDING`** (em qualquer loja) — quem ja tem convite/pedido pendente nao aparece, pois nao pode aceitar um novo enquanto nao resolver o atual (pendencia unica global, ver #8b); convida-lo daria `AFFILIATION_ALREADY_PENDING`.
+>
+> Assim que o profissional e afiliado **ou** recebe um convite pendente, ele sai da busca na hora; volta a aparecer se o vinculo/pendencia for desfeito (recusado/cancelado).
 
 **Response (200):**
 ```json
@@ -1722,6 +1738,44 @@ Remove um servico do profissional. So o proprio profissional (JWT) pode remover.
 
 ---
 
+### Service Types — keywords/sinonimos (item 34)
+
+Resolve o **sinonimo regional** que o cliente conhece (ex.: "luzes") para o **tipo canonico** de servico (ex.: PINTURA). Cada `ServiceItemType` tem sinonimos-**base** (vivem no proprio enum, curadoria inicial) que os **profissionais** podem **estender** em runtime (tabela `service_type_keyword`). Busca e o "i" de informacao usam a **uniao** (base + adicionados). Sinonimos sao do **servico** (globais — valem para todas as lojas), nao por estabelecimento. `keyword` e sempre **normalizada** (minuscula, sem acento) para casar a busca e garantir unicidade.
+
+#### GET /service-types
+Lista/resolve tipos de servico. **Acesso:** Publico.
+
+| Query | Tipo | Notas |
+|-------|------|-------|
+| q | String | termo de busca (sinonimo ou nome). Casa por `contains` normalizado contra keywords, `displayName` e o nome do enum. **Sem `q`**: lista **todos** os tipos (para o "i" / navegacao). |
+
+**Response (200):**
+```json
+[
+  {
+    "type": "PINTURA",
+    "display_name": "Pintura",
+    "service_types": ["BARBER", "BEAUTY_SALON"],
+    "keywords": ["coloracao", "luzes", "mechas", "pintura", "platinado", "reflexo", "tintura"],
+    "matched_keyword": "luzes"
+  }
+]
+```
+> `matched_keyword` = qual sinonimo casou com `q` (`null` quando lista sem `q` ou quando casou pelo proprio nome do servico). `service_types` = categorias para o front entao filtrar estabelecimentos (`GET /establishment?serviceType=`). `keywords` = lista completa (base + adicionados) para o "i".
+
+#### POST /service-types/{type}/keywords
+Profissional adiciona um sinonimo a um tipo. **Acesso:** PROFESSIONAL.
+
+`{type}` = nome do `ServiceItemType` (ex.: `PINTURA`). Body: `{ "keyword": "luzeira" }` (obrigatorio, max 60). O valor e normalizado antes de gravar.
+
+- **201:** retorna o tipo com a keyword ja incluida (`matched_keyword` = a recem-criada).
+- **409 `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS`:** a palavra ja existe para o tipo (base do enum ou adicionada) — **nao pode repetir**. Dedup considera a normalizacao (`APARO` == `aparo`).
+- **403:** cliente/owner sem role PROFESSIONAL.
+
+**Testes:** Integracao (`ServiceTypeKeywordIntegrationTest`)
+
+---
+
 ## 16. Endpoints — User Address
 
 ### POST /users/me/addresses
@@ -1962,6 +2016,32 @@ Encerra manualmente o intervalo (o "botao encerrar refeicao", spec item #11e2), 
 **Erros:** 409 `INTERVAL_CONFLICT` (refeicao nao esta ativa — nada a encerrar; tambem ao encerrar 2x) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
 
 **Testes:** Integracao (`IntervalFinishIntegrationTest`) + Postman (folder 12)
+
+---
+
+### PATCH .../intervals/{intervalId}/skip
+"Nao almocar" do dia (spec item #41): pula a refeicao recorrente **so naquele dia**, derrubando-a do **ETA de todos os clientes na hora**. A recorrencia permanece intacta para os proximos dias (diferente do `DELETE`, que remove de vez). Persiste o skip por `(intervalo, data)` na tabela `professional_interval_skips`; o `QueueUtils` (day-scoped) passa a excluir a refeicao no dia pulado. Apos o skip, rebroadcast da fila via WebSocket (best-effort, secao 18b).
+
+**Query:** `date` (opcional, ISO `YYYY-MM-DD`, default **hoje** UTC). **Sem body.** So vale para refeicoes **RECURRENT** ainda nao iniciadas/encerradas no dia. Idempotente (pular dia ja pulado = 200, no-op).
+
+**Response (200):** `IntervalResponse`
+
+**Erros:** 409 `INTERVAL_CONFLICT` (refeicao ja iniciada/encerrada no dia — usar `finish`; ou intervalo nao-recorrente) · 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+**Testes:** Integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest` — exclusao do ETA) + Postman (folder 12)
+
+---
+
+### DELETE .../intervals/{intervalId}/skip
+Desfaz o skip do dia (spec item #41) — a refeicao volta a contar no ETA. **Query:** `date` (opcional, default hoje UTC). Idempotente. Rebroadcast da fila apos a operacao.
+
+**Response (200):** `IntervalResponse`
+
+**Erros:** 404 `INTERVAL_NOT_FOUND` (inexistente OU de outro profissional) · 403 (CLIENT)
+
+> **Atencao:** `DELETE .../intervals/{intervalId}/skip` desfaz o **skip do dia**; `DELETE .../intervals/{intervalId}` (sem `/skip`) **remove a refeicao recorrente de vez**. Sao operacoes distintas.
+
+**Testes:** Integracao (`IntervalSkipIntegrationTest`) + Postman (folder 12)
 
 ---
 
@@ -2377,7 +2457,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 38 | Encaixe com equalizacao de tempo | **[Pos-MVP]** Profissional **encaixa** um cliente no meio da fila (ex.: posicao 4 de 8). Os clientes apos a posicao precisam absorver o tempo do encaixe (ex.: +30min), mas **sem salto brusco** e sem "saber" do encaixe. Mecanica: **amortizar** o tempo do encaixe entre os N atendimentos seguintes (30min / 4 = +7,5min cada) e fazer o acrescimo entrar **gradualmente** (a cada atendimento concluido), de modo que nenhum update mostre o salto inteiro. Quanto mais clientes a frente, menos cada um sente. O profissional assume o risco de satisfacao (decisao dele). Mesma familia do Item 37 (suavizacao da estimativa). **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend** (insercao em posicao + tempo amortizado pendente por atendimento) / **Front-Partner** (acao de encaixar) / **Front-Client** (estimativa suavizada) |
 | 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
 | 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | **[Pos-MVP]** Cliente quer ser atendido por volta de um **horario que escolhe** (ex.: 17:00), mas a fila esta com estimativa muito mais cedo (ex.: 11:00). Ele entra como **intencao** (nao confirmado): quem entra na fila depois dele recebe **indice menor** (passa na frente) enquanto o horario previsto de atendimento daquela posicao ainda for **antes** do alvo dele. Quando o previsto **cruza** o alvo (ex.: 17:15), ele para de ceder posicao e a presenca vira **confirmada** (deixa de ser so intencao). Funciona como uma **agenda** sobreposta a fila por ordem de chegada. **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | **Backend** (estado intencao vs confirmado no atendimento + horario-alvo + ordenacao que cede posicao ate o previsto cruzar o alvo, entao confirma) / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado) / **Front-Partner** (ver intencoes/agendados na fila) |
-| 41 | Skip de refeicao por dia ("Nao almocar") | **[Pedido Front-Partner 2026-06-18]** O popup de inicio de refeicao tem a acao **"Nao almocar"**, mas hoje **nao existe endpoint** para isso: `finish` so encerra refeicao **ativa** e `DELETE` remove a refeicao **recorrente de vez**. Falta pular a refeicao **so naquele dia** (sem apagar a recorrencia), derrubando-a do ETA de **todos** os clientes na hora. Endpoint proposto: **`PATCH .../intervals/{intervalId}/skip`** (com data do dia — default hoje), PROFESSIONAL/OWNER. Enquanto nao existir, o "Agora nao" do popup so dispensa o aviso. E a parte concreta e antecipavel do "Nao almocar" do Item 37. **Spec detalhada na secao "Item 41 — Skip de refeicao por dia" abaixo do backlog.** | **Backend** (endpoint skip + marcador de skip por dia consumido pelo `QueueUtils`) / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
+| 41 | Skip de refeicao por dia ("Nao almocar") | ✅ **[BACKEND CONCLUIDO 2026-06-21]** Entregue `PATCH .../intervals/{intervalId}/skip` (pula a refeicao recorrente so naquele dia, default hoje) + `DELETE .../intervals/{intervalId}/skip` (desfaz). Skip por `(intervalo, data)` na tabela `professional_interval_skips` (migration 024), consumido pelo `QueueUtils` (day-scoped) — refeicao pulada cai do ETA de todos na hora, recorrencia intacta. Rebroadcast WS apos a operacao. 409 se ja iniciada/encerrada no dia (usar `finish`). Testes integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest`) + Postman folder 12 + PRD secao 18. **Resta:** Front-Partner ligar a acao "Nao almocar" do popup (eles chamam de "backend #17"). | **Backend** ✅ / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 

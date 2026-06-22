@@ -8,7 +8,9 @@ import com.ospaulos.vupth.api.interval.dto.request.UpdateIntervalRequest;
 import com.ospaulos.vupth.api.interval.dto.response.IntervalResponse;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
+import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService.IntervalSkipResult;
 import com.ospaulos.vupth.api.interval.mapper.IntervalMapper;
+import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -34,6 +36,7 @@ public class ProfessionalIntervalController {
 
     @Autowired private IntervalMapper intervalMapper;
     @Autowired private ProfessionalIntervalService intervalService;
+    @Autowired private QueueWebSocketPublisher queuePublisher;
 
     @PostMapping("/recurring")
     @ResponseStatus(HttpStatus.CREATED)
@@ -88,6 +91,36 @@ public class ProfessionalIntervalController {
 
         ProfessionalInterval interval = intervalService.finishIntervalManually(professionalId, intervalId);
         return intervalMapper.toResponse(interval);
+    }
+
+    /**
+     * "Nao almocar" do dia (item #41): pula a refeicao recorrente SO naquele dia, derrubando-a
+     * do ETA de todos os clientes na hora. {@code date} default = hoje (UTC). A recorrencia
+     * permanece para os proximos dias. Apos o skip, rebroadcast da fila (best-effort).
+     */
+    @PatchMapping("/{intervalId}/skip")
+    public IntervalResponse skipInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        LocalDate target = Optional.ofNullable(date).orElse(LocalDate.now(ZoneOffset.UTC));
+        IntervalSkipResult result = intervalService.skipMeal(professionalId, intervalId, target);
+        queuePublisher.broadcastQueue(result.establishmentId());
+        return intervalMapper.toResponse(result.interval());
+    }
+
+    /** Desfaz o skip do dia (item #41): a refeicao volta a contar no ETA. */
+    @DeleteMapping("/{intervalId}/skip")
+    public IntervalResponse unskipInterval(
+            @PathVariable UUID professionalId,
+            @PathVariable UUID intervalId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        LocalDate target = Optional.ofNullable(date).orElse(LocalDate.now(ZoneOffset.UTC));
+        IntervalSkipResult result = intervalService.unskipMeal(professionalId, intervalId, target);
+        queuePublisher.broadcastQueue(result.establishmentId());
+        return intervalMapper.toResponse(result.interval());
     }
 
     @DeleteMapping("/{intervalId}")

@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -86,7 +87,9 @@ public class GetEstablishmentWithQueueUseCase {
         return ProfessionalWithQueueResponse.fromEntity(
                 professional,
                 current.orElse(null),
-                waiting
+                waiting,
+                professional.getIntervals(), // ETA meal-aware (item #37 pre-req); inclui refeicoes
+                OffsetDateTime.now()
         );
     }
 }

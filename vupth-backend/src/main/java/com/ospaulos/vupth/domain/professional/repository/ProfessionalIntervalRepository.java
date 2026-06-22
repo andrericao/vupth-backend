@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -79,6 +80,17 @@ public interface ProfessionalIntervalRepository extends JpaRepository<Profession
      * refeicao que o profissional iniciou manualmente e que ainda esta em curso.
      */
     List<ProfessionalInterval> findByProfessionalIdAndIsActiveTrue(UUID professionalId);
+
+    /**
+     * True se a refeicao (item #41) esta marcada como pulada na data — consulta o join
+     * da {@code skippedDates} sem materializar a colecao lazy (util fora de transacao).
+     */
+    @Query("""
+            SELECT COUNT(d) > 0 FROM ProfessionalInterval pi
+            JOIN pi.skippedDates d
+            WHERE pi.id = :intervalId AND d = :date
+            """)
+    boolean existsSkipForDate(@Param("intervalId") UUID intervalId, @Param("date") LocalDate date);
 
     // Claude v3
     @Query(value = """

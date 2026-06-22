@@ -181,3 +181,13 @@ databaseChangeLog:
             referencedTableName: professional
             referencedColumnNames: id
             onDelete: CASCADE
+
+  # Service type keywords (sinonimos por tipo de servico, adicionados pelos profissionais)
+  - include:
+      file: changesets/50-establishment/023-create-service_type_keyword.yaml
+      relativeToChangeLogFile: true
+
+  # Skip de refeicao por dia ("Nao almocar" — item #41)
+  - include:
+      file: changesets/50-establishment/024-create-professional_interval_skips.yaml
+      relativeToChangeLogFile: true

@@ -7,9 +7,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.OffsetTime;
 import java.time.ZoneOffset;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Getter
@@ -75,6 +78,17 @@ public class ProfessionalInterval {
     @Column(name = "auto_finish_reason")
     private String autoFinishReason;
 
+    /**
+     * Dias em que esta refeicao recorrente foi PULADA ("Nao almocar" do dia — item #41).
+     * O skip e por (intervalo, data): a recorrencia continua intacta para os outros dias.
+     * Consumido por {@link #isSkippedOn} para derrubar a refeicao do ETA so naquele dia.
+     */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "professional_interval_skips",
+            joinColumns = @JoinColumn(name = "interval_id"))
+    @Column(name = "skip_date", nullable = false)
+    private Set<LocalDate> skippedDates = new HashSet<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -110,6 +124,26 @@ public class ProfessionalInterval {
     public boolean isDoneOn(java.time.LocalDate date) {
         return this.actualEndTime != null
                 && this.actualEndTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
+    }
+
+    /** True se a refeicao foi marcada como "pular" (Nao almocar) na data informada (item #41). */
+    public boolean isSkippedOn(LocalDate date) {
+        return this.skippedDates != null && this.skippedDates.contains(date);
+    }
+
+    /** Marca a refeicao para pular na data (idempotente). */
+    public void skipOn(LocalDate date) {
+        if (this.skippedDates == null) {
+            this.skippedDates = new HashSet<>();
+        }
+        this.skippedDates.add(date);
+    }
+
+    /** Desfaz o skip da data — a refeicao volta a contar no ETA (idempotente). */
+    public void unskipOn(LocalDate date) {
+        if (this.skippedDates != null) {
+            this.skippedDates.remove(date);
+        }
     }
 
     public void startInterval() {

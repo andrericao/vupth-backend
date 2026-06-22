@@ -54,13 +54,26 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     // Busca de profissionais por nome e/ou especialidade. Os parametros ja vem como
     // padroes LIKE prontos ("%" = sem filtro) — nunca null, para evitar problemas de
     // inferencia de tipo do Postgres (null vira bytea e quebra o LOWER). COALESCE
-    // trata firstName/specialty nulos. Usado pelo owner para convidar.
+    // trata firstName/specialty nulos. Usado pelo owner para convidar — por isso so
+    // retorna CANDIDATOS A CONVITE:
+    //   (1) SEM establishment (p.establishment IS NULL): quem ja esta afiliado nao e
+    //       candidato (convida-lo daria 409 ALREADY_AFFILIATED);
+    //   (2) SEM nenhuma afiliacao PENDING (NOT EXISTS): quem ja tem convite/pedido
+    //       pendente (neste ou em outro establishment) nao pode aceitar um novo enquanto
+    //       nao resolver o atual (pendencia unica global, #8b) — convida-lo daria
+    //       AFFILIATION_ALREADY_PENDING. Some da busca ate resolver.
     @Query("""
         SELECT p FROM Professional p
         JOIN FETCH p.baseUser u
         WHERE LOWER(COALESCE(u.firstName, '')) LIKE LOWER(:nameLike)
           AND LOWER(COALESCE(p.specialty, '')) LIKE LOWER(:specialtyLike)
           AND u.isActive = true
+          AND p.establishment IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM AffiliationRequest ar
+              WHERE ar.professional = p
+                AND ar.status = com.ospaulos.vupth.domain.affiliation.model.AffiliationStatus.PENDING
+          )
         ORDER BY u.firstName ASC
         """)
     List<Professional> searchByNameAndSpecialty(

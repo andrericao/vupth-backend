@@ -100,9 +100,10 @@ public class QueueServiceImpl implements QueueService {
     @Override
     public ClientInQueueResponse queueWaitingTime(Attendance attendance) {
 
-        QueueResponse fullQueue = getQueueOverview(
-                attendance.getProfessional(),
-                attendance.getEstablishment());
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+
+        QueueResponse fullQueue = getQueueOverview(professional, establishment);
 
         int clientPosition = findClientPosition(fullQueue, attendance.getId());
 
@@ -110,9 +111,19 @@ public class QueueServiceImpl implements QueueService {
             throw new ClientNotInQueueException(attendance.getId());
         }
 
-        WaitingTimeCalculation calculation = calculateWaitingTime(fullQueue, clientPosition);
-        int totalWaitingTime = calculation.waitingTimeMinutes;
-        OffsetDateTime startTime = calculation.estimatedStartTime;
+        // ETA ate a posicao do cliente, meal-aware (item #37 pre-req): inclui as refeicoes do
+        // profissional via QueueUtils, igual ao overview. Usa a lista de entidades do banco
+        // (mesma ordem/origem do fullQueue), para o calculo bater com a posicao encontrada.
+        List<Attendance> queueEntities = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        List<ProfessionalInterval> intervals = professional.getIntervals();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        int currentRemaining = fullQueue.inAttendance() != null
+                ? fullQueue.inAttendance().remainingMinutes() : 0;
+        int totalWaitingTime = currentRemaining
+                + QueueUtils.calculateWaitingTimeForPosition(queueEntities, intervals, now, clientPosition);
+        OffsetDateTime startTime = now.plusMinutes(totalWaitingTime);
 
         AttendanceInQueueResponse attendanceQueue = AttendanceInQueueResponse.fromEntity(attendance);
 
@@ -232,40 +243,6 @@ public class QueueServiceImpl implements QueueService {
                 return i;
         }
         return -1;
-    }
-
-    private WaitingTimeCalculation calculateWaitingTime(QueueResponse fullQueue, int clientPosition) {
-        if (clientPosition == 0) {
-            int waitingTime = fullQueue.inAttendance() != null ?
-                    fullQueue.inAttendance().remainingMinutes() : 0;
-            return new WaitingTimeCalculation(waitingTime, OffsetDateTime.now().plusMinutes(waitingTime));
-        }
-
-        int totalWaitingTime = 0;
-
-        // Tempo restante do attendance em progresso
-        if (fullQueue.inAttendance() != null) {
-            totalWaitingTime += fullQueue.inAttendance().remainingMinutes();
-        }
-
-        // Time of attendances ahead in the queue
-        for (int i = 0; i < clientPosition; i++) {
-            AttendanceInQueueResponse attendance = fullQueue.attendancesInQueue().get(i);
-            totalWaitingTime += attendance.estimatedMinutes() != null ? attendance.estimatedMinutes() : 0;
-        }
-
-        return new WaitingTimeCalculation(totalWaitingTime, OffsetDateTime.now().plusMinutes(totalWaitingTime));
-    }
-
-
-    private static class WaitingTimeCalculation {
-        final int waitingTimeMinutes;
-        final OffsetDateTime estimatedStartTime;
-
-        WaitingTimeCalculation(int waitingTimeMinutes, OffsetDateTime estimatedStartTime) {
-            this.waitingTimeMinutes = waitingTimeMinutes;
-            this.estimatedStartTime = estimatedStartTime;
-        }
     }
 
 }

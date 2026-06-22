@@ -28,6 +28,7 @@ import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidExcep
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenNotFound;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
+import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlreadyExistsException;
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
@@ -360,6 +361,13 @@ public class GlobalExceptionHandler {
             ServiceItemAlreadyExistsException ex, HttpServletRequest req) {
         log.warn("[409] ServiceItemAlreadyExists | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "SERVICE_ITEM_ALREADY_EXISTS");
+    }
+
+    @ExceptionHandler(ServiceTypeKeywordAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleServiceTypeKeywordExists(
+            ServiceTypeKeywordAlreadyExistsException ex, HttpServletRequest req) {
+        log.warn("[409] ServiceTypeKeywordAlreadyExists | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "SERVICE_TYPE_KEYWORD_ALREADY_EXISTS");
     }
 
     @ExceptionHandler(ProfessionalHasActiveAttendancesException.class)

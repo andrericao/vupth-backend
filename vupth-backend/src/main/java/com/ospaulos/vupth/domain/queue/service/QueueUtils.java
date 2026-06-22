@@ -132,7 +132,8 @@ public class QueueUtils {
             if (iv.getIntervalType() == IntervalType.RECURRENT
                     && iv.getFixedStartTime() != null
                     && !iv.isStartedOn(today)
-                    && !iv.isDoneOn(today)) { // refeicao ja feita hoje nao reaparece como previsto
+                    && !iv.isDoneOn(today) // refeicao ja feita hoje nao reaparece como previsto
+                    && !iv.isSkippedOn(today)) { // "Nao almocar" do dia (item #41) — fora do ETA
                 previstos.add(iv);
             }
         }

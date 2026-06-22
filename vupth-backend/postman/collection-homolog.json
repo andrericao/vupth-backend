@@ -2026,7 +2026,7 @@
      ]
     },
     {
-     "name": "GET professional search (owner busca por especialidade)",
+     "name": "GET professional search (owner busca candidatos a convite — sem afiliado nem convite pendente)",
      "request": {
       "method": "GET",
       "header": [
@@ -4196,6 +4196,101 @@
        }
       ]
      }
+    },
+    {
+     "name": "GET service-types search (cliente busca sinonimo regional — ex: luzes)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"luzes resolve para PINTURA + matched_keyword\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r).to.be.an(\"array\");",
+         "  const pintura = r.find(t => t.type === \"PINTURA\");",
+         "  pm.expect(pintura, \"PINTURA presente\").to.exist;",
+         "  pm.expect(pintura.display_name).to.eql(\"Pintura\");",
+         "  pm.expect(pintura.matched_keyword).to.eql(\"luzes\");",
+         "  pm.expect(pintura.keywords).to.be.an(\"array\");",
+         "  pm.expect(pintura.service_types).to.be.an(\"array\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/service-types?q=luzes",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "service-types"
+       ],
+       "query": [
+        {
+         "key": "q",
+         "value": "luzes"
+        }
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "POST service-types add keyword (profissional)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 (criado) ou 409 (ja existe em re-run)\", () => {",
+         "  pm.expect([201, 409]).to.include(pm.response.code);",
+         "});",
+         "if (pm.response.code === 201) {",
+         "  pm.test(\"Schema: type, display_name, keywords, matched_keyword\", () => {",
+         "    const r = pm.response.json();",
+         "    pm.expect(r.type).to.eql(\"PINTURA\");",
+         "    pm.expect(r).to.have.property(\"display_name\");",
+         "    pm.expect(r.keywords).to.be.an(\"array\");",
+         "    pm.expect(r.matched_keyword).to.eql(\"luzeira\");",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"keyword\":\"luzeira\"}"
+      },
+      "url": "{{base_url}}/service-types/PINTURA/keywords",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
@@ -7599,6 +7694,292 @@
      ]
     },
     {
+     "name": "POST recurring (refeicao p/ skip) #41",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"durationMinutes\": 30, \"fixedStartTime\": \"09:00:00Z\", \"recurrencePattern\": \"DAILY\", \"description\": \"Cafe (skip flow)\"}"
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/recurring",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "recurring"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if (pm.response.code === 201) {",
+         "  const r = pm.response.json();",
+         "  pm.collectionVariables.set(\"interval_id_skip\", r.intervalId);",
+         "}"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "PATCH skip (Nao almocar) #41",
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id_skip}}/skip",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "{{interval_id_skip}}",
+        "skip"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intervalId presente\", () => pm.expect(r.intervalId).to.be.a(\"string\"));",
+         "}"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "PATCH skip de novo (idempotente) #41 -> 200",
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id_skip}}/skip",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "{{interval_id_skip}}",
+        "skip"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 (idempotente)\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "DELETE skip (desfaz Nao almocar) #41",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id_skip}}/skip",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "{{interval_id_skip}}",
+        "skip"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] PATCH skip CLIENT -> 403 #41",
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id_skip}}/skip",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "{{interval_id_skip}}",
+        "skip"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "DELETE refeicao do skip (cleanup) #41",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/{{interval_id_skip}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "{{interval_id_skip}}"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ]
+    },
+    {
      "name": "[ERRO] PATCH finish 2x (ja encerrada) -> 409",
      "request": {
       "method": "PATCH",
@@ -10226,6 +10607,10 @@
   },
   {
    "key": "interval_unexpected_start",
+   "value": ""
+  },
+  {
+   "key": "interval_id_skip",
    "value": ""
   }
  ],
