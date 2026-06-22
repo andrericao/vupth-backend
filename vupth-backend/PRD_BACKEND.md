@@ -718,11 +718,15 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
 > O frontend usa esses IDs para enviar `serviceItemIds` no `POST /attendances`.
 
 > **`estimated_wait_minutes` e meal-aware (item #37 pre-req):** o calculo inclui as **refeicoes**
-> previstas/iniciadas do profissional (via `QueueUtils`), nao so a soma dos atendimentos. A mesma
-> base alimenta o `estimated_wait_minutes` da listagem `GET /establishment` e o ETA individual do
-> cliente (`ClientInQueueResponse`). Um **skip** (#41) reflete aqui na hora (refeicao sai do ETA do
-> cliente). Ainda **sem o lock** do #37: por enquanto a refeicao entra/sai conforme o ritmo (recalculo
-> a cada consulta); o lock (estabilizacao no ingresso) entra em seguida.
+> previstas/iniciadas do profissional (via `QueueUtils`), nao so a soma dos atendimentos. Esta
+> **projecao** alimenta o `estimated_wait_minutes` do snapshot da loja (`professionals-with-queue` e a
+> listagem `GET /establishment`) — visao de quem ainda esta **decidindo** entrar; aqui a refeicao
+> entra/sai conforme o ritmo (recalculo a cada consulta) e um **skip** (#41) reflete na hora.
+>
+> **ETA individual do cliente ja na fila e LOCK-aware (item #37):** o `estimatedWaitingTime` de
+> `GET /client-queue/{attendanceId}/wait-time` **nao** usa a projecao crua — usa as refeicoes
+> **travadas no ingresso** (ver secao "Item 37"), que nao saem por ritmo da fila. Skip (#41) ainda
+> derruba mesmo travada (override).
 
 > **Filtro #31 (2a metade):** profissional **sem nenhum servico** nao e exibido neste snapshot,
 > mesmo com a loja aberta. Apenas profissionais com `service_items` nao vazio entram em `professionals`.
@@ -2453,7 +2457,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 34 | Palavras-chave / sinonimos de servico | **[Proximo a implementar]** Coluna de `keywords` no `ServiceItem` para casar **sinonimos regionais** na busca: o servico tem um nome "oficial" (ex.: REFLEXO) e nomes alternativos (ex.: "luzes"). Cliente pesquisa "luzes" → aparece **REFLEXO** + indicacao da correspondencia ("tambem conhecido como luzes"). Decisao de modelo (coluna por ServiceItem vs dicionario por tipo vs busca depois) pendente — avaliar abordagem de mercado (sinonimos/aliases). | **Backend** (coluna keywords + busca por keyword com match e rotulo de correspondencia) / **Front-Client** (busca + exibir o "tambem conhecido como") / **Front-Partner** (cadastrar keywords no servico) |
 | 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
 | 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
-| 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | **[Pos-MVP]** Hoje a estimativa recalcula do zero a cada consulta; conforme a fila acelera/desacelera, a refeicao **entra/sai** do calculo do cliente, causando salto brusco de ±duracao (ex.: 13:00 -> 11:50, ~70min) — ruim para quem se programa para a **locomocao** (adiantar bruscamente faz perder a vez). Regra: **no momento em que o cliente entra na fila**, trava-se se a(s) refeicao(oes) prevista(s) estao no calculo dele; se estavam, a duracao fica **somada permanentemente** (o numero so varia com o ritmo da fila, a refeicao nunca some); se nao estavam, fica **sem**. Vale para os dois lados (aumento e diminuicao de tempo). **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** (snapshot/lock da refeicao por atendimento no ingresso) / **Front-Client** (estimativa estavel) |
+| 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | ✅ **[BACKEND CONCLUIDO 2026-06-22]** Entregue em 2 commits: (1) **pre-req** — ETA client-facing meal-aware (passou a usar `QueueUtils`, antes ignorava refeicoes); (2) **lock** — no ingresso o `Attendance` grava o conjunto de refeicoes que estavam no ETA do cliente (`attendance_locked_intervals`, migration 025) e o ETA individual (`GET /client-queue/{attendanceId}/wait-time`) passa a somar `restante do atual + atendimentos a frente (recalc) + duracao das refeicoes TRAVADAS` — a refeicao nao sai mais por ritmo da fila. Cai so por mudanca estrutural (todos depois sairam → ahead vazio), skip #41 (override) ou inicio/remocao. Testes: unit `QueueUtilsTest` (lock/mealsCounted) + integracao `ClientEtaMealLockIntegrationTest`. **Resta:** Front-Client consumir a estimativa estavel. **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** ✅ / **Front-Client** (estimativa estavel) |
 | 38 | Encaixe com equalizacao de tempo | **[Pos-MVP]** Profissional **encaixa** um cliente no meio da fila (ex.: posicao 4 de 8). Os clientes apos a posicao precisam absorver o tempo do encaixe (ex.: +30min), mas **sem salto brusco** e sem "saber" do encaixe. Mecanica: **amortizar** o tempo do encaixe entre os N atendimentos seguintes (30min / 4 = +7,5min cada) e fazer o acrescimo entrar **gradualmente** (a cada atendimento concluido), de modo que nenhum update mostre o salto inteiro. Quanto mais clientes a frente, menos cada um sente. O profissional assume o risco de satisfacao (decisao dele). Mesma familia do Item 37 (suavizacao da estimativa). **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend** (insercao em posicao + tempo amortizado pendente por atendimento) / **Front-Partner** (acao de encaixar) / **Front-Client** (estimativa suavizada) |
 | 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
 | 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | **[Pos-MVP]** Cliente quer ser atendido por volta de um **horario que escolhe** (ex.: 17:00), mas a fila esta com estimativa muito mais cedo (ex.: 11:00). Ele entra como **intencao** (nao confirmado): quem entra na fila depois dele recebe **indice menor** (passa na frente) enquanto o horario previsto de atendimento daquela posicao ainda for **antes** do alvo dele. Quando o previsto **cruza** o alvo (ex.: 17:15), ele para de ceder posicao e a presenca vira **confirmada** (deixa de ser so intencao). Funciona como uma **agenda** sobreposta a fila por ordem de chegada. **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | **Backend** (estado intencao vs confirmado no atendimento + horario-alvo + ordenacao que cede posicao ate o previsto cruzar o alvo, entao confirma) / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado) / **Front-Partner** (ver intencoes/agendados na fila) |
@@ -2560,7 +2564,29 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
 ### Item 37 — Estabilizacao da estimativa de espera (lock da refeicao no ingresso)
 
-Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
+Decisao 2026-06-16 (Andre). ✅ **Status: BACKEND CONCLUIDO 2026-06-22.** Entregue em 2 commits:
+**(1) pre-req** — o ETA client-facing virou meal-aware (antes a soma simples do cliente ignorava as
+refeicoes, que so entravam no overview do profissional). **(2) lock** — descrito abaixo.
+
+**Implementacao do lock (commit 2):**
+- **Persistencia:** `Attendance.lockedIntervalIds` (`Set<UUID>`, `@ElementCollection` → tabela
+  `attendance_locked_intervals`, migration 025). Decidiu-se **set de ids de refeicao** (nao um inteiro de
+  minutos) para lidar certo com o skip #41 (derruba mesmo travada), com a refeicao que vira bloco real ao
+  ser iniciada (sem contar 2x) e com a regra estrutural de cancelamento.
+- **Gravacao no ingresso:** `AttendanceServiceImpl.lockMealsAtIngress` (best-effort, nao quebra a criacao)
+  roda apos salvar o atendimento, descobre a posicao do cliente na fila de espera e chama
+  `QueueUtils.mealsCountedForPosition` — grava os ids das refeicoes recorrentes que **estavam no ETA dele
+  naquele instante**. Primeiro da fila (pos 0) nao trava nada.
+- **Leitura (ETA estavel):** `QueueServiceImpl.queueWaitingTime` passou a usar
+  `QueueUtils.lockedClientWait(ahead, currentRemaining, lockedMeals, today)` =
+  `restante do em-progresso + duracoes recalculadas dos atendimentos a frente + contribuicao das refeicoes
+  travadas`. Cada refeicao travada contribui: **0** se pulada no dia (#41) ou ja encerrada hoje; o **tempo
+  restante** se em curso; a **duracao cheia** se ainda prevista (nao some por ritmo).
+- **Testes:** unit `QueueUtilsTest` (`mealsCountedForPosition` + `lockedClientWait`, incl. skip/done/null-safe)
+  e integracao `ClientEtaMealLockIntegrationTest` (lock no ingresso; sobrevive a fila encolher quando o
+  cliente vira o 1o; skip override; unskip restaura).
+- **Sem mudanca de contrato** (Postman inalterado): mesmos endpoints, apenas o valor de `estimatedWaitingTime`
+  ficou estavel. **Resta:** Front-Client consumir a estimativa estavel.
 
 **Problema.** O `QueueUtils` recalcula a estimativa do zero a cada consulta. Conforme a fila acelera ou desacelera, a refeicao prevista **entra ou sai** do calculo de um mesmo cliente, fazendo a previsao **saltar bruscamente** pela duracao inteira da refeicao (ex.: de 13:00 para 11:50 quando os atendimentos correm mais rapido e o almoco "some"). Isso e ruim para o cliente que se programa para a **locomocao**: adiantar bruscamente a previsao pode faze-lo **perder a vez**.
 
@@ -2591,9 +2617,9 @@ Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
 
 **Refeicao prevista que o profissional nunca interage com o popup (nem inicia, nem clica "nao almocar"):** nao trava para sempre. O bloco previsto vai sendo **empurrado pra frente** pelos atendimentos e **some ao alcancar a proxima refeicao / fim do dia** (regra "some na proxima", ja existente). Diferente do "nao almocar" explicito (que derruba na hora), aqui a ETA do cliente se corrige **gradualmente**.
 
-**Decisoes pendentes (definir antes de implementar):**
-1. **Onde persistir o lock:** provavel snapshot no `Attendance` no momento da criacao (ex.: `lockedIntervalMinutes` ou flag por refeicao) — a estimativa passa a ser `(soma das duracoes a frente, recalculada) + (minutos de refeicao travados, respeitando a regra estrutural acima)`.
-2. **Janta:** aplica a mesma logica de lock que o almoco.
+**Decisoes (resolvidas na implementacao 2026-06-22):**
+1. ✅ **Onde persistir o lock:** `Attendance.lockedIntervalIds` (set de ids, tabela `attendance_locked_intervals`) gravado no ingresso. A estimativa individual = `(soma das duracoes a frente, recalculada) + (contribuicao das refeicoes travadas)` — ver "Implementacao do lock" acima.
+2. ✅ **Janta:** mesma logica de lock que o almoco (uniforme — o lock e por id de refeicao, sem distinguir tipo).
 
 ### Item 38 — Encaixe com equalizacao de tempo
 

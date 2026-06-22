@@ -9,15 +9,19 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Estimativa de espera da fila, considerando os intervalos (refeicoes/pausas) do
  * profissional. Recorrente-aware e null-safe (spec item #11d).
  *
- * Regras dos intervalos na estimativa:
+ * Regras dos intervalos na estimativa (projecao):
  *  - <b>Iniciado hoje</b> (day-scoped): bloco real em andamento; conta o tempo restante.
  *  - <b>Recorrente previsto</b> (nao iniciado hoje): projetado em hoje@fixedStartTime,
  *    <i>desloca pra frente sempre</i> (nunca no passado; empurrado pelos atendimentos) e
@@ -26,6 +30,9 @@ import java.util.List;
  *  - <b>Unexpected</b>: pausa avulsa num horario; empurrada para depois do atendimento corrente.
  *
  * Nunca muta a entidade — toda a aritmetica usa projecoes locais ({@link Block}).
+ *
+ * <p>Para o <b>ETA estavel do cliente</b> (item #37 — lock), ver {@link #mealsCountedForPosition}
+ * (quais refeicoes travar no ingresso) e {@link #lockedClientWait} (calculo a partir do lock).
  */
 public class QueueUtils {
 
@@ -35,12 +42,15 @@ public class QueueUtils {
         final int durationMinutes;
         final OffsetDateTime disappearAt; // recorrente previsto: some ao alcancar isto; null = nunca some
         final boolean previsto;           // recorrente nao iniciado (deslocavel/cancelavel)
+        final UUID intervalId;            // id da refeicao recorrente prevista (null p/ iniciado/unexpected)
 
-        Block(OffsetDateTime start, int durationMinutes, OffsetDateTime disappearAt, boolean previsto) {
+        Block(OffsetDateTime start, int durationMinutes, OffsetDateTime disappearAt,
+              boolean previsto, UUID intervalId) {
             this.start = start;
             this.durationMinutes = durationMinutes;
             this.disappearAt = disappearAt;
             this.previsto = previsto;
+            this.intervalId = intervalId;
         }
 
         boolean disappeared() {
@@ -48,10 +58,74 @@ public class QueueUtils {
         }
     }
 
-    /** Resultado da drenagem de intervalos vencidos: novo cursor + minutos somados. */
-    private record Drain(OffsetDateTime cursor, long added) {}
+    /** Resultado da simulacao: minutos totais + ids das refeicoes recorrentes contadas. */
+    private record Sim(int minutes, Set<UUID> countedMealIds) {}
 
     public static int calculateWaitingTimeForPosition(
+            List<Attendance> queue,
+            List<ProfessionalInterval> intervals,
+            OffsetDateTime now,
+            int positionX
+    ) {
+        return simulate(queue, intervals, now, positionX).minutes();
+    }
+
+    /**
+     * Quais refeicoes recorrentes (ids) estao no ETA da posicao {@code positionX} — usado para
+     * <b>travar (lock) no ingresso</b> (item #37): grava-se este conjunto no atendimento do cliente.
+     */
+    public static Set<UUID> mealsCountedForPosition(
+            List<Attendance> queue,
+            List<ProfessionalInterval> intervals,
+            OffsetDateTime now,
+            int positionX
+    ) {
+        return simulate(queue, intervals, now, positionX).countedMealIds();
+    }
+
+    /**
+     * ETA estavel do cliente a partir do lock (item #37). Independe da projecao: soma o restante
+     * do atendimento em curso, as duracoes (recalculadas) dos atendimentos a frente e a
+     * <b>contribuicao das refeicoes travadas</b> no ingresso. Cada refeicao travada contribui:
+     * <ul>
+     *   <li>0 se pulada no dia (#41) ou ja encerrada hoje;</li>
+     *   <li>o tempo restante se estiver em curso (iniciada hoje);</li>
+     *   <li>a duracao cheia se ainda prevista (travada, nao some por ritmo da fila).</li>
+     * </ul>
+     * Refeicao removida (recorrencia apagada) simplesmente nao esta em {@code lockedMeals}.
+     */
+    public static int lockedClientWait(
+            List<Attendance> ahead,
+            int currentRemainingMinutes,
+            Collection<ProfessionalInterval> lockedMeals,
+            LocalDate today
+    ) {
+        int total = Math.max(0, currentRemainingMinutes);
+        if (ahead != null) {
+            for (Attendance a : ahead) {
+                total += a.getEstimatedTotalMinutes();
+            }
+        }
+        if (lockedMeals != null) {
+            for (ProfessionalInterval meal : lockedMeals) {
+                total += lockedMealContribution(meal, today);
+            }
+        }
+        return total;
+    }
+
+    private static int lockedMealContribution(ProfessionalInterval meal, LocalDate today) {
+        if (meal == null || meal.isSkippedOn(today) || meal.isDoneOn(today)) {
+            return 0; // pulada/removida do dia ou ja consumida hoje
+        }
+        if (meal.isStartedOn(today)) {
+            return (int) meal.getRemainingMinutes(); // em curso: so o que falta
+        }
+        Integer dur = meal.getDurationMinutes();
+        return dur != null ? dur : 0; // prevista: duracao cheia (travada)
+    }
+
+    private static Sim simulate(
             List<Attendance> queue,
             List<ProfessionalInterval> intervals,
             OffsetDateTime now,
@@ -61,18 +135,27 @@ public class QueueUtils {
         if (positionX < 0 || positionX > queue.size()) {
             throw new IllegalArgumentException("Invalid position in queue: " + positionX + " (size=" + queue.size() + ")");
         }
+        Set<UUID> counted = new HashSet<>();
         if (positionX == 0 || queue.isEmpty()) {
-            return 0;
+            return new Sim(0, counted);
         }
 
         List<Block> blocks = buildBlocks(intervals, now);
+        return simulateImpl(queue, blocks, now, positionX, counted);
+    }
 
+    private static Sim simulateImpl(
+            List<Attendance> queue,
+            List<Block> blocks,
+            OffsetDateTime now,
+            int positionX,
+            Set<UUID> counted
+    ) {
         OffsetDateTime cursor = now;
         long total = 0;
 
         for (int i = 0; i < positionX; i++) {
-            // Intervalos "vencidos" (start <= cursor) acontecem antes de servir o proximo.
-            Drain d = drainDue(blocks, cursor);
+            Drain d = drainDue(blocks, cursor, counted);
             cursor = d.cursor();
             total += d.added();
 
@@ -92,14 +175,17 @@ public class QueueUtils {
         }
 
         // Intervalos que ainda venceriam antes de o cliente ser atendido.
-        Drain tail = drainDue(blocks, cursor);
+        Drain tail = drainDue(blocks, cursor, counted);
         total += tail.added();
 
-        return (int) total;
+        return new Sim((int) total, counted);
     }
 
-    /** Soma e remove todos os blocos vencidos (start <= cursor), encadeando. */
-    private static Drain drainDue(List<Block> blocks, OffsetDateTime cursor) {
+    /** Resultado da drenagem de intervalos vencidos: novo cursor + minutos somados. */
+    private record Drain(OffsetDateTime cursor, long added) {}
+
+    /** Soma e remove todos os blocos vencidos (start <= cursor), encadeando; registra ids contados. */
+    private static Drain drainDue(List<Block> blocks, OffsetDateTime cursor, Set<UUID> counted) {
         long added = 0;
         boolean progressed = true;
         while (progressed) {
@@ -110,6 +196,9 @@ public class QueueUtils {
                 Block b = it.next();
                 if (!b.start.isAfter(cursor)) { // start <= cursor
                     added += b.durationMinutes;
+                    if (b.intervalId != null) {
+                        counted.add(b.intervalId);
+                    }
                     cursor = cursor.plusMinutes(b.durationMinutes);
                     it.remove();
                     progressed = true;
@@ -141,14 +230,14 @@ public class QueueUtils {
 
         List<Block> blocks = new ArrayList<>();
 
-        // Iniciados hoje (em andamento) + unexpected de hoje: blocos fixos (nao somem).
+        // Iniciados hoje (em andamento) + unexpected de hoje: blocos fixos (nao somem, sem id de lock).
         for (ProfessionalInterval iv : intervals) {
             if (iv.isStartedOn(today)) {
                 OffsetDateTime end = iv.getPlannedEndTime();
                 if (end != null && end.isAfter(now)) {
                     long remaining = Duration.between(now, end).toMinutes();
                     if (remaining > 0) {
-                        blocks.add(new Block(now, (int) remaining, null, false));
+                        blocks.add(new Block(now, (int) remaining, null, false, null));
                     }
                 }
             } else if (iv.getIntervalType() == IntervalType.UNEXPECTED
@@ -163,7 +252,7 @@ public class QueueUtils {
                             ? (int) Duration.between(now, end).toMinutes()
                             : iv.getDurationMinutes();
                     if (dur > 0) {
-                        blocks.add(new Block(effStart, dur, null, false));
+                        blocks.add(new Block(effStart, dur, null, false, null));
                     }
                 }
             }
@@ -182,7 +271,7 @@ public class QueueUtils {
             if (!start.isBefore(disappearAt)) {
                 continue;
             }
-            blocks.add(new Block(start, iv.getDurationMinutes(), disappearAt, true));
+            blocks.add(new Block(start, iv.getDurationMinutes(), disappearAt, true, iv.getId()));
         }
 
         blocks.sort(Comparator.comparing(b -> b.start));

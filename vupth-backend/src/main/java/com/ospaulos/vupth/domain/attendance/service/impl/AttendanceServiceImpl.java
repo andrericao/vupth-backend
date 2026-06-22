@@ -25,6 +25,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliate
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.queue.service.QueueUtils;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
@@ -39,6 +40,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -89,8 +91,39 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
+    }
+
+    /**
+     * Trava (lock) no ingresso as refeicoes que ja estavam no ETA do cliente (item #37): grava no
+     * atendimento os ids das refeicoes recorrentes contadas ate a posicao dele na fila. Depois disso,
+     * essas refeicoes nao saem mais do ETA dele por ritmo da fila (so por skip #41 / inicio / remocao).
+     * Best-effort: falha aqui nao quebra a criacao do atendimento.
+     */
+    private void lockMealsAtIngress(com.ospaulos.vupth.domain.attendance.model.Attendance saved,
+                                    Professional professional, Establishment establishment) {
+        try {
+            List<Attendance> queue = attendanceRepository
+                    .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+            int pos = -1;
+            for (int i = 0; i < queue.size(); i++) {
+                if (queue.get(i).getId().equals(saved.getId())) { pos = i; break; }
+            }
+            if (pos <= 0) {
+                return; // primeiro da fila (ou fora dela): nenhuma refeicao a frente para travar
+            }
+            Set<UUID> locked = QueueUtils.mealsCountedForPosition(
+                    queue, professional.getIntervals(), OffsetDateTime.now(), pos);
+            if (!locked.isEmpty()) {
+                saved.setLockedIntervalIds(locked);
+                attendanceRepository.save(saved);
+                log.info("[Attendance] lock refeicoes no ingresso — attendance={} meals={}", saved.getId(), locked);
+            }
+        } catch (Exception e) {
+            log.warn("[Attendance] lockMealsAtIngress falhou para {}: {}", saved.getId(), e.getMessage());
+        }
     }
 
     @Override
@@ -133,6 +166,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setScheduledTime(request.scheduledTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return AttendanceInQueueResponse.fromEntity(saved);
     }
@@ -171,6 +205,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
         return saved;
     }

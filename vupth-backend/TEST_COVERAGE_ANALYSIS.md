@@ -1,6 +1,6 @@
 # 📊 Análise de Cobertura de Testes — Vupth Backend
 
-**Última atualização**: 2026-06-21
+**Última atualização**: 2026-06-22
 **Meta**: 🎯 **100%** — todo endpoint/regra coberto por teste **unitário e/ou de integração**, sempre com **caminho feliz + erros** (401/403/404/409/422).
 **Inventário atual**: ~**175** testes unitários + ~**405** testes de integração (~**580** métodos `@Test`), 15 controllers, ~70 endpoints.
 
@@ -105,7 +105,7 @@ Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Le
 | Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 
 ### 2.6 Attendance & Queue
-Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (12), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5).
+Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
 
 | Endpoint / Regra | Feliz | Erros | Notas |
 |---|---|---|---|
@@ -113,8 +113,8 @@ Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTrans
 | PATCH /attendances/{id}/start·pause·resume·finish | ✅ | ✅ | transições inválidas cobertas (unit) |
 | PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | |
 | GET /attendances · /{id} · /client/me | ✅ | ⚠️ | histórico do cliente + filtros |
-| GET /client-queue/{id}/wait-time (posição/ETA do cliente) | ✅ | ⚠️ | ETA agora **meal-aware** |
-| QueueUtils ETA (previsto/iniciado/unexpected/skip/day-scoped) | ✅ | — | 12 cenários unit (inclui skip #41) |
+| GET /client-queue/{id}/wait-time (posição/ETA do cliente) | ✅ | ⚠️ | ETA **lock-aware** (#37): refeições travadas no ingresso |
+| QueueUtils ETA (previsto/iniciado/unexpected/skip/day-scoped) | ✅ | — | 19 cenários unit (inclui skip #41 + lock #37) |
 
 ### 2.7 Intervals / Refeições (#11, #41)
 Testes (unit): `RegisterProfessionalUseCaseTest`/`QuickCreateProfessionalUseCaseTest` (seed), `QueueUtilsTest` (ETA). Integração: `ProfessionalIntervalIntegrationTest` (10), `IntervalList` (4), `Update` (8), `Start` (7), `Finish` (7), `FinishOnAttend` (5), `Delete` (6), `Validation` (9), `Skip` (8), `ProfessionalMealSeedIntegrationTest` (4).
@@ -163,7 +163,7 @@ Testes: `integrations/websocket/WebSocketIntegrationTest` (2).
 ## 4. NOTAS DE ESTADO REAL (correções vs versão anterior)
 
 A versão anterior (mar/2026) listava como "críticos" itens **já resolvidos**:
-- ✅ `QueueUtils` reescrito (recorrente-aware, day-scoped, null-safe) — coberto por `QueueUtilsTest` (12) + integrações de interval.
+- ✅ `QueueUtils` reescrito (recorrente-aware, day-scoped, null-safe) — coberto por `QueueUtilsTest` (19) + integrações de interval.
 - ✅ Intervals/refeições **completos** (#11) — seed, editar, start, finish, finish-on-attend, delete, validação, skip (#41).
 - ✅ Client wait time/posição implementado e testado (`ClientQueueIntegrationTest`).
 - ✅ Attendance status transitions cobertas (unit 15 + integração 51).
@@ -180,6 +180,9 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 ---
 
 ## 6. CHANGELOG DE COBERTURA
+
+### 2026-06-22
+- **#37 lock da refeição (ETA estável do cliente)**: ✅ `ClientEtaMealLockIntegrationTest` (5) — trava no ingresso; sobrevive a fila encolher (cliente vira o 1º → projeção daria 0, lock mantém); skip #41 override; unskip restaura. Unit: +7 casos em `QueueUtilsTest` → 19 (`mealsCountedForPosition` × 3 + `lockedClientWait` × 4, incl. skip/done/null-safe). ⏳ aguardando André rodar.
 
 ### 2026-06-21
 - **#34 keywords/sinônimos**: `ServiceTypeKeywordIntegrationTest` (10) — busca/normalização, 409 duplicado, 403 client.
