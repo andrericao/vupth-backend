@@ -172,4 +172,79 @@ class QueueUtilsTest {
         // total = 30 + 20 + 30 = 80
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 2)).isEqualTo(80);
     }
+
+    // ── lock da refeicao no ingresso (item #37) ──────────────────
+
+    /** Recorrente previsto com id (necessario para o lock identificar a refeicao). */
+    private ProfessionalInterval recurringWithId(String time, int dur, java.util.UUID id) {
+        ProfessionalInterval iv = recurring(time, dur);
+        iv.setId(id);
+        return iv;
+    }
+
+    @Test
+    @DisplayName("mealsCountedForPosition: refeicao prevista dentro da janela e travada (retorna id)")
+    void mealsCounted_withinWindow_returnsId() {
+        var id = java.util.UUID.randomUUID();
+        var queue = List.of(att(30), att(30), att(30)); // cruzam 12:00
+        var intervals = List.of(recurringWithId("12:00:00Z", 60, id));
+        assertThat(QueueUtils.mealsCountedForPosition(queue, intervals, NOW, 3)).containsExactly(id);
+    }
+
+    @Test
+    @DisplayName("mealsCountedForPosition: refeicao nao alcancada nao e travada (set vazio)")
+    void mealsCounted_notReached_empty() {
+        var id = java.util.UUID.randomUUID();
+        var queue = List.of(att(30)); // servido 11:30 < almoco 12:00
+        var intervals = List.of(recurringWithId("12:00:00Z", 60, id));
+        assertThat(QueueUtils.mealsCountedForPosition(queue, intervals, NOW, 1)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("mealsCountedForPosition: posicao 0 nao trava nada")
+    void mealsCounted_positionZero_empty() {
+        var intervals = List.of(recurringWithId("12:00:00Z", 60, java.util.UUID.randomUUID()));
+        assertThat(QueueUtils.mealsCountedForPosition(List.of(att(30)), intervals, NOW, 0)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("lockedClientWait: restante do atual + atendimentos a frente + duracao cheia da refeicao travada")
+    void lockedWait_prevista_fullDuration() {
+        var ahead = List.of(att(30), att(30));
+        var locked = List.of(recurring("12:00:00Z", 60)); // prevista hoje
+        // 10 (atual) + 60 (a frente) + 60 (refeicao travada) = 130
+        assertThat(QueueUtils.lockedClientWait(ahead, 10, locked, java.time.LocalDate.parse("2026-06-16")))
+                .isEqualTo(130);
+    }
+
+    @Test
+    @DisplayName("lockedClientWait: refeicao travada porem pulada no dia (#41) contribui 0")
+    void lockedWait_skipped_contributesZero() {
+        var ahead = List.of(att(30), att(30));
+        var meal = recurring("12:00:00Z", 60);
+        meal.skipOn(java.time.LocalDate.parse("2026-06-16"));
+        // 0 + 60 + 0 (refeicao pulada cai mesmo travada) = 60
+        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(meal), java.time.LocalDate.parse("2026-06-16")))
+                .isEqualTo(60);
+    }
+
+    @Test
+    @DisplayName("lockedClientWait: refeicao travada porem ja encerrada hoje contribui 0")
+    void lockedWait_doneToday_contributesZero() {
+        var ahead = List.of(att(30));
+        var done = doneToday(OffsetDateTime.parse("2026-06-16T12:00:00Z"),
+                OffsetDateTime.parse("2026-06-16T12:45:00Z"));
+        // 0 + 30 + 0 (ja consumida) = 30
+        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(done), java.time.LocalDate.parse("2026-06-16")))
+                .isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("lockedClientWait: null-safe (sem refeicoes travadas e sem atendimentos a frente)")
+    void lockedWait_nullSafe() {
+        assertThat(QueueUtils.lockedClientWait(null, 15, null, java.time.LocalDate.parse("2026-06-16")))
+                .isEqualTo(15);
+        assertThat(QueueUtils.lockedClientWait(List.of(), -5, List.of(), java.time.LocalDate.parse("2026-06-16")))
+                .isZero(); // currentRemaining negativo e tratado como 0
+    }
 }

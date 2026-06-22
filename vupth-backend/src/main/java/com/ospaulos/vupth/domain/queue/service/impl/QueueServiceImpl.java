@@ -18,10 +18,13 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -111,18 +114,25 @@ public class QueueServiceImpl implements QueueService {
             throw new ClientNotInQueueException(attendance.getId());
         }
 
-        // ETA ate a posicao do cliente, meal-aware (item #37 pre-req): inclui as refeicoes do
-        // profissional via QueueUtils, igual ao overview. Usa a lista de entidades do banco
-        // (mesma ordem/origem do fullQueue), para o calculo bater com a posicao encontrada.
+        // ETA ESTAVEL do cliente (item #37 lock): atendimentos a frente (recalculado, ritmo da fila)
+        // + restante do em progresso + refeicoes TRAVADAS no ingresso (nao saem por ritmo; so por
+        // skip #41 / inicio / remocao). A projecao meal-aware (commit pre-req) segue valendo para o
+        // snapshot da loja (cliente novo decidindo), nao para o ETA de quem ja esta na fila.
         List<Attendance> queueEntities = attendanceRepository
                 .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
-        List<ProfessionalInterval> intervals = professional.getIntervals();
         OffsetDateTime now = OffsetDateTime.now();
+        LocalDate today = now.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
 
         int currentRemaining = fullQueue.inAttendance() != null
                 ? fullQueue.inAttendance().remainingMinutes() : 0;
-        int totalWaitingTime = currentRemaining
-                + QueueUtils.calculateWaitingTimeForPosition(queueEntities, intervals, now, clientPosition);
+
+        List<Attendance> ahead = queueEntities.subList(0, Math.min(clientPosition, queueEntities.size()));
+        Set<UUID> lockedIds = attendance.getLockedIntervalIds();
+        List<ProfessionalInterval> lockedMeals = professional.getIntervals().stream()
+                .filter(iv -> lockedIds.contains(iv.getId()))
+                .toList();
+
+        int totalWaitingTime = QueueUtils.lockedClientWait(ahead, currentRemaining, lockedMeals, today);
         OffsetDateTime startTime = now.plusMinutes(totalWaitingTime);
 
         AttendanceInQueueResponse attendanceQueue = AttendanceInQueueResponse.fromEntity(attendance);

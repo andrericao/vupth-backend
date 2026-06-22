@@ -1,0 +1,32 @@
+databaseChangeLog:
+  # Lock da refeicao no ingresso (item #37): refeicoes recorrentes que estavam no ETA do
+  # cliente quando ele entrou na fila. Travadas para nao sairem por ritmo da fila; cada uma
+  # soma sua duracao no ETA individual do cliente (exceto se pulada no dia / removida).
+  - changeSet:
+      id: 025-create-attendance_locked_intervals
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: attendance_locked_intervals
+            columns:
+              - column:
+                  name: attendance_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: interval_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: attendance_locked_intervals
+            columnNames: attendance_id, interval_id
+            constraintName: pk_attendance_locked_intervals
+        - addForeignKeyConstraint:
+            baseTableName: attendance_locked_intervals
+            baseColumnNames: attendance_id
+            constraintName: fk_locked_interval_attendance
+            referencedTableName: ATTENDANCE
+            referencedColumnNames: id
+            onDelete: CASCADE

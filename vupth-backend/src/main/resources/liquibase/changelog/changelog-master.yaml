@@ -191,3 +191,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/024-create-professional_interval_skips.yaml
       relativeToChangeLogFile: true
+
+  # Lock da refeicao no ingresso (estabilizacao do ETA — item #37)
+  - include:
+      file: changesets/50-establishment/025-create-attendance_locked_intervals.yaml
+      relativeToChangeLogFile: true

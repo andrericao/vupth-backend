@@ -17,8 +17,10 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Getter
@@ -68,6 +70,18 @@ public class Attendance implements Serializable {
 
     @Column(name = "estimated_minutes", nullable = false)
     private Integer estimatedMinutes;
+
+    /**
+     * Refeicoes (recorrentes) que estavam no ETA do cliente NO INGRESSO (item #37 — lock).
+     * Travadas aqui para nao sairem do ETA dele por ritmo da fila; cada uma soma sua
+     * {@code durationMinutes} (exceto se pulada no dia, #41 / removida). Ver
+     * {@code QueueUtils.lockedClientWait}. So usada no ETA individual do cliente.
+     */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "attendance_locked_intervals",
+            joinColumns = @JoinColumn(name = "attendance_id"))
+    @Column(name = "interval_id", nullable = false)
+    private Set<UUID> lockedIntervalIds = new HashSet<>();
 
     @Column(name = "total_value", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalValue;
