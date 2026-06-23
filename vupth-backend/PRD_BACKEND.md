@@ -2144,6 +2144,32 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 
 ---
 
+## 18c. Readiness / cold start (Render Free) — HANDOFF PARA OS FRONTS
+
+**Contexto:** em staging/prod o backend roda no **Render Free**, que **hiberna apos inatividade**. O primeiro request depois da hibernacao **acorda a instancia e pode demorar ~50s** (boot da JVM + migrations Liquibase). Sem tratamento, o usuario abre o app e o **primeiro cadastro falha por timeout** — o backend ainda nao esta pronto.
+
+**O backend ja expoe o sinal de "pronto pra receber requisicao":**
+
+| Endpoint | Auth | Significado |
+|---|---|---|
+| `GET /actuator/health/readiness` | **publico** (sem token) | `200 {"status":"UP"}` **so quando o Postgres responde E as migrations rodaram** = pode cadastrar agora. Enquanto acorda: 502/503 ou conexao segurada. |
+| `GET /actuator/health/liveness` | publico | processo vivo (uso interno/plataforma) |
+
+Config responsavel (prod + staging): `management.endpoint.health.probes.enabled=true` + `management.endpoint.health.group.readiness.include=readinessState,db`. Tambem ligado `server.shutdown=graceful` (redeploy nao derruba request em andamento).
+
+**O QUE OS FRONTS PRECISAM FAZER (portao de readiness no boot):**
+1. Ao abrir o app, **antes de liberar login/cadastro**, cutucar `GET {API}/actuator/health/readiness` com **retry + backoff** ate receber `200` (teto ~90s). A primeira cutucada **acorda o Render**.
+2. Enquanto pendente, mostrar tela **"preparando servidor…"** (a primeira chamada pode segurar ~50s — usar timeout por tentativa de ~60s).
+3. So apos `200 UP` navegar pra fluxo real. Assim **o cadastro nunca dispara antes da hora**.
+
+Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22. Aplica igual ao Front-Partner.
+
+**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Opcional: keep-warm (ping a cada ~10min) ou tier pago pra eliminar a hibernacao.
+
+> **Status de alinhamento:** backend ✅ pronto (config aplicada). **Fronts:** implementar o portao `waitForBackend()` no splash. Quando um front concluir, ele avisa e o backend revisa o alinhamento. Backlog #35 (broker externo) **so** quando escalar pra multi-instancia — readiness/cold start e independente dele.
+
+---
+
 ## 19. Fluxos de Usuario
 
 ### Fluxo 1: Owner cria estabelecimento e trabalha nele (Solo Shop)
