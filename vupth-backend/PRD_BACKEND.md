@@ -4,8 +4,8 @@
 > Descreve **todos os endpoints implementados**, seus contratos (request/response),
 > regras de autenticacao/autorizacao, status de testes e o que ainda precisa ser implementado.
 >
-> **Base URL staging:** `https://vupth-backend.onrender.com`
-> **Base URL prod:** Railway (main branch)
+> **Base URL staging:** `https://vupth-backend-ia.onrender.com` (Render Free, branch `dev`, hiberna — ver secao 18c)
+> **Base URL prod:** `https://vupth-backend-ia-production.up.railway.app` (Railway, branch `main`)
 > **Base URL local:** `http://localhost:8080`
 >
 > **Ultima atualizacao:** 2026-06-08
