@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+# Necessario para empurrar as tags `homolog-last-good` / `prod-last-good`
+# (marcam o ultimo commit que passou em cada ambiente, usados no rollback).
+permissions:
+  contents: write
+
 jobs:
 
   # =========================
@@ -118,6 +123,76 @@ jobs:
             --verbose \
             --bail
 
+      # ✅ So chega aqui se o Newman passou (--bail) → este commit e o novo "last-good" de HOMOLOG.
+      - name: Marca commit como last-good (HOMOLOG)
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "Marcando $SHA como homolog-last-good"
+          git tag -f homolog-last-good "$SHA"
+          git push -f origin homolog-last-good
+
+
+  # =========================
+  # ⏪ ROLLBACK HOMOLOG (Render)
+  # =========================
+  # Dispara SO quando o deploy saiu mas o Newman pos-deploy falhou (commit ruim em homolog).
+  # Redeploya o ultimo commit que passou (tag homolog-last-good) via API do Render.
+  rollback-homolog:
+    needs: [deploy-homolog, test-homolog]
+    if: ${{ always() && needs.deploy-homolog.result == 'success' && needs.test-homolog.result == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve ultimo commit bom (HOMOLOG)
+        id: lastgood
+        run: |
+          git fetch --tags --force
+          if ! git rev-parse -q --verify refs/tags/homolog-last-good >/dev/null; then
+            echo "::warning::Ainda nao existe homolog-last-good — nada para reverter."
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SHA=$(git rev-parse homolog-last-good)
+          echo "Ultimo commit bom de HOMOLOG: $SHA"
+          echo "have=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Redeploy do last-good no Render (API)
+        if: steps.lastgood.outputs.have == 'true'
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          HOMOLOG_URL: ${{ secrets.HOMOLOG_URL }}
+          GOOD_SHA: ${{ steps.lastgood.outputs.sha }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::warning::RENDER_API_KEY/RENDER_SERVICE_ID nao configurados — rollback automatico do Render indisponivel."
+            echo "::warning::Adicione esses 2 secrets para habilitar (commit alvo: $GOOD_SHA). Por ora, reverta pelo painel do Render."
+            exit 0
+          fi
+          echo "Redeployando commit $GOOD_SHA no Render..."
+          curl --fail -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"commitId\":\"$GOOD_SHA\"}"
+
+          echo "Aguardando HOMOLOG voltar (readiness)..."
+          for i in {1..40}; do
+            H=$(curl -s --connect-timeout 5 --max-time 10 "$HOMOLOG_URL/actuator/health/readiness" || true)
+            if echo "$H" | grep -q '"status":"UP"'; then
+              echo "HOMOLOG restaurado no last-good ($GOOD_SHA)!"
+              exit 0
+            fi
+            echo "Tentativa $i/40 — aguardando..."
+            sleep 15
+          done
+          echo "::error::Timeout aguardando HOMOLOG apos rollback"
+          exit 1
+
 
   # =========================
   # 🚀 DEPLOY PROD (Railway)
@@ -181,3 +256,68 @@ jobs:
             --reporters cli \
             --verbose \
             --bail
+
+      # ✅ So chega aqui se o Newman passou (--bail) → este commit e o novo "last-good" de PROD.
+      - name: Marca commit como last-good (PROD)
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "Marcando $SHA como prod-last-good"
+          git tag -f prod-last-good "$SHA"
+          git push -f origin prod-last-good
+
+
+  # =========================
+  # ⏪ ROLLBACK PROD (Railway)
+  # =========================
+  # Dispara SO quando o deploy saiu mas o Newman pos-deploy falhou (commit ruim em prod).
+  # Redeploya o ultimo commit que passou (tag prod-last-good) fazendo checkout + railway up.
+  rollback-prod:
+    needs: [deploy-prod, test-prod]
+    if: ${{ always() && needs.deploy-prod.result == 'success' && needs.test-prod.result == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve ultimo commit bom (PROD)
+        id: lastgood
+        run: |
+          git fetch --tags --force
+          if ! git rev-parse -q --verify refs/tags/prod-last-good >/dev/null; then
+            echo "::warning::Ainda nao existe prod-last-good — nada para reverter."
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          SHA=$(git rev-parse prod-last-good)
+          echo "Ultimo commit bom de PROD: $SHA"
+          echo "have=true" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout do last-good
+        if: steps.lastgood.outputs.have == 'true'
+        run: git checkout ${{ steps.lastgood.outputs.sha }}
+
+      - name: Redeploy do last-good no Railway
+        if: steps.lastgood.outputs.have == 'true'
+        run: |
+          npm install -g @railway/cli
+          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Aguarda PROD voltar (readiness)
+        if: steps.lastgood.outputs.have == 'true'
+        run: |
+          for i in {1..30}; do
+            H=$(curl -s --connect-timeout 5 --max-time 10 "${{ secrets.PROD_URL }}/actuator/health" || true)
+            if echo "$H" | grep -q '"status":"UP"'; then
+              echo "PROD restaurado no last-good (${{ steps.lastgood.outputs.sha }})!"
+              exit 0
+            fi
+            echo "Tentativa $i/30 — aguardando..."
+            sleep 15
+          done
+          echo "::error::Timeout aguardando PROD apos rollback"
+          exit 1
