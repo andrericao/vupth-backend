@@ -201,7 +201,9 @@ public class QueueServiceImpl implements QueueService {
 
         OffsetDateTime nextAvailableTime = calculateNextAvailableTime(professional);
 
-        List<Attendance> queuedAttendances = professional.getScheduledAttendances();
+        // Inclui LATE (item #19): o atrasado fica na fila e precisa ser renormalizado junto,
+        // mantendo a posicao relativa (senao seu horario antigo o jogaria pro fim).
+        List<Attendance> queuedAttendances = professional.getWaitingAttendances();
 
         updateQueueScheduledTimes(queuedAttendances, nextAvailableTime);
     }

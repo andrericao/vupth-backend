@@ -16,6 +16,18 @@ public interface ProfessionalService {
 
     public QueueResponse startAttendance(UUID professionalId, UUID attendanceId);
 
+    /**
+     * Marca um cliente que nao chegou como LATE (item #19): ele cai uma posicao na fila
+     * (fica atras do proximo) mas NAO sai. Pode ser chamado de novo para cair mais.
+     */
+    public QueueResponse markAttendanceLate(UUID professionalId, UUID attendanceId);
+
+    /**
+     * Desfaz o LATE (item #19): o cliente volta a SCHEDULED, mantendo a posicao atual
+     * (a que ele caiu). Usado quando o cliente chega e ainda nao vai ser atendido na hora.
+     */
+    public QueueResponse undoAttendanceLate(UUID professionalId, UUID attendanceId);
+
     public QueueResponse finishAttendance(UUID professionalId, UUID attendanceId);
 
     public QueueResponse cancelAttendance(UUID professionalId, UUID attendanceId);

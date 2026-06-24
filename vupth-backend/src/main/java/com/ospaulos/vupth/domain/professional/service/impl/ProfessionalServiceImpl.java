@@ -120,7 +120,9 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         assertProfessionalOwnsAttendance(professional, attendance);
 
-        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+        // Aceita SCHEDULED ou LATE (item #19): o cliente atrasado pode ser atendido direto ao chegar.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
 
@@ -137,6 +139,100 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         log.info("[Professional] startAttendance — attendance={} iniciado", attendanceId);
         return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
+    public QueueResponse markAttendanceLate(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] markAttendanceLate — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        // So um cliente que esta esperando pode ser marcado como atrasado.
+        // Aceita SCHEDULED ou ja-LATE (marcar de novo = cai mais uma posicao).
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Cai uma posicao: reposiciona atras do proximo da fila (empurrando o scheduledTime).
+        // A fila ja inclui SCHEDULED+LATE ordenada por scheduledTime. Se ja for o ultimo, so vira LATE.
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        repositionBehindNext(attendance, waiting);
+        attendance.setStatus(AttendanceStatus.LATE);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] markAttendanceLate — attendance={} marcado LATE (caiu de posicao)", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
+    public QueueResponse undoAttendanceLate(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] undoAttendanceLate — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        if (attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.LATE);
+        }
+
+        // Volta a SCHEDULED mantendo a posicao atual (a que ele caiu) — nao reposiciona.
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] undoAttendanceLate — attendance={} voltou para SCHEDULED", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    /**
+     * Empurra {@code target} para tras do proximo da fila de espera (cai 1 posicao), ajustando o
+     * {@code scheduledTime} para um instante entre o proximo e o seguinte. Se o target ja for o
+     * ultimo (ou nao estiver na lista), nada muda — permanece onde esta. A lista vem ordenada por
+     * {@code scheduledTime} ASC e inclui SCHEDULED+LATE.
+     */
+    private void repositionBehindNext(Attendance target, List<Attendance> waiting) {
+        int idx = -1;
+        for (int i = 0; i < waiting.size(); i++) {
+            if (waiting.get(i).getId().equals(target.getId())) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0 || idx == waiting.size() - 1) {
+            return; // fora da fila ou ja e o ultimo
+        }
+
+        java.time.OffsetDateTime next = waiting.get(idx + 1).getScheduledTime();
+        java.time.OffsetDateTime newTime;
+        if (idx + 2 < waiting.size()) {
+            java.time.OffsetDateTime afterNext = waiting.get(idx + 2).getScheduledTime();
+            long gapSeconds = java.time.Duration.between(next, afterNext).getSeconds();
+            // ponto medio entre o proximo e o seguinte -> cai exatamente 1 posicao
+            newTime = next.plusSeconds(Math.max(1, gapSeconds / 2));
+        } else {
+            newTime = next.plusMinutes(1); // passa a ser o ultimo
+        }
+        target.setScheduledTime(newTime);
     }
 
     @Override

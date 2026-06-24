@@ -185,6 +185,49 @@ public class AttendanceController {
     }
 
     /**
+     * PATCH /attendances/{attendanceId}/late
+     *
+     * Marca um cliente que nao chegou como LATE (item #19): ele cai uma posicao na fila
+     * (atras do proximo) mas NAO sai. Pode ser chamado de novo para cair mais.
+     * O profissional logado deve ser o dono do attendance. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/late")
+    public ResponseEntity<?> markLate(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER LATE {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.markAttendanceLate(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou (cliente caiu de posicao) → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/undo-late
+     *
+     * Desfaz o LATE (item #19): o cliente volta a SCHEDULED na posicao atual (a que caiu).
+     * O profissional logado deve ser o dono do attendance. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/undo-late")
+    public ResponseEntity<?> undoLate(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER UNDO-LATE {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.undoAttendanceLate(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * PATCH /attendances/{attendanceId}/finish
      *
      * Finaliza um attendance IN_PROGRESS → FINISHED.

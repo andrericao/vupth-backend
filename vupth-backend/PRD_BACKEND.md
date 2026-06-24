@@ -84,7 +84,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
@@ -219,7 +219,9 @@ Todos os erros seguem um dos dois formatos:
 `OPEN` | `CLOSED` | `TEMPORARILY_CLOSED`
 
 ### AttendanceStatus
-`SCHEDULED` | `IN_PROGRESS` | `FINISHED` | `CANCELLED` | `PAUSED`
+`SCHEDULED` | `IN_PROGRESS` | `FINISHED` | `CANCELLED` | `PAUSED` | `LATE`
+
+`LATE` (item #19): cliente que nao chegou a tempo (no-show parcial). O profissional o "pula" — ele **cai uma posicao** na fila mas **NAO sai** dela: continua aparecendo na fila de espera (junto com `SCHEDULED`), pode voltar a `SCHEDULED` (`undo-late`) ou ser atendido direto (`start`) quando chegar.
 
 ### AffiliationType
 `REQUEST` (profissional solicitou) | `INVITATION` (owner convidou)
@@ -1290,7 +1292,7 @@ Lista atendimentos filtrados por establishment, profissional, periodo e status. 
 | professionalId | UUID | Filtrar por profissional |
 | dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
 | dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
-| status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED |
+| status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED, LATE |
 
 **Regras de autorizacao:**
 - Se `establishmentId` informado: usuario deve ser owner ou profissional afiliado ao establishment
@@ -1338,7 +1340,7 @@ Lista atendimentos do cliente logado, com filtros opcionais de status e periodo.
 
 | Param | Tipo | Descricao |
 |-------|------|-----------|
-| status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED |
+| status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED, LATE |
 | dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
 | dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
 
@@ -1509,21 +1511,55 @@ Retoma atendimento: PAUSED -> IN_PROGRESS.
 
 ---
 
+### PATCH /attendances/{attendanceId}/late
+Marca um cliente que nao chegou como atrasado (item #19): `SCHEDULED -> LATE` (ou `LATE -> LATE`).
+O cliente **cai uma posicao** na fila (reposicionado atras do proximo, empurrando o `scheduledTime`)
+mas **NAO sai** dela. Pode ser chamado de novo para cair mais. Se ja for o ultimo da fila, apenas
+vira `LATE` sem mudar de posicao. So o profissional **dono** do attendance pode marcar.
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `QueueResponse` (overview da fila atualizado). Dispara broadcast WS da fila da loja.
+
+**Erros:** `400` status invalido (so `SCHEDULED`/`LATE` podem ser marcados) · `403` profissional nao e o dono / sem role PROFESSIONAL · `404` attendance inexistente · `401` sem token.
+
+**Testes:** Integracao (`LateAttendanceIntegrationTest`)
+
+---
+
+### PATCH /attendances/{attendanceId}/undo-late
+Desfaz o atraso (item #19): `LATE -> SCHEDULED`, **mantendo a posicao atual** (a que o cliente caiu —
+nao reposiciona de volta). Usado quando o cliente chega mas ainda nao vai ser atendido na hora.
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `QueueResponse`. Dispara broadcast WS da fila da loja.
+
+**Erros:** `400` quando o attendance nao esta `LATE` · `403` / `404` / `401` (idem acima).
+
+**Testes:** Integracao (`LateAttendanceIntegrationTest`)
+
+---
+
 ### Maquina de estados do Attendance
 
 ```
 SCHEDULED ──start──> IN_PROGRESS ──finish──> FINISHED
-    │                    │    ▲
-    │                    │    │
-    │                  pause resume
-    │                    │    │
-    │                    ▼    │
-    │                  PAUSED
+    │  ▲                 │    ▲
+    │  │                 │    │
+   late undo-late      pause resume
+    │  │                 │    │
+    ▼  │                 ▼    │
+   LATE ───start───>   PAUSED
+    │                    (LATE tambem pode ir direto a IN_PROGRESS)
     │
     └──cancel/leave──> CANCELLED  (cliente: so SCHEDULED)
 
 IN_PROGRESS ──remove──> CANCELLED  (profissional)
 PAUSED      ──remove──> CANCELLED  (profissional)
+
+LATE: cliente atrasado (item #19) — cai 1 posicao mas continua na fila de espera (junto com SCHEDULED).
+      `late` pode repetir (cai mais); `undo-late` volta a SCHEDULED na posicao atual; `start` atende direto.
 ```
 
 ---
@@ -2124,6 +2160,8 @@ A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` R
 | `PATCH /attendances/{id}/finish` | ✅ | ✅ `ATTENDANCE_FINISHED` |
 | `PATCH /attendances/{id}/pause` | ✅ | — |
 | `PATCH /attendances/{id}/resume` | ✅ | — |
+| `PATCH /attendances/{id}/late` | ✅ | — |
+| `PATCH /attendances/{id}/undo-late` | ✅ | — |
 
 O broadcast e disparado pela camada web **apos a transacao commitada**, entao o snapshot reflete o estado persistido. Envio e best-effort: falha de WS e logada e nunca quebra a resposta HTTP.
 
@@ -2167,6 +2205,28 @@ Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22.
 **Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Opcional: keep-warm (ping a cada ~10min) ou tier pago pra eliminar a hibernacao.
 
 > **Status de alinhamento:** backend ✅ pronto (config aplicada). **Fronts:** implementar o portao `waitForBackend()` no splash. Quando um front concluir, ele avisa e o backend revisa o alinhamento. Backlog #35 (broker externo) **so** quando escalar pra multi-instancia — readiness/cold start e independente dele.
+
+---
+
+## 18d. Rollback / deploy seguro (anti-quebra)
+
+**Objetivo:** se um deploy sair e o teste pos-deploy (Newman) falhar, o ambiente **volta sozinho ao ultimo commit que passou** — o app instalado (APK) nunca fica apontando para uma API quebrada.
+
+> ⚠️ **O APK de demo (`eas build ... --profile preview`) aponta para `dev`/Render = HOMOLOG**, nao para prod. Entao o rollback que protege a demo para usuarios e o de **HOMOLOG (Render)**. O de PROD (Railway) protege a Play Store (AAB `production`).
+
+**Como funciona (`.github/workflows/ci.yml`):**
+1. **Marca o last-good:** quando o Newman pos-deploy passa (`--bail`), o pipeline empurra a tag `homolog-last-good` (apos `test-homolog`) ou `prod-last-good` (apos `test-prod`) no commit que acabou de validar. Essas tags = "ultimo commit comprovadamente bom" de cada ambiente.
+2. **Auto-rollback:** se o deploy **saiu** mas o Newman **falhou**, dispara o job `rollback-homolog`/`rollback-prod`:
+   - **HOMOLOG (Render):** redeploy do commit `homolog-last-good` via API do Render (`POST /v1/services/{id}/deploys` com `commitId`), depois espera `readiness=UP`.
+   - **PROD (Railway):** `checkout` da tag `prod-last-good` + `railway up`, depois espera `health=UP`.
+   - Condicao: `needs.deploy-*.result == 'success' && needs.test-*.result == 'failure'` (so reverte quando o problema e o codigo deployado, nao quando o `mvn test` nem chegou a deployar).
+3. **Rollback manual** (`.github/workflows/rollback.yml`): botao **Run workflow** → escolhe ambiente (`homolog`/`prod`) e, opcionalmente, um commit/tag especifico (vazio = ultimo last-good). Util para reverter sob demanda mesmo sem falha de CI.
+
+**Pendente fora do codigo (Andre) — para o auto-rollback de HOMOLOG funcionar (o do APK!):** adicionar 2 secrets no GitHub Actions:
+- `RENDER_API_KEY` — API key da conta Render (Account Settings → API Keys).
+- `RENDER_SERVICE_ID` — id do servico (`srv-...`, na URL do dashboard do servico).
+
+Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warning::`), mas o Render **nao** reverte sozinho — ai e manual pelo painel do Render. O rollback de PROD (Railway) ja funciona com os secrets existentes (`RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`).
 
 ---
 
@@ -2230,10 +2290,12 @@ Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22.
 ### Fluxo 5: Profissional gerencia atendimento
 
 ```
-1. PATCH /attendances/{id}/start    → SCHEDULED → IN_PROGRESS
+1. PATCH /attendances/{id}/start    → SCHEDULED → IN_PROGRESS  (aceita LATE → IN_PROGRESS)
 2. PATCH /attendances/{id}/pause    → IN_PROGRESS → PAUSED (opcional)
 3. PATCH /attendances/{id}/resume   → PAUSED → IN_PROGRESS (opcional)
 4. PATCH /attendances/{id}/finish   → IN_PROGRESS → FINISHED
+   PATCH /attendances/{id}/late       → SCHEDULED → LATE  (atrasado: cai 1 posicao, opcional/repetivel)
+   PATCH /attendances/{id}/undo-late  → LATE → SCHEDULED (opcional)
 ```
 
 ---
@@ -2342,6 +2404,8 @@ Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22.
 | PATCH /attendances/{id}/finish | ✅ |
 | PATCH /attendances/{id}/pause | ✅ |
 | PATCH /attendances/{id}/resume | ✅ |
+| PATCH /attendances/{id}/late | 🟡 Integracao |
+| PATCH /attendances/{id}/undo-late | 🟡 Integracao |
 | POST /professional-queue/add-attendance | 🟡 Integracao |
 | POST /professional-queue/add-quest-attendance | 🟡 Integracao |
 | DELETE /professional-queue/{id}/remove | 🟡 Integracao |

@@ -219,8 +219,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] startAttendance — attendanceId={} professionalId={}",
                 attendance.getId(), professional.getId());
 
-        if (!attendance.getStatus().equals(AttendanceStatus.SCHEDULED)) {
-            log.warn("[Attendance] startAttendance — invalid status: current={} required=SCHEDULED",
+        // Aceita SCHEDULED ou LATE (item #19): um cliente atrasado pode ser atendido direto
+        // quando finalmente chega, sem precisar desfazer o LATE antes.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
+            log.warn("[Attendance] startAttendance — invalid status: current={} required=SCHEDULED|LATE",
                     attendance.getStatus());
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
