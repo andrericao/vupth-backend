@@ -494,19 +494,27 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
     @Override
     @Transactional
-    public ServiceItemResponse createServiceItemForEstablishment(UUID ownerId, UUID establishmentId, ServiceItemRequest request) {
-        log.info("[Professional] createServiceItemForEstablishment — owner={} establishment={} type={} name={}",
-                ownerId, establishmentId, request.serviceItemType(), request.customName());
+    public ServiceItemResponse createServiceItemForEstablishment(UUID requesterId, UUID establishmentId, ServiceItemRequest request) {
+        log.info("[Professional] createServiceItemForEstablishment — requester={} establishment={} type={} name={}",
+                requesterId, establishmentId, request.serviceItemType(), request.customName());
 
         Establishment establishment = establishmentRepository.findById(establishmentId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
 
-        if (establishment.getOwner() == null || !establishment.getOwner().getId().equals(ownerId)) {
-            throw new EstablishmentAccessDeniedException("User " + ownerId + " is not the owner of establishment " + establishmentId);
-        }
+        Professional requester = professionalRepository.findByIdWithBaseUser(requesterId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(requesterId));
 
-        Professional professional = professionalRepository.findByIdWithBaseUser(ownerId)
-                .orElseThrow(() -> new ProfessionalNotFoundException(ownerId));
+        // S1: o owner OU um profissional AFILIADO a esta loja pode cadastrar servico.
+        // O servico fica sob o professional do requester (ServiceItem.professional ->
+        // professional.establishment = a loja), entao o afiliado cadastra o proprio servico.
+        boolean isOwner = establishment.getOwner() != null
+                && establishment.getOwner().getId().equals(requesterId);
+        boolean isAffiliated = requester.getEstablishment() != null
+                && requester.getEstablishment().getId().equals(establishmentId);
+        if (!isOwner && !isAffiliated) {
+            throw new EstablishmentAccessDeniedException(
+                    "User " + requesterId + " is neither the owner nor an affiliated professional of establishment " + establishmentId);
+        }
 
         List<ServiceItem> services = establishmentService.getServicesItemByEstablishment(establishmentId);
         boolean nameExists = services.stream()
@@ -515,7 +523,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
             throw new ServiceItemAlreadyExistsException(request.customName());
         }
 
-        return serviceItemService.createServiceItem(professional, request);
+        return serviceItemService.createServiceItem(requester, request);
     }
 
     // ─────────────────────────────────────────────────────────────

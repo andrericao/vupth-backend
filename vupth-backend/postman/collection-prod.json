@@ -10312,7 +10312,7 @@
 					]
 				},
 				{
-					"name": "POST [ERRO] add service item - token PROFESSIONAL sem OWNER (403)",
+					"name": "POST add service item - PROFESSIONAL afiliado cadastra proprio servico (S1) -> 201",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -10334,7 +10334,7 @@
 						},
 						"body": {
 							"mode": "raw",
-							"raw": "{\"serviceItemType\":\"BARBA\",\"customName\":\"Teste Barba\",\"price\":20.00,\"estimatedMinutes\":15}",
+							"raw": "{\"serviceItemType\":\"BARBA\",\"customName\":\"Servico Afiliado S1\",\"price\":28.00,\"estimatedMinutes\":20}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -10359,7 +10359,13 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(\"Status 403 - PROFESSIONAL sem OWNER nao pode adicionar\", () => pm.response.to.have.status(403));"
+									"// S1: profissional AFILIADO a loja (nao-owner) pode cadastrar o proprio servico.",
+										"pm.test(\"Status 201 - afiliado cadastra servico (S1)\", () => pm.response.to.have.status(201));",
+										"pm.test(\"Servico fica sob o establishment da loja\", () => {",
+										"  const r = pm.response.json();",
+										"  pm.expect(r.id).to.be.a(\"string\");",
+										"  pm.expect(r.establishmentId).to.eql(pm.collectionVariables.get(\"owner_establishment_id\"));",
+										"});"
 								]
 							}
 						}

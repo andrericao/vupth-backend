@@ -121,7 +121,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/affiliations").hasRole("PROFESSIONAL")
 
                         // ── ROLE_OWNER ────────────────────────────────────────────────────
-                        .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
+                        // S1: alem do owner, um profissional AFILIADO a loja pode cadastrar o proprio servico
+                        // (a checagem owner-ou-afiliado fica no service).
+                        .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")
