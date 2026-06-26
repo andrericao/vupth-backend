@@ -370,7 +370,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         var status = attendance.getStatus();
+        // LATE (item #19) continua na fila de espera — o profissional tambem pode removê-lo daqui.
         if (status != AttendanceStatus.SCHEDULED
+                && status != AttendanceStatus.LATE
                 && status != AttendanceStatus.IN_PROGRESS
                 && status != AttendanceStatus.PAUSED) {
             throw new AttendanceInvalidStatusException(status, AttendanceStatus.SCHEDULED);

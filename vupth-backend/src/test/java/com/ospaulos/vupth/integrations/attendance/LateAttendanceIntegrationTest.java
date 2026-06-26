@@ -228,6 +228,28 @@ class LateAttendanceIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    @Order(14)
+    @DisplayName("PATCH /professional-queue/{id}/remove — remove um cliente LATE da fila → CANCELLED")
+    void removeFromQueue_acceptsLateAttendance() throws Exception {
+        String late = createScheduled(900);
+        createScheduled(901); // proximo, para o late ter como cair
+
+        markLate(late, ownerProfToken);
+        assertThat(statusOf(late)).isEqualTo(AttendanceStatus.LATE);
+
+        mvc.perform(patch("/professional-queue/{id}/remove", late)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andDo(print());
+
+        assertThat(statusOf(late)).isEqualTo(AttendanceStatus.CANCELLED);
+        assertThat(waitingIndexOf(late))
+                .as("cliente removido sai da fila de espera")
+                .isEqualTo(-1);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Errors
     // ─────────────────────────────────────────────────────────────

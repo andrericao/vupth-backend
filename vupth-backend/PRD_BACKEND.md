@@ -1640,7 +1640,7 @@ Adiciona um guest (sem cadastro) na fila.
 ---
 
 ### DELETE /professional-queue/{attendanceId}/remove
-Profissional cancela um attendance. Aceita status: SCHEDULED, IN_PROGRESS, PAUSED.
+Profissional cancela um attendance. Aceita status: SCHEDULED, LATE (item #19), IN_PROGRESS, PAUSED.
 
 **Acesso:** PROFESSIONAL
 
