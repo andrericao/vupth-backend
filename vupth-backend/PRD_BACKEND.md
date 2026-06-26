@@ -2779,6 +2779,20 @@ Decisao 2026-06-16 (Andre). **✅ BACKEND CONCLUIDO (2026-06-25).** Pos-MVP. Mes
 - Unit (`QueueUtilsTest`): `effectiveEstimatedMinutes` (normal cheio, encaixe 0 no ingresso, ramp linear por fatia, boca da fila = D, length 0, null-safe) + `lockedClientWait` com encaixe rampado.
 - Integracao (`FitInAttendanceIntegrationTest`): posicionamento (apos N / frente / alem do fim clampado), ramp via ETA total (0 ao encaixar -> +1 fatia por cancelamento da frente -> D na boca), cliente de tras sem salto no instante do encaixe, undo-fit, e erros (400 status/aheadCount, 400 undo nao-encaixe, 403/404 ownership, 401 sem token, 403 client, 404 inexistente).
 
+**🔗 HANDOFF PARA OS FRONTS (item #38 — backend pronto, consumir assim):**
+
+- **Front-Partner (acao de encaixar):**
+  - Encaixar: `PATCH /attendances/{attendanceId}/fit-in?aheadCount=N` com token PROFESSIONAL (dono). `N` = quantos clientes ficam **a frente** do encaixado (ele vira o `N+1`-esimo). Ex.: "encaixar daqui a 5 cortes" -> `aheadCount=5`. Resposta: `QueueResponse` (a fila ja atualizada). UI sugerida: no card de um cliente da fila, acao "Encaixar" + escolher depois de quantos atendimentos.
+  - Desfazer: `PATCH /attendances/{attendanceId}/undo-fit` (mesmo token). Volta o atendimento ao tempo cheio, mantendo a posicao.
+  - Erros a tratar: `400` (status invalido — so da pra encaixar quem esta SCHEDULED/LATE — ou `aheadCount` negativo), `403/404` (nao e o dono / inexistente).
+  - **Nao precisa calcular nada de tempo** — o backend faz o ramp.
+
+- **Front-Client (estimativa):**
+  - **Nada novo a implementar.** A estimativa que ja e consumida (`GET /client-queue/{attendanceId}/wait-time?clientId=` -> `estimatedWaitingTime`/`startTime`, e `GET /client-queue/{professionalId}/queue` -> `totalEstimatedMinutes`) **ja vem suavizada**: quando alguem e encaixado a frente, o tempo do encaixe entra **aos poucos** (nao pula de uma vez). O cliente nao ve o campo `is_fit` e nao sabe que houve encaixe — so ve a estimativa subir gradualmente.
+  - Recomendacao de UX: manter o polling/refresh ja existente (ou o WebSocket da fila) — a cada atualizacao o numero sobe no maximo uma "fatia", entao **nao** precisa de animacao especial anti-solavanco do lado do app.
+
+- **Contrato:** nenhum campo novo exposto ao cliente; `QueueResponse`/`ClientInQueueResponse` inalterados. `is_fit`/`fit_ahead_length` sao internos (nao serializados nas respostas de fila).
+
 ### Item 39 — Multa / aviso de cancelamento tardio
 
 Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
