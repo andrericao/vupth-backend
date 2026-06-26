@@ -2523,6 +2523,41 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 > - **Front-Client** — app React Native do cliente final
 > - **Front-Partner** — app React Native do profissional/owner
 
+### 🎯 Pendencias abertas do BACKEND — por prioridade (FONTE UNICA)
+
+> **Como manter (regra 2026-06-25):** esta lista contem **so o que falta no backend**, numerada **1..N por prioridade**.
+> Quando um item fecha, ele **sai daqui** (vai para "Concluidos" abaixo) e a lista **renumera** — nao deixar buracos nem inflar.
+> Os **commits referenciam o NOME** do item (ex.: `feat: intencao de fila com horario-alvo`), nao o numero (que e volatil).
+> As tabelas detalhadas mais abaixo (CRITICO/ALTA/MEDIA/BAIXA/PARTNER, numeracao historica 1-41) sao **referencia/detalhe** — esta lista aqui manda no "o que falta".
+
+| # | Pendencia (backend) | Status | Detalhe |
+|---|---------------------|--------|---------|
+| 1 | Intencao de fila com horario-alvo (agenda + fila) | 🔵 em andamento | secao "Item 40" |
+| 2 | Multa / cancelamento tardio + escalada de no-show | ⬜ aberto | secao "Item 39" (reusa LATE/#19) |
+| 3 | Troca mutua de posicao na fila (aceite dos dois, `true && true`) | ⬜ aberto | NOVO — TODO ja existe em `ClientServiceImpl` |
+| 4 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
+| 5 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
+| 6 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
+| 7 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 8 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 9 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
+| 10 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 11 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 12 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` |
+| 13 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 14 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 15 | Precificacao calculada no backend | ⬜ aberto (dep. #17) | secao "Item 36" |
+| 16 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 17 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao |
+| 18 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 19 | Agendamento futuro dia+hora (overlap c/ #1) | ⬜ aberto | reavaliar apos #1 |
+| 20 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · Skip de refeicao (#41).
+**Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
+
+---
+
 ### CRITICO — implementar logo apos MVP
 
 | # | Item | Descricao | Ambientes |
@@ -2810,6 +2845,18 @@ Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
 2. **Valor/forma:** aviso so, strike, ou cobranca (Fase 2) — fixo vs %?
 3. **Reincidencia e isencoes:** quantos strikes ate restringir; o que conta como motivo legitimo.
 4. **Efeito real na fila:** um cancelamento normalmente **adianta** o proximo; a "multa" aqui e dissuasao/compensacao, nao recalculo — confirmar o proposito (reduzir no-show) vs impacto tecnico.
+
+**Escalada de no-show (Andre 2026-06-25).** O *no-show* (cliente que nao comparece) ja tem o tratamento de **cair de posicao** no Item #19 (LATE): o profissional marca `/late`, o ausente cai 1 posicao e atende-se o seguinte. A regra desta secao adiciona a **escalada**: se o cliente, depois de cair, **nao aparece de novo** quando volta a ser chamado (ex.: cai de novo para a 2a posicao), ele e **removido da fila + recebe a multa/strike**. Ou seja: LATE (#19) cuida do "cai de posicao"; este item cuida do "ausente reincidente -> sai + penalidade". Presenca/no-show do Item 40 (intencao) tambem desagua aqui.
+
+### Item 42 — Troca mutua de posicao na fila (NOVO, 2026-06-25)
+
+Decisao 2026-06-25 (Andre). **Status: especificado, nao implementado.** (Numeracao historica; na lista-fonte e a pendencia **#3**.)
+
+**Objetivo.** Dois clientes **trocam de posicao** (indice) na fila, **por consentimento mutuo** — independente de atraso. Casos: um cliente que sabe que vai se atrasar pede para trocar para **depois**; outro que quer ser atendido antes troca para **antes**. E uma troca simples de indice entre dois atendimentos da mesma fila.
+
+**Regra de autorizacao (chave).** A troca so efetiva se **os dois aceitarem**: `aceiteA && aceiteB` (booleano AND). Um inicia a proposta; o outro confirma; so entao os indices/`scheduledTime` sao trocados. Sem o aceite dos dois, nada muda.
+
+**Notas de implementacao (a detalhar quando entrar):** ja existe o placeholder `// TODO: Trocar lugar na fila` em `ClientServiceImpl`. Reusar o padrao de reposicionamento por `scheduledTime` (mesmo do #19/#38): trocar os `scheduledTime` dos dois atendimentos. Broadcast WS da fila apos a troca. Pontos a definir: quem pode propor (cliente<->cliente; profissional media?), expiracao da proposta pendente, e se vale so para `SCHEDULED` (nao `IN_PROGRESS`).
 
 ### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
 
