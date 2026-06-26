@@ -54,5 +54,6 @@ public interface ProfessionalService {
 
     public ServiceItemResponse createServiceItem(UUID professionalId, ServiceItemRequest request);
 
-    public ServiceItemResponse createServiceItemForEstablishment(UUID ownerId, UUID establishmentId, ServiceItemRequest request);
+    // S1: requester pode ser o OWNER ou um PROFESSIONAL afiliado a loja.
+    public ServiceItemResponse createServiceItemForEstablishment(UUID requesterId, UUID establishmentId, ServiceItemRequest request);
 }

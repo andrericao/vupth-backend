@@ -162,6 +162,7 @@ Todos os erros seguem um dos dois formatos:
 | 409 | `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS` | Sinonimo ja existe para o tipo de servico (base ou adicionado) |
 | 409 | `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` | Profissional tem atendimentos ativos (impede sair do establishment) |
 | 409 | `INTERVAL_CONFLICT` | Conflito de horario de intervalo |
+| 405 | `METHOD_NOT_ALLOWED` | Metodo HTTP errado para a rota (ex.: PATCH numa rota DELETE) |
 | 422 | `VALIDATION_ERROR` | Campos obrigatorios faltando ou formato invalido |
 | 500 | `INTERNAL_ERROR` | Erro inesperado |
 
@@ -2487,7 +2488,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | ~~GET /establishment/mine~~ | ~~Alta~~ | ~~Listar establishments do owner logado~~ | **IMPLEMENTADO** |
 | ~~GET /professional/me~~ | ~~Alta~~ | ~~Retornar dados do profissional autenticado~~ | **IMPLEMENTADO** |
 | Regra owner unico nao pode se desafiliar | Baixa | Owner unico deve adicionar outro owner (transferir) antes de sair, ou deletar o establishment. Desafiliacao de owner por outro owner exige confirmacao da contraparte. Ao perder ultimo establishment, usuario perde role OWNER | `Establishment` / `AffiliationController` — Backend |
-| Adicao de servico por funcionario da mesma loja | Media | Profissional afiliado pode adicionar ServiceItem ao establishment onde trabalha (hoje so owner pode). Novo endpoint ou permissao adicional em POST /establishment/{id}/service-items | Backend + **Front-Partner** |
+| ~~Adicao de servico por funcionario da mesma loja (S1)~~ | ~~Media~~ | ~~Profissional afiliado pode adicionar ServiceItem ao establishment onde trabalha~~ | ✅ **BACKEND CONCLUIDO** — `POST /establishment/{id}/service-items` agora aceita owner OU afiliado (servico fica sob o professional do requester). Ver secao do endpoint. → resta **Front-Partner** ligar a acao pro afiliado |
 | Busca de establishment por nome/apelido do funcionario (cliente) | Media | Cliente que nao sabe o nome da loja busca pelo `firstName` OU `nickname` do profissional e recebe os establishments dele (ordenado por fila). Desenho recomendado: novo param `?professional=<termo>` no `GET /establishment` (LIKE parcial, case-insensitive, casa firstName/nickname). Apelido ja exposto na tela do estabelecimento e na busca do owner. | Backend + **Front-Client** |
 
 
@@ -2495,7 +2496,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | Bug | Endpoint | Erro | Prioridade |
 |-----|----------|------|------------|
-| BUG 1 | `GET /establishment/{id}/affiliations` | 500 — `Cannot invoke UserDetailsImpl.getUserId() because user is null`. Provavel: rota sem `.authenticated()` no SecurityConfig, JWT filter nao popula SecurityContext | ALTA |
+| ~~BUG 1~~ | ~~`GET /establishment/{id}/affiliations` → 500~~ | ✅ **RESOLVIDO / NAO REPRODUZ** (reconferido 2026-06-26). A query `findByEstablishmentAndStatus` faz `JOIN FETCH` de professional+baseUser+establishment (tudo que o `fromEntity` le) desde 2026-05-23 — sem lazy-init. Coberto por integracao (Order 13 → 200) + Postman `03e` + Newman verde. | ~~ALTA~~ |
 | BUG 2 | `POST /establishment/{id}/service-items` | "Nao foi possivel adicionar o servico". Verificar: enum ServiceItemType vs valores do front, campo `estimatedMinutes` obrigatorio, tipo do campo `price` | ALTA |
 | BUG 3 | `GET /attendances?establishmentId=X&status=Y` | "Carregar atendimento" nao funciona. Verificar se endpoint existe e retorna dados corretos | ALTA |
 
