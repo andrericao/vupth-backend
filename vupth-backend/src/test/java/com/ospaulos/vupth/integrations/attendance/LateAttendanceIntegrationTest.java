@@ -230,7 +230,7 @@ class LateAttendanceIntegrationTest {
 
     @Test
     @Order(14)
-    @DisplayName("PATCH /professional-queue/{id}/remove — remove um cliente LATE da fila → CANCELLED")
+    @DisplayName("DELETE /professional-queue/{id}/remove — remove um cliente LATE da fila → CANCELLED")
     void removeFromQueue_acceptsLateAttendance() throws Exception {
         String late = createScheduled(900);
         createScheduled(901); // proximo, para o late ter como cair
@@ -238,7 +238,7 @@ class LateAttendanceIntegrationTest {
         markLate(late, ownerProfToken);
         assertThat(statusOf(late)).isEqualTo(AttendanceStatus.LATE);
 
-        mvc.perform(patch("/professional-queue/{id}/remove", late)
+        mvc.perform(delete("/professional-queue/{id}/remove", late)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())

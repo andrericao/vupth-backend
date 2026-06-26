@@ -5293,7 +5293,7 @@
 						}
 					],
 					"request": {
-						"method": "PATCH",
+						"method": "DELETE",
 						"header": [
 							{
 								"key": "Authorization",
@@ -5563,7 +5563,7 @@
 						}
 					],
 					"request": {
-						"method": "PATCH",
+						"method": "DELETE",
 						"header": [
 							{
 								"key": "Authorization",
@@ -5592,7 +5592,7 @@
 						}
 					],
 					"request": {
-						"method": "PATCH",
+						"method": "DELETE",
 						"header": [
 							{
 								"key": "Authorization",
