@@ -170,11 +170,13 @@ public class QueueServiceImpl implements QueueService {
         int totalEstimated = 0;
         int totalRemaining = 0;
 
-        for (Attendance attendance : scheduledQueue) {
+        for (int i = 0; i < scheduledQueue.size(); i++) {
+            Attendance attendance = scheduledQueue.get(i);
 
             AttendanceInQueueResponse attendanceInfo = attendanceService.buildAttendanceInQueueResponse(attendance);
 
-            int estimatedMinutes = attendance.getEstimatedTotalMinutes();
+            // item #38: encaixe contribui tempo rampado (i = clientes a frente agora); NORMAL = tempo cheio.
+            int estimatedMinutes = QueueUtils.effectiveEstimatedMinutes(attendance, i);
             totalEstimated += estimatedMinutes;
             totalRemaining += estimatedMinutes;
 

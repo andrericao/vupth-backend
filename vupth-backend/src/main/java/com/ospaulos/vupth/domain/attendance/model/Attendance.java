@@ -86,6 +86,23 @@ public class Attendance implements Serializable {
     @Column(name = "total_value", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalValue;
 
+    /**
+     * Encaixe (item #38): marca este atendimento como "encaixado" no meio da fila. Enquanto
+     * espera (SCHEDULED), ele NAO contribui o tempo cheio (D) para o ETA dos clientes de tras —
+     * contribui um valor RAMPADO que sobe de 0 ate D conforme a fila anda, para que o tempo do
+     * encaixe seja absorvido sem solavanco. Ver {@code QueueUtils.effectiveEstimatedMinutes}.
+     */
+    @Column(name = "is_fit", nullable = false)
+    private boolean fit = false;
+
+    /**
+     * Encaixe (item #38): numero de clientes que estavam a frente NO INSTANTE do encaixe
+     * (o "length inicial"). E o divisor do ramp: cada cliente que sai da frente libera uma
+     * fatia de {@code D / fitAheadLength}. Null quando {@code fit == false}.
+     */
+    @Column(name = "fit_ahead_length")
+    private Integer fitAheadLength;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;

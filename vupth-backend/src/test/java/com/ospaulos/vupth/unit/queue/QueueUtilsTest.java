@@ -247,4 +247,74 @@ class QueueUtilsTest {
         assertThat(QueueUtils.lockedClientWait(List.of(), -5, List.of(), java.time.LocalDate.parse("2026-06-16")))
                 .isZero(); // currentRemaining negativo e tratado como 0
     }
+
+    // ── Encaixe / ramp (item #38) ────────────────────────────────
+
+    /** Atendimento encaixado (isFit): contribui rampado. D=minutes, length inicial=aheadLength. */
+    private Attendance fitAtt(int minutes, int aheadLength) {
+        Attendance a = mock(Attendance.class);
+        when(a.getEstimatedTotalMinutes()).thenReturn(minutes);
+        when(a.isFit()).thenReturn(true);
+        when(a.getFitAheadLength()).thenReturn(aheadLength);
+        return a;
+    }
+
+    @Test
+    @DisplayName("effective: atendimento NORMAL contribui sempre o tempo cheio (sem ramp)")
+    void effective_normal_full() {
+        var normal = att(30);
+        assertThat(QueueUtils.effectiveEstimatedMinutes(normal, 0)).isEqualTo(30);
+        assertThat(QueueUtils.effectiveEstimatedMinutes(normal, 9)).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("effective: encaixe no instante (index == length) contribui 0 — ninguem sente")
+    void effective_fit_atInsertion_zero() {
+        // D=40, length=5, recem-encaixado -> 5 clientes ainda a frente -> 0 cotas maduras
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fitAtt(40, 5), 5)).isZero();
+    }
+
+    @Test
+    @DisplayName("effective: ramp linear sobe uma fatia (D/length) a cada cliente que sai da frente")
+    void effective_fit_rampSteps() {
+        // D=40, length=5 -> fatia = 8 min. index = clientes a frente agora.
+        Attendance fit = fitAtt(40, 5);
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fit, 5)).isEqualTo(0);   // 0 cotas
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fit, 4)).isEqualTo(8);   // 1 cota
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fit, 3)).isEqualTo(16);  // 2 cotas
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fit, 2)).isEqualTo(24);  // 3 cotas
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fit, 1)).isEqualTo(32);  // 4 cotas
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fit, 0)).isEqualTo(40);  // boca da fila = D cheio
+    }
+
+    @Test
+    @DisplayName("effective: na boca da fila (index 0) e alem do length o encaixe contribui o D cheio")
+    void effective_fit_atFrontFull() {
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fitAtt(40, 5), 0)).isEqualTo(40);
+        // index negativo (clamp) tambem -> cheio
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fitAtt(40, 5), -1)).isEqualTo(40);
+    }
+
+    @Test
+    @DisplayName("effective: encaixe sem ninguem a frente (length 0) contribui cheio desde o inicio")
+    void effective_fit_zeroLength_full() {
+        assertThat(QueueUtils.effectiveEstimatedMinutes(fitAtt(40, 0), 0)).isEqualTo(40);
+    }
+
+    @Test
+    @DisplayName("effective: null-safe (atendimento nulo -> 0)")
+    void effective_nullSafe() {
+        assertThat(QueueUtils.effectiveEstimatedMinutes(null, 0)).isZero();
+    }
+
+    @Test
+    @DisplayName("lockedClientWait: encaixe a frente entra rampado conforme a posicao dele na fila")
+    void lockedWait_withFit_ramped() {
+        // fila a frente do cliente: [normal 30, encaixe(D=40,len=5) na posicao 1]
+        // o encaixe esta no index 1 -> 4 cotas maduras de fatia 8 -> contribui 32
+        var ahead = List.of(att(30), fitAtt(40, 5));
+        // 0 (atual) + 30 (normal) + 32 (encaixe rampado) = 62
+        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(), java.time.LocalDate.parse("2026-06-16")))
+                .isEqualTo(62);
+    }
 }

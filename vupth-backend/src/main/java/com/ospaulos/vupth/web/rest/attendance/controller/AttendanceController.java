@@ -228,6 +228,51 @@ public class AttendanceController {
     }
 
     /**
+     * PATCH /attendances/{attendanceId}/fit-in?aheadCount=5
+     *
+     * Encaixa o cliente no meio da fila (item #38): o atendimento e movido para logo apos
+     * {@code aheadCount} clientes. Os de tras absorvem o tempo do encaixe de forma rampada
+     * (sem solavanco na estimativa). O profissional logado deve ser o dono. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/fit-in")
+    public ResponseEntity<?> fitIn(
+            @PathVariable UUID attendanceId,
+            @RequestParam(defaultValue = "0") int aheadCount,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER FIT-IN {} aheadCount={} by user={}",
+                attendanceId, aheadCount, principal.getUserId());
+
+        QueueResponse response = professionalService.fitInAttendance(principal.getUserId(), attendanceId, aheadCount);
+
+        // WS: a fila mudou (cliente encaixado) → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/undo-fit
+     *
+     * Desfaz o encaixe (item #38): o atendimento deixa de rampar e passa a contribuir o tempo
+     * cheio, mantendo a posicao atual. O profissional logado deve ser o dono. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/undo-fit")
+    public ResponseEntity<?> undoFit(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER UNDO-FIT {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.undoFitInAttendance(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * PATCH /attendances/{attendanceId}/finish
      *
      * Finaliza um attendance IN_PROGRESS → FINISHED.

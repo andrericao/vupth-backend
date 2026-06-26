@@ -196,3 +196,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/025-create-attendance_locked_intervals.yaml
       relativeToChangeLogFile: true
+
+  # Encaixe com equalizacao de tempo (item #38): colunas is_fit + fit_ahead_length
+  - include:
+      file: changesets/80-attendance/004-add-attendance-fit-columns.yaml
+      relativeToChangeLogFile: true

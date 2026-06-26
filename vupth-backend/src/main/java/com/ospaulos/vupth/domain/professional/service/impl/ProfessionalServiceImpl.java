@@ -235,6 +235,114 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         target.setScheduledTime(newTime);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // ENCAIXE (item #38)
+    // ─────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public QueueResponse fitInAttendance(UUID professionalId, UUID attendanceId, int aheadCount) {
+        log.info("[Professional] fitInAttendance — professional={} attendance={} aheadCount={}",
+                professionalId, attendanceId, aheadCount);
+
+        if (aheadCount < 0) {
+            throw new IllegalArgumentException("aheadCount cannot be negative");
+        }
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        // So um cliente que esta esperando pode ser encaixado (aceita SCHEDULED ou LATE).
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+
+        // Reposiciona o atendimento para logo apos `aheadCount` OUTROS clientes e grava o
+        // "length inicial" do ramp (= quantos realmente ficaram a frente). Volta a SCHEDULED
+        // (sai de LATE se estava) — o ramp e marcado por isFit, nao pelo status.
+        int aheadLength = repositionForFit(attendance, waiting, aheadCount);
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        attendance.setFit(true);
+        attendance.setFitAheadLength(aheadLength);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] fitInAttendance — attendance={} encaixado apos {} clientes (ramp length={})",
+                attendanceId, aheadLength, aheadLength);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
+    public QueueResponse undoFitInAttendance(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] undoFitInAttendance — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        if (!attendance.isFit()) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Para de rampar: passa a contribuir o tempo cheio, mantendo a posicao atual.
+        attendance.setFit(false);
+        attendance.setFitAheadLength(null);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] undoFitInAttendance — attendance={} deixou de ser encaixe", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    /**
+     * Posiciona {@code target} logo apos {@code aheadCount} OUTROS atendimentos da fila de espera,
+     * ajustando o {@code scheduledTime} (ponto medio entre os vizinhos — mesmo padrao do #19).
+     * A fila vem ordenada por {@code scheduledTime} ASC e inclui o proprio {@code target}.
+     *
+     * @return o "length inicial" do ramp = quantos clientes realmente ficaram a frente (clamp
+     *         em [0, n_outros]); usado como divisor das fatias de tempo do encaixe.
+     */
+    private int repositionForFit(Attendance target, List<Attendance> waiting, int aheadCount) {
+        List<Attendance> others = waiting.stream()
+                .filter(a -> !a.getId().equals(target.getId()))
+                .toList();
+        if (others.isEmpty()) {
+            return 0; // unico na fila: sem ninguem a frente, sem ramp
+        }
+
+        int idx = Math.min(aheadCount, others.size()); // quantos ficam realmente a frente
+        java.time.OffsetDateTime newTime;
+        if (idx == 0) {
+            newTime = others.get(0).getScheduledTime().minusMinutes(1); // vai pra frente de todos
+        } else if (idx >= others.size()) {
+            newTime = others.get(others.size() - 1).getScheduledTime().plusMinutes(1); // vai pro fim
+        } else {
+            java.time.OffsetDateTime before = others.get(idx - 1).getScheduledTime();
+            java.time.OffsetDateTime after = others.get(idx).getScheduledTime();
+            long gapSeconds = java.time.Duration.between(before, after).getSeconds();
+            newTime = before.plusSeconds(Math.max(1, gapSeconds / 2));
+        }
+        target.setScheduledTime(newTime);
+        return idx;
+    }
+
     @Override
     public QueueResponse finishAttendance(UUID professionalId, UUID attendanceId) {
         log.info("[Professional] finishAttendance — professional={} attendance={}",

@@ -84,7 +84,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/{id}/service-items`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
@@ -1541,6 +1541,38 @@ nao reposiciona de volta). Usado quando o cliente chega mas ainda nao vai ser at
 
 ---
 
+### PATCH /attendances/{attendanceId}/fit-in?aheadCount=N
+Encaixa o cliente no meio da fila (item #38): move o atendimento (`SCHEDULED` ou `LATE`) para logo apos
+`N` clientes (reposiciona via `scheduledTime`, ponto-medio — mesmo padrao do #19), marca `is_fit=true` e
+grava `fit_ahead_length` = quantos realmente ficaram a frente (clamp em `[0, n_outros]`; volta a `SCHEDULED`).
+Os clientes **de tras** absorvem o tempo do encaixe (D) de forma **rampada**: o encaixe contribui `0` no
+ingresso e sobe `D/fit_ahead_length` a cada cliente que sai da frente, ate `D` na boca da fila — sem solavanco
+na estimativa (damping / slew-rate). So o profissional **dono** pode encaixar.
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `QueueResponse` (overview com o ETA ja rampado). Dispara broadcast WS da fila da loja.
+
+**Erros:** `400` status invalido (so `SCHEDULED`/`LATE`) ou `aheadCount` negativo · `403` nao-dono / sem role PROFESSIONAL · `404` inexistente · `401` sem token.
+
+**Testes:** Unit (`QueueUtilsTest`) + Integracao (`FitInAttendanceIntegrationTest`)
+
+---
+
+### PATCH /attendances/{attendanceId}/undo-fit
+Desfaz o encaixe (item #38): `is_fit=false` (limpa `fit_ahead_length`), **mantendo a posicao atual** —
+o atendimento volta a contribuir o tempo **cheio** (deixa de rampar).
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `QueueResponse`. Dispara broadcast WS da fila da loja.
+
+**Erros:** `400` quando o attendance nao e encaixe (`is_fit=false`) · `403` / `404` / `401` (idem acima).
+
+**Testes:** Integracao (`FitInAttendanceIntegrationTest`)
+
+---
+
 ### Maquina de estados do Attendance
 
 ```
@@ -2162,6 +2194,8 @@ A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` R
 | `PATCH /attendances/{id}/resume` | ✅ | — |
 | `PATCH /attendances/{id}/late` | ✅ | — |
 | `PATCH /attendances/{id}/undo-late` | ✅ | — |
+| `PATCH /attendances/{id}/fit-in` | ✅ | — |
+| `PATCH /attendances/{id}/undo-fit` | ✅ | — |
 
 O broadcast e disparado pela camada web **apos a transacao commitada**, entao o snapshot reflete o estado persistido. Envio e best-effort: falha de WS e logada e nunca quebra a resposta HTTP.
 
@@ -2296,6 +2330,8 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 4. PATCH /attendances/{id}/finish   → IN_PROGRESS → FINISHED
    PATCH /attendances/{id}/late       → SCHEDULED → LATE  (atrasado: cai 1 posicao, opcional/repetivel)
    PATCH /attendances/{id}/undo-late  → LATE → SCHEDULED (opcional)
+   PATCH /attendances/{id}/fit-in     → encaixe: move apos N clientes, is_fit=true (ETA rampado), opcional
+   PATCH /attendances/{id}/undo-fit   → encaixe: is_fit=false, volta ao tempo cheio (opcional)
 ```
 
 ---
@@ -2406,6 +2442,8 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | PATCH /attendances/{id}/resume | ✅ |
 | PATCH /attendances/{id}/late | 🟡 Integracao |
 | PATCH /attendances/{id}/undo-late | 🟡 Integracao |
+| PATCH /attendances/{id}/fit-in | 🟢 Unit + Integracao |
+| PATCH /attendances/{id}/undo-fit | 🟡 Integracao |
 | POST /professional-queue/add-attendance | 🟡 Integracao |
 | POST /professional-queue/add-quest-attendance | 🟡 Integracao |
 | DELETE /professional-queue/{id}/remove | 🟡 Integracao |
@@ -2548,7 +2586,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 35 | WebSocket — broker externo para escala | **[Pos-MVP]** Hoje o tempo real (secao 18b) usa **SimpleBroker em memoria** = 1 instancia. Para staging/prod com mais de uma instancia, trocar por **broker externo** (RabbitMQ ou Redis STOMP) via `enableStompBrokerRelay`. Tambem: tornar o broadcast **assincrono** (hoje sincrono no fluxo HTTP). | **Backend** (relay de broker externo + broadcast async) |
 | 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
 | 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | ✅ **[BACKEND CONCLUIDO 2026-06-22]** Entregue em 2 commits: (1) **pre-req** — ETA client-facing meal-aware (passou a usar `QueueUtils`, antes ignorava refeicoes); (2) **lock** — no ingresso o `Attendance` grava o conjunto de refeicoes que estavam no ETA do cliente (`attendance_locked_intervals`, migration 025) e o ETA individual (`GET /client-queue/{attendanceId}/wait-time`) passa a somar `restante do atual + atendimentos a frente (recalc) + duracao das refeicoes TRAVADAS` — a refeicao nao sai mais por ritmo da fila. Cai so por mudanca estrutural (todos depois sairam → ahead vazio), skip #41 (override) ou inicio/remocao. Testes: unit `QueueUtilsTest` (lock/mealsCounted) + integracao `ClientEtaMealLockIntegrationTest`. **Resta:** Front-Client consumir a estimativa estavel. **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** ✅ / **Front-Client** (estimativa estavel) |
-| 38 | Encaixe com equalizacao de tempo | **[Pos-MVP]** Profissional **encaixa** um cliente no meio da fila (ex.: posicao 4 de 8). Os clientes apos a posicao precisam absorver o tempo do encaixe (ex.: +30min), mas **sem salto brusco** e sem "saber" do encaixe. Mecanica: **amortizar** o tempo do encaixe entre os N atendimentos seguintes (30min / 4 = +7,5min cada) e fazer o acrescimo entrar **gradualmente** (a cada atendimento concluido), de modo que nenhum update mostre o salto inteiro. Quanto mais clientes a frente, menos cada um sente. O profissional assume o risco de satisfacao (decisao dele). Mesma familia do Item 37 (suavizacao da estimativa). **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend** (insercao em posicao + tempo amortizado pendente por atendimento) / **Front-Partner** (acao de encaixar) / **Front-Client** (estimativa suavizada) |
+| 38 | Encaixe com equalizacao de tempo | **✅ BACKEND CONCLUIDO** (Pos-MVP). Profissional **encaixa** um cliente no meio da fila via `PATCH /attendances/{id}/fit-in?aheadCount=N`. Os de tras absorvem o tempo do encaixe (D) **sem salto brusco**: o encaixe contribui um valor **rampado** (0 -> D em fatias de `D/fitAheadLength` a cada cliente que sai da frente). Damping do valor exibido (slew-rate). `undo-fit` reverte. **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend ✅** (colunas `is_fit`/`fit_ahead_length` + ramp em `QueueUtils.effectiveEstimatedMinutes` + endpoints) / **Front-Partner** (acao de encaixar, `aheadCount`) / **Front-Client** (estimativa ja suavizada vem da API) |
 | 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
 | 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | **[Pos-MVP]** Cliente quer ser atendido por volta de um **horario que escolhe** (ex.: 17:00), mas a fila esta com estimativa muito mais cedo (ex.: 11:00). Ele entra como **intencao** (nao confirmado): quem entra na fila depois dele recebe **indice menor** (passa na frente) enquanto o horario previsto de atendimento daquela posicao ainda for **antes** do alvo dele. Quando o previsto **cruza** o alvo (ex.: 17:15), ele para de ceder posicao e a presenca vira **confirmada** (deixa de ser so intencao). Funciona como uma **agenda** sobreposta a fila por ordem de chegada. **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | **Backend** (estado intencao vs confirmado no atendimento + horario-alvo + ordenacao que cede posicao ate o previsto cruzar o alvo, entao confirma) / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado) / **Front-Partner** (ver intencoes/agendados na fila) |
 | 41 | Skip de refeicao por dia ("Nao almocar") | ✅ **[BACKEND CONCLUIDO 2026-06-21]** Entregue `PATCH .../intervals/{intervalId}/skip` (pula a refeicao recorrente so naquele dia, default hoje) + `DELETE .../intervals/{intervalId}/skip` (desfaz). Skip por `(intervalo, data)` na tabela `professional_interval_skips` (migration 024), consumido pelo `QueueUtils` (day-scoped) — refeicao pulada cai do ETA de todos na hora, recorrencia intacta. Rebroadcast WS apos a operacao. 409 se ja iniciada/encerrada no dia (usar `finish`). Testes integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest`) + Postman folder 12 + PRD secao 18. **Resta:** Front-Partner ligar a acao "Nao almocar" do popup (eles chamam de "backend #17"). | **Backend** ✅ / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
@@ -2713,23 +2751,33 @@ refeicoes, que so entravam no overview do profissional). **(2) lock** — descri
 
 ### Item 38 — Encaixe com equalizacao de tempo
 
-Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP. Mesma familia do Item 37 (suavizacao da estimativa).
+Decisao 2026-06-16 (Andre). **✅ BACKEND CONCLUIDO (2026-06-25).** Pos-MVP. Mesma familia do Item 37 (suavizacao da estimativa). Resta: Front-Partner (acao de encaixar com `aheadCount`) e Front-Client (estimativa ja suavizada vem pronta da API).
 
-**Objetivo.** Permitir ao profissional **encaixar** um cliente que pede para ser atendido antes, no meio da fila (ex.: posicao 4 de 8). Os clientes apos o encaixe passam a esperar mais (o tempo do encaixe, ex.: +30min), mas a estimativa deles **nao deve dar um salto brusco** nem expor que houve encaixe.
+**Objetivo.** Permitir ao profissional **encaixar** um cliente que pede para ser atendido antes, no meio da fila (ex.: posicao 4 de 8). Os clientes apos o encaixe passam a esperar mais (o tempo do encaixe, ex.: +30min), mas a estimativa deles **nao deve dar um salto brusco**.
 
-**Mecanica (equalizacao):**
-- **Amortizar** o tempo do atendimento encaixado entre os **N atendimentos seguintes**: `acrescimo por cliente = duracao_encaixe / N`. Ex.: encaixe de 30min com 4 clientes apos -> **+7,5min cada**.
-- **Ramp gradual:** o acrescimo entra **aos poucos** (ex.: a cada atendimento concluido a frente), de modo que nenhum update unico mostre o salto inteiro — o tempo sobe "sem que os demais sintam".
-- **Quanto mais clientes a frente, menor o acrescimo** percebido por cada (o divisor N e maior).
-- **Responsabilidade do profissional:** ele sabe que pode comprometer a satisfacao de quem esperava; e decisao dele.
+**Mecanica implementada (ramp / damping do valor exibido):**
+- O atendimento encaixado guarda seu tempo cheio **D** (= `estimatedTotalMinutes`, soma dos serviceItems) e, enquanto espera, **NAO** contribui D para o ETA da fila — contribui um valor **rampado** que sobe de 0 ate D.
+- **Divisor = clientes a frente no instante do encaixe** (`fitAheadLength`, o "length inicial"). Cada cliente que **sai da frente** (FINISHED **ou** CANCELLED) libera uma **fatia de `D / fitAheadLength`**.
+- Formula (em `QueueUtils.effectiveEstimatedMinutes`): com `queueIndex` = clientes a frente AGORA,
+  `contribuicao = D * (fitAheadLength - queueIndex) / fitAheadLength` (clamp `[0, D]`).
+  No ingresso (`queueIndex == fitAheadLength`) contribui **0** — ninguem de tras sente; na boca da fila (`queueIndex == 0`) contribui **D inteiro** — que e quando o tempo vira real.
+- **Ramp dirigido pela saida da frente** ("saiu da fila adiciona"): nao ha cursor persistido nem scheduler — o `queueIndex` e derivado ao vivo da fila ordenada. Cancelamento da frente apenas **completa o ramp mais rapido** (auto-resolve o "fila encurtou", sem descarte nem redistribuicao).
+- Aplicado nos dois caminhos de ETA: `getQueueForProfessional` (overview, sem in-progress) e `lockedClientWait` (ETA individual do cliente). **Nota:** quando ha um atendimento IN_PROGRESS, o overview usa `calculateWaitingTimeForPosition` (projecao meal-aware) que **nao** ranfa — o ramp vale para o ETA individual do cliente (lockedClientWait) e para o overview sem in-progress.
 
-**Melhores praticas (referencia):** sistemas de ETA (mobilidade, delivery, filas de suporte) raramente mostram o recalculo cru — usam **amortizacao + damping + rate-limit de updates** (limitar o quanto o numero exibido muda por intervalo). A equalizacao descrita e exatamente isso. **Ressalva de transparencia:** suavizar a *curva* da estimativa e boa pratica; *esconder ativamente* que alguem furou a fila e decisao de produto com risco de confianca se percebido — manter como escolha consciente do dono.
+**Modelo de dados (Attendance):**
+- `is_fit` (BOOLEAN, default false) — marca o encaixe.
+- `fit_ahead_length` (INTEGER, null quando nao-encaixe) — o divisor do ramp.
+- Migration `80-attendance/004-add-attendance-fit-columns.yaml` (idempotente, sem context — roda em todos os ambientes).
 
-**Decisoes pendentes:**
-1. **Modelo de fila com posicao explicita:** o encaixe exige inserir um `Attendance` numa posicao especifica (hoje a ordem e por chegada). Definir como representar ordem/posicao.
-2. **Onde guardar o "tempo amortizado pendente":** por atendimento afetado (campo) ou derivado de um marcador de encaixe + cursor de ramp.
-3. **Granularidade do ramp:** por atendimento concluido (recomendado) vs por minuto.
-4. **Teto/limite** de equalizacao e o que acontece se a fila encurtar (cancelamentos) antes de distribuir tudo.
+**Endpoints (PROFESSIONAL, dono do attendance):**
+- `PATCH /attendances/{id}/fit-in?aheadCount=N` — move o atendimento (SCHEDULED ou LATE) para logo apos `N` clientes (reposiciona via `scheduledTime`, ponto-medio — mesmo padrao do #19 LATE), marca `is_fit=true` e grava `fit_ahead_length` = quantos realmente ficaram a frente (clamp em `[0, n_outros]`). Volta a SCHEDULED. `400` se status invalido ou `aheadCount` negativo; `403/404` ownership; `404` inexistente.
+- `PATCH /attendances/{id}/undo-fit` — desfaz o encaixe (`is_fit=false`, limpa length), mantendo a posicao atual; volta a contribuir o tempo cheio. `400` se nao era encaixe. Broadcast WS da fila nos dois.
+
+**Melhores praticas (referencia, pesquisa 2026-06-25):** valida o desenho — dispatch de ride-share **espalha o atraso proporcionalmente entre os ja comprometidos** ("small delay of already accepted customers proportional to remaining time, smooths sudden ETA changes"); filas de salao/walk-in fatiam o encaixe nas estimativas downstream. A tecnica do ramp e **slew-rate limiting / damping** do valor exibido. **Ressalva de transparencia:** suavizar a *curva* e boa pratica; *esconder ativamente* que alguem furou a fila e decisao de produto — escolha consciente do dono.
+
+**Cobertura de testes:**
+- Unit (`QueueUtilsTest`): `effectiveEstimatedMinutes` (normal cheio, encaixe 0 no ingresso, ramp linear por fatia, boca da fila = D, length 0, null-safe) + `lockedClientWait` com encaixe rampado.
+- Integracao (`FitInAttendanceIntegrationTest`): posicionamento (apos N / frente / alem do fim clampado), ramp via ETA total (0 ao encaixar -> +1 fatia por cancelamento da frente -> D na boca), cliente de tras sem salto no instante do encaixe, undo-fit, e erros (400 status/aheadCount, 400 undo nao-encaixe, 403/404 ownership, 401 sem token, 403 client, 404 inexistente).
 
 ### Item 39 — Multa / aviso de cancelamento tardio
 

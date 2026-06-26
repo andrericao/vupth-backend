@@ -28,6 +28,20 @@ public interface ProfessionalService {
      */
     public QueueResponse undoAttendanceLate(UUID professionalId, UUID attendanceId);
 
+    /**
+     * Encaixa um cliente no meio da fila (item #38): o atendimento e movido para logo apos
+     * {@code aheadCount} clientes (vira o {@code aheadCount+1}-esimo). Os que estavam a frente
+     * NAO sofrem impacto; os de tras absorvem o tempo do encaixe (D) de forma RAMPADA — entra em
+     * fatias de {@code D/aheadCount} a cada cliente que sai da frente, sem solavanco na estimativa.
+     */
+    public QueueResponse fitInAttendance(UUID professionalId, UUID attendanceId, int aheadCount);
+
+    /**
+     * Desfaz o encaixe (item #38): o atendimento deixa de ser FIT (para de rampar e passa a
+     * contribuir o tempo cheio), mantendo a posicao atual.
+     */
+    public QueueResponse undoFitInAttendance(UUID professionalId, UUID attendanceId);
+
     public QueueResponse finishAttendance(UUID professionalId, UUID attendanceId);
 
     public QueueResponse cancelAttendance(UUID professionalId, UUID attendanceId);

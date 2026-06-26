@@ -197,6 +197,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "ATTENDANCE_INVALID_STATUS");
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+            IllegalArgumentException ex, HttpServletRequest req) {
+        log.warn("[400] IllegalArgument | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_ARGUMENT");
+    }
+
     @ExceptionHandler(InvalidIntervalTimeException.class)
     public ResponseEntity<ErrorResponse> handleInvalidIntervalTime(
             InvalidIntervalTimeException ex, HttpServletRequest req) {
