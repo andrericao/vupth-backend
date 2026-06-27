@@ -164,6 +164,11 @@
 				<configuration>
 					<forkCount>1</forkCount>
 					<reuseForks>false</reuseForks>
+					<!-- Mockito 5 (inline mock maker) + ByteBuddy retransformacao + CDS ("sharing")
+					     causa flakiness "Could not modify all classes / NoClassDefFoundError" no suite
+					     completo (nao reproduz em isolamento). -Xshare:off desliga o CDS no fork.
+					     -XX:+EnableDynamicAgentLoading silencia o warning de self-attach do agente. -->
+					<argLine>-Xshare:off -XX:+EnableDynamicAgentLoading</argLine>
 				</configuration>
 			</plugin>
 			<plugin>
