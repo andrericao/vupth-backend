@@ -2862,7 +2862,26 @@ Decisao 2026-06-25 (Andre). **Status: especificado, nao implementado.** (Numerac
 
 ### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
 
-Decisao 2026-06-18 (Andre). **Status: especificado, nao implementado.** Pos-MVP. Vale para os **dois fronts**.
+Decisao 2026-06-18 (Andre). **Status: funcoes puras adiantadas (2026-06-26); fluxo/persistencia ainda em aberto.** Pos-MVP. Vale para os **dois fronts**.
+
+**Adiantado (independente da persistencia) — `QueueUtils`, com testes unitarios:**
+- `isTargetFeasible(now, etaMinutes, target)` — trava de viabilidade: so reserva se o ETA atual for **estritamente antes** do alvo (se a fila ja preve `>= alvo`, recusa).
+- `shouldConfirmIntent(now, etaMinutes, target, tolerance)` — gatilho de confirmacao: a intencao para de ceder posicao quando o previsto **encosta/cruza** o alvo (`previsto >= alvo - tolerancia`).
+- `assignAgendaSlot(target, duration, reserved)` — encaixe **cronologico**: 1o a pedir pega o alvo; colisoes recebem o proximo horario livre (alvo + duracao), em cadeia.
+- Estas funcoes recebem o ETA ja calculado por `calculateWaitingTimeForPosition` e nao dependem do modelo de estado escolhido (servem tanto para `AttendanceStatus.INTENT` quanto para flag `is_intent` + `target_time`).
+
+**Decisao de persistencia (Andre 2026-06-26): OPCAO B — `is_intent` + `target_time`** (atributo sobre o `SCHEDULED`, estilo `isFit`/`fitAheadLength` do #38; descartada a Opcao A `AttendanceStatus.INTENT`). Razao: mercado (Waitwhile/Qminder/Zenoti/JRNI) trata agendado-vs-walk-in como **atributo sobre fila unica** com lifecycle compartilhado, nao estado proprio; e B nao mexe em `findWaiting`/`SecurityConfig`/maquina de estados/renormalizacao (#19) — so na **ordenacao** e no **ingresso**, reduzindo risco de regressao.
+
+**Falta implementar (fluxo completo, plugando as funcoes puras acima):**
+- Migration: `attendance.is_intent boolean NOT NULL DEFAULT false` + `target_time timestamptz NULL`.
+- Entidade `Attendance`: campos `isIntent` + `targetTime` (status permanece `SCHEDULED`).
+- Ingresso com alvo: valida `isTargetFeasible` (recusa se fila ja preve `>= alvo`) + `assignAgendaSlot` (cronologico); grava `is_intent=true`, `target_time`, `scheduled_time` = slot atribuido.
+- Ordenacao da fila de espera: intencao ordena por `target_time` (cede posicao a quem chega depois enquanto previsto `< alvo`).
+- Confirmacao **automatica** (decisao do Andre): quando `shouldConfirmIntent` dispara (previsto encosta/cruza o alvo), vira `is_intent=false` + aviso WS. (Mecanismo recomendado: lazy-on-read na leitura da fila + flip persistido oportunista, sem scheduler.)
+- No-show: reusa LATE (#19) + escalada/multa (Item 39).
+- Broadcast WS (secao 18b) ao ingressar/confirmar; visibilidade de intencoes vs confirmados no Front-Partner.
+- Limites: alvo dentro do horario de funcionamento (#14-g2), alvo minimo no futuro, 1 intencao ativa por cliente por profissional (a definir no detalhe).
+- Testes (unit + integracao) + Postman + atualizar este PRD.
 
 **Problema.** A fila e por ordem de chegada e a estimativa "puxa" o cliente para o **mais cedo possivel**. Mas as vezes o cliente **nao quer** ser atendido agora — ele so pode mais tarde (ex.: a fila preve 11:00, mas ele so consegue chegar as 17:00). Hoje ele teria que ficar entrando na fila na hora certa, competindo com quem chegou antes. A ideia e deixar o cliente **declarar a intencao de ser atendido por volta de um horario-alvo** que ele escolhe.
 

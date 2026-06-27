@@ -317,4 +317,91 @@ class QueueUtilsTest {
         assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(), java.time.LocalDate.parse("2026-06-16")))
                 .isEqualTo(62);
     }
+
+    // ── Item 40 — intencao de fila com horario-alvo (funcoes puras) ─────────────────
+
+    private static final OffsetDateTime TARGET = OffsetDateTime.parse("2026-06-16T17:00:00Z");
+
+    @Test
+    @DisplayName("isTargetFeasible: ETA atual mais cedo que o alvo -> viavel")
+    void targetFeasible_etaBeforeTarget() {
+        // agora 11:00 + 120min = 13:00 < 17:00 -> ha margem para segurar a intencao
+        assertThat(QueueUtils.isTargetFeasible(NOW, 120, TARGET)).isTrue();
+    }
+
+    @Test
+    @DisplayName("isTargetFeasible: fila ja preve atender em cima/depois do alvo -> recusa")
+    void targetFeasible_etaAtOrAfterTarget() {
+        // 11:00 + 360min = 17:00 (em cima) -> recusa
+        assertThat(QueueUtils.isTargetFeasible(NOW, 360, TARGET)).isFalse();
+        // 11:00 + 420min = 18:00 (depois) -> recusa
+        assertThat(QueueUtils.isTargetFeasible(NOW, 420, TARGET)).isFalse();
+    }
+
+    @Test
+    @DisplayName("isTargetFeasible: null-safe")
+    void targetFeasible_nullSafe() {
+        assertThat(QueueUtils.isTargetFeasible(null, 60, TARGET)).isFalse();
+        assertThat(QueueUtils.isTargetFeasible(NOW, 60, null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("shouldConfirmIntent: previsto ainda antes do alvo -> nao confirma (segue cedendo)")
+    void confirmIntent_stillBefore() {
+        assertThat(QueueUtils.shouldConfirmIntent(NOW, 120, TARGET, 0)).isFalse();
+    }
+
+    @Test
+    @DisplayName("shouldConfirmIntent: previsto cruzou o alvo -> confirma")
+    void confirmIntent_crossed() {
+        // 11:00 + 360 = 17:00 >= 17:00 -> confirma
+        assertThat(QueueUtils.shouldConfirmIntent(NOW, 360, TARGET, 0)).isTrue();
+        // 11:00 + 380 = 17:20 > 17:00 -> confirma
+        assertThat(QueueUtils.shouldConfirmIntent(NOW, 380, TARGET, 0)).isTrue();
+    }
+
+    @Test
+    @DisplayName("shouldConfirmIntent: tolerancia confirma quando 'encosta' antes do alvo")
+    void confirmIntent_tolerance() {
+        // 11:00 + 345 = 16:45; alvo - 15min = 16:45 -> encosta, confirma
+        assertThat(QueueUtils.shouldConfirmIntent(NOW, 345, TARGET, 15)).isTrue();
+        // 11:00 + 344 = 16:44 < 16:45 -> ainda nao
+        assertThat(QueueUtils.shouldConfirmIntent(NOW, 344, TARGET, 15)).isFalse();
+    }
+
+    @Test
+    @DisplayName("assignAgendaSlot: sem reservas -> pega o proprio alvo")
+    void assignSlot_empty() {
+        assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, List.of())).isEqualTo(TARGET);
+    }
+
+    @Test
+    @DisplayName("assignAgendaSlot: colisao no mesmo alvo -> proximo recebe alvo + duracao")
+    void assignSlot_collision_chained() {
+        var reserved = List.of(new QueueUtils.AgendaSlot(TARGET, 30)); // 17:00-17:30 ocupado
+        // 2o pedido para 17:00, 30min -> 17:30
+        assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved))
+                .isEqualTo(OffsetDateTime.parse("2026-06-16T17:30:00Z"));
+    }
+
+    @Test
+    @DisplayName("assignAgendaSlot: cadeia de colisoes empurra ate o primeiro buraco livre")
+    void assignSlot_chainOfCollisions() {
+        var reserved = List.of(
+                new QueueUtils.AgendaSlot(TARGET, 30),                                       // 17:00-17:30
+                new QueueUtils.AgendaSlot(OffsetDateTime.parse("2026-06-16T17:30:00Z"), 30)  // 17:30-18:00
+        );
+        assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved))
+                .isEqualTo(OffsetDateTime.parse("2026-06-16T18:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("assignAgendaSlot: alvo nao colide -> mantem o alvo mesmo com reservas adiante")
+    void assignSlot_noOverlap_keepsTarget() {
+        var reserved = List.of(
+                new QueueUtils.AgendaSlot(OffsetDateTime.parse("2026-06-16T18:00:00Z"), 30) // 18:00-18:30
+        );
+        // alvo 17:00 + 30 = 17:30, nao toca 18:00 -> mantem 17:00
+        assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved)).isEqualTo(TARGET);
+    }
 }

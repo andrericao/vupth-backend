@@ -160,6 +160,81 @@ public class QueueUtils {
         return (int) Math.max(0, Math.min(full, ramped));
     }
 
+    // ── Item 40 — Intencao de fila com horario-alvo (agenda sobreposta a fila) ────────────
+    //
+    // Funcoes PURAS, independentes da persistencia (o modelo de estado/coluna ainda esta em
+    // aberto). Recebem o ETA ja calculado em minutos (via calculateWaitingTimeForPosition) e o
+    // horario-alvo escolhido pelo cliente. Plugaveis em qualquer representacao (novo
+    // AttendanceStatus.INTENT ou flag is_intent + target_time).
+
+    /** Um slot ja reservado na agenda: inicio + duracao. Usado para encaixe cronologico. */
+    public record AgendaSlot(OffsetDateTime start, int durationMinutes) {}
+
+    /**
+     * Horario de atendimento previsto = agora + ETA da posicao. Conveniencia para as regras abaixo.
+     */
+    public static OffsetDateTime predictedServeTime(OffsetDateTime now, int etaMinutes) {
+        return now.plusMinutes(Math.max(0, etaMinutes));
+    }
+
+    /**
+     * Trava de viabilidade do alvo (Andre 2026-06): so se reserva uma intencao quando o ETA atual da
+     * fila for <b>mais cedo</b> que o alvo. Se a fila ja preve atender em cima ou depois do alvo
+     * ({@code previsto >= alvo}), nao ha margem para "segurar a vez" ate la — recusa.
+     *
+     * @return {@code true} se {@code agora + etaMinutes} for estritamente antes de {@code targetTime}
+     */
+    public static boolean isTargetFeasible(OffsetDateTime now, int etaMinutes, OffsetDateTime targetTime) {
+        if (now == null || targetTime == null) {
+            return false;
+        }
+        return predictedServeTime(now, etaMinutes).isBefore(targetTime);
+    }
+
+    /**
+     * Gatilho de confirmacao (a intencao vira presenca confirmada e <b>para de ceder posicao</b>):
+     * dispara quando o atendimento previsto <b>encosta/cruza</b> o alvo, isto e, quando
+     * {@code agora + etaMinutes >= targetTime - tolerancia}. Com {@code toleranceMinutes = 0},
+     * confirma exatamente quando o previsto alcanca o alvo.
+     */
+    public static boolean shouldConfirmIntent(
+            OffsetDateTime now, int etaMinutes, OffsetDateTime targetTime, int toleranceMinutes) {
+        if (now == null || targetTime == null) {
+            return false;
+        }
+        OffsetDateTime threshold = targetTime.minusMinutes(Math.max(0, toleranceMinutes));
+        return !predictedServeTime(now, etaMinutes).isBefore(threshold);
+    }
+
+    /**
+     * Atribuicao cronologica de slot na agenda (Andre 2026-06): o 1o a pedir um alvo pega o proprio
+     * alvo; os seguintes que colidem recebem o <b>proximo horario livre</b> (alvo do conflito +
+     * duracao), em cadeia. Retorna o inicio efetivo: o menor instante {@code >= target} que nao
+     * sobrepoe nenhum slot ja reservado.
+     *
+     * <p>Funcao pura: {@code reserved} sao os slots ja confirmados/intencionados (start + duracao);
+     * nao muta nada.
+     */
+    public static OffsetDateTime assignAgendaSlot(
+            OffsetDateTime target, int durationMinutes, Collection<AgendaSlot> reserved) {
+        OffsetDateTime candidate = target;
+        if (reserved == null || reserved.isEmpty() || durationMinutes <= 0) {
+            return candidate;
+        }
+        List<AgendaSlot> sorted = new ArrayList<>(reserved);
+        sorted.sort(Comparator.comparing(AgendaSlot::start));
+        for (AgendaSlot slot : sorted) {
+            OffsetDateTime slotEnd = slot.start().plusMinutes(slot.durationMinutes());
+            OffsetDateTime candEnd = candidate.plusMinutes(durationMinutes);
+            // sobrepoe se candidate < slotEnd && slot.start < candEnd
+            boolean overlaps = candidate.isBefore(slotEnd) && slot.start().isBefore(candEnd);
+            if (overlaps) {
+                candidate = slotEnd; // empurra para depois do conflito
+            }
+        }
+        return candidate;
+    }
+
     private static int lockedMealContribution(ProfessionalInterval meal, LocalDate today) {
         if (meal == null || meal.isSkippedOn(today) || meal.isDoneOn(today)) {
             return 0; // pulada/removida do dia ou ja consumida hoje
