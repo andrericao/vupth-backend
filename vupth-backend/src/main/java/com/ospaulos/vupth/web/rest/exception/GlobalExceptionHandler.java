@@ -11,6 +11,9 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundExceptio
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
@@ -130,6 +133,20 @@ public class GlobalExceptionHandler {
             TargetTimeNotFeasibleException ex, HttpServletRequest req) {
         log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
+    }
+
+    @ExceptionHandler(SwapNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSwapNotAllowed(
+            SwapNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[422] SwapNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_SWAP_NOT_ALLOWED");
+    }
+
+    @ExceptionHandler(SwapRequestNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSwapRequestNotFound(
+            SwapRequestNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] SwapRequestNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_NOT_FOUND");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)
@@ -328,6 +345,13 @@ public class GlobalExceptionHandler {
             EmailNotAvailableException ex, HttpServletRequest req) {
         log.warn("[409] EmailNotAvailable | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "EMAIL_NOT_AVAILABLE");
+    }
+
+    @ExceptionHandler(SwapAlreadyPendingException.class)
+    public ResponseEntity<ErrorResponse> handleSwapAlreadyPending(
+            SwapAlreadyPendingException ex, HttpServletRequest req) {
+        log.warn("[409] SwapAlreadyPending | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "QUEUE_SWAP_ALREADY_PENDING");
     }
 
     @ExceptionHandler(UserAlreadyProfessionalException.class)

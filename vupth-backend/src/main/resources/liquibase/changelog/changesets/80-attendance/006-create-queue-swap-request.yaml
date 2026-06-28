@@ -1,0 +1,61 @@
+databaseChangeLog:
+  # Troca de posicao na fila por consentimento mutuo (item #42): cliente A propoe a troca com o
+  # cliente B (mesma fila); so efetiva quando B aceita (aceiteA && aceiteB), trocando os
+  # scheduledTime dos dois atendimentos. PENDING -> ACCEPTED/REJECTED/CANCELLED. Sem expiracao por
+  # tempo: expira por evento (um dos atendimentos sai da fila -> a pendencia vira CANCELLED).
+  - changeSet:
+      id: 006-create-queue_swap_request
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: queue_swap_request
+      changes:
+        - createTable:
+            tableName: queue_swap_request
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_queue_swap_request
+                    nullable: false
+              - column:
+                  name: proposer_attendance_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: target_attendance_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: responded_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - addForeignKeyConstraint:
+            baseTableName: queue_swap_request
+            baseColumnNames: proposer_attendance_id
+            constraintName: fk_swap_proposer_attendance
+            referencedTableName: ATTENDANCE
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: queue_swap_request
+            baseColumnNames: target_attendance_id
+            constraintName: fk_swap_target_attendance
+            referencedTableName: ATTENDANCE
+            referencedColumnNames: id
+            onDelete: CASCADE

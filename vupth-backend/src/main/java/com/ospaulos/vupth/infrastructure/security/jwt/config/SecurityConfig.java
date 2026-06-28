@@ -87,6 +87,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/attendances/*/leave-queue").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
+                        // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente
+                        .requestMatchers(HttpMethod.POST, "/swap-requests").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/swap-requests/me").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/swap-requests/*").hasRole("CLIENT")
+
                         .requestMatchers(HttpMethod.POST, "/establishment/quick-create").hasRole("CLIENT")
 
                         // App parceiro — fluxo "sou profissional" (sem establishment)

@@ -8,6 +8,7 @@ import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.queue.swap.service.QueueSwapService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ public class AttendanceController {
     private final AttendanceService attendanceService;
     private final ProfessionalService professionalService;
     private final QueueWebSocketPublisher queuePublisher;
+    private final QueueSwapService queueSwapService;
 
     @GetMapping
     public ResponseEntity<List<AttendanceListResponse>> listAttendances(
@@ -129,6 +131,8 @@ public class AttendanceController {
 
         AttendanceInQueueResponse response = attendanceService.cancelAttendance(attendanceId, principal.getUserId());
 
+        // #42: saiu da fila → propostas de troca pendentes deixam de existir
+        queueSwapService.expirePendingForAttendance(attendanceId);
         // WS: saiu da fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
 
@@ -151,6 +155,8 @@ public class AttendanceController {
 
         AttendanceInQueueResponse response = attendanceService.leaveQueue(attendanceId, principal.getUserId());
 
+        // #42: saiu da fila → propostas de troca pendentes deixam de existir
+        queueSwapService.expirePendingForAttendance(attendanceId);
         // WS: saiu da fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
 
@@ -174,6 +180,9 @@ public class AttendanceController {
         // Pass principal.getUserId() directly — ProfessionalServiceImpl validates ownership.
         // Avoids triggering a lazy proxy load on attendance.getProfessional() outside a TX.
         QueueResponse response = professionalService.startAttendance(principal.getUserId(), attendanceId);
+
+        // #42: foi atendido → propostas de troca pendentes deixam de existir
+        queueSwapService.expirePendingForAttendance(attendanceId);
 
         // WS: fila ao vivo + avisa o cliente que chegou a vez dele
         AttendanceInQueueResponse att = attendanceService.getById(attendanceId);

@@ -9,6 +9,7 @@ import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.queue.swap.service.QueueSwapService;
 import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
@@ -31,6 +32,7 @@ public class ProfessionalController {
     private final AttendanceService attendanceService;
     private final ProfessionalService professionalService;
     private final ServiceItemService serviceItemService;
+    private final QueueSwapService queueSwapService;
 
     // TODO: accept ID as parameter to support caller-specific routing
 
@@ -70,6 +72,9 @@ public class ProfessionalController {
                 attendanceId, principal.getUserId());
 
         AttendanceInQueueResponse response = attendanceService.removeFromQueue(attendanceId, principal.getUserId());
+
+        // #42: removido da fila → propostas de troca pendentes deixam de existir
+        queueSwapService.expirePendingForAttendance(attendanceId);
         return ResponseEntity.ok(response);
     }
 

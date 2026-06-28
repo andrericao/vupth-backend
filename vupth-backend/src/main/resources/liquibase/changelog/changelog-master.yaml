@@ -206,3 +206,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/005-add-attendance-intent-columns.yaml
       relativeToChangeLogFile: true
+
+  # Troca de posicao na fila por consentimento mutuo (item #42): tabela queue_swap_request
+  - include:
+      file: changesets/80-attendance/006-create-queue-swap-request.yaml
+      relativeToChangeLogFile: true
