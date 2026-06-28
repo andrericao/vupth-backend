@@ -2890,13 +2890,17 @@ Decisao 2026-06-18 (Andre). ✅ **Status: BACKEND CONCLUIDO (2026-06-28).** Func
 - ✅ Ingresso com alvo (`AttendanceServiceImpl.applyIntentIfRequested`): alvo no passado → `400`; valida `isTargetFeasible` (recusa com `422 QUEUE_TARGET_NOT_FEASIBLE` se a fila ja preve `>= alvo`) + `assignAgendaSlot` (cronologico); grava `is_intent=true`, `target_time`, `scheduled_time` = slot atribuido.
 - ✅ Ordenacao da fila de espera: a intencao reserva slot fixo (`scheduled_time` = alvo/encaixe) e cede a vez aos walk-ins enquanto o previsto `< alvo` (a renormalizacao em evento de fila preserva o slot).
 - ✅ Confirmacao **automatica** em evento de fila (`QueueServiceImpl.updateQueueEstimates`): quando `shouldConfirmIntent` dispara (previsto encosta/cruza o alvo, tolerancia 0), vira `is_intent=false`, trava no inicio (deixa de ceder) e persiste.
-- ✅ Testes: unit (`QueueUtilsTest`) + integracao (`QueueIntentIntegrationTest`: viavel/inviavel/passado/cede-a-vez/renormalizacao/confirmacao).
+- ✅ Testes: unit (`QueueUtilsTest`) + integracao (`QueueIntentIntegrationTest`: viavel/inviavel/passado/cede-a-vez/renormalizacao/confirmacao) + Postman folder `08e - intencao de fila (#40)` (viavel 201 / inviavel 422 / alvo no passado 400).
 
-**Pendente (fronts + refinamentos pos-MVP):**
+**📣 HANDOFF PARA OS FRONTS (ler antes de implementar o item #40):**
+- **Front-Client** — no fluxo de entrar na fila, oferecer (opcional) a escolha de um **horario-alvo** e envia-lo em `POST /attendances` no campo **`targetTime`** (ISO-8601, no futuro). Sem `targetTime` = ingresso normal (walk-in), comportamento atual inalterado. Tratar os erros: **`422 QUEUE_TARGET_NOT_FEASIBLE`** (a fila ja preve atender em cima/depois do alvo → orientar a entrar sem horario-alvo) e **`400`** (alvo no passado). O response **nao** traz `targetTime`/`is_intent` hoje (so `scheduledTime` ja vem com o slot reservado) — se o front precisar exibir "intencao vs confirmado", avisar o backend para expor esses campos no `AttendanceInQueueResponse`.
+- **Front-Partner** — exibir as **intencoes** distintas dos confirmados na fila ao vivo. Hoje a API nao marca isso no response; **depende** de o backend expor `is_intent`/`targetTime` no DTO (pendencia abaixo). Avisar quando for implementar para o backend liberar os campos.
+
+**Pendente (refinamentos pos-MVP, conforme os fronts pedirem):**
+- Expor `is_intent` + `targetTime` no `AttendanceInQueueResponse` (necessario para o Front-Partner distinguir intencao/confirmado e para o Front-Client exibir o estado).
 - No-show: reusa LATE (#19) + escalada/multa (Item 39).
-- Broadcast WS (secao 18b) dedicado ao confirmar; visibilidade de intencoes vs confirmados no Front-Partner.
+- Broadcast WS (secao 18b) dedicado ao confirmar a intencao.
 - Limites adicionais: alvo dentro do horario de funcionamento (#14-g2), 1 intencao ativa por cliente por profissional (hoje so valida alvo no futuro + viabilidade).
-- Postman folder dedicada.
 
 **Problema.** A fila e por ordem de chegada e a estimativa "puxa" o cliente para o **mais cedo possivel**. Mas as vezes o cliente **nao quer** ser atendido agora — ele so pode mais tarde (ex.: a fila preve 11:00, mas ele so consegue chegar as 17:00). Hoje ele teria que ficar entrando na fila na hora certa, competindo com quem chegou antes. A ideia e deixar o cliente **declarar a intencao de ser atendido por volta de um horario-alvo** que ele escolhe.
 
