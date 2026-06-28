@@ -2547,7 +2547,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
 | 1 | Multa / cancelamento tardio + escalada de no-show | ⬜ aberto | secao "Item 39" (reusa LATE/#19) |
-| 2 | Troca mutua de posicao na fila (aceite dos dois, `true && true`) | ⬜ aberto | NOVO — TODO ja existe em `ClientServiceImpl` |
+| 2 | Remanejar cliente com espera > 1h (escolher horario / ir pro fim da fila) | ⬜ aberto | NOVO (2026-06-28) — front: 2 botoes; backend reusa `target_time` (#40) + reposition-to-end. Ver secao "Item 43" |
 | 3 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
 | 4 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
 | 5 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
@@ -2566,7 +2566,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | 18 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
 | 19 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41).
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2861,15 +2861,29 @@ Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
 
 **Escalada de no-show (Andre 2026-06-25).** O *no-show* (cliente que nao comparece) ja tem o tratamento de **cair de posicao** no Item #19 (LATE): o profissional marca `/late`, o ausente cai 1 posicao e atende-se o seguinte. A regra desta secao adiciona a **escalada**: se o cliente, depois de cair, **nao aparece de novo** quando volta a ser chamado (ex.: cai de novo para a 2a posicao), ele e **removido da fila + recebe a multa/strike**. Ou seja: LATE (#19) cuida do "cai de posicao"; este item cuida do "ausente reincidente -> sai + penalidade". Presenca/no-show do Item 40 (intencao) tambem desagua aqui.
 
-### Item 42 — Troca mutua de posicao na fila (NOVO, 2026-06-25)
+### Item 42 — Troca de posicao na fila por consentimento mutuo (cliente<->cliente)
 
-Decisao 2026-06-25 (Andre). **Status: especificado, nao implementado.** (Numeracao historica; na lista-fonte e a pendencia **#3**.)
+Decisao 2026-06-25 (Andre). ✅ **Status: BACKEND CONCLUIDO (2026-06-28).** Resta so os fronts.
 
-**Objetivo.** Dois clientes **trocam de posicao** (indice) na fila, **por consentimento mutuo** — independente de atraso. Casos: um cliente que sabe que vai se atrasar pede para trocar para **depois**; outro que quer ser atendido antes troca para **antes**. E uma troca simples de indice entre dois atendimentos da mesma fila.
+**Objetivo.** Dois clientes **trocam de posicao** (indice) na fila, **por consentimento mutuo** — independente de atraso. Um cliente que sabe que vai se atrasar pede para trocar para **depois**; outro que quer ser atendido antes troca para **antes**. Troca simples de indice entre dois atendimentos da mesma fila.
 
-**Regra de autorizacao (chave).** A troca so efetiva se **os dois aceitarem**: `aceiteA && aceiteB` (booleano AND). Um inicia a proposta; o outro confirma; so entao os indices/`scheduledTime` sao trocados. Sem o aceite dos dois, nada muda.
+**Regra de autorizacao (chave).** A troca so efetiva se **os dois aceitarem**: `aceiteA && aceiteB`. O cliente A propoe; B confirma; so entao os `scheduledTime` dos dois sao trocados. Sem aceite dos dois, nada muda.
 
-**Notas de implementacao (a detalhar quando entrar):** ja existe o placeholder `// TODO: Trocar lugar na fila` em `ClientServiceImpl`. Reusar o padrao de reposicionamento por `scheduledTime` (mesmo do #19/#38): trocar os `scheduledTime` dos dois atendimentos. Broadcast WS da fila apos a troca. Pontos a definir: quem pode propor (cliente<->cliente; profissional media?), expiracao da proposta pendente, e se vale so para `SCHEDULED` (nao `IN_PROGRESS`).
+**Decisoes (Andre 2026-06-28):** (a) cliente<->cliente direto (profissional nao participa); (b) persistencia em **entidade dedicada** `QueueSwapRequest` (proposer/target/status/createdAt); (c) escopo **so SCHEDULED**; (d) **sem expiracao por tempo** — expira **por evento**: quando proposer ou target sai da fila (atendido/cancelado/removido), a proposta PENDING vira CANCELLED.
+
+**✅ Implementado no backend:**
+- ✅ Entidade `QueueSwapRequest` + enum `SwapRequestStatus` (PENDING/ACCEPTED/REJECTED/CANCELLED) + migration `006-create-queue-swap-request.yaml`.
+- ✅ `POST /swap-requests` (CLIENT): body `{proposerAttendanceId, targetAttendanceId}`. proposer validado contra o token. Cria PENDING + notifica B via WS. Erros: `403` (nao e o dono do proposer), `422 QUEUE_SWAP_NOT_ALLOWED` (fila diferente / nao SCHEDULED / mesmo atendimento), `409 QUEUE_SWAP_ALREADY_PENDING` (ja ha PENDING entre o par).
+- ✅ `PATCH /swap-requests/{id}?accept=true|false` (CLIENT, so o **target** B responde): `true` troca os `scheduledTime` + `updateQueueEstimates` + broadcast WS + notifica A; `false` = REJECTED. `403` se nao for o target; `422` se ja nao estiver PENDING ou se algum saiu do SCHEDULED.
+- ✅ `GET /swap-requests/me` (CLIENT): propostas PENDING que envolvem o cliente (recebidas/enviadas).
+- ✅ Expiracao por evento: hooks em `start`/`cancel`/`leave-queue`/`remove` chamam `expirePendingForAttendance` (PENDING -> CANCELLED).
+- ✅ Testes: integracao (`QueueSwapIntegrationTest`: propor 201/403/409/422, aceitar troca posicoes, recusar, responder-nao-target 403, responder-nao-pendente 422, expiracao em atendido/cancelado).
+
+**🟦 Lado do profissional (atender fora de ordem quando o da vez esta atrasado) — JA SUPORTADO, sem codigo novo.** `PATCH /attendances/{id}/start` ja aceita iniciar **qualquer** atendimento SCHEDULED/LATE por id (em qualquer posicao) — o profissional atende quem quiser fora de ordem; ninguem mais e reordenado. Para o atrasado (indice 0) virar LATE e cair de posicao, usa-se `PATCH /attendances/{id}/late` (#19). O front orquestra o fluxo: escolhe o proximo, marca o da vez como LATE, e (opcional) inicia. *(Se o front precisar promover um escolhido qualquer ao indice 0 SEM atender, e uma adicao pequena a fazer sob demanda.)*
+
+**📣 HANDOFF PARA OS FRONTS (item #42):**
+- **Front-Client** — botao "trocar de posicao": escolhe outro cliente da fila e chama `POST /swap-requests`. Recebe via WS `SWAP_REQUESTED` (notificacao de proposta recebida) — exibe aceitar/recusar -> `PATCH /swap-requests/{id}?accept=`. WS `SWAP_ACCEPTED`/`SWAP_REJECTED` para o proponente. `GET /swap-requests/me` lista pendentes. Tratar `409` (ja pendente), `422` (fila diferente/ja atendido).
+- **Front-Partner** — sem mudanca obrigatoria; o profissional ja atende fora de ordem via `start` + marca `late` no atrasado.
 
 ### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
 
