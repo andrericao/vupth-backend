@@ -1404,7 +1404,8 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
   "status": "SCHEDULED",
   "scheduledTime": "2026-05-26T14:00:00Z",
   "estimatedMinutes": 30,
-  "local": "2026-05-26T12:00:00Z"
+  "local": "2026-05-26T12:00:00Z",
+  "targetTime": "2026-05-26T17:00:00Z"
 }
 ```
 
@@ -1418,10 +1419,21 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
 | scheduledTime | OffsetDateTime | Nao | ISO-8601. Default: now() se nao informado |
 | estimatedMinutes | Integer | Nao | Estimativa em minutos |
 | local | OffsetDateTime | Nao | Hora local do cliente |
+| targetTime | OffsetDateTime | Nao | **Item #40 — intencao de fila.** Quando presente, o cliente NAO entra como walk-in: entra como **intencao** com horario-alvo. Ausente/null = ingresso normal. |
 
-**Response (201):** `AttendanceInQueueResponse`
+**Item #40 — intencao de fila com horario-alvo (Opcao B: `is_intent` + `target_time`):**
 
-**Testes:** Unitario + Integracao
+Ao enviar `targetTime`, o cliente reserva um lugar mirando um horario futuro (ex.: 17:00) em vez de entrar no fim da fila agora. Enquanto o **atendimento previsto** da posicao dele for ANTES do alvo, a intencao **cede a vez** a quem chega depois (walk-ins sorteiam a frente). Quando o previsto **encosta/cruza** o alvo, em um **evento de fila** (start/finish/late/fit-in) a intencao e **confirmada automaticamente**: vira SCHEDULED normal e trava no inicio da fila (deixa de ceder). O `status` permanece `SCHEDULED` o tempo todo; a distincao e a flag `is_intent`.
+
+- **Viabilidade (trava no ingresso):** so reserva a intencao se a fila prever atender ESTRITAMENTE antes do alvo. Se ja preve atender em cima/depois do alvo, retorna **422 `QUEUE_TARGET_NOT_FEASIBLE`** — o cliente deve entrar na fila normalmente (sem `targetTime`).
+- **Alvo no passado:** **400** (`targetTime` deve estar no futuro).
+- **Encaixe de slot:** entre intencoes ja reservadas, o `scheduledTime` recebe o proximo horario livre `>= targetTime` (encaixe cronologico), de modo que a ordenacao por `scheduledTime` faca a intencao ceder aos walk-ins ate o previsto alcancar o alvo.
+
+**Response (201):** `AttendanceInQueueResponse` (com `targetTime` quando intencao)
+
+**Erros:** `400` (alvo no passado) · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo)
+
+**Testes:** Unitario (funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`) + Integracao (`QueueIntentIntegrationTest`)
 
 ---
 
@@ -2534,28 +2546,27 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Intencao de fila com horario-alvo (agenda + fila) | 🔵 em andamento | secao "Item 40" |
-| 2 | Multa / cancelamento tardio + escalada de no-show | ⬜ aberto | secao "Item 39" (reusa LATE/#19) |
-| 3 | Troca mutua de posicao na fila (aceite dos dois, `true && true`) | ⬜ aberto | NOVO — TODO ja existe em `ClientServiceImpl` |
-| 4 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
-| 5 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
-| 6 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 7 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 8 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 9 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 10 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 11 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 12 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` |
-| 13 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 14 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 15 | Precificacao calculada no backend | ⬜ aberto (dep. #17) | secao "Item 36" |
-| 16 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 17 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao |
-| 18 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 19 | Agendamento futuro dia+hora (overlap c/ #1) | ⬜ aberto | reavaliar apos #1 |
-| 20 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Multa / cancelamento tardio + escalada de no-show | ⬜ aberto | secao "Item 39" (reusa LATE/#19) |
+| 2 | Troca mutua de posicao na fila (aceite dos dois, `true && true`) | ⬜ aberto | NOVO — TODO ja existe em `ClientServiceImpl` |
+| 3 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
+| 4 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
+| 5 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
+| 6 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 7 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 8 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
+| 9 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 10 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 11 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` |
+| 12 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 13 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 14 | Precificacao calculada no backend | ⬜ aberto (dep. #16) | secao "Item 36" |
+| 15 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 16 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao |
+| 17 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 18 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 19 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · Skip de refeicao (#41).
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41).
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2625,7 +2636,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | ✅ **[BACKEND CONCLUIDO 2026-06-22]** Entregue em 2 commits: (1) **pre-req** — ETA client-facing meal-aware (passou a usar `QueueUtils`, antes ignorava refeicoes); (2) **lock** — no ingresso o `Attendance` grava o conjunto de refeicoes que estavam no ETA do cliente (`attendance_locked_intervals`, migration 025) e o ETA individual (`GET /client-queue/{attendanceId}/wait-time`) passa a somar `restante do atual + atendimentos a frente (recalc) + duracao das refeicoes TRAVADAS` — a refeicao nao sai mais por ritmo da fila. Cai so por mudanca estrutural (todos depois sairam → ahead vazio), skip #41 (override) ou inicio/remocao. Testes: unit `QueueUtilsTest` (lock/mealsCounted) + integracao `ClientEtaMealLockIntegrationTest`. **Resta:** Front-Client consumir a estimativa estavel. **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** ✅ / **Front-Client** (estimativa estavel) |
 | 38 | Encaixe com equalizacao de tempo | **✅ BACKEND CONCLUIDO** (Pos-MVP). Profissional **encaixa** um cliente no meio da fila via `PATCH /attendances/{id}/fit-in?aheadCount=N`. Os de tras absorvem o tempo do encaixe (D) **sem salto brusco**: o encaixe contribui um valor **rampado** (0 -> D em fatias de `D/fitAheadLength` a cada cliente que sai da frente). Damping do valor exibido (slew-rate). `undo-fit` reverte. **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend ✅** (colunas `is_fit`/`fit_ahead_length` + ramp em `QueueUtils.effectiveEstimatedMinutes` + endpoints) / **Front-Partner** (acao de encaixar, `aheadCount`) / **Front-Client** (estimativa ja suavizada vem da API) |
 | 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
-| 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | **[Pos-MVP]** Cliente quer ser atendido por volta de um **horario que escolhe** (ex.: 17:00), mas a fila esta com estimativa muito mais cedo (ex.: 11:00). Ele entra como **intencao** (nao confirmado): quem entra na fila depois dele recebe **indice menor** (passa na frente) enquanto o horario previsto de atendimento daquela posicao ainda for **antes** do alvo dele. Quando o previsto **cruza** o alvo (ex.: 17:15), ele para de ceder posicao e a presenca vira **confirmada** (deixa de ser so intencao). Funciona como uma **agenda** sobreposta a fila por ordem de chegada. **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | **Backend** (estado intencao vs confirmado no atendimento + horario-alvo + ordenacao que cede posicao ate o previsto cruzar o alvo, entao confirma) / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado) / **Front-Partner** (ver intencoes/agendados na fila) |
+| 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | ✅ **[BACKEND CONCLUIDO 2026-06-28]** Opcao B (`is_intent` + `target_time`, migration 005). `POST /attendances` aceita `targetTime` opcional: presente = entra como **intencao** (cede a vez aos walk-ins enquanto o previsto for antes do alvo); ausente = walk-in normal. Trava de viabilidade no ingresso (`422 QUEUE_TARGET_NOT_FEASIBLE` se a fila ja preve atender em cima/depois do alvo), alvo no passado = `400`. Confirmacao automatica em evento de fila quando o previsto encosta no alvo (vira SCHEDULED normal, trava no inicio). Funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`. Testes: unit (`QueueUtilsTest`) + integracao (`QueueIntentIntegrationTest`). **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | ~~**Backend**~~ ✅ / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado; tratar 422/400) / **Front-Partner** (ver intencoes/agendados na fila) |
 | 41 | Skip de refeicao por dia ("Nao almocar") | ✅ **[BACKEND CONCLUIDO 2026-06-21]** Entregue `PATCH .../intervals/{intervalId}/skip` (pula a refeicao recorrente so naquele dia, default hoje) + `DELETE .../intervals/{intervalId}/skip` (desfaz). Skip por `(intervalo, data)` na tabela `professional_interval_skips` (migration 024), consumido pelo `QueueUtils` (day-scoped) — refeicao pulada cai do ETA de todos na hora, recorrencia intacta. Rebroadcast WS apos a operacao. 409 se ja iniciada/encerrada no dia (usar `finish`). Testes integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest`) + Postman folder 12 + PRD secao 18. **Resta:** Front-Partner ligar a acao "Nao almocar" do popup (eles chamam de "backend #17"). | **Backend** ✅ / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
@@ -2862,7 +2873,7 @@ Decisao 2026-06-25 (Andre). **Status: especificado, nao implementado.** (Numerac
 
 ### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
 
-Decisao 2026-06-18 (Andre). **Status: funcoes puras adiantadas (2026-06-26); fluxo/persistencia ainda em aberto.** Pos-MVP. Vale para os **dois fronts**.
+Decisao 2026-06-18 (Andre). ✅ **Status: BACKEND CONCLUIDO (2026-06-28).** Funcoes puras (2026-06-26) + fiacao completa (model/migration/service/controller/422 + testes). Resta so os fronts (Front-Client escolhe o alvo e trata 422/400; Front-Partner ve intencoes vs confirmados). Pos-MVP. Vale para os **dois fronts**.
 
 **Adiantado (independente da persistencia) — `QueueUtils`, com testes unitarios:**
 - `isTargetFeasible(now, etaMinutes, target)` — trava de viabilidade: so reserva se o ETA atual for **estritamente antes** do alvo (se a fila ja preve `>= alvo`, recusa).
@@ -2872,16 +2883,20 @@ Decisao 2026-06-18 (Andre). **Status: funcoes puras adiantadas (2026-06-26); flu
 
 **Decisao de persistencia (Andre 2026-06-26): OPCAO B — `is_intent` + `target_time`** (atributo sobre o `SCHEDULED`, estilo `isFit`/`fitAheadLength` do #38; descartada a Opcao A `AttendanceStatus.INTENT`). Razao: mercado (Waitwhile/Qminder/Zenoti/JRNI) trata agendado-vs-walk-in como **atributo sobre fila unica** com lifecycle compartilhado, nao estado proprio; e B nao mexe em `findWaiting`/`SecurityConfig`/maquina de estados/renormalizacao (#19) — so na **ordenacao** e no **ingresso**, reduzindo risco de regressao.
 
-**Falta implementar (fluxo completo, plugando as funcoes puras acima):**
-- Migration: `attendance.is_intent boolean NOT NULL DEFAULT false` + `target_time timestamptz NULL`.
-- Entidade `Attendance`: campos `isIntent` + `targetTime` (status permanece `SCHEDULED`).
-- Ingresso com alvo: valida `isTargetFeasible` (recusa se fila ja preve `>= alvo`) + `assignAgendaSlot` (cronologico); grava `is_intent=true`, `target_time`, `scheduled_time` = slot atribuido.
-- Ordenacao da fila de espera: intencao ordena por `target_time` (cede posicao a quem chega depois enquanto previsto `< alvo`).
-- Confirmacao **automatica** (decisao do Andre): quando `shouldConfirmIntent` dispara (previsto encosta/cruza o alvo), vira `is_intent=false` + aviso WS. (Mecanismo recomendado: lazy-on-read na leitura da fila + flip persistido oportunista, sem scheduler.)
+**✅ Implementado no backend (fiacao das funcoes puras acima):**
+- ✅ Migration `005-add-attendance-intent-columns.yaml`: `attendance.is_intent boolean NOT NULL DEFAULT false` + `target_time timestamptz NULL` (idempotente, preConditions).
+- ✅ Entidade `Attendance`: campos `intent` (`is_intent`) + `targetTime` (status permanece `SCHEDULED`).
+- ✅ DTO `AttendanceRequest`: campo `targetTime` opcional + construtor de compat (walk-in). `POST /attendances` o repassa.
+- ✅ Ingresso com alvo (`AttendanceServiceImpl.applyIntentIfRequested`): alvo no passado → `400`; valida `isTargetFeasible` (recusa com `422 QUEUE_TARGET_NOT_FEASIBLE` se a fila ja preve `>= alvo`) + `assignAgendaSlot` (cronologico); grava `is_intent=true`, `target_time`, `scheduled_time` = slot atribuido.
+- ✅ Ordenacao da fila de espera: a intencao reserva slot fixo (`scheduled_time` = alvo/encaixe) e cede a vez aos walk-ins enquanto o previsto `< alvo` (a renormalizacao em evento de fila preserva o slot).
+- ✅ Confirmacao **automatica** em evento de fila (`QueueServiceImpl.updateQueueEstimates`): quando `shouldConfirmIntent` dispara (previsto encosta/cruza o alvo, tolerancia 0), vira `is_intent=false`, trava no inicio (deixa de ceder) e persiste.
+- ✅ Testes: unit (`QueueUtilsTest`) + integracao (`QueueIntentIntegrationTest`: viavel/inviavel/passado/cede-a-vez/renormalizacao/confirmacao).
+
+**Pendente (fronts + refinamentos pos-MVP):**
 - No-show: reusa LATE (#19) + escalada/multa (Item 39).
-- Broadcast WS (secao 18b) ao ingressar/confirmar; visibilidade de intencoes vs confirmados no Front-Partner.
-- Limites: alvo dentro do horario de funcionamento (#14-g2), alvo minimo no futuro, 1 intencao ativa por cliente por profissional (a definir no detalhe).
-- Testes (unit + integracao) + Postman + atualizar este PRD.
+- Broadcast WS (secao 18b) dedicado ao confirmar; visibilidade de intencoes vs confirmados no Front-Partner.
+- Limites adicionais: alvo dentro do horario de funcionamento (#14-g2), 1 intencao ativa por cliente por profissional (hoje so valida alvo no futuro + viabilidade).
+- Postman folder dedicada.
 
 **Problema.** A fila e por ordem de chegada e a estimativa "puxa" o cliente para o **mais cedo possivel**. Mas as vezes o cliente **nao quer** ser atendido agora — ele so pode mais tarde (ex.: a fila preve 11:00, mas ele so consegue chegar as 17:00). Hoje ele teria que ficar entrando na fila na hora certa, competindo com quem chegou antes. A ideia e deixar o cliente **declarar a intencao de ser atendido por volta de um horario-alvo** que ele escolhe.
 
