@@ -8,6 +8,7 @@ import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -65,6 +66,7 @@ class FitInAttendanceIntegrationTest {
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired UserRepository userRepository;
     @Autowired ServiceItemRepository serviceItemRepository;
+    @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
 
     private final Faker faker = new Faker();
 
@@ -85,6 +87,13 @@ class FitInAttendanceIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerProfToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Owner Professional");
+
+        // quick-create seeda refeicoes recorrentes (almoco 12:00 / janta 18:00 UTC). Elas sao TRAVADAS
+        // no ingresso e entram no ETA individual (lockedClientWait), o que tornaria os totais ABSOLUTOS
+        // deste teste dependentes da hora do relogio (flaky quando a suite roda perto de uma refeicao).
+        // Removemos as refeicoes para o ETA ficar puramente baseado no tempo de servico (premissa da classe).
+        professionalIntervalRepository.deleteAll(
+                professionalIntervalRepository.findByProfessional_Id(UUID.fromString(professionalId)));
 
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, ownerProfToken,
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));

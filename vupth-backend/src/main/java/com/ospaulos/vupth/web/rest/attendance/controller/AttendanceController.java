@@ -99,7 +99,8 @@ public class AttendanceController {
                 request.status(),
                 request.scheduledTime(),
                 request.estimatedMinutes(),
-                request.local()
+                request.local(),
+                request.targetTime()    // item #40: horario-alvo (intencao de fila)
         );
 
         var response = attendanceService.createAttendance(secureRequest);

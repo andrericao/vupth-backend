@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgres
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
+import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
@@ -122,6 +123,13 @@ public class GlobalExceptionHandler {
             EstablishmentHoursRequiredException ex, HttpServletRequest req) {
         log.warn("[422] EstablishmentHoursRequired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
+    }
+
+    @ExceptionHandler(TargetTimeNotFeasibleException.class)
+    public ResponseEntity<ErrorResponse> handleTargetTimeNotFeasible(
+            TargetTimeNotFeasibleException ex, HttpServletRequest req) {
+        log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)

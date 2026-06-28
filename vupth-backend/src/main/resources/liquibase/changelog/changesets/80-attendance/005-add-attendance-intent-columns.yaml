@@ -1,0 +1,43 @@
+databaseChangeLog:
+  # Intencao de fila com horario-alvo (item #40, Opcao B): um atendimento pode entrar como
+  # INTENCAO (is_intent=true) com um horario-alvo (target_time). Enquanto o atendimento previsto
+  # da posicao dele for ANTES do alvo, ele cede a vez a quem chega depois; quando o previsto
+  # encosta/cruza o alvo, vira CONFIRMADO (is_intent=false) automaticamente (lazy-on-read).
+  # O status permanece SCHEDULED o tempo todo. Ver QueueUtils.isTargetFeasible / shouldConfirmIntent
+  # / assignAgendaSlot.
+  - changeSet:
+      id: 005-add-is_intent-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: is_intent
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: is_intent
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 005-add-target_time-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: target_time
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: target_time
+                  type: TIMESTAMP WITH TIME ZONE

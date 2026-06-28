@@ -103,6 +103,25 @@ public class Attendance implements Serializable {
     @Column(name = "fit_ahead_length")
     private Integer fitAheadLength;
 
+    /**
+     * Intencao de fila com horario-alvo (item #40, Opcao B): marca este atendimento como
+     * INTENCAO (ainda nao confirmado). Enquanto {@code isIntent}, ele ordena pelo {@code targetTime}
+     * e CEDE a vez a quem chega depois — desde que o atendimento previsto da posicao dele ainda
+     * seja ANTES do alvo. Quando o previsto encosta/cruza o alvo, vira confirmado
+     * ({@code isIntent=false}) automaticamente. O status permanece {@code SCHEDULED}.
+     * Ver {@code QueueUtils.isTargetFeasible}/{@code shouldConfirmIntent}/{@code assignAgendaSlot}.
+     */
+    @Column(name = "is_intent", nullable = false)
+    private boolean intent = false;
+
+    /**
+     * Intencao de fila (item #40): horario-alvo escolhido pelo cliente (ex.: 17:00). Null quando
+     * {@code intent == false}. A ordenacao da fila de espera usa este horario para a intencao
+     * (em vez do {@code scheduledTime}), e a confirmacao dispara quando o previsto o alcanca.
+     */
+    @Column(name = "target_time")
+    private OffsetDateTime targetTime;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
