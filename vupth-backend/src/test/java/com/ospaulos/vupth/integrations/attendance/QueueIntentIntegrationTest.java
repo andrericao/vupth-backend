@@ -178,7 +178,15 @@ class QueueIntentIntegrationTest {
     @Order(10)
     @DisplayName("Ingresso viavel (fila vazia) — entra como INTENCAO com slot reservado >= alvo")
     void intent_feasible_marksIntentWithSlot() throws Exception {
-        Q intent = createIntent(120); // fila vazia -> previsto agora (0) < alvo -> viavel
+        // posta direto para inspecionar o response (DTO expoe isIntent + targetTime — item #40)
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        OffsetDateTime target = OffsetDateTime.now().plusMinutes(120);
+        MvcResult r = postAttendance(client.token(), client.id(), OffsetDateTime.now(), target);
+        assertThat(r.getResponse().getStatus()).isEqualTo(201);
+        JSONObject body = new JSONObject(r.getResponse().getContentAsString());
+        assertThat(body.getBoolean("isIntent")).as("DTO expoe isIntent=true").isTrue();
+        assertThat(body.isNull("targetTime")).as("DTO expoe targetTime").isFalse();
+        Q intent = new Q(body.getString("id"), client.token(), client.id());
 
         Attendance a = reload(intent.id());
         assertThat(a.isIntent()).as("marcado como intencao").isTrue();

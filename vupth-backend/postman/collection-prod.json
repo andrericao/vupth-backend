@@ -5634,6 +5634,8 @@
 									"  const r = pm.response.json();",
 									"  pm.collectionVariables.set(\"attendance_id_intent\", r.id);",
 									"  pm.test(\"status SCHEDULED\", () => pm.expect(r.status).to.equal(\"SCHEDULED\"));",
+									"  pm.test(\"DTO expoe isIntent=true (item #40)\", () => pm.expect(r.isIntent).to.equal(true));",
+									"  pm.test(\"DTO expoe targetTime\", () => pm.expect(r.targetTime).to.be.a(\"string\"));",
 									"  pm.test(\"reservou slot no futuro (intencao, nao walk-in)\", function(){",
 									"    const sched = new Date(r.scheduledTime).getTime();",
 									"    pm.expect(sched).to.be.above(Date.now() + 2*3600*1000);",

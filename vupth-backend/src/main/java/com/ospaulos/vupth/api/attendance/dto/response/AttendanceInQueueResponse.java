@@ -24,7 +24,12 @@ public record AttendanceInQueueResponse(
         OffsetDateTime scheduledTime,
         Integer estimatedMinutes,
         //Integer pausedTime,
-        Integer durationInMinutes
+        Integer durationInMinutes,
+        // Item #40 (intencao de fila): isIntent=true enquanto o atendimento ainda cede a vez (intencao
+        // nao confirmada); targetTime e o horario-alvo escolhido pelo cliente (null em walk-in normal).
+        // Permite ao Front-Partner distinguir intencao vs confirmado e ao Front-Client exibir o estado.
+        boolean isIntent,
+        OffsetDateTime targetTime
 ) {
     public static AttendanceInQueueResponse fromEntity(Attendance attendance) {
 
@@ -48,7 +53,9 @@ public record AttendanceInQueueResponse(
                 attendance.getScheduledTime(),
                 attendance.getEstimatedTotalMinutes(),
                 //attendance.getPausedTime
-                attendance.getDurationInMinutes()
+                attendance.getDurationInMinutes(),
+                attendance.isIntent(),
+                attendance.getTargetTime()
         );
     }
 
