@@ -56,6 +56,13 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final ProfessionalRepository professionalRepository;
     private final ClientRepository clientRepository;
     private final EstablishmentRepository establishmentRepository;
+    private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
+
+    /**
+     * Janela (minutos) abaixo da qual cancelar a vez e considerado tardio (item #39). Cancelar com o
+     * ETA da propria vez a menos disso gera um strike (penalidade) ao cliente registrado.
+     */
+    private static final int LATE_CANCEL_THRESHOLD_MINUTES = 60;
 
     // ─────────────────────────────────────────────────────────────
     // CREATE
@@ -360,6 +367,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceCancelNotAllowedException(attendanceId);
         }
 
+        // Item #39 (Fase 1): cancelar a <1h da propria vez desorganiza a fila — registra strike.
+        // Avalia o ETA AGORA (antes de marcar CANCELLED, enquanto ainda esta na fila de espera).
+        registerLateCancelPenaltyIfApplicable(attendance);
+
         attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
 
@@ -370,6 +381,59 @@ public class AttendanceServiceImpl implements AttendanceService {
                 clientName, attendance.getProfessional().getName());
 
         return AttendanceInQueueResponse.fromEntity(saved);
+    }
+
+    /**
+     * Item #39 (Fase 1, sem pagamento). Se o atendimento que esta sendo cancelado pertence a um
+     * cliente registrado e o ETA ate a vez dele AGORA e menor que {@link #LATE_CANCEL_THRESHOLD_MINUTES},
+     * registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
+     * {@code LATE_CANCEL} e incrementa o contador denormalizado {@code strikeCount} do cliente.
+     *
+     * <p>O ETA usa {@link QueueUtils#calculateWaitingTimeForPosition} (meal-aware) sobre a fila de
+     * espera atual, ate a posicao do proprio atendimento — a mesma base do ingresso (#40) e do
+     * wait-time exibido ao cliente. Convidados (sem conta) nao acumulam strikes.</p>
+     */
+    private void registerLateCancelPenaltyIfApplicable(
+            com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        Client client = attendance.getClient();
+        if (client == null) {
+            return; // convidado — sem conta, sem strike
+        }
+
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+        if (professional == null || establishment == null) {
+            return;
+        }
+
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        int position = -1;
+        for (int i = 0; i < waiting.size(); i++) {
+            if (waiting.get(i).getId().equals(attendance.getId())) {
+                position = i;
+                break;
+            }
+        }
+        if (position < 0) {
+            return; // ja nao esta na fila de espera — nada a penalizar
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        int eta = QueueUtils.calculateWaitingTimeForPosition(
+                waiting, professional.getIntervals(), now, position);
+
+        if (eta < LATE_CANCEL_THRESHOLD_MINUTES) {
+            penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+                    client,
+                    com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL,
+                    attendance.getId(),
+                    eta));
+            // client e gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
+            client.incrementStrike();
+            log.info("[Attendance] cancelAttendance — LATE_CANCEL strike: client={} eta={}min strikes={}",
+                    client.getId(), eta, client.getStrikeCount());
+        }
     }
 
     @Override

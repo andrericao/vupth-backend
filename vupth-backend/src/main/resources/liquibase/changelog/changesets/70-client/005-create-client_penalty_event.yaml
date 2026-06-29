@@ -1,0 +1,81 @@
+databaseChangeLog:
+  # Multa / aviso de cancelamento tardio + strikes (item #39, Fase 1 — sem pagamento).
+  # Ao cancelar um atendimento SCHEDULED com ETA < 1h para a vez do cliente, registra-se um
+  # evento de penalidade (strike) e incrementa-se o contador denormalizado strike_count no client.
+  # Fase 1 apenas registra e expoe a contagem (sem cobranca, sem bloqueio automatico).
+  - changeSet:
+      id: 005-add-strike_count-to-client
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: client
+                columnName: strike_count
+      changes:
+        - addColumn:
+            tableName: client
+            columns:
+              - column:
+                  name: strike_count
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 005-create-client_penalty_event
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: client_penalty_event
+      changes:
+        - createTable:
+            tableName: client_penalty_event
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_client_penalty_event
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: attendance_id
+                  type: UUID
+              - column:
+                  name: type
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: eta_minutes
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: client_penalty_event
+            baseColumnNames: client_id
+            constraintName: fk_penalty_event_client
+            referencedTableName: client
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: client_penalty_event
+            baseColumnNames: attendance_id
+            constraintName: fk_penalty_event_attendance
+            referencedTableName: ATTENDANCE
+            referencedColumnNames: id
+            onDelete: SET NULL

@@ -35,9 +35,21 @@ public class Client {
     @OneToMany(mappedBy = "client", fetch = FetchType.LAZY)
     private List<Attendance> attendances = new ArrayList<>();
 
+    /**
+     * Contador denormalizado de strikes/penalidades (item #39, Fase 1). Incrementado a cada
+     * {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} (ex.: cancelamento tardio
+     * com ETA &lt; 1h). Fase 1 apenas acumula e expoe — sem bloqueio automatico.
+     */
+    @Column(name = "strike_count", nullable = false)
+    private int strikeCount = 0;
+
     public Client(BaseUser baseUser) {
         this.baseUser = baseUser;
         this.id = baseUser.getId();
+    }
+
+    public void incrementStrike() {
+        this.strikeCount++;
     }
 
     public String getFirstName(){
