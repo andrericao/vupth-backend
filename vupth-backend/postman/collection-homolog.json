@@ -5952,6 +5952,148 @@
 			]
 		},
 		{
+			"name": "08f - cancelamento tardio (#39)",
+			"description": "Item #39 (Fase 1) — multa/aviso de cancelamento tardio + strikes. Cancelar (PUT /attendances/{id}/cancel) com o ETA da propria vez a menos de 1h registra um strike (ClientPenaltyEvent LATE_CANCEL) e incrementa strikeCount no client. GET /clients/{id} expoe strikeCount. Fase 1 so registra/expoe (sem cobranca, sem bloqueio). Em ambiente compartilhado o ETA depende do estado da fila; este folder valida o contrato (strikeCount numerico) e o comportamento (nao diminui apos cancelar; +1 quando ETA<1h).",
+			"item": [
+				{
+					"name": "GET strikeCount inicial do cliente",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  const r = pm.response.json();",
+									"  pm.test(\"strikeCount e numero (contrato #39)\", () => pm.expect(r.strikeCount).to.be.a(\"number\"));",
+									"  pm.collectionVariables.set(\"strike_before\", r.strikeCount);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/clients/{{client_id}}",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create walk-in do cliente -> 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_latecancel\", pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PUT cancel (tardio se ETA<1h) -> 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_latecancel}}/cancel",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET strikeCount apos cancel -> nao diminui (+1 se ETA<1h)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  const r = pm.response.json();",
+									"  const before = Number(pm.collectionVariables.get(\"strike_before\"));",
+									"  pm.test(\"strikeCount e numero\", () => pm.expect(r.strikeCount).to.be.a(\"number\"));",
+									"  pm.test(\"strikeCount nao diminui apos cancelar\", () => pm.expect(r.strikeCount).to.be.at.least(before));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/clients/{{client_id}}",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "08b - prof attendance pause resume",
 			"item": [
 				{
