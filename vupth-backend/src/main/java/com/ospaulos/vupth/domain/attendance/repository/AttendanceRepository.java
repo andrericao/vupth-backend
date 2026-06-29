@@ -94,7 +94,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
 
     /**
-     * Find apenas attendances em espera (SCHEDULED) para formar a fila.
+     * Find os attendances em espera para formar a fila. Inclui SCHEDULED e LATE (item #19):
+     * o cliente marcado como atrasado NAO sai da fila — apenas cai de posicao (scheduledTime
+     * empurrado), entao continua aparecendo aqui, ordenado por scheduledTime.
      * JOIN FETCH evita LazyInitializationException ao serializar client/professional/serviceItems.
      */
     @Query("""
@@ -107,7 +109,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
         LEFT JOIN FETCH a.serviceItems
         WHERE a.professional.id = :professionalId
           AND a.establishment.id = :establishmentId
-          AND a.status = 'SCHEDULED'
+          AND a.status IN ('SCHEDULED', 'LATE')
         ORDER BY a.scheduledTime ASC
     """)
     List<Attendance> findWaitingQueueByProfessionalAndEstablishment(
@@ -189,13 +191,13 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     boolean existsByProfessional_IdAndStatusIn(UUID professionalId, List<AttendanceStatus> statuses);
 
     /**
-     * Counts how many attendances are waiting in the queue
+     * Counts how many attendances are waiting in the queue (SCHEDULED + LATE, item #19).
      */
     @Query("""
         SELECT COUNT(a) FROM Attendance a
         WHERE a.professional.id = :professionalId
           AND a.establishment.id = :establishmentId
-          AND a.status = 'SCHEDULED'
+          AND a.status IN ('SCHEDULED', 'LATE')
     """)
     long countWaitingQueueByProfessionalAndEstablishment(
             @Param("professionalId") UUID professionalId,

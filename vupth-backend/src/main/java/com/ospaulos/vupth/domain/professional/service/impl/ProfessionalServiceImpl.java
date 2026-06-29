@@ -120,7 +120,9 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         assertProfessionalOwnsAttendance(professional, attendance);
 
-        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+        // Aceita SCHEDULED ou LATE (item #19): o cliente atrasado pode ser atendido direto ao chegar.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
 
@@ -137,6 +139,208 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         log.info("[Professional] startAttendance — attendance={} iniciado", attendanceId);
         return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
+    public QueueResponse markAttendanceLate(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] markAttendanceLate — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        // So um cliente que esta esperando pode ser marcado como atrasado.
+        // Aceita SCHEDULED ou ja-LATE (marcar de novo = cai mais uma posicao).
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Cai uma posicao: reposiciona atras do proximo da fila (empurrando o scheduledTime).
+        // A fila ja inclui SCHEDULED+LATE ordenada por scheduledTime. Se ja for o ultimo, so vira LATE.
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        repositionBehindNext(attendance, waiting);
+        attendance.setStatus(AttendanceStatus.LATE);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] markAttendanceLate — attendance={} marcado LATE (caiu de posicao)", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
+    public QueueResponse undoAttendanceLate(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] undoAttendanceLate — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        if (attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.LATE);
+        }
+
+        // Volta a SCHEDULED mantendo a posicao atual (a que ele caiu) — nao reposiciona.
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] undoAttendanceLate — attendance={} voltou para SCHEDULED", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    /**
+     * Empurra {@code target} para tras do proximo da fila de espera (cai 1 posicao), ajustando o
+     * {@code scheduledTime} para um instante entre o proximo e o seguinte. Se o target ja for o
+     * ultimo (ou nao estiver na lista), nada muda — permanece onde esta. A lista vem ordenada por
+     * {@code scheduledTime} ASC e inclui SCHEDULED+LATE.
+     */
+    private void repositionBehindNext(Attendance target, List<Attendance> waiting) {
+        int idx = -1;
+        for (int i = 0; i < waiting.size(); i++) {
+            if (waiting.get(i).getId().equals(target.getId())) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0 || idx == waiting.size() - 1) {
+            return; // fora da fila ou ja e o ultimo
+        }
+
+        java.time.OffsetDateTime next = waiting.get(idx + 1).getScheduledTime();
+        java.time.OffsetDateTime newTime;
+        if (idx + 2 < waiting.size()) {
+            java.time.OffsetDateTime afterNext = waiting.get(idx + 2).getScheduledTime();
+            long gapSeconds = java.time.Duration.between(next, afterNext).getSeconds();
+            // ponto medio entre o proximo e o seguinte -> cai exatamente 1 posicao
+            newTime = next.plusSeconds(Math.max(1, gapSeconds / 2));
+        } else {
+            newTime = next.plusMinutes(1); // passa a ser o ultimo
+        }
+        target.setScheduledTime(newTime);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ENCAIXE (item #38)
+    // ─────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
+    public QueueResponse fitInAttendance(UUID professionalId, UUID attendanceId, int aheadCount) {
+        log.info("[Professional] fitInAttendance — professional={} attendance={} aheadCount={}",
+                professionalId, attendanceId, aheadCount);
+
+        if (aheadCount < 0) {
+            throw new IllegalArgumentException("aheadCount cannot be negative");
+        }
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        // So um cliente que esta esperando pode ser encaixado (aceita SCHEDULED ou LATE).
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+
+        // Reposiciona o atendimento para logo apos `aheadCount` OUTROS clientes e grava o
+        // "length inicial" do ramp (= quantos realmente ficaram a frente). Volta a SCHEDULED
+        // (sai de LATE se estava) — o ramp e marcado por isFit, nao pelo status.
+        int aheadLength = repositionForFit(attendance, waiting, aheadCount);
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        attendance.setFit(true);
+        attendance.setFitAheadLength(aheadLength);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] fitInAttendance — attendance={} encaixado apos {} clientes (ramp length={})",
+                attendanceId, aheadLength, aheadLength);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
+    public QueueResponse undoFitInAttendance(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] undoFitInAttendance — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        if (!attendance.isFit()) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Para de rampar: passa a contribuir o tempo cheio, mantendo a posicao atual.
+        attendance.setFit(false);
+        attendance.setFitAheadLength(null);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] undoFitInAttendance — attendance={} deixou de ser encaixe", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    /**
+     * Posiciona {@code target} logo apos {@code aheadCount} OUTROS atendimentos da fila de espera,
+     * ajustando o {@code scheduledTime} (ponto medio entre os vizinhos — mesmo padrao do #19).
+     * A fila vem ordenada por {@code scheduledTime} ASC e inclui o proprio {@code target}.
+     *
+     * @return o "length inicial" do ramp = quantos clientes realmente ficaram a frente (clamp
+     *         em [0, n_outros]); usado como divisor das fatias de tempo do encaixe.
+     */
+    private int repositionForFit(Attendance target, List<Attendance> waiting, int aheadCount) {
+        List<Attendance> others = waiting.stream()
+                .filter(a -> !a.getId().equals(target.getId()))
+                .toList();
+        if (others.isEmpty()) {
+            return 0; // unico na fila: sem ninguem a frente, sem ramp
+        }
+
+        int idx = Math.min(aheadCount, others.size()); // quantos ficam realmente a frente
+        java.time.OffsetDateTime newTime;
+        if (idx == 0) {
+            newTime = others.get(0).getScheduledTime().minusMinutes(1); // vai pra frente de todos
+        } else if (idx >= others.size()) {
+            newTime = others.get(others.size() - 1).getScheduledTime().plusMinutes(1); // vai pro fim
+        } else {
+            java.time.OffsetDateTime before = others.get(idx - 1).getScheduledTime();
+            java.time.OffsetDateTime after = others.get(idx).getScheduledTime();
+            long gapSeconds = java.time.Duration.between(before, after).getSeconds();
+            newTime = before.plusSeconds(Math.max(1, gapSeconds / 2));
+        }
+        target.setScheduledTime(newTime);
+        return idx;
     }
 
     @Override
@@ -290,19 +494,27 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
     @Override
     @Transactional
-    public ServiceItemResponse createServiceItemForEstablishment(UUID ownerId, UUID establishmentId, ServiceItemRequest request) {
-        log.info("[Professional] createServiceItemForEstablishment — owner={} establishment={} type={} name={}",
-                ownerId, establishmentId, request.serviceItemType(), request.customName());
+    public ServiceItemResponse createServiceItemForEstablishment(UUID requesterId, UUID establishmentId, ServiceItemRequest request) {
+        log.info("[Professional] createServiceItemForEstablishment — requester={} establishment={} type={} name={}",
+                requesterId, establishmentId, request.serviceItemType(), request.customName());
 
         Establishment establishment = establishmentRepository.findById(establishmentId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
 
-        if (establishment.getOwner() == null || !establishment.getOwner().getId().equals(ownerId)) {
-            throw new EstablishmentAccessDeniedException("User " + ownerId + " is not the owner of establishment " + establishmentId);
-        }
+        Professional requester = professionalRepository.findByIdWithBaseUser(requesterId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(requesterId));
 
-        Professional professional = professionalRepository.findByIdWithBaseUser(ownerId)
-                .orElseThrow(() -> new ProfessionalNotFoundException(ownerId));
+        // S1: o owner OU um profissional AFILIADO a esta loja pode cadastrar servico.
+        // O servico fica sob o professional do requester (ServiceItem.professional ->
+        // professional.establishment = a loja), entao o afiliado cadastra o proprio servico.
+        boolean isOwner = establishment.getOwner() != null
+                && establishment.getOwner().getId().equals(requesterId);
+        boolean isAffiliated = requester.getEstablishment() != null
+                && requester.getEstablishment().getId().equals(establishmentId);
+        if (!isOwner && !isAffiliated) {
+            throw new EstablishmentAccessDeniedException(
+                    "User " + requesterId + " is neither the owner nor an affiliated professional of establishment " + establishmentId);
+        }
 
         List<ServiceItem> services = establishmentService.getServicesItemByEstablishment(establishmentId);
         boolean nameExists = services.stream()
@@ -311,7 +523,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
             throw new ServiceItemAlreadyExistsException(request.customName());
         }
 
-        return serviceItemService.createServiceItem(professional, request);
+        return serviceItemService.createServiceItem(requester, request);
     }
 
     // ─────────────────────────────────────────────────────────────

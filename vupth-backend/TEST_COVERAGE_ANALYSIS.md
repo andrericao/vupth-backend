@@ -181,6 +181,10 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 
 ## 6. CHANGELOG DE COBERTURA
 
+### 2026-06-24
+- **#19 status LATE (cliente atrasado / no-show parcial)**: ✅ `LateAttendanceIntegrationTest` (10) — feliz: cai 1 posição atrás do próximo (sem sair da fila); marcar de novo cai mais; `undo-late` volta a SCHEDULED; `start` aceita LATE direto. Erros: status inválido 400, undo de não-LATE 400, profissional de outra loja 403/404, sem token 401, token CLIENT 403, attendance inexistente 404. Endpoints novos `PATCH /attendances/{id}/late` e `/undo-late` + fila (`findWaitingQueueByProfessionalAndEstablishment`) passa a incluir LATE. Postman: folder `08c - prof attendance late (#19)` (6 requests, homolog+prod).
+  - **2 falhas na 1ª rodada → corrigidas:** (1) `markLate_clientToken_403` dava 404 → faltava matcher de segurança: `/attendances/*/late` e `/undo-late` agora `hasRole("PROFESSIONAL")`. (2) `markLate_again_fallsFurther` (caía pro fim, não 1 posição) → `updateQueueEstimates` renormalizava só `SCHEDULED`, congelando o LATE no fim; criado `Professional.getWaitingAttendances()` (SCHEDULED+LATE) e a renormalização passou a usá-lo (no-op quando não há LATE → não afeta testes existentes). Recompila. ⏳ aguardando André re-rodar.
+
 ### 2026-06-22
 - **#37 lock da refeição (ETA estável do cliente)**: ✅ `ClientEtaMealLockIntegrationTest` (5) — trava no ingresso; sobrevive a fila encolher (cliente vira o 1º → projeção daria 0, lock mantém); skip #41 override; unskip restaura. Unit: +7 casos em `QueueUtilsTest` → 19 (`mealsCountedForPosition` × 3 + `lockedClientWait` × 4, incl. skip/done/null-safe). ⏳ aguardando André rodar.
 

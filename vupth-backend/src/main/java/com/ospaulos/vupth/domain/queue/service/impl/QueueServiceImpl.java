@@ -18,6 +18,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -32,6 +33,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @org.springframework.transaction.annotation.Transactional
 public class QueueServiceImpl implements QueueService {
+
+    // item #40: tolerancia (min) do gatilho de confirmacao da intencao. 0 = confirma exatamente quando
+    // o atendimento previsto alcanca o horario-alvo. Aumentar antecipa a confirmacao (deixa de ceder antes).
+    private static final int INTENT_CONFIRM_TOLERANCE_MINUTES = 0;
 
     private final AttendanceService attendanceService;
 
@@ -170,11 +175,13 @@ public class QueueServiceImpl implements QueueService {
         int totalEstimated = 0;
         int totalRemaining = 0;
 
-        for (Attendance attendance : scheduledQueue) {
+        for (int i = 0; i < scheduledQueue.size(); i++) {
+            Attendance attendance = scheduledQueue.get(i);
 
             AttendanceInQueueResponse attendanceInfo = attendanceService.buildAttendanceInQueueResponse(attendance);
 
-            int estimatedMinutes = attendance.getEstimatedTotalMinutes();
+            // item #38: encaixe contribui tempo rampado (i = clientes a frente agora); NORMAL = tempo cheio.
+            int estimatedMinutes = QueueUtils.effectiveEstimatedMinutes(attendance, i);
             totalEstimated += estimatedMinutes;
             totalRemaining += estimatedMinutes;
 
@@ -201,7 +208,9 @@ public class QueueServiceImpl implements QueueService {
 
         OffsetDateTime nextAvailableTime = calculateNextAvailableTime(professional);
 
-        List<Attendance> queuedAttendances = professional.getScheduledAttendances();
+        // Inclui LATE (item #19): o atrasado fica na fila e precisa ser renormalizado junto,
+        // mantendo a posicao relativa (senao seu horario antigo o jogaria pro fim).
+        List<Attendance> queuedAttendances = professional.getWaitingAttendances();
 
         updateQueueScheduledTimes(queuedAttendances, nextAvailableTime);
     }
@@ -232,6 +241,30 @@ public class QueueServiceImpl implements QueueService {
         OffsetDateTime currentTime = startTime;
 
         for (Attendance attendance : queuedAttendances) {
+            // item #40 (intencao de fila): uma intencao reserva um slot FIXO (scheduledTime = horario-alvo/encaixe)
+            // e sorta ao fim da fila, cedendo a vez aos walk-ins. Como a lista vem ordenada por scheduledTime,
+            // ao chegar aqui o currentTime ja acumulou todos os walk-ins A FRENTE — ou seja, e o horario PREVISTO
+            // de atendimento desta intencao. Avaliamos a CONFIRMACAO (item #40, gatilho em evento de fila): se o
+            // previsto encostou no alvo, a intencao deixa de ceder, vira SCHEDULED normal e trava no inicio da
+            // fila (anchor) para nao ser cortada por futuros walk-ins. Enquanto nao confirma, mantem o slot e NAO
+            // consome a timeline (currentTime nao avanca), senao empurraria os walk-ins de tras.
+            if (attendance.isIntent()) {
+                int etaToHere = (int) Math.max(0, Duration.between(startTime, currentTime).toMinutes());
+                boolean confirm = QueueUtils.shouldConfirmIntent(
+                        startTime, etaToHere, attendance.getTargetTime(), INTENT_CONFIRM_TOLERANCE_MINUTES);
+                if (!confirm) {
+                    log.debug("⏭️ Intent {} ainda cede (previsto={} < alvo={})",
+                            attendance.getId(), currentTime, attendance.getTargetTime());
+                    continue;
+                }
+                attendance.setIntent(false);
+                attendance.setScheduledTime(startTime); // trava no inicio: futuros walk-ins (now > startTime) entram atras
+                attendanceRepository.save(attendance);
+                log.info("✅ Intent {} confirmada — previsto {} encostou no alvo {}",
+                        attendance.getId(), currentTime, attendance.getTargetTime());
+                continue;
+            }
+
             OffsetDateTime oldTime = attendance.getScheduledTime();
 
             attendance.setScheduledTime(currentTime);

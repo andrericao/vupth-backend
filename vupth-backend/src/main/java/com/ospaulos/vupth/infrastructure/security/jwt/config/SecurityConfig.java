@@ -103,6 +103,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/finish").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/pause").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/resume").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/late").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-late").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/fit-in").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-fit").hasRole("PROFESSIONAL")
 
                         .requestMatchers(HttpMethod.POST, "/professional-queue/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional-queue/**").hasRole("PROFESSIONAL")
@@ -117,7 +121,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/affiliations").hasRole("PROFESSIONAL")
 
                         // ── ROLE_OWNER ────────────────────────────────────────────────────
-                        .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasRole("OWNER")
+                        // S1: alem do owner, um profissional AFILIADO a loja pode cadastrar o proprio servico
+                        // (a checagem owner-ou-afiliado fica no service).
+                        .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")

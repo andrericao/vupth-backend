@@ -99,7 +99,8 @@ public class AttendanceController {
                 request.status(),
                 request.scheduledTime(),
                 request.estimatedMinutes(),
-                request.local()
+                request.local(),
+                request.targetTime()    // item #40: horario-alvo (intencao de fila)
         );
 
         var response = attendanceService.createAttendance(secureRequest);
@@ -180,6 +181,94 @@ public class AttendanceController {
         queuePublisher.notifyClient(att.clientId(), QueueNotification.of(
                 "ATTENDANCE_STARTED", attendanceId, att.establishmentId(),
                 "É a sua vez! Seu atendimento começou."));
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/late
+     *
+     * Marca um cliente que nao chegou como LATE (item #19): ele cai uma posicao na fila
+     * (atras do proximo) mas NAO sai. Pode ser chamado de novo para cair mais.
+     * O profissional logado deve ser o dono do attendance. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/late")
+    public ResponseEntity<?> markLate(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER LATE {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.markAttendanceLate(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou (cliente caiu de posicao) → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/undo-late
+     *
+     * Desfaz o LATE (item #19): o cliente volta a SCHEDULED na posicao atual (a que caiu).
+     * O profissional logado deve ser o dono do attendance. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/undo-late")
+    public ResponseEntity<?> undoLate(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER UNDO-LATE {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.undoAttendanceLate(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/fit-in?aheadCount=5
+     *
+     * Encaixa o cliente no meio da fila (item #38): o atendimento e movido para logo apos
+     * {@code aheadCount} clientes. Os de tras absorvem o tempo do encaixe de forma rampada
+     * (sem solavanco na estimativa). O profissional logado deve ser o dono. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/fit-in")
+    public ResponseEntity<?> fitIn(
+            @PathVariable UUID attendanceId,
+            @RequestParam(defaultValue = "0") int aheadCount,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER FIT-IN {} aheadCount={} by user={}",
+                attendanceId, aheadCount, principal.getUserId());
+
+        QueueResponse response = professionalService.fitInAttendance(principal.getUserId(), attendanceId, aheadCount);
+
+        // WS: a fila mudou (cliente encaixado) → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/undo-fit
+     *
+     * Desfaz o encaixe (item #38): o atendimento deixa de rampar e passa a contribuir o tempo
+     * cheio, mantendo a posicao atual. O profissional logado deve ser o dono. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/undo-fit")
+    public ResponseEntity<?> undoFit(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER UNDO-FIT {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.undoFitInAttendance(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
 
         return ResponseEntity.ok(response);
     }

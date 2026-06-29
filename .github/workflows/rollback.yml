@@ -1,0 +1,91 @@
+name: Rollback manual
+
+# Rollback sob demanda (botao "Run workflow" no GitHub Actions).
+# Por padrao redeploya o ultimo commit que passou no ambiente escolhido
+# (tag homolog-last-good / prod-last-good); opcionalmente um commit/tag especifico.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Ambiente para reverter"
+        required: true
+        type: choice
+        options:
+          - homolog
+          - prod
+      ref:
+        description: "Commit/tag a deployar (vazio = ultimo last-good do ambiente)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve commit alvo
+        id: r
+        run: |
+          git fetch --tags --force
+          REF="${{ inputs.ref }}"
+          if [ -z "$REF" ]; then
+            if [ "${{ inputs.environment }}" = "prod" ]; then
+              REF=prod-last-good
+            else
+              REF=homolog-last-good
+            fi
+          fi
+          if ! SHA=$(git rev-parse --verify "$REF^{commit}" 2>/dev/null); then
+            echo "::error::ref '$REF' nao existe (ainda nao houve deploy verde nesse ambiente?)"
+            exit 1
+          fi
+          echo "Rollback ${{ inputs.environment }} -> $REF ($SHA)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Rollback HOMOLOG (Render API)
+        if: inputs.environment == 'homolog'
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          HOMOLOG_URL: ${{ secrets.HOMOLOG_URL }}
+          GOOD_SHA: ${{ steps.r.outputs.sha }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "::error::Configure RENDER_API_KEY e RENDER_SERVICE_ID para rollback do Render."
+            exit 1
+          fi
+          curl --fail -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"commitId\":\"$GOOD_SHA\"}"
+          echo "Aguardando HOMOLOG (readiness)..."
+          for i in {1..40}; do
+            H=$(curl -s --connect-timeout 5 --max-time 10 "$HOMOLOG_URL/actuator/health/readiness" || true)
+            echo "$H" | grep -q '"status":"UP"' && echo "HOMOLOG OK no $GOOD_SHA" && exit 0
+            sleep 15
+          done
+          echo "::error::Timeout aguardando HOMOLOG"; exit 1
+
+      - name: Rollback PROD (Railway)
+        if: inputs.environment == 'prod'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          PROD_URL: ${{ secrets.PROD_URL }}
+        run: |
+          git checkout ${{ steps.r.outputs.sha }}
+          npm install -g @railway/cli
+          railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
+          echo "Aguardando PROD (readiness)..."
+          for i in {1..30}; do
+            H=$(curl -s --connect-timeout 5 --max-time 10 "$PROD_URL/actuator/health" || true)
+            echo "$H" | grep -q '"status":"UP"' && echo "PROD OK no ${{ steps.r.outputs.sha }}" && exit 0
+            sleep 15
+          done
+          echo "::error::Timeout aguardando PROD"; exit 1

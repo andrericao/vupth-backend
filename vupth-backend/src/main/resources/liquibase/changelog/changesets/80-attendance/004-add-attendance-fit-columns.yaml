@@ -1,0 +1,41 @@
+databaseChangeLog:
+  # Encaixe com equalizacao de tempo (item #38): um atendimento pode ser "encaixado"
+  # numa posicao da fila (apos `fit_ahead_length` clientes). Enquanto espera, ele contribui
+  # um tempo RAMPADO para a fila (0 -> D em fatias de D/fit_ahead_length a cada cliente que
+  # sai da frente), para que os de tras absorvam o tempo sem solavanco. Ver QueueUtils.effectiveEstimatedMinutes.
+  - changeSet:
+      id: 004-add-is_fit-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: is_fit
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: is_fit
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 004-add-fit_ahead_length-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: fit_ahead_length
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: fit_ahead_length
+                  type: INTEGER

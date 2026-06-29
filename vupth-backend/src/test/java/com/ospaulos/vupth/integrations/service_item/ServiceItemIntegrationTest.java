@@ -228,6 +228,33 @@ class ServiceItemIntegrationTest {
                 .andDo(print());
     }
 
+    @Test
+    @Order(7)
+    @DisplayName("POST /establishment/{id}/service-items — 201 profissional AFILIADO (nao-owner) cadastra o proprio servico (S1)")
+    void createServiceItem_byAffiliatedProfessional_success() throws Exception {
+        // Novo usuario que se afilia como PROFESSIONAL a loja do owner (nao e o owner).
+        var affiliated = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        TestUserUtils.becomeProfessional(mvc, mapper, faker, affiliated.token(), establishmentId, "Afiliado");
+
+        ServiceItemRequest request = new ServiceItemRequest(
+                UUID.fromString(establishmentId),
+                ServiceItemType.BARBA,
+                "Barba do Afiliado",
+                BigDecimal.valueOf(28.00),
+                20, null, null);
+
+        mvc.perform(post("/establishment/{id}/service-items", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", affiliated.token())
+                        .content(mapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.customName").value("Barba do Afiliado"))
+                // o servico fica sob o establishment da loja (derivado do professional do afiliado)
+                .andExpect(jsonPath("$.establishmentId").value(establishmentId))
+                .andDo(print());
+    }
+
     // ─────────────────────────────────────────────────────────────
     // #10 — Editar e remover ServiceItem do profissional
     // ─────────────────────────────────────────────────────────────

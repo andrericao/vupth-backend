@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgres
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
+import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
@@ -47,6 +48,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -123,6 +125,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
     }
 
+    @ExceptionHandler(TargetTimeNotFeasibleException.class)
+    public ResponseEntity<ErrorResponse> handleTargetTimeNotFeasible(
+            TargetTimeNotFeasibleException ex, HttpServletRequest req) {
+        log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
+    }
+
     @ExceptionHandler(ProfessionalNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleProfessionalNotFound(
             ProfessionalNotFoundException ex, HttpServletRequest req) {
@@ -195,6 +204,13 @@ public class GlobalExceptionHandler {
             AttendanceInvalidStatusException ex, HttpServletRequest req) {
         log.warn("[400] AttendanceInvalidStatus | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "ATTENDANCE_INVALID_STATUS");
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(
+            IllegalArgumentException ex, HttpServletRequest req) {
+        log.warn("[400] IllegalArgument | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_ARGUMENT");
     }
 
     @ExceptionHandler(InvalidIntervalTimeException.class)
@@ -426,6 +442,15 @@ public class GlobalExceptionHandler {
     // ─────────────────────────────────────────────
     // 500 INTERNAL SERVER ERROR — fallback
     // ─────────────────────────────────────────────
+
+    // 405 METHOD NOT ALLOWED — metodo HTTP errado para a rota (ex.: PATCH numa rota DELETE).
+    // Sem este handler cairia no handleGeneric e viraria um 500 enganoso.
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException ex, HttpServletRequest req) {
+        log.warn("[405] MethodNotSupported | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.METHOD_NOT_ALLOWED, ex.getMessage(), "METHOD_NOT_ALLOWED");
+    }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {

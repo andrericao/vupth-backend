@@ -11,6 +11,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelled
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
+import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
@@ -126,6 +127,57 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
     }
 
+    /**
+     * Intencao de fila com horario-alvo (item #40, Opcao B). Se {@code targetTime != null}, valida e
+     * marca o atendimento como INTENCAO antes de persistir:
+     * <ul>
+     *   <li>alvo deve estar no futuro (senao {@code IllegalArgumentException} -> 400);</li>
+     *   <li>trava de viabilidade ({@link QueueUtils#isTargetFeasible}): a fila precisa prever atendimento
+     *       <b>antes</b> do alvo, senao {@link TargetTimeNotFeasibleException} -> 422;</li>
+     *   <li>encaixe cronologico ({@link QueueUtils#assignAgendaSlot}) entre as intencoes ja reservadas:
+     *       o {@code scheduledTime} recebe o slot atribuido (>= alvo), de modo que a ordenacao por
+     *       {@code scheduledTime} faca a intencao ceder a vez aos walk-ins ate o previsto encostar no alvo.</li>
+     * </ul>
+     * Nao persiste — o caller salva em seguida (o slot precisa estar no {@code scheduledTime} antes do save).
+     */
+    private void applyIntentIfRequested(com.ospaulos.vupth.domain.attendance.model.Attendance attendance,
+                                        Professional professional, Establishment establishment,
+                                        OffsetDateTime targetTime) {
+        if (targetTime == null) {
+            return; // ingresso normal (walk-in)
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!targetTime.isAfter(now)) {
+            throw new IllegalArgumentException("targetTime deve estar no futuro: " + targetTime);
+        }
+
+        int duration = attendance.getServiceItems() == null ? 0 :
+                attendance.getServiceItems().stream()
+                        .filter(java.util.Objects::nonNull)
+                        .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
+                        .sum();
+
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        int eta = QueueUtils.calculateWaitingTimeForPosition(
+                waiting, professional.getIntervals(), now, waiting.size());
+
+        if (!QueueUtils.isTargetFeasible(now, eta, targetTime)) {
+            throw new TargetTimeNotFeasibleException(targetTime);
+        }
+
+        List<QueueUtils.AgendaSlot> reserved = waiting.stream()
+                .filter(Attendance::isIntent)
+                .map(a -> new QueueUtils.AgendaSlot(a.getScheduledTime(), a.getEstimatedTotalMinutes()))
+                .collect(Collectors.toList());
+        OffsetDateTime slot = QueueUtils.assignAgendaSlot(targetTime, duration, reserved);
+
+        attendance.setIntent(true);
+        attendance.setTargetTime(targetTime);
+        attendance.setScheduledTime(slot);
+        log.info("[Attendance] intencao de fila — target={} slot={} duration={}", targetTime, slot, duration);
+    }
+
     @Override
     public AttendanceInQueueResponse createAttendance(AttendanceRequest request) {
         log.info("[Attendance] createAttendance(request) — professionalId={} clientId={}",
@@ -164,10 +216,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setServiceItems(serviceItems);
         attendance.setStatus(AttendanceStatus.SCHEDULED);
         attendance.setScheduledTime(request.scheduledTime());
+        // item #40: se veio horario-alvo, entra como INTENCAO (sobrescreve o scheduledTime com o slot)
+        applyIntentIfRequested(attendance, professional, establishment, request.targetTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         lockMealsAtIngress(saved, professional, establishment);
-        log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
+        log.info("[Attendance] createAttendance — created id={} totalValue={} intent={} targetTime={}",
+                saved.getId(), saved.getTotalValue(), saved.isIntent(), saved.getTargetTime());
         return AttendanceInQueueResponse.fromEntity(saved);
     }
 
@@ -219,8 +274,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] startAttendance — attendanceId={} professionalId={}",
                 attendance.getId(), professional.getId());
 
-        if (!attendance.getStatus().equals(AttendanceStatus.SCHEDULED)) {
-            log.warn("[Attendance] startAttendance — invalid status: current={} required=SCHEDULED",
+        // Aceita SCHEDULED ou LATE (item #19): um cliente atrasado pode ser atendido direto
+        // quando finalmente chega, sem precisar desfazer o LATE antes.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED
+                && attendance.getStatus() != AttendanceStatus.LATE) {
+            log.warn("[Attendance] startAttendance — invalid status: current={} required=SCHEDULED|LATE",
                     attendance.getStatus());
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
@@ -367,7 +425,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         var status = attendance.getStatus();
+        // LATE (item #19) continua na fila de espera — o profissional tambem pode removê-lo daqui.
         if (status != AttendanceStatus.SCHEDULED
+                && status != AttendanceStatus.LATE
                 && status != AttendanceStatus.IN_PROGRESS
                 && status != AttendanceStatus.PAUSED) {
             throw new AttendanceInvalidStatusException(status, AttendanceStatus.SCHEDULED);

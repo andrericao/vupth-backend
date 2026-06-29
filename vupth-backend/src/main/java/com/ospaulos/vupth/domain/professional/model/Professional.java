@@ -79,6 +79,20 @@ public class Professional {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Fila de espera completa (item #19): SCHEDULED + LATE, ordenada por scheduledTime.
+     * O cliente marcado como LATE (atrasado) NAO sai da fila — apenas cai de posicao — entao
+     * precisa participar da renormalizacao de horarios junto com os SCHEDULED, mantendo sua
+     * posicao relativa (senao o horario antigo congelado o jogaria pro fim da fila).
+     */
+    public List<Attendance> getWaitingAttendances() {
+        return attendances.stream()
+                .filter(a -> a.getStatus() == AttendanceStatus.SCHEDULED
+                        || a.getStatus() == AttendanceStatus.LATE)
+                .sorted(Comparator.comparing(Attendance::getScheduledTime))
+                .collect(Collectors.toList());
+    }
+
     public Optional<Attendance> getCurrentAttendance() {
         return attendances.stream()
                 .filter(a -> a.getStatus() == AttendanceStatus.IN_PROGRESS)

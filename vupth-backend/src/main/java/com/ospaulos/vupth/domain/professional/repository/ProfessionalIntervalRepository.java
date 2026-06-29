@@ -82,6 +82,13 @@ public interface ProfessionalIntervalRepository extends JpaRepository<Profession
     List<ProfessionalInterval> findByProfessionalIdAndIsActiveTrue(UUID professionalId);
 
     /**
+     * Todos os intervalos de um profissional (qualquer estado/tipo), incluindo as refeicoes
+     * recorrentes seedadas inativas. Usado por testes que precisam neutralizar as refeicoes
+     * para deixar o ETA puramente baseado no tempo de servico.
+     */
+    List<ProfessionalInterval> findByProfessional_Id(UUID professionalId);
+
+    /**
      * True se a refeicao (item #41) esta marcada como pulada na data — consulta o join
      * da {@code skippedDates} sem materializar a colecao lazy (util fora de transacao).
      */
