@@ -6,8 +6,9 @@ package com.ospaulos.vupth.domain.client.model;
  * <ul>
  *   <li>{@code LATE_CANCEL} — cliente cancelou um atendimento SCHEDULED com o ETA da sua vez
  *       a menos de 1h (desorganiza a fila / afeta o proximo). Unico tipo da Fase 1.</li>
- *   <li>{@code NO_SHOW} — reservado para a escalada de no-show (ausente reincidente removido da
- *       fila + strike); ainda nao emitido nesta entrega.</li>
+ *   <li>{@code NO_SHOW} — escalada de no-show: cliente que ja estava LATE (#19, caiu de posicao)
+ *       e nao compareceu ao ser chamado de novo e removido da fila (CANCELLED) + recebe strike.
+ *       Emitido por {@code PATCH /attendances/{id}/no-show}.</li>
  * </ul>
  */
 public enum PenaltyType {

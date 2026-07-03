@@ -29,6 +29,14 @@ public interface ProfessionalService {
     public QueueResponse undoAttendanceLate(UUID professionalId, UUID attendanceId);
 
     /**
+     * Item #39 — escalada de no-show. Remove da fila (status CANCELLED) um cliente que ja
+     * estava LATE (#19) e nao compareceu ao ser chamado de novo, registrando um strike
+     * {@code NO_SHOW}. Exige que o atendimento esteja em LATE (a escalada pressupoe que ele
+     * ja caiu de posicao ao menos uma vez). Convidados sao removidos mas nao acumulam strike.
+     */
+    public QueueResponse markAttendanceNoShow(UUID professionalId, UUID attendanceId);
+
+    /**
      * Encaixa um cliente no meio da fila (item #38): o atendimento e movido para logo apos
      * {@code aheadCount} clientes (vira o {@code aheadCount+1}-esimo). Os que estavam a frente
      * NAO sofrem impacto; os de tras absorvem o tempo do encaixe (D) de forma RAMPADA — entra em

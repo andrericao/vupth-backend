@@ -6094,6 +6094,282 @@
 			]
 		},
 		{
+			"name": "08g - escalada de no-show (#39)",
+			"description": "Item #39 (escalada de no-show). Um cliente que ja estava LATE (#19) e nao compareceu ao ser chamado de novo e removido da fila via PATCH /attendances/{id}/no-show (CANCELLED) + strike NO_SHOW (ClientPenaltyEvent + strikeCount). Exige status LATE (senao 400). Convidados sao removidos mas nao acumulam strike. Requer role PROFESSIONAL (token do dono).",
+			"item": [
+				{
+					"name": "create walk-in para no-show -> 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_noshow\", pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH late (prof) -> LATE",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  const r = pm.response.json();",
+									"  const id = pm.collectionVariables.get(\"attendance_id_noshow\");",
+									"  const found = (r.attendancesInQueue || []).find(a => a.id === id);",
+									"  pm.test(\"atrasado continua na fila como LATE\", () => {",
+									"    pm.expect(found, \"nao saiu da fila\").to.not.be.undefined;",
+									"    pm.expect(found.status).to.equal(\"LATE\");",
+									"  });",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{prof_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_noshow}}/late",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH no-show (prof) -> 200 sai da fila",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  const r = pm.response.json();",
+									"  const id = pm.collectionVariables.get(\"attendance_id_noshow\");",
+									"  const found = (r.attendancesInQueue || []).find(a => a.id === id);",
+									"  pm.test(\"no-show removido da fila de espera\", () => pm.expect(found, \"nao deveria estar na fila\").to.be.undefined);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{prof_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_noshow}}/no-show",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET strikeCount apos no-show -> numero >= 1",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  const r = pm.response.json();",
+									"  pm.test(\"strikeCount e numero\", () => pm.expect(r.strikeCount).to.be.a(\"number\"));",
+									"  pm.test(\"strikeCount >= 1 apos no-show\", () => pm.expect(r.strikeCount).to.be.at.least(1));",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/clients/{{client_id}}",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create walk-in 2 (para casos de erro) -> 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_noshow2\", pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] no-show em SCHEDULED (nao-LATE) -> 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 400 - atendimento nao esta LATE\", () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{prof_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_noshow2}}/no-show",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] no-show CLIENT token -> 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 403 - CLIENT nao tem role PROFESSIONAL\", () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_noshow2}}/no-show",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "cleanup: remove walk-in 2 da fila",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{prof_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/professional-queue/{{attendance_id_noshow2}}/remove",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "08b - prof attendance pause resume",
 			"item": [
 				{

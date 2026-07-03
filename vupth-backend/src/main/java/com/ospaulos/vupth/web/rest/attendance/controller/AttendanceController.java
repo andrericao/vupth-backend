@@ -238,6 +238,29 @@ public class AttendanceController {
     }
 
     /**
+     * PATCH /attendances/{attendanceId}/no-show
+     *
+     * Escalada de no-show (item #39): remove da fila (CANCELLED) um cliente que ja estava
+     * LATE (#19) e nao compareceu ao ser chamado de novo, registrando um strike NO_SHOW.
+     * Exige que o atendimento esteja em LATE. O profissional logado deve ser o dono.
+     * Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/no-show")
+    public ResponseEntity<?> markNoShow(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER NO-SHOW {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.markAttendanceNoShow(principal.getUserId(), attendanceId);
+
+        // WS: a fila mudou (cliente removido) → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * PATCH /attendances/{attendanceId}/fit-in?aheadCount=5
      *
      * Encaixa o cliente no meio da fila (item #38): o atendimento e movido para logo apos

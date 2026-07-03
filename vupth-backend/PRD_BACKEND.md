@@ -84,7 +84,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
 
@@ -1555,6 +1555,23 @@ nao reposiciona de volta). Usado quando o cliente chega mas ainda nao vai ser at
 
 ---
 
+### PATCH /attendances/{attendanceId}/no-show
+Escalada de no-show (item #39): remove da fila um cliente **em `LATE`** (ja caiu de posicao ao menos uma vez
+via `/late`) que nao compareceu ao ser chamado de novo. `LATE -> CANCELLED` (sai da fila de espera) e registra
+um strike **`NO_SHOW`** (`ClientPenaltyEvent` + incrementa `strikeCount` do cliente). O strike e **incondicional**
+(nao ha janela de 1h — o profissional ja declarou o no-show). **Convidados** (sem conta) sao removidos mas **nao
+acumulam** strike. So o profissional **dono** do attendance pode marcar.
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `QueueResponse` (overview da fila atualizado, sem o removido). Dispara broadcast WS da fila da loja.
+
+**Erros:** `400` quando o attendance **nao esta `LATE`** (use `/late` primeiro) · `403` nao-dono / sem role PROFESSIONAL · `404` inexistente · `401` sem token.
+
+**Testes:** Integracao (`NoShowEscalationIntegrationTest`)
+
+---
+
 ### PATCH /attendances/{attendanceId}/fit-in?aheadCount=N
 Encaixa o cliente no meio da fila (item #38): move o atendimento (`SCHEDULED` ou `LATE`) para logo apos
 `N` clientes (reposiciona via `scheduledTime`, ponto-medio — mesmo padrao do #19), marca `is_fit=true` e
@@ -1599,6 +1616,8 @@ SCHEDULED ──start──> IN_PROGRESS ──finish──> FINISHED
    LATE ───start───>   PAUSED
     │                    (LATE tambem pode ir direto a IN_PROGRESS)
     │
+    ├──no-show──> CANCELLED  (profissional; escalada #39: + strike NO_SHOW)
+    │
     └──cancel/leave──> CANCELLED  (cliente: so SCHEDULED)
 
 IN_PROGRESS ──remove──> CANCELLED  (profissional)
@@ -1606,6 +1625,7 @@ PAUSED      ──remove──> CANCELLED  (profissional)
 
 LATE: cliente atrasado (item #19) — cai 1 posicao mas continua na fila de espera (junto com SCHEDULED).
       `late` pode repetir (cai mais); `undo-late` volta a SCHEDULED na posicao atual; `start` atende direto.
+      `no-show` (item #39) remove o LATE reincidente da fila (CANCELLED) + registra strike NO_SHOW.
 ```
 
 ---
@@ -2208,6 +2228,7 @@ A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` R
 | `PATCH /attendances/{id}/resume` | ✅ | — |
 | `PATCH /attendances/{id}/late` | ✅ | — |
 | `PATCH /attendances/{id}/undo-late` | ✅ | — |
+| `PATCH /attendances/{id}/no-show` | ✅ | — |
 | `PATCH /attendances/{id}/fit-in` | ✅ | — |
 | `PATCH /attendances/{id}/undo-fit` | ✅ | — |
 
@@ -2344,6 +2365,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 4. PATCH /attendances/{id}/finish   → IN_PROGRESS → FINISHED
    PATCH /attendances/{id}/late       → SCHEDULED → LATE  (atrasado: cai 1 posicao, opcional/repetivel)
    PATCH /attendances/{id}/undo-late  → LATE → SCHEDULED (opcional)
+   PATCH /attendances/{id}/no-show    → LATE → CANCELLED (escalada #39: ausente reincidente sai + strike NO_SHOW)
    PATCH /attendances/{id}/fit-in     → encaixe: move apos N clientes, is_fit=true (ETA rampado), opcional
    PATCH /attendances/{id}/undo-fit   → encaixe: is_fit=false, volta ao tempo cheio (opcional)
 ```
@@ -2456,6 +2478,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | PATCH /attendances/{id}/resume | ✅ |
 | PATCH /attendances/{id}/late | 🟡 Integracao |
 | PATCH /attendances/{id}/undo-late | 🟡 Integracao |
+| PATCH /attendances/{id}/no-show | 🟡 Integracao |
 | PATCH /attendances/{id}/fit-in | 🟢 Unit + Integracao |
 | PATCH /attendances/{id}/undo-fit | 🟡 Integracao |
 | POST /professional-queue/add-attendance | 🟡 Integracao |
@@ -2546,27 +2569,26 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Escalada de no-show (ausente reincidente sai + strike) + cobranca (Fase 2, dep. gateway #21) | 🟨 parcial | secao "Item 39" — ✅ Fase 1 (cancelamento tardio + strikes + aviso) CONCLUIDA; resta escalada no-show (reusa LATE/#19) + cobranca |
-| 2 | Remanejar cliente com espera > 1h (escolher horario / ir pro fim da fila) | ⬜ aberto | NOVO (2026-06-28) — front: 2 botoes; backend reusa `target_time` (#40) + reposition-to-end. Ver secao "Item 43" |
-| 3 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
-| 4 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
-| 5 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 6 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 7 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 8 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 9 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 10 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 11 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` |
-| 12 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 13 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 14 | Precificacao calculada no backend | ⬜ aberto (dep. #16) | secao "Item 36" |
-| 15 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 16 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao |
-| 17 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 18 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 19 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Remanejar cliente com espera > 1h (escolher horario / ir pro fim da fila) | ⬜ aberto | NOVO (2026-06-28) — front: 2 botoes; backend reusa `target_time` (#40) + reposition-to-end. Ver secao "Item 43" |
+| 2 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
+| 3 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
+| 4 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
+| 5 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 6 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 7 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
+| 8 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 9 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 10 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 11 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 12 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 13 | Precificacao calculada no backend | ⬜ aberto (dep. #15) | secao "Item 36" |
+| 14 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 15 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 16 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 17 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 18 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)**.
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2635,7 +2657,7 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
 | 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | ✅ **[BACKEND CONCLUIDO 2026-06-22]** Entregue em 2 commits: (1) **pre-req** — ETA client-facing meal-aware (passou a usar `QueueUtils`, antes ignorava refeicoes); (2) **lock** — no ingresso o `Attendance` grava o conjunto de refeicoes que estavam no ETA do cliente (`attendance_locked_intervals`, migration 025) e o ETA individual (`GET /client-queue/{attendanceId}/wait-time`) passa a somar `restante do atual + atendimentos a frente (recalc) + duracao das refeicoes TRAVADAS` — a refeicao nao sai mais por ritmo da fila. Cai so por mudanca estrutural (todos depois sairam → ahead vazio), skip #41 (override) ou inicio/remocao. Testes: unit `QueueUtilsTest` (lock/mealsCounted) + integracao `ClientEtaMealLockIntegrationTest`. **Resta:** Front-Client consumir a estimativa estavel. **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** ✅ / **Front-Client** (estimativa estavel) |
 | 38 | Encaixe com equalizacao de tempo | **✅ BACKEND CONCLUIDO** (Pos-MVP). Profissional **encaixa** um cliente no meio da fila via `PATCH /attendances/{id}/fit-in?aheadCount=N`. Os de tras absorvem o tempo do encaixe (D) **sem salto brusco**: o encaixe contribui um valor **rampado** (0 -> D em fatias de `D/fitAheadLength` a cada cliente que sai da frente). Damping do valor exibido (slew-rate). `undo-fit` reverte. **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend ✅** (colunas `is_fit`/`fit_ahead_length` + ramp em `QueueUtils.effectiveEstimatedMinutes` + endpoints) / **Front-Partner** (acao de encaixar, `aheadCount`) / **Front-Client** (estimativa ja suavizada vem da API) |
-| 39 | Multa / aviso de cancelamento tardio | 🟨 **[FASE 1 BACKEND CONCLUIDA 2026-06-29]** Cancelar (`PUT /attendances/{id}/cancel`) com o ETA da propria vez **< 1h** registra um strike (`ClientPenaltyEvent` tipo `LATE_CANCEL`, tabela `client_penalty_event`, migration 70-client/005) e incrementa `strikeCount` no `client`. ETA avaliado no instante do cancel (`QueueUtils.calculateWaitingTimeForPosition`). `GET /clients/{id}` expoe `strikeCount`. Convidados nao acumulam. Fase 1 so registra/expoe (sem cobranca, sem bloqueio). Testes `LateCancelPenaltyIntegrationTest` + Postman folder 08f. **Resta:** escalada de no-show (ausente reincidente sai + strike, reusa LATE #19) + Fase 2 cobranca (dep. gateway #21). **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** 🟨 (Fase 1 ✅; escalada no-show + cobranca = #21) / **Front-Client** (aviso da politica no cancelamento + exibir strikeCount) |
+| 39 | Multa / aviso de cancelamento tardio + no-show | 🟨 **[FASE 1 + ESCALADA NO-SHOW CONCLUIDAS]** **(Fase 1, 2026-06-29)** Cancelar (`PUT /attendances/{id}/cancel`) com o ETA da propria vez **< 1h** registra um strike (`ClientPenaltyEvent` tipo `LATE_CANCEL`, tabela `client_penalty_event`, migration 70-client/005) e incrementa `strikeCount` no `client`. `GET /clients/{id}` expoe `strikeCount`. **(Escalada no-show, 2026-07-03)** `PATCH /attendances/{id}/no-show` (PROFESSIONAL, dono): remove da fila (→ CANCELLED) um atendimento **em LATE** (#19) que nao compareceu ao ser chamado de novo e registra strike `NO_SHOW` (incondicional; exige status LATE senao `400`). Convidados sao removidos mas nao acumulam. Testes `LateCancelPenaltyIntegrationTest` + `NoShowEscalationIntegrationTest` + Postman folders 08f/08g. **Resta so:** Fase 2 cobranca monetaria (dep. gateway #21). **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** 🟨 (Fase 1 ✅ + escalada no-show ✅; so cobranca = #21) / **Front-Client** (aviso da politica no cancelamento + exibir strikeCount) / **Front-Partner** (botao "marcar no-show" no cliente LATE) |
 | 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | ✅ **[BACKEND CONCLUIDO 2026-06-28]** Opcao B (`is_intent` + `target_time`, migration 005). `POST /attendances` aceita `targetTime` opcional: presente = entra como **intencao** (cede a vez aos walk-ins enquanto o previsto for antes do alvo); ausente = walk-in normal. Trava de viabilidade no ingresso (`422 QUEUE_TARGET_NOT_FEASIBLE` se a fila ja preve atender em cima/depois do alvo), alvo no passado = `400`. Confirmacao automatica em evento de fila quando o previsto encosta no alvo (vira SCHEDULED normal, trava no inicio). Funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`. Testes: unit (`QueueUtilsTest`) + integracao (`QueueIntentIntegrationTest`). **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | ~~**Backend**~~ ✅ / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado; tratar 422/400) / **Front-Partner** (ver intencoes/agendados na fila) |
 | 41 | Skip de refeicao por dia ("Nao almocar") | ✅ **[BACKEND CONCLUIDO 2026-06-21]** Entregue `PATCH .../intervals/{intervalId}/skip` (pula a refeicao recorrente so naquele dia, default hoje) + `DELETE .../intervals/{intervalId}/skip` (desfaz). Skip por `(intervalo, data)` na tabela `professional_interval_skips` (migration 024), consumido pelo `QueueUtils` (day-scoped) — refeicao pulada cai do ETA de todos na hora, recorrencia intacta. Rebroadcast WS apos a operacao. 409 se ja iniciada/encerrada no dia (usar `finish`). Testes integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest`) + Postman folder 12 + PRD secao 18. **Resta:** Front-Partner ligar a acao "Nao almocar" do popup (eles chamam de "backend #17"). | **Backend** ✅ / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
 
@@ -2843,7 +2865,7 @@ Decisao 2026-06-16 (Andre). **✅ BACKEND CONCLUIDO (2026-06-25).** Pos-MVP. Mes
 
 ### Item 39 — Multa / aviso de cancelamento tardio
 
-Decisao 2026-06-16 (Andre). **Status: ✅ FASE 1 BACKEND CONCLUIDA (2026-06-29).** Resta a escalada de no-show e a Fase 2 (cobranca, dep. gateway #21). Pos-MVP.
+Decisao 2026-06-16 (Andre). **Status: ✅ FASE 1 + ✅ ESCALADA DE NO-SHOW CONCLUIDAS (Fase 1 em 2026-06-29; escalada em 2026-07-03).** Resta so a Fase 2 (cobranca monetaria, dep. gateway #21). Pos-MVP.
 
 **Objetivo.** Desencorajar cancelamentos de ultima hora: cancelar com **ETA < 1h** para o atendimento desorganiza a fila e afeta o proximo cliente, entao gera uma **"multa"**.
 
@@ -2871,7 +2893,15 @@ Decisao 2026-06-16 (Andre). **Status: ✅ FASE 1 BACKEND CONCLUIDA (2026-06-29).
 3. **Reincidencia e isencoes:** quantos strikes ate restringir; o que conta como motivo legitimo.
 4. **Efeito real na fila:** um cancelamento normalmente **adianta** o proximo; a "multa" aqui e dissuasao/compensacao, nao recalculo — confirmar o proposito (reduzir no-show) vs impacto tecnico.
 
-**Escalada de no-show (Andre 2026-06-25).** O *no-show* (cliente que nao comparece) ja tem o tratamento de **cair de posicao** no Item #19 (LATE): o profissional marca `/late`, o ausente cai 1 posicao e atende-se o seguinte. A regra desta secao adiciona a **escalada**: se o cliente, depois de cair, **nao aparece de novo** quando volta a ser chamado (ex.: cai de novo para a 2a posicao), ele e **removido da fila + recebe a multa/strike**. Ou seja: LATE (#19) cuida do "cai de posicao"; este item cuida do "ausente reincidente -> sai + penalidade". Presenca/no-show do Item 40 (intencao) tambem desagua aqui.
+**✅ Escalada de no-show (implementada 2026-07-03; decisao Andre 2026-06-25).** O *no-show* (cliente que nao comparece) ja tinha o tratamento de **cair de posicao** no Item #19 (LATE): o profissional marca `/late`, o ausente cai 1 posicao e atende-se o seguinte. Esta escalada adiciona o passo final: se o cliente, depois de cair, **nao aparece de novo** quando volta a ser chamado, ele e **removido da fila + recebe strike**. LATE (#19) cuida do "cai de posicao"; a escalada cuida do "ausente reincidente -> sai + penalidade". Presenca/no-show do Item 40 (intencao) tambem desagua aqui.
+
+**Contrato implementado:**
+- **`PATCH /attendances/{id}/no-show`** — role `PROFESSIONAL`, dono do atendimento. Exige que o atendimento esteja em **LATE** (a escalada pressupoe que ja caiu de posicao ao menos uma vez via `/late`); se nao estiver LATE → `400` (`AttendanceInvalidStatusException`). Sucesso: status → `CANCELLED` (sai da fila de espera, que ja exclui CANCELLED), broadcast WS da fila, retorna o overview da fila.
+- **Strike:** registra `ClientPenaltyEvent` do tipo **`NO_SHOW`** (mesma tabela `client_penalty_event` da Fase 1) e incrementa `strikeCount` do cliente. Diferente do `LATE_CANCEL`, o strike aqui e **incondicional** (nao ha janela de 1h — o profissional ja declarou o no-show); o `etaMinutes` guardado e o ETA da vez do cliente no instante (best-effort, so auditoria). **Convidados** (sem conta) sao removidos da fila mas **nao acumulam** strike.
+- **Motivo auditado:** a distincao "cancelou vs no-show" fica no `type` do `ClientPenaltyEvent` — reusa-se o status `CANCELLED` (sem novo enum de status, sem tocar findWaiting/lifecycle/relatorios).
+- **Decisoes seladas:** (1) gatilho = endpoint dedicado `/no-show` (nao sobrecarrega a semantica do `/late`); (2) status final = `CANCELLED` (menor superficie). Registrado como recomendacao aprovada; ver [[project_pending_work]].
+- **Testes:** integracao `NoShowEscalationIntegrationTest` (LATE→no-show remove+strike+count; nao-LATE→400; convidado removido sem strike; token CLIENT→403). Postman folder `08g - escalada de no-show (#39)` (homolog+prod).
+- **📣 Handoff Front-Partner:** botao "marcar no-show" disponivel **so** para clientes ja em LATE (apos ao menos um `/late`); a acao remove da fila e registra o strike. Front-Client: o `strikeCount` (GET `/clients/{id}`) ja reflete tambem os no-shows.
 
 ### Item 42 — Troca de posicao na fila por consentimento mutuo (cliente<->cliente)
 

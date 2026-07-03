@@ -204,6 +204,40 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         return queueService.getQueueOverview(professional, establishment);
     }
 
+    @Override
+    @Transactional
+    public QueueResponse markAttendanceNoShow(UUID professionalId, UUID attendanceId) {
+        log.info("[Professional] markAttendanceNoShow — professional={} attendance={}",
+                professionalId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        assertProfessionalOwnsAttendance(professional, attendance);
+
+        // Escalada: so quem ja esta LATE (caiu de posicao ao menos uma vez, #19) pode ser
+        // marcado como no-show. Do contrario o profissional deve usar /late primeiro.
+        if (attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.LATE);
+        }
+
+        // Registra o strike NO_SHOW ANTES de sair da fila (ainda esta na fila de espera).
+        attendanceService.registerNoShowPenalty(attendance);
+
+        // Remove da fila: sai da espera (findWaiting exclui CANCELLED). O motivo (no-show)
+        // fica auditado no ClientPenaltyEvent NO_SHOW.
+        attendance.setStatus(AttendanceStatus.CANCELLED);
+        attendanceRepository.save(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] markAttendanceNoShow — attendance={} removido da fila (no-show)", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
     /**
      * Empurra {@code target} para tras do proximo da fila de espera (cai 1 posicao), ajustando o
      * {@code scheduledTime} para um instante entre o proximo e o seguinte. Se o target ja for o

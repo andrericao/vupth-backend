@@ -436,6 +436,53 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
     }
 
+    /**
+     * Item #39 — escalada de no-show. Diferente do late-cancel, o strike aqui e
+     * <b>incondicional</b> (nao ha janela de 1h): quem chama ja constatou que o cliente,
+     * mesmo depois de cair de posicao (LATE #19), nao compareceu ao ser chamado de novo.
+     * Registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
+     * {@code NO_SHOW} e incrementa o {@code strikeCount}. O {@code etaMinutes} guardado e o
+     * ETA da vez do cliente AGORA (best-effort; 0 se ja fora da fila de espera), apenas para
+     * auditoria. Convidados (sem conta) nao acumulam strikes.
+     */
+    @Override
+    public void registerNoShowPenalty(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        Client client = attendance.getClient();
+        if (client == null) {
+            return; // convidado — sem conta, sem strike
+        }
+
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+
+        int eta = 0;
+        if (professional != null && establishment != null) {
+            List<Attendance> waiting = attendanceRepository
+                    .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+            int position = -1;
+            for (int i = 0; i < waiting.size(); i++) {
+                if (waiting.get(i).getId().equals(attendance.getId())) {
+                    position = i;
+                    break;
+                }
+            }
+            if (position >= 0) {
+                eta = QueueUtils.calculateWaitingTimeForPosition(
+                        waiting, professional.getIntervals(), OffsetDateTime.now(), position);
+            }
+        }
+
+        penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+                client,
+                com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW,
+                attendance.getId(),
+                eta));
+        // client gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
+        client.incrementStrike();
+        log.info("[Attendance] registerNoShowPenalty — NO_SHOW strike: client={} eta={}min strikes={}",
+                client.getId(), eta, client.getStrikeCount());
+    }
+
     @Override
     public AttendanceInQueueResponse cancelAttendance(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
         log.info("[Attendance] cancelAttendance(entity) — attendanceId={}", attendance.getId());
