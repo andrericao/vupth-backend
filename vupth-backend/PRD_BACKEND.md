@@ -82,7 +82,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | Acesso | Endpoints |
 |--------|-----------|
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
-| **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
+| **CLIENT** | `POST /attendances`, `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1) |
 | **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
@@ -1572,6 +1572,28 @@ acumulam** strike. So o profissional **dono** do attendance pode marcar.
 
 ---
 
+### POST /attendances/{attendanceId}/rating
+Avaliacao de atendimento (item #6): o cliente **dono** avalia um atendimento **`FINISHED`** com 1-5 estrelas
+(inteiro) + comentario opcional (ate 500 chars). **1 voto por atendimento.** A nota alimenta os agregados
+denormalizados (`rating_sum`/`rating_count`) do **profissional** e, quando o atendimento tinha **exatamente 1
+servico**, tambem do **`ServiceItem`** correspondente (`serviceItemId` registra a origem); com 2+ servicos
+(combo) a nota vai **so ao profissional** (`serviceItemId=null`). Atendimento **guest** (sem `client`) nao avalia.
+
+**Acesso:** CLIENT (dono do attendance)
+
+**Body:** `{ "score": 1..5 (obrigatorio), "comment": "..." (opcional, <=500) }`
+
+**Response (201):** `{ id, attendanceId, score, comment, serviceItemId, createdAt, professionalRatingAverage,
+professionalRatingCount, serviceItemRatingAverage, serviceItemRatingCount }`. **Nao dispara WS.**
+
+**Erros:** `400` `ATTENDANCE_INVALID_STATUS` (nao esta `FINISHED`) · `403` `ESTABLISHMENT_ACCESS_DENIED` (nao-dono / guest) · `409` `ATTENDANCE_ALREADY_RATED` (2o voto) · `422` `VALIDATION_ERROR` (score fora de 1..5 ou comment > 500) · `404` inexistente · `401` sem token.
+
+**Exibicao:** as medias sao lidas em `GET /establishment/id/{id}/professionals-with-queue` (`rating_average`/`rating_count` no profissional e por `service_items`) e em `ServiceItemResponse` (`rating_average`/`rating_count`).
+
+**Testes:** Integracao (`AttendanceRatingIntegrationTest`)
+
+---
+
 ### PATCH /attendances/{attendanceId}/fit-in?aheadCount=N
 Encaixa o cliente no meio da fila (item #38): move o atendimento (`SCHEDULED` ou `LATE`) para logo apos
 `N` clientes (reposiciona via `scheduledTime`, ponto-medio — mesmo padrao do #19), marca `is_fit=true` e
@@ -2479,6 +2501,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | PATCH /attendances/{id}/late | 🟡 Integracao |
 | PATCH /attendances/{id}/undo-late | 🟡 Integracao |
 | PATCH /attendances/{id}/no-show | 🟡 Integracao |
+| POST /attendances/{id}/rating | 🟡 Integracao |
 | PATCH /attendances/{id}/fit-in | 🟢 Unit + Integracao |
 | PATCH /attendances/{id}/undo-fit | 🟡 Integracao |
 | POST /professional-queue/add-attendance | 🟡 Integracao |
@@ -2569,25 +2592,24 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
-| 2 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
-| 3 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 4 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 5 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 6 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 7 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 8 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 9 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 10 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 11 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 12 | Precificacao calculada no backend | ⬜ aberto (dep. #15) | secao "Item 36" |
-| 13 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 14 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 15 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 16 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 17 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
+| 2 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
+| 3 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 4 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 5 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
+| 6 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 7 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 8 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 9 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 10 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 11 | Precificacao calculada no backend | ⬜ aberto (dep. #15) | secao "Item 36" |
+| 12 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 13 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 14 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 15 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 16 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)**.
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2662,7 +2684,36 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 
-Decisao 2026-06-13. **Status: especificado, nao implementado.**
+Decisao 2026-06-13. **Status: ✅ BACKEND CONCLUIDO (2026-07-03).**
+
+**Contrato entregue:**
+- **Endpoint:** `POST /attendances/{attendanceId}/rating` (ROLE_CLIENT). Body:
+  `{"score": 1..5 (obrigatorio, inteiro), "comment": "..." (opcional, ate 500 chars)}`.
+  - **201** com o voto criado + retrato imediato das medias:
+    `{ id, attendanceId, score, comment, serviceItemId, createdAt, professionalRatingAverage,
+    professionalRatingCount, serviceItemRatingAverage, serviceItemRatingCount }`.
+  - **403** `ESTABLISHMENT_ACCESS_DENIED` se nao for o cliente dono (inclui atendimento guest, sem `client`).
+  - **400** `ATTENDANCE_INVALID_STATUS` se o atendimento nao estiver `FINISHED`.
+  - **409** `ATTENDANCE_ALREADY_RATED` no segundo voto (1 voto por atendimento).
+  - **422** `VALIDATION_ERROR` se `score` fora de 1..5 ou `comment` > 500 chars.
+- **Modelo:** entidade `AttendanceRating` (`attendance_id` UNIQUE, `score`, `comment`, `service_item_id`
+  nullable, `created_at`) — migration `80-attendance/007-create-attendance_rating.yaml`.
+- **Agregados denormalizados:** `rating_sum` + `rating_count` em `professional` e em `service_item`
+  (mesma migration). Media (2 casas) via `getRatingAverage()` (null sem votos). O ServiceItem so recebe
+  a nota quando o atendimento tem **exatamente 1 servico** (regra abaixo); com combo, so o profissional.
+- **Exibicao (read models ja expostos p/ os fronts):**
+  - `GET /establishment/id/{id}/professionals-with-queue` → `rating_average` + `rating_count` no
+    profissional; e `rating_average` + `rating_count` em cada item de `service_items`.
+  - `GET /professional/{id}/service-items` (`ServiceItemResponse`) → `rating_average` + `rating_count` por servico.
+- **Cobertura:** integracao `AttendanceRatingIntegrationTest` (1 servico alimenta prof+servico; combo so prof;
+  409 no 2o voto; 400 nao-FINISHED; 403 nao-dono; 422 score invalido; media agrega multiplos votos) +
+  Postman folder `08i - avaliacao de atendimento (#6)` (homolog+prod).
+- **HANDOFF FRONTS:** **Front-Client** — apos um atendimento `FINISHED`, oferecer tela de avaliacao (1-5
+  estrelas + comentario opcional) chamando `POST /attendances/{id}/rating`; tratar 409 (ja avaliado) escondendo
+  o botao; exibir `rating_average (rating_count)` no card do profissional e por servico. **Front-Partner** —
+  exibir as avaliacoes recebidas (media geral + por servico) lendo os mesmos campos dos read models.
+
+**Especificacao original (mantida para referencia):**
 
 **Objetivo:** capturar nota do profissional E, quando possivel, do tipo de servico — um profissional pode ser otimo na pintura e ruim no corte. O `serviceItemType` (enum ja existente em `ServiceItem`) e o eixo de agregacao por tipo.
 

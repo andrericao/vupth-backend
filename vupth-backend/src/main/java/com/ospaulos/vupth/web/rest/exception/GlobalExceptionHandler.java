@@ -4,6 +4,7 @@ import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAccessDeniedEx
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAlreadyPendingException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
@@ -394,6 +395,13 @@ public class GlobalExceptionHandler {
             AttendanceCancelNotAllowedException ex, HttpServletRequest req) {
         log.warn("[403] AttendanceCancelNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), "ATTENDANCE_CANCEL_NOT_ALLOWED");
+    }
+
+    @ExceptionHandler(AttendanceAlreadyRatedException.class)
+    public ResponseEntity<ErrorResponse> handleAlreadyRated(
+            AttendanceAlreadyRatedException ex, HttpServletRequest req) {
+        log.warn("[409] AttendanceAlreadyRated | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ATTENDANCE_ALREADY_RATED");
     }
 
     @ExceptionHandler(ServiceItemAlreadyExistsException.class)

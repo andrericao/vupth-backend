@@ -324,9 +324,10 @@ class ProfessionalServiceImplTest {
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
             when(establishmentService.getServicesItemByEstablishment(establishmentId)).thenReturn(List.of());
 
-            // ServiceItemResponse(establishmentId, establishmentName, id, type, customName, price, weeklyAvg)
+            // ServiceItemResponse(establishmentId, establishmentName, id, type, customName, price,
+            //                     clientPrice, usesPlatformPricing, weeklyAvg, ratingAverage, ratingCount)
             ServiceItemResponse fakeResponse = new ServiceItemResponse(
-                    establishmentId, establishment.getName(), null, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), null, null, null);
+                    establishmentId, establishment.getName(), null, ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30), null, null, null, null, 0L);
             when(serviceItemService.createServiceItem(professional, request)).thenReturn(fakeResponse);
 
             ServiceItemResponse result = professionalService.createServiceItem(professionalId, request);

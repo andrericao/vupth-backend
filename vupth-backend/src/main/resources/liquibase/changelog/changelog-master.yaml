@@ -216,3 +216,9 @@ databaseChangeLog:
   - include:
       file: changesets/70-client/005-create-client_penalty_event.yaml
       relativeToChangeLogFile: true
+
+  # Rating / avaliacao de atendimentos (item #6): tabela attendance_rating + agregados
+  # denormalizados (rating_sum + rating_count) em professional e service_item
+  - include:
+      file: changesets/80-attendance/007-create-attendance_rating.yaml
+      relativeToChangeLogFile: true

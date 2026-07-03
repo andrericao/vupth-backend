@@ -6590,6 +6590,361 @@
 			]
 		},
 		{
+			"name": "08i - avaliacao de atendimento (#6)",
+			"item": [
+				{
+					"name": "create walk-in para avaliar -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_rating\", pm.response.json().id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "start attendance (prof)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{prof_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating}}/start",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "finish attendance (prof) -> FINISHED",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{prof_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating}}/finish",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "POST rating (client) 5 estrelas -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating}}/rating",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"score\":5,\"comment\":\"Excelente atendimento\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"pm.test(\"serviceItemId presente (1 servico)\", () => pm.expect(pm.response.json().serviceItemId).to.not.be.null);",
+									"pm.test(\"media do profissional exposta\", () => pm.expect(pm.response.json().professionalRatingAverage).to.not.be.undefined);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "[ERRO] segundo voto no mesmo atendimento -> 409",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating}}/rating",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"score\":1,\"comment\":\"tentando de novo\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 409\", () => pm.response.to.have.status(409));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "[ERRO] avaliar por nao-dono -> 403",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{owner_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating}}/rating",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"score\":4}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "create walk-in 2 (para casos de erro) -> 201",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_rating2\", pm.response.json().id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "[ERRO] avaliar SCHEDULED (nao FINISHED) -> 400",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating2}}/rating",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"score\":5}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "[ERRO] score invalido (0) -> 422",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating2}}/rating",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"score\":0}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "cleanup: leave-queue do walk-in 2",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_rating2}}/leave-queue",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
 			"name": "08b - prof attendance pause resume",
 			"item": [
 				{
@@ -12144,6 +12499,14 @@
 		},
 		{
 			"key": "interval_id_skip",
+			"value": ""
+		},
+		{
+			"key": "attendance_id_rating",
+			"value": ""
+		},
+		{
+			"key": "attendance_id_rating2",
 			"value": ""
 		}
 	],

@@ -40,6 +40,13 @@ public record ProfessionalWithQueueResponse(
         @JsonProperty("estimated_wait_minutes")
         int estimatedWaitMinutes,
 
+        // Rating denormalizado do profissional (item #6). Media (2 casas) null quando sem votos.
+        @JsonProperty("rating_average")
+        Double ratingAverage,
+
+        @JsonProperty("rating_count")
+        long ratingCount,
+
         @JsonProperty("service_items")
         List<ServiceItemSummary> serviceItems
 
@@ -50,7 +57,14 @@ public record ProfessionalWithQueueResponse(
             ServiceItemType serviceItemType,
             String customName,
             BigDecimal price,
-            Integer estimatedMinutes
+            Integer estimatedMinutes,
+
+            // Rating denormalizado por servico (item #6). Media (2 casas) null quando sem votos.
+            @JsonProperty("rating_average")
+            Double ratingAverage,
+
+            @JsonProperty("rating_count")
+            long ratingCount
     ) {
         public static ServiceItemSummary fromEntity(ServiceItem item) {
             return new ServiceItemSummary(
@@ -58,7 +72,9 @@ public record ProfessionalWithQueueResponse(
                     item.getServiceItemType(),
                     item.getCustomName(),
                     item.getPrice(),
-                    item.getEstimatedMinutes()
+                    item.getEstimatedMinutes(),
+                    item.getRatingAverage(),
+                    item.getRatingCount()
             );
         }
     }
@@ -107,6 +123,8 @@ public record ProfessionalWithQueueResponse(
                 waitingDtos,
                 waitingList.size(),
                 estimatedWait,
+                professional.getRatingAverage(),
+                professional.getRatingCount(),
                 serviceItemDtos
         );
     }

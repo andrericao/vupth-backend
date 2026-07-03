@@ -66,6 +66,16 @@ public interface AttendanceService {
      */
     public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId);
 
+    /**
+     * Item #6 — avaliar um atendimento concluido. Apenas o {@code clientId} dono do atendimento
+     * (por JWT) e apenas com {@code status = FINISHED}. Bloqueia o 2o voto (409). Convidado (sem
+     * conta) nao avalia. Se o atendimento tem exatamente 1 servico, a nota alimenta o profissional
+     * E o {@code ServiceItem}; com 2+ servicos, so o profissional.
+     */
+    public com.ospaulos.vupth.api.attendance.dto.response.AttendanceRatingResponse rateAttendance(
+            UUID attendanceId, UUID clientId,
+            com.ospaulos.vupth.api.attendance.dto.request.AttendanceRatingRequest request);
+
     public AttendanceInQueueResponse removeFromQueue(UUID attendanceId, UUID professionalId);
 
     public AttendanceInQueueResponse getNextAttendance(Professional professional, Establishment establishment);

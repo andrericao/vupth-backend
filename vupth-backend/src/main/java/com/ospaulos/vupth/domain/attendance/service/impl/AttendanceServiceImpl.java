@@ -13,6 +13,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusExc
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
+import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
@@ -57,6 +58,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final ClientRepository clientRepository;
     private final EstablishmentRepository establishmentRepository;
     private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
+    private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRatingRepository attendanceRatingRepository;
 
     /**
      * Janela (minutos) abaixo da qual cancelar a vez e considerado tardio (item #39). Cancelar com o
@@ -505,6 +507,65 @@ public class AttendanceServiceImpl implements AttendanceService {
         client.incrementStrike();
         log.info("[Attendance] registerNoShowPenalty — NO_SHOW strike: client={} eta={}min strikes={}",
                 client.getId(), eta, client.getStrikeCount());
+    }
+
+    /**
+     * Item #6 — avaliar atendimento concluido. Ver contrato em {@link AttendanceService#rateAttendance}.
+     *
+     * <p>Regra de atribuicao (Andre): 1 servico -> nota vai ao profissional E ao ServiceItem
+     * (alimenta a media daquele tipo, {@code serviceItemId} registra a origem); 2+ servicos ->
+     * so ao profissional ({@code serviceItemId} null). Profissional e ServiceItem sao entidades
+     * gerenciadas pela sessao (carregadas eager) -> dirty checking persiste os agregados no commit.</p>
+     */
+    @Override
+    public com.ospaulos.vupth.api.attendance.dto.response.AttendanceRatingResponse rateAttendance(
+            UUID attendanceId, UUID clientId,
+            com.ospaulos.vupth.api.attendance.dto.request.AttendanceRatingRequest request) {
+        log.info("[Attendance] rateAttendance — attendanceId={} clientId={} score={}",
+                attendanceId, clientId, request.score());
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        // Só o próprio cliente dono avalia. Convidado (sem conta) nao tem dono -> 403.
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only rate your own attendance.");
+        }
+
+        // Só atendimento concluido pode ser avaliado.
+        if (attendance.getStatus() != AttendanceStatus.FINISHED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.FINISHED);
+        }
+
+        // 1 voto por atendimento.
+        if (attendanceRatingRepository.existsByAttendanceId(attendanceId)) {
+            throw new com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException(attendanceId);
+        }
+
+        Professional professional = attendance.getProfessional();
+        List<ServiceItem> serviceItems = attendance.getServiceItems();
+
+        // Atribuicao ao ServiceItem so quando ha exatamente 1 servico (senao null — combo).
+        ServiceItem ratedServiceItem = (serviceItems != null && serviceItems.size() == 1)
+                ? serviceItems.get(0)
+                : null;
+        UUID serviceItemId = ratedServiceItem != null ? ratedServiceItem.getId() : null;
+
+        AttendanceRating rating = attendanceRatingRepository.save(new AttendanceRating(
+                attendanceId, request.score(), request.comment(), serviceItemId));
+
+        // Agregados denormalizados: sempre o profissional; o ServiceItem so no caso de 1 servico.
+        professional.addRating(request.score());
+        if (ratedServiceItem != null) {
+            ratedServiceItem.addRating(request.score());
+        }
+
+        log.info("[Attendance] rateAttendance — rated attendance={} prof={} avg={} ({}) serviceItem={}",
+                attendanceId, professional.getId(), professional.getRatingAverage(),
+                professional.getRatingCount(), serviceItemId);
+
+        return com.ospaulos.vupth.api.attendance.dto.response.AttendanceRatingResponse.of(
+                rating, professional, ratedServiceItem);
     }
 
     @Override

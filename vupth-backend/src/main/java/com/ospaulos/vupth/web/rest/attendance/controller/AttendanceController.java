@@ -216,6 +216,28 @@ public class AttendanceController {
     }
 
     /**
+     * POST /attendances/{attendanceId}/rating
+     *
+     * Item #6 — o cliente dono avalia o atendimento concluido (1-5 estrelas + comentario opcional).
+     * Só o proprio cliente (JWT), so em FINISHED. 409 no segundo voto; 400 se nao estiver FINISHED;
+     * 403 se nao for o dono (inclui convidado). Se o atendimento tem 1 servico, a nota alimenta o
+     * profissional E o ServiceItem; com 2+ servicos, so o profissional. Requer ROLE_CLIENT.
+     */
+    @PostMapping("/{attendanceId}/rating")
+    public ResponseEntity<com.ospaulos.vupth.api.attendance.dto.response.AttendanceRatingResponse> rateAttendance(
+            @PathVariable UUID attendanceId,
+            @RequestBody @Valid com.ospaulos.vupth.api.attendance.dto.request.AttendanceRatingRequest request,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER RATE {} by client={} score={}",
+                attendanceId, principal.getUserId(), request.score());
+
+        var response = attendanceService.rateAttendance(attendanceId, principal.getUserId(), request);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
      * PATCH /attendances/{attendanceId}/start
      *
      * Inicia um attendance SCHEDULED → IN_PROGRESS.
