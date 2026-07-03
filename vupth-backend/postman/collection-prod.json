@@ -6414,6 +6414,226 @@
 			]
 		},
 		{
+			"name": "08h - remanejar cliente espera longa (#43)",
+			"description": "Item #43. Cliente com espera longa remaneja a PROPRIA vez (SCHEDULED, validado por JWT): PATCH /attendances/{id}/reschedule?targetTime= (Opcao A -> vira intencao de fila #40; 422 se alvo infactivel, 400 se alvo no passado) ou PATCH /attendances/{id}/move-to-end (Opcao B -> desce para o fim da fila, no-op se ja ultimo). So o dono (403 senao) e so em SCHEDULED (400 senao). Requer role CLIENT.",
+			"item": [
+				{
+					"name": "create walk-in para remanejar -> 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_resched\", pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH reschedule (client, alvo +6h) -> 200 vira intencao",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"target_time_future\", encodeURIComponent(new Date(Date.now() + 6*3600*1000).toISOString()));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  const r = pm.response.json();",
+									"  pm.test(\"targetTime preenchido (virou intencao)\", () => pm.expect(r.targetTime, \"targetTime deveria vir preenchido\").to.not.be.null);",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_resched}}/reschedule?targetTime={{target_time_future}}",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] reschedule alvo no passado -> 400",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"target_time_past\", encodeURIComponent(new Date(Date.now() - 5*60*1000).toISOString()));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 400 - alvo no passado\", () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_resched}}/reschedule?targetTime={{target_time_past}}",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ERRO] reschedule de outro dono -> 403",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"target_time_future\", encodeURIComponent(new Date(Date.now() + 6*3600*1000).toISOString()));"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 403 - so o proprio cliente remaneja\", () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{owner_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_resched}}/reschedule?targetTime={{target_time_future}}",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH move-to-end (client) -> 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_resched}}/move-to-end",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "cleanup: leave-queue do remanejado",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{client_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/attendances/{{attendance_id_resched}}/leave-queue",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
 			"name": "08b - prof attendance pause resume",
 			"item": [
 				{

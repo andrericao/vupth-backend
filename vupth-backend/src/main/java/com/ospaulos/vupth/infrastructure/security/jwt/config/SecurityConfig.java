@@ -85,6 +85,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/attendances").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PUT, "/attendances/*/cancel").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.DELETE, "/attendances/*/leave-queue").hasRole("CLIENT")
+                        // Item #43 — cliente remaneja a propria vez (espera longa): horario-alvo ou fim da fila
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/reschedule").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/move-to-end").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente

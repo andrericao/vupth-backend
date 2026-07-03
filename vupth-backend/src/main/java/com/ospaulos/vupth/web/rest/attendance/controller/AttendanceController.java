@@ -164,6 +164,58 @@ public class AttendanceController {
     }
 
     /**
+     * PATCH /attendances/{attendanceId}/reschedule?targetTime=2026-07-03T16:30:00Z
+     *
+     * Item #43 (Opcao A) — cliente com espera longa remaneja a propria vez escolhendo um
+     * horario-alvo: o atendimento (SCHEDULED) vira INTENCAO de fila (#40). Só o proprio
+     * cliente (JWT). 422 se o alvo for infactivel; 400 se status invalido / alvo no passado.
+     * Requer ROLE_CLIENT.
+     */
+    @PatchMapping("/{attendanceId}/reschedule")
+    public ResponseEntity<AttendanceInQueueResponse> reschedule(
+            @PathVariable UUID attendanceId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime targetTime,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER RESCHEDULE {} by client={} targetTime={}",
+                attendanceId, principal.getUserId(), targetTime);
+
+        AttendanceInQueueResponse response = attendanceService.rescheduleWithTargetTime(
+                attendanceId, principal.getUserId(), targetTime);
+
+        // #42: a posicao mudou → propostas de troca pendentes deixam de valer
+        queueSwapService.expirePendingForAttendance(attendanceId);
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/move-to-end
+     *
+     * Item #43 (Opcao B) — cliente com espera longa desce a propria vez para o fim da fila
+     * (sem sair). Só o proprio cliente (JWT). 400 se status invalido. Requer ROLE_CLIENT.
+     */
+    @PatchMapping("/{attendanceId}/move-to-end")
+    public ResponseEntity<AttendanceInQueueResponse> moveToEnd(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER MOVE-TO-END {} by client={}", attendanceId, principal.getUserId());
+
+        AttendanceInQueueResponse response = attendanceService.moveToEndOfQueue(
+                attendanceId, principal.getUserId());
+
+        // #42: a posicao mudou → propostas de troca pendentes deixam de valer
+        queueSwapService.expirePendingForAttendance(attendanceId);
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * PATCH /attendances/{attendanceId}/start
      *
      * Inicia um attendance SCHEDULED → IN_PROGRESS.

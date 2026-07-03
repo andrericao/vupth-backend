@@ -2569,26 +2569,25 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Remanejar cliente com espera > 1h (escolher horario / ir pro fim da fila) | ⬜ aberto | NOVO (2026-06-28) — front: 2 botoes; backend reusa `target_time` (#40) + reposition-to-end. Ver secao "Item 43" |
-| 2 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
-| 3 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
-| 4 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 5 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 6 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 7 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 8 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 9 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 10 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 11 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 12 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 13 | Precificacao calculada no backend | ⬜ aberto (dep. #15) | secao "Item 36" |
-| 14 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 15 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 16 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 17 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 18 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
+| 2 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
+| 3 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
+| 4 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 5 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 6 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
+| 7 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 8 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 9 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 10 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 11 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 12 | Precificacao calculada no backend | ⬜ aberto (dep. #15) | secao "Item 36" |
+| 13 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 14 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 15 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 16 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 17 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)**.
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2926,6 +2925,26 @@ Decisao 2026-06-25 (Andre). ✅ **Status: BACKEND CONCLUIDO (2026-06-28).** Rest
 **📣 HANDOFF PARA OS FRONTS (item #42):**
 - **Front-Client** — botao "trocar de posicao": escolhe outro cliente da fila e chama `POST /swap-requests`. Recebe via WS `SWAP_REQUESTED` (notificacao de proposta recebida) — exibe aceitar/recusar -> `PATCH /swap-requests/{id}?accept=`. WS `SWAP_ACCEPTED`/`SWAP_REJECTED` para o proponente. `GET /swap-requests/me` lista pendentes. Tratar `409` (ja pendente), `422` (fila diferente/ja atendido).
 - **Front-Partner** — sem mudanca obrigatoria; o profissional ja atende fora de ordem via `start` + marca `late` no atrasado.
+
+### Item 43 — Remanejar cliente com espera longa (escolher horario / ir pro fim da fila)
+
+Decisao 2026-06-28. ✅ **Status: BACKEND CONCLUIDO (2026-07-03).** Resta so os fronts.
+
+**Objetivo.** Quando a espera do cliente fica **longa** (o front mostra os botoes quando o ETA da vez passa de ~1h), dar-lhe **autonomia** em vez de so abandonar a fila. Duas acoes **client-facing** sobre a **propria** vez (validado por JWT), ambas so em `SCHEDULED`:
+
+- **Opcao A — "Escolher um horario" (`PATCH /attendances/{id}/reschedule?targetTime=`).** O atendimento vira **INTENCAO de fila** reusando integralmente a maquina do Item #40 (`isIntent=true` + `target_time` + slot cronologico via `assignAgendaSlot`): ele passa a ceder a vez aos walk-ins ate o previsto encostar no alvo, quando e reconfirmado automaticamente. Trava de viabilidade (`isTargetFeasible`): **422** `QUEUE_TARGET_NOT_FEASIBLE` se a fila (excluindo o proprio) ja preve atender em cima/depois do alvo; alvo no passado = **400**.
+- **Opcao B — "Ir pro fim da fila" (`PATCH /attendances/{id}/move-to-end`).** Desce a propria vez para **depois do ultimo em espera** (empurra o `scheduledTime`, mesmo padrao de reposicao do #19), sem sair da fila e sem strike. Limpa qualquer intencao. **No-op** (200) se ja for o ultimo.
+
+**Decisoes seladas (Andre 2026-07-03):** (a) o **gatilho de 1h e responsabilidade do front** — o backend expoe os endpoints sempre, mais simples e reusavel; (b) ambos exigem **`SCHEDULED`** (nao deixamos o cliente escapar de um `LATE` marcado pelo profissional -> **400** `AttendanceInvalidStatus`); (c) so o **proprio** cliente pode remanejar sua vez (**403** `EstablishmentAccessDenied`); (d) a Opcao A **reusa** `#40` (nao duplica logica — o nucleo `applyIntent` agora serve ingresso E remanejar).
+
+**✅ Implementado no backend:**
+- ✅ `AttendanceService.rescheduleWithTargetTime(attendanceId, clientId, targetTime)` + `moveToEndOfQueue(attendanceId, clientId)`; nucleo `applyIntent(..., alreadyInQueue)` extraido do ingresso do #40 (exclui o proprio atendimento do ETA e das intencoes reservadas ao remanejar).
+- ✅ `PATCH /attendances/{id}/reschedule?targetTime=` e `PATCH /attendances/{id}/move-to-end` (controller) — CLIENT role (SecurityConfig), broadcast WS da fila + expira propostas de troca #42 pendentes do atendimento.
+- ✅ Testes: integracao (`ClientRescheduleIntegrationTest`: reschedule factivel vira intencao, infactivel 422, alvo passado 400, nao-SCHEDULED 400, nao-dono 403; move-to-end vai pro fim, ja-ultimo no-op, nao-SCHEDULED 400, nao-dono 403). Postman folder 08h (homolog+prod).
+
+**📣 HANDOFF PARA OS FRONTS (item #43):**
+- **Front-Client** — quando o ETA da vez do cliente passar de ~1h, exibir 2 botoes: **"Escolher horario"** -> `PATCH /attendances/{id}/reschedule?targetTime=<ISO>` (tratar `422` alvo infactivel e `400` alvo no passado; sucesso = vira intencao, mesmo estado do #40); **"Ir pro fim da fila"** -> `PATCH /attendances/{id}/move-to-end`. Ambos so aparecem em atendimento `SCHEDULED`.
+- **Front-Partner** — sem mudanca obrigatoria; a fila ao vivo (WS) ja reflete o remanejamento (intencao ou nova posicao).
 
 ### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
 

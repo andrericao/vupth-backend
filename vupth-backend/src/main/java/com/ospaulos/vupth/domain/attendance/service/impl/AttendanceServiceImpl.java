@@ -153,6 +153,22 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (targetTime == null) {
             return; // ingresso normal (walk-in)
         }
+        // Ingresso novo: o atendimento ainda nao esta persistido, entao NAO esta na fila.
+        applyIntent(attendance, professional, establishment, targetTime, false);
+    }
+
+    /**
+     * Nucleo da intencao de fila (#40), reusado no ingresso ({@link #applyIntentIfRequested}) e no
+     * remanejamento de um atendimento ja na fila ({@link #rescheduleWithTargetTime}, item #43 Opcao A).
+     * Valida a viabilidade do alvo, calcula o slot cronologico e marca o atendimento como intencao.
+     * Nao persiste — o caller salva em seguida.
+     *
+     * @param alreadyInQueue {@code true} quando o atendimento ja consta na fila de espera (remanejar):
+     *                       o proprio atendimento e excluido do calculo de ETA e das intencoes reservadas.
+     */
+    private void applyIntent(com.ospaulos.vupth.domain.attendance.model.Attendance attendance,
+                             Professional professional, Establishment establishment,
+                             OffsetDateTime targetTime, boolean alreadyInQueue) {
         OffsetDateTime now = OffsetDateTime.now();
         if (!targetTime.isAfter(now)) {
             throw new IllegalArgumentException("targetTime deve estar no futuro: " + targetTime);
@@ -166,6 +182,13 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         List<Attendance> waiting = attendanceRepository
                 .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        if (alreadyInQueue) {
+            // Ao remanejar, o proprio atendimento ja esta na fila -> tira ele do calculo de viabilidade
+            // e da lista de intencoes reservadas (senao colidiria com o proprio slot).
+            waiting = waiting.stream()
+                    .filter(a -> !a.getId().equals(attendance.getId()))
+                    .collect(Collectors.toList());
+        }
         int eta = QueueUtils.calculateWaitingTimeForPosition(
                 waiting, professional.getIntervals(), now, waiting.size());
 
@@ -182,7 +205,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setIntent(true);
         attendance.setTargetTime(targetTime);
         attendance.setScheduledTime(slot);
-        log.info("[Attendance] intencao de fila — target={} slot={} duration={}", targetTime, slot, duration);
+        log.info("[Attendance] intencao de fila — target={} slot={} duration={} (remanejar={})",
+                targetTime, slot, duration, alreadyInQueue);
     }
 
     @Override
@@ -520,6 +544,77 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] leaveQueue — client='{}' left the queue voluntarily",
                 attendance.getClient().getFirstName());
 
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
+    public AttendanceInQueueResponse rescheduleWithTargetTime(UUID attendanceId, UUID clientId, OffsetDateTime targetTime) {
+        log.info("[Attendance] rescheduleWithTargetTime — attendanceId={} clientId={} targetTime={}",
+                attendanceId, clientId, targetTime);
+
+        if (targetTime == null) {
+            throw new IllegalArgumentException("targetTime e obrigatorio para remanejar por horario-alvo");
+        }
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only reschedule your own queue position.");
+        }
+
+        // So um atendimento em espera comum (SCHEDULED) pode ser remanejado pelo cliente. LATE e
+        // um estado dirigido pelo profissional (#19) — nao deixamos o cliente escapar dele por aqui.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Reusa a maquina de intencao do #40 sobre um atendimento JA na fila (alreadyInQueue=true).
+        applyIntent(attendance, attendance.getProfessional(), attendance.getEstablishment(), targetTime, true);
+        Attendance saved = attendanceRepository.save(attendance);
+
+        log.info("[Attendance] rescheduleWithTargetTime — attendance={} virou intencao slot={}",
+                attendanceId, saved.getScheduledTime());
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
+    public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId) {
+        log.info("[Attendance] moveToEndOfQueue — attendanceId={} clientId={}", attendanceId, clientId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only move your own queue position.");
+        }
+
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Fila de espera (SCHEDULED+LATE) ordenada por scheduledTime ASC — inclui o proprio atendimento.
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                attendance.getProfessional().getId(), attendance.getEstablishment().getId());
+
+        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
+        if (last == null || last.getId().equals(attendance.getId())) {
+            // Ja e o ultimo (ou fila vazia por corrida) — nada a fazer, mas garante que nao fique como intencao.
+            attendance.setIntent(false);
+            attendance.setTargetTime(null);
+            Attendance saved = attendanceRepository.save(attendance);
+            log.info("[Attendance] moveToEndOfQueue — attendance={} ja era o ultimo (no-op)", attendanceId);
+            return buildAttendanceInQueueResponse(saved);
+        }
+
+        // Desce para depois do ultimo em espera; limpa intencao (vira espera comum no fim).
+        attendance.setIntent(false);
+        attendance.setTargetTime(null);
+        attendance.setScheduledTime(last.getScheduledTime().plusMinutes(1));
+        Attendance saved = attendanceRepository.save(attendance);
+
+        log.info("[Attendance] moveToEndOfQueue — attendance={} foi para o fim (scheduledTime={})",
+                attendanceId, saved.getScheduledTime());
         return buildAttendanceInQueueResponse(saved);
     }
 

@@ -49,6 +49,23 @@ public interface AttendanceService {
 
     public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId);
 
+    /**
+     * Item #43 (Opcao A) — remanejar por horario-alvo. O cliente com espera longa reagenda a
+     * propria vez escolhendo um {@code targetTime}: o atendimento (que ja esta na fila em
+     * {@code SCHEDULED}) vira INTENCAO ({@code isIntent=true}), reusando a maquina do #40
+     * (viabilidade {@code isTargetFeasible} -> 422 se infactivel; encaixe cronologico
+     * {@code assignAgendaSlot}). Só o proprio cliente (por JWT) e apenas em {@code SCHEDULED}.
+     */
+    public AttendanceInQueueResponse rescheduleWithTargetTime(UUID attendanceId, UUID clientId, java.time.OffsetDateTime targetTime);
+
+    /**
+     * Item #43 (Opcao B) — ir para o fim da fila. O cliente com espera longa desce a propria
+     * vez para depois do ultimo em espera (empurra o {@code scheduledTime}), sem sair da fila,
+     * reusando o padrao de reposicao do #19. Limpa qualquer intencao ({@code isIntent}/target).
+     * Só o proprio cliente (por JWT) e apenas em {@code SCHEDULED}. No-op se ja for o ultimo.
+     */
+    public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId);
+
     public AttendanceInQueueResponse removeFromQueue(UUID attendanceId, UUID professionalId);
 
     public AttendanceInQueueResponse getNextAttendance(Professional professional, Establishment establishment);
