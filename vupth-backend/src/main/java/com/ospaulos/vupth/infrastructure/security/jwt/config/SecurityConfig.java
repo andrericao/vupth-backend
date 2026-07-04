@@ -134,6 +134,9 @@ public class SecurityConfig {
                         // S1: alem do owner, um profissional AFILIADO a loja pode cadastrar o proprio servico
                         // (a checagem owner-ou-afiliado fica no service).
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasAnyRole("OWNER", "PROFESSIONAL")
+                        // Editar/remover servico da loja: owner OU o proprio profissional dono (checagem fina no service)
+                        .requestMatchers(HttpMethod.PUT, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
+                        .requestMatchers(HttpMethod.DELETE, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")

@@ -17,8 +17,10 @@ import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralIn
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.report.dto.response.EstablishmentReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
+import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.report.service.ReportService;
+import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
@@ -73,6 +75,7 @@ public class EstablishmentController {
     private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
     private final ReportService                          reportService;
+    private final ServiceItemService                     serviceItemService;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -198,6 +201,48 @@ public class EstablishmentController {
         ServiceItemResponse response = professionalService.createServiceItemForEstablishment(
                 user.getUserId(), establishmentId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * PUT /establishment/{establishmentId}/service-items/{itemId}
+     *
+     * Edita um servico do establishment (parcial — campos null/branco ignorados).
+     * Autorizado ao OWNER da loja OU ao proprio profissional dono do item.
+     * 404 se a loja/item nao existir ou o item nao pertencer a esta loja;
+     * 403 se o requester nao for owner nem dono do item; 409 se o novo nome colidir.
+     */
+    @PutMapping("/{establishmentId}/service-items/{itemId}")
+    public ResponseEntity<ServiceItemResponse> updateServiceItem(
+            @PathVariable UUID establishmentId,
+            @PathVariable UUID itemId,
+            @RequestBody @Valid UpdateServiceItemRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] updateServiceItem — establishment={} item={} requester={}",
+                establishmentId, itemId, user.getUserId());
+
+        ServiceItemResponse response = serviceItemService.updateServiceItemForEstablishment(
+                user.getUserId(), establishmentId, itemId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * DELETE /establishment/{establishmentId}/service-items/{itemId}
+     *
+     * Remove um servico do establishment.
+     * Autorizado ao OWNER da loja OU ao proprio profissional dono do item.
+     */
+    @DeleteMapping("/{establishmentId}/service-items/{itemId}")
+    public ResponseEntity<Void> deleteServiceItem(
+            @PathVariable UUID establishmentId,
+            @PathVariable UUID itemId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] deleteServiceItem — establishment={} item={} requester={}",
+                establishmentId, itemId, user.getUserId());
+
+        serviceItemService.deleteServiceItemForEstablishment(user.getUserId(), establishmentId, itemId);
+        return ResponseEntity.noContent().build();
     }
 
     /**

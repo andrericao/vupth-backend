@@ -84,11 +84,12 @@ Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional
 | 500 legado NAVALHA/PROCEDIMENTO | ✅ | ✅ | resiliência (hotfix) |
 
 ### 2.4 Service Item & Service Types
-Testes: `unit/serviceitem/ServiceItemServiceImplTest` (6); `integrations/service_item/ServiceItemIntegrationTest` (15), `serviceItem/ServiceTypeKeywordIntegrationTest` (10).
+Testes: `unit/serviceitem/ServiceItemServiceImplTest` (6); `integrations/service_item/ServiceItemIntegrationTest` (23), `serviceItem/ServiceTypeKeywordIntegrationTest` (10).
 
 | Endpoint | Feliz | Erros |
 |---|---|---|
 | POST /establishment/{id}/service-items | ✅ | ✅ (duplicado, validação) |
+| PUT/DELETE /establishment/{id}/service-items/{itemId} | ✅ (owner edita/remove; afiliado edita o próprio) | ✅ (404 inexistente/loja errada, 403 alheio/client, 409 nome duplicado) |
 | POST/PATCH/DELETE professional-queue service-items | ✅ | ✅ |
 | GET /service-types[?q=] (#34) | ✅ | ✅ (vazio/normalização) |
 | POST /service-types/{type}/keywords (#34) | ✅ | ✅ (409 duplicado, 403 client) |

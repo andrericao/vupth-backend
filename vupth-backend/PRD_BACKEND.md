@@ -83,7 +83,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 |--------|-----------|
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
-| **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1) |
+| **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1), `PUT\|DELETE /establishment/{id}/service-items/{itemId}` (owner da loja ou o proprio profissional dono do item; checagem fina no service) |
 | **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, `POST /devices`, `DELETE /devices/{token}` (push — implementado), todos os demais endpoints nao listados |
@@ -900,6 +900,34 @@ O servico fica sob o professional do **requester** (`ServiceItem.professional` �
 **Response (201):** `ServiceItemResponse` (inclui `client_price` e `uses_platform_pricing`).
 
 **Testes:** Integracao
+
+---
+
+### PUT /establishment/{id}/service-items/{itemId}
+Edita um service item **pela otica do establishment** (edicao parcial).
+
+**Acesso:** OWNER da loja **ou** o **proprio profissional** dono do item. Qualquer outro (inclusive profissional afiliado que nao e o dono do item) recebe `403 ESTABLISHMENT_ACCESS_DENIED`. Complementa o `PATCH /professional-queue/{profId}/service-items/{itemId}` (edicao pelo proprio profissional): aqui o **owner** tambem consegue gerir o catalogo da loja inteira.
+
+**Request:** `UpdateServiceItemRequest` — todos os campos opcionais (null/branco ignorados): `customName`, `price` (>0), `estimatedMinutes` (>0), `client_price` (>0), `uses_platform_pricing`.
+
+**Response (200):** `ServiceItemResponse`.
+
+**Erros:** `404 ESTABLISHMENT_NOT_FOUND` (loja inexistente) · `404 SERVICE_ITEM_NOT_FOUND` (item inexistente **ou** que nao pertence a esta loja) · `403 ESTABLISHMENT_ACCESS_DENIED` · `409 SERVICE_ITEM_ALREADY_EXISTS` (novo `customName` colide com outro servico da loja, case-insensitive) · `422 VALIDATION_ERROR` (preco/duracao <= 0).
+
+**Testes:** Integracao (`ServiceItemIntegrationTest` — owner edita, 404 inexistente/loja errada, 403 alheio, 409 nome duplicado, afiliado edita o proprio).
+
+---
+
+### DELETE /establishment/{id}/service-items/{itemId}
+Remove um service item **pela otica do establishment**.
+
+**Acesso:** OWNER da loja **ou** o **proprio profissional** dono do item (mesma regra do PUT acima).
+
+**Response (204):** sem corpo.
+
+**Erros:** `404 ESTABLISHMENT_NOT_FOUND` · `404 SERVICE_ITEM_NOT_FOUND` (inexistente ou fora desta loja) · `403 ESTABLISHMENT_ACCESS_DENIED`.
+
+**Testes:** Integracao (`ServiceItemIntegrationTest` — owner remove + 404 na 2a vez, CLIENT 403).
 
 ---
 
@@ -1800,6 +1828,10 @@ E gerenciados pelo proprio profissional:
 - `PATCH /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — edita nome, preco e/ou duracao
 - `DELETE /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — remove
 
+Ou pela otica do establishment (OWNER **ou** o proprio profissional dono do item):
+- `PUT /establishment/{id}/service-items/{itemId}` — edita (parcial); `409` se novo nome colidir na loja
+- `DELETE /establishment/{id}/service-items/{itemId}` — remove
+
 ### PATCH /professional-queue/{professionalId}/service-items/{itemId}
 Edicao parcial de um servico do profissional. So o proprio profissional (JWT) pode editar seus servicos.
 
@@ -2474,6 +2506,8 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | DELETE /establishment/{id}/professionals/{pid} | ✅ |
 | PATCH /establishment/{id}/owner | ✅ |
 | POST /establishment/{id}/service-items | 🟡 Integracao |
+| PUT /establishment/{id}/service-items/{itemId} | ✅ |
+| DELETE /establishment/{id}/service-items/{itemId} | ✅ |
 | GET /professional (busca) | ✅ |
 | POST /professional/register | ✅ |
 | PATCH /professional/me | ✅ |
@@ -2590,25 +2624,37 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 > Os **commits referenciam o NOME** do item (ex.: `feat: intencao de fila com horario-alvo`), nao o numero (que e volatil).
 > As tabelas detalhadas mais abaixo (CRITICO/ALTA/MEDIA/BAIXA/PARTNER, numeracao historica 1-41) sao **referencia/detalhe** — esta lista aqui manda no "o que falta".
 
+> **Ordem revisada 2026-07-04:** consolidei aqui os gaps de backend levantados pelos fronts (Partner: `BUGx`/`Sx`; Client: handoffs do PRD-Client). Coloquei os **desbloqueios de front** (itens 2-11) acima dos grandes pos-MVP, porque travam trabalho ja pronto no front. **Andre: confirme/reordene a prioridade** — os numeros sao volateis, commits usam o NOME.
+
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 2 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 3 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 4 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 5 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 6 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 7 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 8 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 9 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 10 | Precificacao calculada no backend | ⬜ aberto (dep. #13) | secao "Item 36" |
-| 11 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 12 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 13 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 14 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 15 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Endereco no read-back do establishment | ⬜ aberto | **Partner BUG4** — incluir `address` no `EstablishmentResponse` (ou `GET /establishment/{id}/addresses`); front ja le `data.address` |
+| 2 | Gate ao fechar loja com fila/atendimento ativo | ⬜ aberto | **Partner BUG6** — `updateOpenStatus` deve dar **409** se houver atendimento ativo/fila ao fechar (hoje so existe o gate de *abrir* sem prof+servico) |
+| 3 | openStatus real: filtro + auto-fechar + horarios | ⬜ aberto | **Partner BUG5** + antigo "filtro openStatus" — `?includeAll=true`; auto-fechar no `closing_time` / expor `is_open` efetivo; horarios na listagem |
+| 4 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono) |
+| 5 | Oferta aberta de troca de posicao | ⬜ aberto | **Partner S3 / Client 10b** — `/swap-offers` (anuncia; qualquer um aceita). O `#42` `/swap-requests` e **direcionado** e nao cobre. Deve **expirar no `start`** (igual #42) |
+| 6 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
+| 7 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 + Client #14** — endpoint de reset (codigo/email) + confirmar nova senha; infra de e-mail |
+| 8 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 9 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 10 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
+| 11 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 12 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 13 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 14 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 15 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 16 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 17 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 18 | Precificacao calculada no backend | ⬜ aberto (dep. #21) | secao "Item 36" |
+| 19 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 20 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 21 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 22 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 23 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)**.
+**Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3** — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging.
+
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2641,7 +2687,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | 12 | QR Code dinamico por profissional | Hoje e apenas link do estabelecimento. Futuro: link direto ao profissional especifico. Parametro `?professionalId=` na URL | **Front-Partner** (gerar QR) / **Front-Client** (ler QR e redirecionar) |
 | 13 | Fila de espera virtual com posicao nominal | Exibir ao cliente: "Voce e o 3o da fila". Esconder lista completa mas calcular posicao do cliente logado | **Backend** (endpoint posicao individual) / **Front-Client** (exibir posicao) |
 | 14 | Modo offline completo (partner-app) | Cache da fila atual no AsyncStorage. Acoes offline: fila local, sincroniza ao reconectar. Estrategia last-write-wins | **Front-Partner** (cache + sync) |
-| 15 | Editar e deletar ServiceItem (establishment e professional-queue) | **Establishment:** `PUT /establishment/{id}/service-items/{itemId}` e `DELETE ...` (validacao: nao deletar se ha attendances SCHEDULED vinculados). **Professional-queue:** `PATCH /professional-queue/{profId}/service-items/{itemId}` (editar nome e preco) e `DELETE /professional-queue/{profId}/service-items/{itemId}` — hoje so existe o POST de adicionar; validar owner/membership | **Backend** (endpoints + validacao nos dois escopos) / **Front-Partner** (UI de edicao/remocao) |
+| 15 | ~~Editar e deletar ServiceItem (establishment e professional-queue)~~ | ✅ **BACKEND CONCLUIDO** — **Establishment:** `PUT`/`DELETE /establishment/{id}/service-items/{itemId}` (OWNER ou o proprio profissional dono do item; `404` fora da loja, `403` alheio, `409` nome duplicado). **Professional-queue:** `PATCH`/`DELETE /professional-queue/{profId}/service-items/{itemId}` (proprio profissional). Ver secoes dos endpoints. → resta **Front-Partner** (UI de edicao/remocao). Nota: a delecao remove direto (o vinculo de servico com attendances passados nao bloqueia) | **Backend** ✅ / **Front-Partner** (UI de edicao/remocao) |
 | 16 | Transferencia de atendimento entre profissionais | Profissional pode passar cliente para colega. `PATCH /attendances/{id}/transfer?toProfessionalId=` | **Backend** (endpoint + logica de transferencia) / **Front-Partner** (botao transferir) |
 | 17 | Blacklist / bloquear cliente | Owner ou professional pode bloquear cliente. Tabela: `establishment_blocked_users` | **Backend** (entidade + endpoints) / **Front-Partner** (botao bloquear) |
 | 18 | Multiplos estabelecimentos por owner | Owner atual so ve o proprio establishment. Dashboard para owners com varios locais (franquias) | **Backend** (refatorar relacao Owner-Establishment) / **Front-Partner** (seletor de establishment) |
