@@ -223,6 +223,18 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("establishmentId") UUID establishmentId
     );
 
+    /**
+     * Conta os atendimentos ATIVOS de um establishment — fila de espera (SCHEDULED, LATE)
+     * mais os em curso (IN_PROGRESS, PAUSED). Base do gate que impede fechar a loja com
+     * cliente na fila ou em atendimento (Partner BUG6). FINISHED/CANCELLED nao contam.
+     */
+    @Query("""
+        SELECT COUNT(a) FROM Attendance a
+        WHERE a.establishment.id = :establishmentId
+          AND a.status IN ('SCHEDULED', 'LATE', 'IN_PROGRESS', 'PAUSED')
+    """)
+    long countActiveByEstablishment(@Param("establishmentId") UUID establishmentId);
+
     @Query(value = """
         SELECT DISTINCT a.* FROM attendance a
         LEFT JOIN client c ON c.id = a.client_id

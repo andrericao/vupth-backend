@@ -16,6 +16,7 @@ import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingExceptio
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
@@ -430,6 +431,13 @@ public class GlobalExceptionHandler {
             IntervalConflictException ex, HttpServletRequest req) {
         log.warn("[409] IntervalConflict | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "INTERVAL_CONFLICT");
+    }
+
+    @ExceptionHandler(EstablishmentHasActiveAttendancesException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentHasActiveAttendances(
+            EstablishmentHasActiveAttendancesException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES");
     }
 
     // ─────────────────────────────────────────────

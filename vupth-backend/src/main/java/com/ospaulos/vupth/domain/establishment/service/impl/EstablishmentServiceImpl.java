@@ -5,6 +5,8 @@ import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.ProfessionalWithQueueResponse;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
@@ -37,6 +39,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
     private final GetEstablishmentWithQueueUseCase getWithQueueUseCase;
+    private final AttendanceRepository attendanceRepository;
 
     @Override
     public EstablishmentResponse registerEstablishment(EstablishmentRequest request){
@@ -147,6 +150,14 @@ public class EstablishmentServiceImpl implements EstablishmentService {
             if (establishment.getOpeningTime() == null || establishment.getClosingTime() == null) {
                 throw new EstablishmentHoursRequiredException(establishmentId);
             }
+        }
+
+        // Gate de fechamento (Partner BUG6): não fechar com cliente na fila ou em atendimento.
+        // Só bloqueia a transição OPEN -> fechado (idempotência: re-fechar um já fechado não valida).
+        if ((newStatus == OpenStatus.CLOSED || newStatus == OpenStatus.TEMPORARILY_CLOSED)
+                && establishment.getOpenStatus() == OpenStatus.OPEN
+                && attendanceRepository.countActiveByEstablishment(establishmentId) > 0) {
+            throw new EstablishmentHasActiveAttendancesException(establishmentId);
         }
 
         establishment.setOpenStatus(newStatus);

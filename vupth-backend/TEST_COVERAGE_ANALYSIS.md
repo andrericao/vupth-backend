@@ -68,13 +68,13 @@ Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegra
 | GET /users/email/{email} | ✅ | ⚠️ |
 
 ### 2.3 Establishment
-Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
+Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `CloseEstablishmentGateIntegrationTest` (3), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
 
 | Endpoint | Feliz | Erros | Notas |
 |---|---|---|---|
 | POST /establishment/create · /quick-create | ✅ | ✅ | |
 | PATCH /{id}/general-infos (+ phone/instagram/horário) | ✅ | ✅ | |
-| PATCH /{id}/open-status | ✅ | ✅ | 422 ESTABLISHMENT_NOT_READY / HOURS_REQUIRED |
+| PATCH /{id}/open-status | ✅ | ✅ | 422 NOT_READY / HOURS_REQUIRED (abrir); **409 HAS_ACTIVE_ATTENDANCES** ao fechar com fila (BUG6, `CloseEstablishmentGateIntegrationTest`) |
 | PATCH /{id}/owner (transfer) | ✅ (unit) | ⚠️ | falta integração de erro |
 | POST/DELETE /{id}/professionals | ✅ | ✅ | |
 | GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação |

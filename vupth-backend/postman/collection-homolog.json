@@ -4887,6 +4887,56 @@
 					}
 				},
 				{
+					"name": "[ERRO] fechar loja com fila ativa → 409 (BUG6)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status 409 - nao fecha com fila ativa\", () => pm.response.to.have.status(409));",
+									"pm.test(\"code ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES\", () => {",
+									"  pm.expect(pm.response.json().code).to.equal(\"ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{owner_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"openStatus\":\"CLOSED\"}"
+						},
+						"url": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
+						"auth": {
+							"type": "noauth"
+						}
+					},
+					"response": [],
+					"auth": {
+						"type": "bearer",
+						"bearer": [
+							{
+								"key": "token",
+								"value": "{{owner_token}}",
+								"type": "string"
+							}
+						]
+					}
+				},
+				{
 					"name": "[ERRO] create attendance - sem serviceItemIds (500)",
 					"event": [
 						{
