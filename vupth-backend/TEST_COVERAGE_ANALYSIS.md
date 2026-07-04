@@ -137,6 +137,15 @@ Testes: `integrations/websocket/WebSocketIntegrationTest` (2).
 | STOMP connect + broadcast fila | ✅ | ❌ (falta auth inválida / canal negado) |
 | Notificação pessoal | ⚠️ | ❌ |
 
+### 2.9 Notificações push (backlog #1)
+Testes: `integrations/notification/PushNotificationIntegrationTest` (4) — `PushSender` mockado (`vupth.push.provider=none`).
+
+| Endpoint / Regra | Feliz | Erros |
+|---|---|---|
+| POST /devices (registrar/upsert) · DELETE /devices/{token} | ✅ | ✅ (401 sem auth, 422 token em branco) |
+| Push "você é o próximo" (front da fila, dedup + avanço) | ✅ | — |
+| Push ATTENDANCE_STARTED / ATTENDANCE_FINISHED | ✅ | — |
+
 ---
 
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)
@@ -181,6 +190,9 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 ---
 
 ## 6. CHANGELOG DE COBERTURA
+
+### 2026-07-03 (2)
+- **Notificações push (backlog #1)**: ✅ `PushNotificationIntegrationTest` (4) — registro de device token (`POST /devices` upsert idempotente + `DELETE /devices/{token}`), 401 sem auth + 422 token em branco; disparo do push "você é o próximo" ao entrar na fila (frente), dedup do 2º da fila + avanço ao 1º iniciar, e `ATTENDANCE_STARTED`/`ATTENDANCE_FINISHED`. `PushSender` mockado (perfil `test` usa `vupth.push.provider=none` → `NoOpPushSender`, sem HTTP). Novos: entidade `DeviceToken` + repo (migration 95-notification/001), flag `attendance.next_notified` (migration 80-attendance/008), `PushSender`/`ExpoPushSender`/`NoOpPushSender`/`PushNotificationPublisher`, `QueuePushService` (next-in-line via `broadcastQueue`), `DeviceController` + `DeviceTokenService`. Push espelha as notificações WS pessoais (started/finished/swap). Postman: folder `13 - device tokens / push (notificacoes)`. ⏳ aguardando André rodar.
 
 ### 2026-07-03
 - **#6 rating / avaliação de atendimentos**: ✅ `AttendanceRatingIntegrationTest` (7) — feliz: 1 serviço alimenta agregados do profissional **e** do `ServiceItem` (`serviceItemId` presente); combo (2+ serviços) alimenta **só** o profissional (`serviceItemId=null`, serviços intactos); média denormalizada agrega múltiplos votos (5+3 → 4.0). Erros: 2º voto 409 (`ATTENDANCE_ALREADY_RATED`), não-FINISHED 400, não-dono 403, score inválido 422. Novos: entidade `AttendanceRating` + repo, agregados `rating_sum`/`rating_count` em `professional` e `service_item` (migration 80-attendance/007), endpoint `POST /attendances/{id}/rating`, exposição em `professionals-with-queue` + `ServiceItemResponse`. Postman: folder `08i - avaliacao de atendimento (#6)` (homolog+prod). ⏳ aguardando André rodar.

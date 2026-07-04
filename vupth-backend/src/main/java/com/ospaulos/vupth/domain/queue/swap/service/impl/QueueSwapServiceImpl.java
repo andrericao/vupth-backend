@@ -38,6 +38,7 @@ public class QueueSwapServiceImpl implements QueueSwapService {
     private final ProfessionalRepository professionalRepository;
     private final QueueService queueService;
     private final QueueWebSocketPublisher publisher;
+    private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
 
     @Override
     public SwapRequestResponse propose(UUID proposerAttendanceId, UUID targetAttendanceId, UUID requesterClientId) {
@@ -79,6 +80,9 @@ public class QueueSwapServiceImpl implements QueueSwapService {
                     "SWAP_REQUESTED", proposer.getId(),
                     proposer.getEstablishment() != null ? proposer.getEstablishment().getId() : null,
                     "Um cliente pediu para trocar de posicao com voce na fila."));
+            pushPublisher.notifyUser(target.getClient().getId(), "Pedido de troca de posicao",
+                    "Um cliente pediu para trocar de posicao com voce na fila.",
+                    java.util.Map.of("type", "SWAP_REQUESTED", "attendanceId", proposer.getId().toString()));
         }
 
         log.info("[Swap] propose — criada proposta {} (PENDING)", swap.getId());
@@ -196,6 +200,8 @@ public class QueueSwapServiceImpl implements QueueSwapService {
                     type, target.getId(),
                     proposer.getEstablishment() != null ? proposer.getEstablishment().getId() : null,
                     message));
+            pushPublisher.notifyUser(proposer.getClient().getId(), "Troca de posicao", message,
+                    java.util.Map.of("type", type, "attendanceId", target.getId().toString()));
         }
     }
 }

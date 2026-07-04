@@ -86,7 +86,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1) |
 | **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
-| **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
+| **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, `POST /devices`, `DELETE /devices/{token}` (push, backlog #1), todos os demais endpoints nao listados |
 
 ---
 
@@ -2592,24 +2592,23 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
-| 2 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 3 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 4 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 5 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 6 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 7 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 8 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 9 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 10 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 11 | Precificacao calculada no backend | ⬜ aberto (dep. #15) | secao "Item 36" |
-| 12 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 13 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 14 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 15 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 16 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
+| 2 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 3 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 4 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
+| 5 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 6 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 7 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 8 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 9 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 10 | Precificacao calculada no backend | ⬜ aberto (dep. #13) | secao "Item 36" |
+| 11 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 12 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 13 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 14 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 15 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)**.
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2733,6 +2732,29 @@ Decisao 2026-06-13. **Status: ✅ BACKEND CONCLUIDO (2026-07-03).**
 **Endpoint:** `POST /attendances/{id}/rating` — apenas o `clientId` dono do attendance, apenas com `status = FINISHED`, bloqueia segundo voto (409). Atendimento guest (`guestName`, sem `client`) nao avalia.
 
 **Exibicao:** media geral no card do profissional; media por servico/tipo na lista de servicos do profissional.
+
+### Notificacoes push (Expo) — device token + disparo (especificacao detalhada)
+
+Decisao 2026-07-03. **Status: ✅ BACKEND CONCLUIDO.** Complementa o WebSocket (secao 18b): o WS atualiza a
+tela com o app aberto; o push alcanca o cliente com o **app em background/fechado**.
+
+**Registro de device token:**
+- `POST /devices` (qualquer autenticado — CLIENT/PROFESSIONAL/OWNER). Body `{ "token": "<ExpoPushToken>" (obrigatorio, <=512), "platform": "ios|android|web" (opcional) }`. **Idempotente por token** (upsert: se o token ja existe, reatribui dono/plataforma). `userId` sempre do JWT. **200** `{ id, token, platform }`. **401** sem token · **422** token em branco/ausente.
+- `DELETE /devices/{token}` (qualquer autenticado) — remove no logout. **204** (idempotente, 204 mesmo se nao existir). **⚠️ O token Expo tem colchetes (`ExponentPushToken[...]`); o Tomcat rejeita `[ ]` crus no path com 400 — o cliente DEVE url-encodar o segmento: `DELETE /devices/${encodeURIComponent(token)}` (colchetes viram `%5B`/`%5D`, o `@PathVariable` recebe o token original).**
+- Modelo: entidade `DeviceToken` (`user_id`, `token` UNIQUE, `platform`, `created_at`, `updated_at`) — migration `95-notification/001-create-device_token.yaml`. FK `user_id -> base_user` (ON DELETE CASCADE).
+
+**Gatilhos de disparo (decisao Andre 2026-07-03):**
+1. **"Voce e o proximo"** (`QUEUE_NEXT_IN_LINE`) — quando o cliente passa a ser o **1o da fila de espera** do seu profissional (o proximo a ser atendido). **Deduplicado** pela flag `attendance.next_notified` (migration `80-attendance/008`): 1 push por atendimento ao alcancar a frente — nao reenvia a cada nova mutacao. Disparado junto do broadcast WS da fila (`QueueWebSocketPublisher.broadcastQueue` → `QueuePushService.notifyNextInLine`), best-effort. **Nota:** entrar numa fila vazia ja torna o cliente a frente → recebe o aviso imediatamente (comportamento intencional; front decide a UX).
+2. **`ATTENDANCE_STARTED`** ("É a sua vez!") e **`ATTENDANCE_FINISHED`** — espelham as notificacoes pessoais WS ja existentes (mesmos pontos de `start`/`finish`).
+3. **Swap (#42)** — `SWAP_REQUESTED` (ao alvo) e `SWAP_ACCEPTED`/`SWAP_REJECTED` (ao proponente), espelhando o WS.
+
+Convidados (sem conta) nao recebem push. O payload leva `data.type` (o mesmo type do WS) + `attendanceId`/`establishmentId` para o front rotear.
+
+**Provedor:** Expo Push API (`POST https://exp.host/--/api/v2/push/send`, lotes de 100). Abstraido por `PushSender` (`ExpoPushSender` em prod; `NoOpPushSender` quando `vupth.push.provider=none`, usado nos testes/staging para nao chamar rede). Config: `vupth.push.provider` (env `PUSH_PROVIDER`, default `expo`), `vupth.push.expo.url`, `vupth.push.expo.access-token` (opcional). **Best-effort:** falha de rede/provedor e logada e nunca quebra a resposta HTTP.
+
+**HANDOFF FRONTS (Client e Partner):** ao abrir o app (apos o portao de readiness), pedir permissao de push, obter o Expo Push Token e chamar `POST /devices {token, platform}`; no logout, `DELETE /devices/${encodeURIComponent(token)}` (url-encodar por causa dos colchetes do token Expo — ver ⚠️ acima). Tratar as notificacoes por `data.type` (`QUEUE_NEXT_IN_LINE`, `ATTENDANCE_STARTED`, `ATTENDANCE_FINISHED`, `SWAP_*`). O WS continua para o app em foreground; o push cobre background/fechado.
+
+**Cobertura:** integracao `PushNotificationIntegrationTest` (registro upsert + delete + 401/422; "proximo" ao entrar; dedup do 2o + avanco ao iniciar; started/finished) + Postman folder `13 - device tokens / push (notificacoes)` (homolog+prod).
 
 ### Item 11 — Refeicoes/intervalos do profissional (especificacao detalhada)
 

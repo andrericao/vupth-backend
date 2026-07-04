@@ -1,0 +1,24 @@
+databaseChangeLog:
+  # Notificacoes push (item backlog #1): dedupe do aviso "voce e o proximo". Quando um atendimento
+  # em espera chega a FRENTE da fila do profissional (index 0), o cliente recebe UM push; a flag evita
+  # reenviar a cada nova mutacao da fila enquanto ele continua na frente. Nasce false; nunca reseta
+  # dentro do ciclo de vida do atendimento (novo atendimento = nova flag).
+  - changeSet:
+      id: 008-add-next_notified-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: next_notified
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: next_notified
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

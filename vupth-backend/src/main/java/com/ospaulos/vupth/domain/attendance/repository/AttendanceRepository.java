@@ -118,6 +118,25 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
+     * Fila de espera de TODOS os profissionais de um establishment (SCHEDULED + LATE),
+     * ordenada por profissional e horario — usada para detectar o "proximo" de cada fila
+     * (push do item de notificacoes). JOIN FETCH evita LazyInitialization ao ler client/professional.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH a.establishment
+        WHERE a.establishment.id = :establishmentId
+          AND a.status IN ('SCHEDULED', 'LATE')
+        ORDER BY a.professional.id ASC, a.scheduledTime ASC
+    """)
+    List<Attendance> findWaitingQueueByEstablishment(
+            @Param("establishmentId") UUID establishmentId
+    );
+
+    /**
      * Find o attendance atualmente em progresso — JOIN FETCH para serialização segura.
      */
     @Query("""

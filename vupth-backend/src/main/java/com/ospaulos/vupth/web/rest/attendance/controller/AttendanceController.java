@@ -34,6 +34,7 @@ public class AttendanceController {
     private final ProfessionalService professionalService;
     private final QueueWebSocketPublisher queuePublisher;
     private final QueueSwapService queueSwapService;
+    private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
 
     @GetMapping
     public ResponseEntity<List<AttendanceListResponse>> listAttendances(
@@ -264,6 +265,11 @@ public class AttendanceController {
         queuePublisher.notifyClient(att.clientId(), QueueNotification.of(
                 "ATTENDANCE_STARTED", attendanceId, att.establishmentId(),
                 "É a sua vez! Seu atendimento começou."));
+        // Push (mesmo aviso do WS, para o app em background)
+        pushPublisher.notifyUser(att.clientId(), "É a sua vez!", "Seu atendimento começou.",
+                java.util.Map.of("type", "ATTENDANCE_STARTED",
+                        "attendanceId", attendanceId.toString(),
+                        "establishmentId", String.valueOf(att.establishmentId())));
 
         return ResponseEntity.ok(response);
     }
@@ -401,6 +407,11 @@ public class AttendanceController {
         queuePublisher.notifyClient(att.clientId(), QueueNotification.of(
                 "ATTENDANCE_FINISHED", attendanceId, att.establishmentId(),
                 "Seu atendimento foi concluído."));
+        // Push (mesmo aviso do WS, para o app em background)
+        pushPublisher.notifyUser(att.clientId(), "Atendimento concluído", "Seu atendimento foi concluído.",
+                java.util.Map.of("type", "ATTENDANCE_FINISHED",
+                        "attendanceId", attendanceId.toString(),
+                        "establishmentId", String.valueOf(att.establishmentId())));
 
         return ResponseEntity.ok(response);
     }

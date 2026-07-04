@@ -1,0 +1,62 @@
+databaseChangeLog:
+  # Notificacoes push (item backlog #1). Registro de device tokens (Expo Push Token) por usuario.
+  # Um mesmo usuario pode ter varios devices; um token e unico (identifica o device). No login/abertura
+  # o front registra via POST /devices; no logout remove via DELETE /devices/{token}. O disparo de push
+  # (vez chegando / atendimento iniciado) resolve os tokens do usuario e envia via Expo.
+  - changeSet:
+      id: 001-create-device_token
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: device_token
+      changes:
+        - createTable:
+            tableName: device_token
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_device_token
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: token
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_device_token_token
+              - column:
+                  name: platform
+                  type: VARCHAR(20)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: device_token
+            baseColumnNames: user_id
+            constraintName: fk_device_token_user
+            referencedTableName: base_user
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - createIndex:
+            tableName: device_token
+            indexName: idx_device_token_user
+            columns:
+              - column:
+                  name: user_id
