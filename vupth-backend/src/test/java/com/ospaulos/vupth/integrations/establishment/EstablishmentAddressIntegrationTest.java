@@ -17,6 +17,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -48,6 +50,7 @@ class EstablishmentAddressIntegrationTest {
     private final Faker faker = new Faker();
 
     String ownerToken, establishmentId;
+    AddressRequest createdAddress;
 
     @BeforeAll
     void setup() throws Exception {
@@ -70,6 +73,7 @@ class EstablishmentAddressIntegrationTest {
         log.info("[EstabAddress] createAddress_success — estab={}", establishmentId);
 
         AddressRequest request = buildValidAddress();
+        this.createdAddress = request;
 
         MvcResult result = mvc.perform(post("/establishments/{id}/addresses", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -85,6 +89,60 @@ class EstablishmentAddressIntegrationTest {
         String body = result.getResponse().getContentAsString();
         log.info("[EstabAddress] createAddress_success — created OK");
         assertThat(body).contains(establishmentId);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Read-back do endereco no EstablishmentResponse (Partner BUG4)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(15)
+    @DisplayName("GET /establishment/mine — inclui data.address da loja (path fora de tx, OSIV off)")
+    void mine_includesAddress() throws Exception {
+        log.info("[EstabAddress] mine_includesAddress — estab={}", establishmentId);
+
+        // Regressao do Partner BUG4: /mine mapeia fromEntity NO CONTROLLER (sem @Transactional).
+        // Sem o FETCH de addresses+address no findByOwnerId, acessar getMainAddress() estouraria
+        // LazyInitializationException (OSIV off). O endereco tem de vir embutido.
+        mvc.perform(get("/establishment/mine")
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(establishmentId))
+                .andExpect(jsonPath("$[0].address.street").value(createdAddress.street()))
+                .andExpect(jsonPath("$[0].address.city").value(createdAddress.city()))
+                .andExpect(jsonPath("$[0].address.zipCode").value(createdAddress.zipCode()))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(16)
+    @DisplayName("GET /establishment/id/{id} — inclui data.address da loja (path transacional)")
+    void findById_includesAddress() throws Exception {
+        log.info("[EstabAddress] findById_includesAddress — estab={}", establishmentId);
+
+        mvc.perform(get("/establishment/id/{id}", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(establishmentId))
+                .andExpect(jsonPath("$.address.street").value(createdAddress.street()))
+                .andExpect(jsonPath("$.address.neighborhood").value(createdAddress.neighborhood()))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("GET /establishment/mine — address == null quando a loja nao tem endereco")
+    void mine_nullAddressWhenNone() throws Exception {
+        log.info("[EstabAddress] mine_nullAddressWhenNone — fresh owner without address");
+
+        var freshOwner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var freshEstablishment = TestUserUtils.becomeOwner(mvc, mapper, faker, freshOwner.token());
+
+        mvc.perform(get("/establishment/mine")
+                        .header("Authorization", freshOwner.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(freshEstablishment.id()))
+                .andExpect(jsonPath("$[0].address").value(nullValue()))
+                .andDo(print());
     }
 
     // ─────────────────────────────────────────────────────────────

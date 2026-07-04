@@ -3,6 +3,7 @@ package com.ospaulos.vupth.domain.establishment.model;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
@@ -145,5 +146,18 @@ public class Establishment implements Serializable {
     public void removeAddress(EstablishmentAddress address) {
         addresses.remove(address);
         address.setEstablishment(null);
+    }
+
+    /**
+     * Endereco principal da loja para o read-back (Partner BUG4).
+     * Prioriza o marcado {@code isMain}; senao o primeiro cadastrado; {@code null} se nao houver.
+     */
+    public Address getMainAddress() {
+        return addresses.stream()
+                .filter(a -> Boolean.TRUE.equals(a.getIsMain()))
+                .findFirst()
+                .or(() -> addresses.stream().findFirst())
+                .map(EstablishmentAddress::getAddress)
+                .orElse(null);
     }
 }

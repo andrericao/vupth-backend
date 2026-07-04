@@ -68,7 +68,7 @@ Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegra
 | GET /users/email/{email} | ✅ | ⚠️ |
 
 ### 2.3 Establishment
-Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (9), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
+Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
 
 | Endpoint | Feliz | Erros | Notas |
 |---|---|---|---|
@@ -78,7 +78,7 @@ Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional
 | PATCH /{id}/owner (transfer) | ✅ (unit) | ⚠️ | falta integração de erro |
 | POST/DELETE /{id}/professionals | ✅ | ✅ | |
 | GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação |
-| GET /establishment/id/{id} · /mine | ✅ | ⚠️ | |
+| GET /establishment/id/{id} · /mine | ✅ | ⚠️ | `address` embutido (Partner BUG4): `/mine` fora de tx com JOIN FETCH, `/id/{id}` transacional, `null` sem endereco |
 | GET /establishment/id/{id}/professionals-with-queue | ✅ | — | ETA **meal-aware** (#37 pré-req) |
 | GET /{id}/reports | ✅ | ⚠️ | `ReportIntegrationTest` |
 | 500 legado NAVALHA/PROCEDIMENTO | ✅ | ✅ | resiliência (hotfix) |

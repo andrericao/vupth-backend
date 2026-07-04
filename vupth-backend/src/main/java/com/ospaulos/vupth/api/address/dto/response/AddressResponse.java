@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.address.dto.response;
 
+import com.ospaulos.vupth.domain.address.model.Address;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -32,4 +33,25 @@ public record AddressResponse(
 
         Double longitude
 ) {
+    /**
+     * Constroi o endereco embutido a partir do value object {@link Address}.
+     * Retorna {@code null} quando a loja nao tem endereco (Partner BUG4: front le {@code data.address}).
+     */
+    public static AddressResponse fromEntity(Address address) {
+        if (address == null) {
+            return null;
+        }
+        return new AddressResponse(
+                address.getStreet(),
+                address.getNumber(),
+                address.getComplement(),
+                address.getNeighborhood(),
+                address.getCity(),
+                address.getState(),
+                address.getZipCode(),
+                address.getReference(),
+                address.getLatitude(),
+                address.getLongitude()
+        );
+    }
 }

@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.establishment.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.ospaulos.vupth.api.address.dto.response.AddressResponse;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import jakarta.validation.constraints.NotNull;
@@ -36,7 +37,11 @@ public record EstablishmentResponse(
         String openStatus,
 
         @JsonProperty("status")
-        String status
+        String status,
+
+        // Endereco principal da loja (Partner BUG4). null quando a loja ainda nao tem endereco.
+        // O front le data.address para exibir localizacao no read-back do establishment.
+        AddressResponse address
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return fromEntity(establishment, null);
@@ -56,7 +61,8 @@ public record EstablishmentResponse(
                 establishment.getClosingTime(),
                 estimatedWaitMinutes,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
-                establishment.getStatus() != null ? establishment.getStatus().name() : null
+                establishment.getStatus() != null ? establishment.getStatus().name() : null,
+                AddressResponse.fromEntity(establishment.getMainAddress())
         );
     }
 }

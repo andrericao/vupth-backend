@@ -636,12 +636,26 @@ Lista establishments ativos com filtros opcionais.
     "instagram": "@barbearia | null",
     "estimated_wait_minutes": 25,
     "open_status": "OPEN",
-    "status": "ACTIVE"
+    "status": "ACTIVE",
+    "address": {
+      "street": "Rua das Flores",
+      "number": "123",
+      "complement": "Sala 2 | null",
+      "neighborhood": "Centro",
+      "city": "Sao Paulo",
+      "state": "SP",
+      "zipCode": "01310100",
+      "reference": "Ao lado do banco | null",
+      "latitude": -23.56,
+      "longitude": -46.65
+    }
   }
 ]
 ```
 
 > `estimated_wait_minutes` e preenchido **apenas na listagem** (`GET /establishment`). Em `GET /establishment/id/{id}` e nos demais usos do `EstablishmentResponse` vem `null`.
+
+> **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
 **Testes:** Integracao
 
@@ -2628,33 +2642,32 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Endereco no read-back do establishment | ⬜ aberto | **Partner BUG4** — incluir `address` no `EstablishmentResponse` (ou `GET /establishment/{id}/addresses`); front ja le `data.address` |
-| 2 | Gate ao fechar loja com fila/atendimento ativo | ⬜ aberto | **Partner BUG6** — `updateOpenStatus` deve dar **409** se houver atendimento ativo/fila ao fechar (hoje so existe o gate de *abrir* sem prof+servico) |
-| 3 | openStatus real: filtro + auto-fechar + horarios | ⬜ aberto | **Partner BUG5** + antigo "filtro openStatus" — `?includeAll=true`; auto-fechar no `closing_time` / expor `is_open` efetivo; horarios na listagem |
-| 4 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono) |
-| 5 | Oferta aberta de troca de posicao | ⬜ aberto | **Partner S3 / Client 10b** — `/swap-offers` (anuncia; qualquer um aceita). O `#42` `/swap-requests` e **direcionado** e nao cobre. Deve **expirar no `start`** (igual #42) |
-| 6 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
-| 7 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 + Client #14** — endpoint de reset (codigo/email) + confirmar nova senha; infra de e-mail |
-| 8 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
-| 9 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
-| 10 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
-| 11 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 12 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 13 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 14 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 15 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 16 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 17 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 18 | Precificacao calculada no backend | ⬜ aberto (dep. #21) | secao "Item 36" |
-| 19 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 20 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 21 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 22 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 23 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Gate ao fechar loja com fila/atendimento ativo | ⬜ aberto | **Partner BUG6** — `updateOpenStatus` deve dar **409** se houver atendimento ativo/fila ao fechar (hoje so existe o gate de *abrir* sem prof+servico) |
+| 2 | openStatus real: filtro + auto-fechar + horarios | ⬜ aberto | **Partner BUG5** + antigo "filtro openStatus" — `?includeAll=true`; auto-fechar no `closing_time` / expor `is_open` efetivo; horarios na listagem |
+| 3 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono) |
+| 4 | Oferta aberta de troca de posicao | ⬜ aberto | **Partner S3 / Client 10b** — `/swap-offers` (anuncia; qualquer um aceita). O `#42` `/swap-requests` e **direcionado** e nao cobre. Deve **expirar no `start`** (igual #42) |
+| 5 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
+| 6 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 + Client #14** — endpoint de reset (codigo/email) + confirmar nova senha; infra de e-mail |
+| 7 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 8 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 9 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
+| 10 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 11 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 12 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 13 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 14 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 15 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 16 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 17 | Precificacao calculada no backend | ⬜ aberto (dep. #21) | secao "Item 36" |
+| 18 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 19 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 20 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 21 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 22 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
 **Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3** — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging.
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)**.
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)** · **Endereco no read-back do establishment (Partner BUG4 — `EstablishmentResponse.address` embutido; endereco principal `isMain`, `null` sem endereco)**.
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---

@@ -746,6 +746,10 @@
 									"  const r = pm.response.json();",
 									"  const ids = r.map(e => e.id);",
 									"  pm.expect(ids).to.include(pm.collectionVariables.get(\"owner_establishment_id\"));",
+									"});",
+									"pm.test(\"Schema: expoe address no read-back (Partner BUG4, pode ser null)\", () => {",
+									"  const r = pm.response.json();",
+									"  pm.expect(r[0]).to.have.property(\"address\");",
 									"});"
 								],
 								"type": "text/javascript"
@@ -770,6 +774,10 @@
 									"  const r = pm.response.json();",
 									"  pm.expect(r).to.have.property(\"id\");",
 									"  pm.expect(r).to.have.property(\"name\");",
+									"});",
+									"pm.test(\"Schema: expoe address (Partner BUG4, pode ser null)\", () => {",
+									"  const r = pm.response.json();",
+									"  pm.expect(r).to.have.property(\"address\");",
 									"});"
 								],
 								"type": "text/javascript"
