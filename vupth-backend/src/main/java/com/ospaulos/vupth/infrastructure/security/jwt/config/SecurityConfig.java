@@ -139,7 +139,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
-                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/owner").hasRole("OWNER")
 
                         // Owner adiciona/remove profissional do seu establishment

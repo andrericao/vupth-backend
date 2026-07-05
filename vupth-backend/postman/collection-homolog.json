@@ -12459,6 +12459,425 @@
 			]
 		},
 		{
+			"name": "S1 - profissional afiliado abre/fecha loja (open-status)",
+			"item": [
+				{
+					"name": "setup: register dono (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/auth/register",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"{{s1_owner_email}}\",\"password\":\"{{s1_owner_pass}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"s1_owner_email\", \"s1_owner_\" + pm.variables.replaceIn(\"{{$guid}}\") + \"@vupth.test\");",
+									"pm.collectionVariables.set(\"s1_owner_pass\", \"Test1234!\");"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - dono registrado\", () => pm.response.to.have.status(201));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: login dono (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/auth/login",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"{{s1_owner_email}}\",\"password\":\"{{s1_owner_pass}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - login dono\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) pm.collectionVariables.set(\"s1_owner_token\", pm.response.json().tokens.access_token);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: dono quick-create loja (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{s1_owner_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/establishment/quick-create",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"name\":\"Loja S1 {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - loja criada (nasce CLOSED)\", () => pm.response.to.have.status(201));",
+									"if (pm.response.code === 201) pm.collectionVariables.set(\"s1_estab_id\", pm.response.json().id);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: register funcionario (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/auth/register",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"{{s1_emp_email}}\",\"password\":\"{{s1_emp_pass}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"s1_emp_email\", \"s1_emp_\" + pm.variables.replaceIn(\"{{$guid}}\") + \"@vupth.test\");",
+									"pm.collectionVariables.set(\"s1_emp_pass\", \"Test1234!\");"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - funcionario registrado\", () => pm.response.to.have.status(201));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: login funcionario (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/auth/login",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"{{s1_emp_email}}\",\"password\":\"{{s1_emp_pass}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - login funcionario\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) pm.collectionVariables.set(\"s1_emp_token\", pm.response.json().tokens.access_token);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: funcionario vira profissional AFILIADO (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{s1_emp_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/professional/quick-create",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"name\":\"Funcionario S1\",\"establishmentId\":\"{{s1_estab_id}}\",\"specialty\":\"Barber\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - profissional afiliado a loja S1\", () => pm.response.to.have.status(201));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: register estranho (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/auth/register",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"{{s1_str_email}}\",\"password\":\"{{s1_str_pass}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.collectionVariables.set(\"s1_str_email\", \"s1_str_\" + pm.variables.replaceIn(\"{{$guid}}\") + \"@vupth.test\");",
+									"pm.collectionVariables.set(\"s1_str_pass\", \"Test1234!\");"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - estranho registrado\", () => pm.response.to.have.status(201));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: login estranho (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "{{base_url}}/auth/login",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"email\":\"{{s1_str_email}}\",\"password\":\"{{s1_str_pass}}\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - login estranho\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) pm.collectionVariables.set(\"s1_str_token\", pm.response.json().tokens.access_token);"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "setup: estranho vira dono de OUTRA loja (S1)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{s1_str_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/establishment/quick-create",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"name\":\"Loja OUTRA {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 201 - estranho e OWNER de outra loja (passa o gate de role)\", () => pm.response.to.have.status(201));"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "profissional AFILIADO fecha a loja -> 200",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{s1_emp_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/establishment/{{s1_estab_id}}/open-status",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"openStatus\":\"TEMPORARILY_CLOSED\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 200 - profissional afiliado altera o open-status\", () => pm.response.to.have.status(200));",
+									"if (pm.response.code === 200) {",
+									"  pm.test(\"open_status = TEMPORARILY_CLOSED\", () => pm.expect(pm.response.json().open_status).to.equal(\"TEMPORARILY_CLOSED\"));",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "[ERRO] profissional de OUTRA loja -> 403",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{s1_str_token}}",
+								"type": "text"
+							}
+						],
+						"url": "{{base_url}}/establishment/{{s1_estab_id}}/open-status",
+						"auth": {
+							"type": "noauth"
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\"openStatus\":\"CLOSED\"}"
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status 403 - nao afiliado a esta loja (ESTABLISHMENT_ACCESS_DENIED)\", () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
 			"name": "99 - cleanup",
 			"item": [
 				{

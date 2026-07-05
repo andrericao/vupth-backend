@@ -49,7 +49,7 @@ import java.util.UUID;
  *   GET    /establishment                                 — lista ativos (público, suporta ?name=, ?neighborhood= e ?serviceType=)
  *   GET    /establishment/id/{id}                        — busca por ID (público)
  *   GET    /establishment/id/{id}/professionals-with-queue — snapshot da fila (público)
- *   PATCH  /establishment/{id}/open-status               — atualiza status de abertura (OWNER)
+ *   PATCH  /establishment/{id}/open-status               — atualiza status de abertura (OWNER ou profissional afiliado)
  *   POST   /establishment/{establishmentId}/service-items — adiciona serviço (OWNER)
  *   POST   /establishment/{establishmentId}/professionals — owner adiciona profissional (OWNER)
  *   DELETE /establishment/{id}/professionals/{pid}       — owner remove profissional (OWNER)
@@ -171,9 +171,9 @@ public class EstablishmentController {
 
     /**
      * PATCH /establishment/{id}/open-status
-     * Owner atualiza o status de abertura do establishment.
+     * Dono da loja OU profissional afiliado a ela atualiza o status de abertura.
      * Valores válidos: OPEN, CLOSED, TEMPORARILY_CLOSED
-     * Requer: ROLE_OWNER.
+     * Requer: ROLE_OWNER ou ROLE_PROFESSIONAL (vínculo verificado no serviço → 403 se não pertence).
      */
     @PatchMapping("/{id}/open-status")
     public ResponseEntity<EstablishmentResponse> updateOpenStatus(
@@ -181,7 +181,7 @@ public class EstablishmentController {
             @RequestBody @Valid UpdateOpenStatusRequest request,
             @AuthenticationPrincipal UserDetailsImpl user) {
 
-        log.info("[Establishment] updateOpenStatus — id={} owner={} status={}",
+        log.info("[Establishment] updateOpenStatus — id={} requester={} status={}",
                 id, user.getUserId(), request.openStatus());
 
         EstablishmentResponse response =
