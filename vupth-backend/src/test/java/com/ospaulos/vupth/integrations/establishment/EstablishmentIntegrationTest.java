@@ -664,8 +664,11 @@ class EstablishmentIntegrationTest {
         // busca por parte do bairro, em minúsculas, para validar LIKE + case-insensitive
         String partial = testNeighborhood.substring(0, 12).toLowerCase();
 
+        // includeAll=true: o filtro por bairro é independente do gate BUG5 (só-OPEN);
+        // establishmentId não pode abrir (sem profissional+serviço), então incluímos os não-OPEN.
         MvcResult result = mvc.perform(get("/establishment")
                         .param("neighborhood", partial)
+                        .param("includeAll", "true")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andDo(print())
@@ -711,9 +714,11 @@ class EstablishmentIntegrationTest {
         // establishmentId é BARBER (quick-create) e tem endereço em testNeighborhood (Order 55)
         String partial = testNeighborhood.substring(0, 12).toLowerCase();
 
+        // includeAll=true: valida a combinação categoria+bairro independente do gate BUG5 (só-OPEN).
         MvcResult result = mvc.perform(get("/establishment")
                         .param("serviceType", "BARBER")
                         .param("neighborhood", partial)
+                        .param("includeAll", "true")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andDo(print())
@@ -861,16 +866,17 @@ class EstablishmentIntegrationTest {
 
     @Test
     @Order(65)
-    @DisplayName("PATCH /establishment/{id}/open-status — 404 owner errado não encontra o establishment")
-    void updateOpenStatus_wrongOwner_404() throws Exception {
+    @DisplayName("PATCH /establishment/{id}/open-status — 403 owner de outra loja não pode gerenciar esta")
+    void updateOpenStatus_wrongOwner_403() throws Exception {
         Assumptions.assumeTrue(establishmentId != null, "Depende do quickCreate_success");
-        log.info("[Establishment] updateOpenStatus_wrongOwner_404");
+        log.info("[Establishment] updateOpenStatus_wrongOwner_403");
 
+        // ownerProfToken é dono/afiliado de OUTRA loja → não é owner nem afiliado desta → 403.
         mvc.perform(patch("/establishment/{id}/open-status", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken)
                         .content("{\"openStatus\":\"CLOSED\"}"))
-                .andExpect(status().isNotFound())
+                .andExpect(status().isForbidden())
                 .andDo(print());
     }
 

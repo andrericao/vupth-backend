@@ -68,7 +68,7 @@ Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegra
 | GET /users/email/{email} | ✅ | ⚠️ |
 
 ### 2.3 Establishment
-Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `CloseEstablishmentGateIntegrationTest` (3), `OpenStatusAccessIntegrationTest` (2), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
+Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `CloseEstablishmentGateIntegrationTest` (3), `OpenStatusAccessIntegrationTest` (2), `OpenStatusListingFilterIntegrationTest` (3), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
 
 | Endpoint | Feliz | Erros | Notas |
 |---|---|---|---|
@@ -77,7 +77,7 @@ Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional
 | PATCH /{id}/open-status | ✅ | ✅ | 422 NOT_READY / HOURS_REQUIRED (abrir); **409 HAS_ACTIVE_ATTENDANCES** ao fechar com fila (BUG6, `CloseEstablishmentGateIntegrationTest`); **acesso OWNER ou profissional afiliado** — afiliado 200 / profissional de outra loja **403 ACCESS_DENIED** (`OpenStatusAccessIntegrationTest`) |
 | PATCH /{id}/owner (transfer) | ✅ (unit) | ⚠️ | falta integração de erro |
 | POST/DELETE /{id}/professionals | ✅ | ✅ | |
-| GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação |
+| GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação; **filtro open-status (BUG5): default só `OPEN`, `?includeAll=true` inclui fechados** (`OpenStatusListingFilterIntegrationTest`) |
 | GET /establishment/id/{id} · /mine | ✅ | ⚠️ | `address` embutido (Partner BUG4): `/mine` fora de tx com JOIN FETCH, `/id/{id}` transacional, `null` sem endereco |
 | GET /establishment/id/{id}/professionals-with-queue | ✅ | — | ETA **meal-aware** (#37 pré-req) |
 | GET /{id}/reports | ✅ | ⚠️ | `ReportIntegrationTest` |

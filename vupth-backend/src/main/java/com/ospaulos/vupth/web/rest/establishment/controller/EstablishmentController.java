@@ -113,10 +113,11 @@ public class EstablishmentController {
     public ResponseEntity<List<EstablishmentResponse>> findAll(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String neighborhood,
-            @RequestParam(required = false) ServiceType serviceType) {
+            @RequestParam(required = false) ServiceType serviceType,
+            @RequestParam(required = false, defaultValue = "false") boolean includeAll) {
 
-        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={}",
-                name, neighborhood, serviceType);
+        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={} includeAll={}",
+                name, neighborhood, serviceType, includeAll);
 
         boolean hasNeighborhood = neighborhood != null && !neighborhood.isBlank();
 
@@ -131,6 +132,15 @@ public class EstablishmentController {
             result = service.findByServiceType(serviceType);
         } else {
             result = service.findAllActive();
+        }
+
+        // BUG5: por padrão a listagem pública só devolve lojas ABERTAS (OPEN).
+        // ?includeAll=true devolve todas as ativas (inclui CLOSED/TEMPORARILY_CLOSED),
+        // p/ o Front-Partner/gestão. Filtro pós-fetch: preserva a ordenação por tempo de espera.
+        if (!includeAll) {
+            result = result.stream()
+                    .filter(e -> OpenStatus.OPEN.name().equals(e.openStatus()))
+                    .toList();
         }
 
         return ResponseEntity.ok(result);
