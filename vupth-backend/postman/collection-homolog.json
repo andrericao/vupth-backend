@@ -945,6 +945,9 @@
        "script": {
         "exec": [
          "pm.test(\"Status 200 - Filtro por serviceType OK\", () => pm.response.to.have.status(200));",
+         "// BUG5: a listagem pública padrão só devolve lojas OPEN. A barbearia de teste",
+         "// nasce CLOSED (e sem serviço, então nem dá pra abrir — gate #31), por isso usamos",
+         "// includeAll=true aqui p/ exercitar de fato o filtro serviceType contra a loja criada.",
          "pm.test(\"Schema: retorna array não vazio\", () => {",
          "  const arr = pm.response.json();",
          "  pm.expect(arr).to.be.an(\"array\");",
@@ -964,7 +967,7 @@
       "method": "GET",
       "header": [],
       "url": {
-       "raw": "{{base_url}}/establishment?serviceType=BARBER",
+       "raw": "{{base_url}}/establishment?serviceType=BARBER&includeAll=true",
        "host": [
         "{{base_url}}"
        ],
@@ -975,6 +978,10 @@
         {
          "key": "serviceType",
          "value": "BARBER"
+        },
+        {
+         "key": "includeAll",
+         "value": "true"
         }
        ]
       }
