@@ -120,10 +120,20 @@ public class Professional {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Atendimento "atual" do profissional: o IN_PROGRESS ou, na ausencia dele, o PAUSED
+     * (Partner BUG7). Um atendimento pausado continua sendo o atual — exposto e retomavel —
+     * ate resume/finish; sem esse fallback ele sumia de todos os read-models (orfao) e o
+     * profissional nao conseguia retomar. Tambem serve de guarda ("ja tem atendimento ativo"):
+     * nao se inicia um novo enquanto ha um pausado.
+     */
     public Optional<Attendance> getCurrentAttendance() {
         return attendances.stream()
                 .filter(a -> a.getStatus() == AttendanceStatus.IN_PROGRESS)
-                .findFirst();
+                .findFirst()
+                .or(() -> attendances.stream()
+                        .filter(a -> a.getStatus() == AttendanceStatus.PAUSED)
+                        .findFirst());
     }
 
     // Or more generic if other statuses are needed
