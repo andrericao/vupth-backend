@@ -973,12 +973,23 @@ public class AttendanceServiceImpl implements AttendanceService {
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
+            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status) {
 
-        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} dateFrom={} dateTo={} status={}",
-                userId, establishmentId, professionalId, dateFrom, dateTo, status);
+        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} clientId={} dateFrom={} dateTo={} status={}",
+                userId, establishmentId, professionalId, clientId, dateFrom, dateTo, status);
+
+        // Partner BUG8 (sintoma b): o cliente lista os PROPRIOS atendimentos por aqui (?clientId=).
+        // clientId so pode ser o do proprio JWT — nao se lista fila de outro cliente. Delega ao
+        // mesmo caminho de /attendances/client/me (findByClientFilters), consistente com a queue.
+        if (clientId != null) {
+            if (!clientId.equals(userId)) {
+                throw new EstablishmentAccessDeniedException("You can only list your own attendances.");
+            }
+            return listClientAttendances(userId, status, dateFrom, dateTo);
+        }
 
         Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
         final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);

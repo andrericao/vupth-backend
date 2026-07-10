@@ -100,6 +100,7 @@ public interface AttendanceService {
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
+            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status);

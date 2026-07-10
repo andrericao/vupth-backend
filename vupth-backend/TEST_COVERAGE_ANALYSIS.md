@@ -106,14 +106,14 @@ Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Le
 | Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 
 ### 2.6 Attendance & Queue
-Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
+Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `QueueVisibilityBug8IntegrationTest` (5), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
 
 | Endpoint / Regra | Feliz | Erros | Notas |
 |---|---|---|---|
 | POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente |
 | PATCH /attendances/{id}/start·pause·resume·finish | ✅ | ✅ | transições inválidas cobertas (unit) |
 | PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | |
-| GET /attendances · /{id} · /client/me | ✅ | ⚠️ | histórico do cliente + filtros |
+| GET /attendances · /{id} · /client/me | ✅ | ✅ | histórico do cliente + filtros; **`?clientId=<self>` devolve os próprios atendimentos do cliente (Partner BUG8); clientId de outro → 403** (`QueueVisibilityBug8IntegrationTest`); consistência nos 3 read-models (waiting_list / ?clientId / client/me) |
 | GET /client-queue/{id}/wait-time (posição/ETA do cliente) | ✅ | ⚠️ | ETA **lock-aware** (#37): refeições travadas no ingresso |
 | POST /attendances/{id}/rating (#6) | ✅ | ✅ | `AttendanceRatingIntegrationTest` — 1 serviço alimenta prof+serviço; combo só prof; 409 2º voto; 400 não-FINISHED; 403 não-dono; 422 score inválido; média agrega votos |
 | QueueUtils ETA (previsto/iniciado/unexpected/skip/day-scoped) | ✅ | — | 19 cenários unit (inclui skip #41 + lock #37) |

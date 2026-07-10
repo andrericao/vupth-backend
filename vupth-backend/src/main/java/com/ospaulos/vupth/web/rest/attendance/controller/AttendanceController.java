@@ -40,16 +40,17 @@ public class AttendanceController {
     public ResponseEntity<List<AttendanceListResponse>> listAttendances(
             @RequestParam(required = false) UUID establishmentId,
             @RequestParam(required = false) UUID professionalId,
+            @RequestParam(required = false) UUID clientId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) AttendanceStatus status,
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
-        log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} dateFrom={} dateTo={} status={}",
-                principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo, status);
+        log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} client={} dateFrom={} dateTo={} status={}",
+                principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo, status);
 
         List<AttendanceListResponse> response = attendanceService.listAttendances(
-                principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo, status);
+                principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo, status);
         return ResponseEntity.ok(response);
     }
 

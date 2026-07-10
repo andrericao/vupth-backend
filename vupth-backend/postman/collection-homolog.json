@@ -8609,6 +8609,105 @@
           "auth": {
             "type": "noauth"
           }
+        },
+        {
+          "name": "(BUG8) list own attendances via ?clientId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Partner BUG8 (b): o cliente lista os proprios atendimentos por /attendances?clientId=self.",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response is array', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "pm.test('So atendimentos do proprio cliente', () => {",
+                  "    const items = pm.response.json();",
+                  "    items.forEach(a => pm.expect(a.clientId).to.eql(pm.collectionVariables.get('client_id')));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?clientId={{client_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "{{client_id}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] (BUG8) ?clientId de outro usuario -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Partner BUG8 (b): clientId != JWT -> 403 (nao se lista fila de outro cliente).",
+                  "pm.test('Status 403', () => pm.response.to.have.status(403));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/attendances?clientId=00000000-0000-0000-0000-000000000000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "attendances"
+              ],
+              "query": [
+                {
+                  "key": "clientId",
+                  "value": "00000000-0000-0000-0000-000000000000"
+                }
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
         }
       ]
     },
