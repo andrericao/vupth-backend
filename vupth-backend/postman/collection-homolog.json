@@ -750,6 +750,12 @@
                   "pm.test(\"Schema: expoe address no read-back (Partner BUG4, pode ser null)\", () => {",
                   "  const r = pm.response.json();",
                   "  pm.expect(r[0]).to.have.property(\"address\");",
+                  "});",
+                  "",
+                  "pm.test(\"Schema: expoe is_open efetivo (BUG5 parte B, boolean)\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r[0]).to.have.property(\"is_open\");",
+                  "  pm.expect(r[0].is_open).to.be.a(\"boolean\");",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -1589,6 +1595,12 @@
                   "  const mf = pm.response.json().modified_fields || [];",
                   "  pm.expect(mf).to.include(\"opening_time\");",
                   "  pm.expect(mf).to.include(\"closing_time\");",
+                  "});",
+                  "",
+                  "pm.test(\"Schema: expoe is_open efetivo (BUG5 parte B, boolean)\", () => {",
+                  "  const b = pm.response.json();",
+                  "  pm.expect(b).to.have.property(\"is_open\");",
+                  "  pm.expect(b.is_open).to.be.a(\"boolean\");",
                   "});"
                 ]
               }

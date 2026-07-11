@@ -36,6 +36,13 @@ public record EstablishmentResponse(
         @JsonProperty("open_status")
         String openStatus,
 
+        // "Aberto agora" efetivo (BUG5 parte B): open_status == OPEN E dentro de
+        // [opening_time, closing_time). Campo de LEITURA derivado — nao muda o
+        // open_status persistido. O front-client usa pra nao mostrar como aberta
+        // uma loja OPEN cujo horario ja passou.
+        @JsonProperty("is_open")
+        boolean isOpen,
+
         @JsonProperty("status")
         String status,
 
@@ -61,6 +68,7 @@ public record EstablishmentResponse(
                 establishment.getClosingTime(),
                 estimatedWaitMinutes,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
+                establishment.isOpenNow(),
                 establishment.getStatus() != null ? establishment.getStatus().name() : null,
                 AddressResponse.fromEntity(establishment.getMainAddress())
         );

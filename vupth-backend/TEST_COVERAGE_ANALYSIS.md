@@ -68,7 +68,7 @@ Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegra
 | GET /users/email/{email} | ✅ | ⚠️ |
 
 ### 2.3 Establishment
-Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `CloseEstablishmentGateIntegrationTest` (3), `OpenStatusAccessIntegrationTest` (2), `OpenStatusListingFilterIntegrationTest` (3), `PausedAttendanceVisibilityIntegrationTest` (3), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
+Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `CloseEstablishmentGateIntegrationTest` (3), `OpenStatusAccessIntegrationTest` (2), `OpenStatusListingFilterIntegrationTest` (3), `PausedAttendanceVisibilityIntegrationTest` (3), `IsOpenEffectiveIntegrationTest` (3), `LegacyServiceItemTypeResilienceIntegrationTest` (1); `unit/establishment/EstablishmentIsOpenNowTest` (is_open efetivo).
 
 | Endpoint | Feliz | Erros | Notas |
 |---|---|---|---|
@@ -79,6 +79,7 @@ Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional
 | POST/DELETE /{id}/professionals | ✅ | ✅ | |
 | GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação; **filtro open-status (BUG5): default só `OPEN`, `?includeAll=true` inclui fechados** (`OpenStatusListingFilterIntegrationTest`) |
 | GET /establishment/id/{id} · /mine | ✅ | ⚠️ | `address` embutido (Partner BUG4): `/mine` fora de tx com JOIN FETCH, `/id/{id}` transacional, `null` sem endereco |
+| `is_open` efetivo (BUG5 parte B) | ✅ | ✅ | `EstablishmentIsOpenNowTest` (unit: janela normal/borda/24h/virada-meia-noite/offsets/open_status) + `IsOpenEffectiveIntegrationTest` (OPEN dentro→true; OPEN fora→false; CLOSED dentro→false) |
 | GET /establishment/id/{id}/professionals-with-queue | ✅ | — | ETA **meal-aware** (#37 pré-req); **atendimento PAUSED continua em `current_attendance` e retomável (Partner BUG7)** — `PausedAttendanceVisibilityIntegrationTest` (IN_PROGRESS→current; pause→segue current status PAUSED; resume→200 volta IN_PROGRESS) |
 | GET /{id}/reports | ✅ | ⚠️ | `ReportIntegrationTest` |
 | 500 legado NAVALHA/PROCEDIMENTO | ✅ | ✅ | resiliência (hotfix) |

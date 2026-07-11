@@ -160,4 +160,45 @@ public class Establishment implements Serializable {
                 .map(EstablishmentAddress::getAddress)
                 .orElse(null);
     }
+
+    /**
+     * "Aberto agora" efetivo (BUG5 parte B): a loja so esta realmente recebendo
+     * quando o {@code openStatus} e {@code OPEN} <b>e</b> o horario atual cai dentro
+     * da janela {@code [openingTime, closingTime)}.
+     * <p>
+     * Campo de LEITURA derivado — nao muda o {@code openStatus} persistido (nao
+     * ha auto-fechamento; fechar e sempre manual). Serve pro front-client decidir
+     * se mostra a loja como aberta e (no futuro) pro gate de entrada na fila.
+     * <p>
+     * Sem janela definida ({@code openingTime}/{@code closingTime} nulos) so o
+     * {@code openStatus} manda — nao ha como recortar por horario.
+     */
+    public boolean isOpenNow() {
+        return isOpenAt(OffsetTime.now(java.time.ZoneOffset.UTC));
+    }
+
+    /**
+     * Nucleo puro do {@link #isOpenNow()}, parametrizado pelo instante — deterministico
+     * para teste. Trata janela normal {@code [open, close)}, 24h ({@code open == close})
+     * e janela que vira a meia-noite ({@code close < open}).
+     */
+    public boolean isOpenAt(OffsetTime now) {
+        if (openStatus != OpenStatus.OPEN) {
+            return false;
+        }
+        if (openingTime == null || closingTime == null) {
+            return true; // sem janela: so o open_status manda
+        }
+        java.time.LocalTime n = now.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        java.time.LocalTime open = openingTime.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        java.time.LocalTime close = closingTime.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        if (open.equals(close)) {
+            return true; // janela degenerada = 24h
+        }
+        if (open.isBefore(close)) {
+            return !n.isBefore(open) && n.isBefore(close); // [open, close)
+        }
+        // janela que atravessa a meia-noite: [open, 24h) U [0, close)
+        return !n.isBefore(open) || n.isBefore(close);
+    }
 }
