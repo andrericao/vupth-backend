@@ -112,7 +112,7 @@ Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTrans
 |---|---|---|---|
 | POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente; **invariante serviço↔profissional (BUG8 c): item de outro prof → 422 `SERVICE_ITEM_NOT_OF_PROFESSIONAL`** (`QueueVisibilityBug8IntegrationTest` Order 60) |
 | PATCH /attendances/{id}/start·pause·resume·finish | ✅ | ✅ | transições inválidas cobertas (unit) |
-| PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | |
+| PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | **`/remove` (BUG9): além de `CANCELLED`, faz broadcast da fila + notifica o cliente (`ATTENDANCE_CANCELLED` WS + push) p/ sair de "em fila" sem reload** (`PushNotificationIntegrationTest` Order 22) |
 | GET /attendances · /{id} · /client/me | ✅ | ✅ | histórico do cliente + filtros; **`?clientId=<self>` devolve os próprios atendimentos do cliente (Partner BUG8); clientId de outro → 403** (`QueueVisibilityBug8IntegrationTest`); consistência nos 3 read-models (waiting_list / ?clientId / client/me) |
 | GET /client-queue/{id}/wait-time (posição/ETA do cliente) | ✅ | ⚠️ | ETA **lock-aware** (#37): refeições travadas no ingresso |
 | POST /attendances/{id}/rating (#6) | ✅ | ✅ | `AttendanceRatingIntegrationTest` — 1 serviço alimenta prof+serviço; combo só prof; 409 2º voto; 400 não-FINISHED; 403 não-dono; 422 score inválido; média agrega votos |
@@ -139,7 +139,7 @@ Testes: `integrations/websocket/WebSocketIntegrationTest` (2).
 | Notificação pessoal | ⚠️ | ❌ |
 
 ### 2.9 Notificações push (backlog #1)
-Testes: `integrations/notification/PushNotificationIntegrationTest` (4) — `PushSender` mockado (`vupth.push.provider=none`).
+Testes: `integrations/notification/PushNotificationIntegrationTest` (5) — `PushSender` mockado (`vupth.push.provider=none`). Inclui **BUG9** (Order 22): profissional remove da fila → push `ATTENDANCE_CANCELLED` ao cliente + status `CANCELLED`.
 
 | Endpoint / Regra | Feliz | Erros |
 |---|---|---|
@@ -193,7 +193,7 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 ## 6. CHANGELOG DE COBERTURA
 
 ### 2026-07-03 (2)
-- **Notificações push (backlog #1)**: ✅ `PushNotificationIntegrationTest` (4) — registro de device token (`POST /devices` upsert idempotente + `DELETE /devices/{token}`), 401 sem auth + 422 token em branco; disparo do push "você é o próximo" ao entrar na fila (frente), dedup do 2º da fila + avanço ao 1º iniciar, e `ATTENDANCE_STARTED`/`ATTENDANCE_FINISHED`. `PushSender` mockado (perfil `test` usa `vupth.push.provider=none` → `NoOpPushSender`, sem HTTP). Novos: entidade `DeviceToken` + repo (migration 95-notification/001), flag `attendance.next_notified` (migration 80-attendance/008), `PushSender`/`ExpoPushSender`/`NoOpPushSender`/`PushNotificationPublisher`, `QueuePushService` (next-in-line via `broadcastQueue`), `DeviceController` + `DeviceTokenService`. Push espelha as notificações WS pessoais (started/finished/swap). Postman: folder `13 - device tokens / push (notificacoes)`. ⏳ aguardando André rodar.
+- **Notificações push (backlog #1)**: ✅ `PushNotificationIntegrationTest` (5) — registro de device token (`POST /devices` upsert idempotente + `DELETE /devices/{token}`), 401 sem auth + 422 token em branco; disparo do push "você é o próximo" ao entrar na fila (frente), dedup do 2º da fila + avanço ao 1º iniciar, `ATTENDANCE_STARTED`/`ATTENDANCE_FINISHED`, e **`ATTENDANCE_CANCELLED` ao remover da fila (BUG9, Order 22)**. `PushSender` mockado (perfil `test` usa `vupth.push.provider=none` → `NoOpPushSender`, sem HTTP). Novos: entidade `DeviceToken` + repo (migration 95-notification/001), flag `attendance.next_notified` (migration 80-attendance/008), `PushSender`/`ExpoPushSender`/`NoOpPushSender`/`PushNotificationPublisher`, `QueuePushService` (next-in-line via `broadcastQueue`), `DeviceController` + `DeviceTokenService`. Push espelha as notificações WS pessoais (started/finished/swap). Postman: folder `13 - device tokens / push (notificacoes)`. ⏳ aguardando André rodar.
 
 ### 2026-07-03
 - **#6 rating / avaliação de atendimentos**: ✅ `AttendanceRatingIntegrationTest` (7) — feliz: 1 serviço alimenta agregados do profissional **e** do `ServiceItem` (`serviceItemId` presente); combo (2+ serviços) alimenta **só** o profissional (`serviceItemId=null`, serviços intactos); média denormalizada agrega múltiplos votos (5+3 → 4.0). Erros: 2º voto 409 (`ATTENDANCE_ALREADY_RATED`), não-FINISHED 400, não-dono 403, score inválido 422. Novos: entidade `AttendanceRating` + repo, agregados `rating_sum`/`rating_count` em `professional` e `service_item` (migration 80-attendance/007), endpoint `POST /attendances/{id}/rating`, exposição em `professionals-with-queue` + `ServiceItemResponse`. Postman: folder `08i - avaliacao de atendimento (#6)` (homolog+prod). ⏳ aguardando André rodar.

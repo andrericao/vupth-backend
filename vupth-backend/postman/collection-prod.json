@@ -5605,7 +5605,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+                  "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));",
+                  "pm.test(\"(BUG9) remove -> status CANCELLED (sai do read ativo do cliente)\", () => {",
+                  "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"CANCELLED\");",
+                  "});"
                 ],
                 "type": "text/javascript"
               }
