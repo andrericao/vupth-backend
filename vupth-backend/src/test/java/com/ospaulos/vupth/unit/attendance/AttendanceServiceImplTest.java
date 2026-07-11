@@ -123,9 +123,11 @@ class AttendanceServiceImplTest {
         client = new Client(clientUser);
 
         ServiceItem si = new ServiceItem();
+        si.setId(UUID.randomUUID());
         si.setCustomName("Corte");
         si.setPrice(BigDecimal.valueOf(30));
         si.setEstimatedMinutes(30);
+        si.setProfessional(professional); // invariante: item pertence ao profissional (commit 3286667)
         serviceItems = List.of(si);
 
         attendance = new Attendance();
