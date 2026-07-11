@@ -2661,29 +2661,30 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 |---|---------------------|--------|---------|
 | 1 | Remover da fila nao reflete pro cliente (BUG9) | ⬜ aberto (a reproduzir) | **Partner BUG9 + Client C9 (teste 2026-07-04).** Apos `DELETE /professional-queue/{id}/remove`, o app-cliente segue "voce esta na fila". A remocao deve (1) **cancelar** o attendance de forma que suma do read do cliente e (2) **emitir** notificacao em `/user/queue/notifications` (`ATTENDANCE_CANCELLED`) + push, p/ o client sair do estado "em fila" sem reload. |
 | 2 | Fechamento com bloqueio de entrada + "solicitar corte" (BUG5 refinado) | ⬜ aberto | **Partner BUG5 (refinado Andre 2026-07-04) — NAO auto-fechar.** Ao chegar `closing_time` (ou parada manual): **bloquear NOVAS entradas** na fila (cliente nao entra sozinho); fila existente continua; cliente ainda pode **solicitar corte** (pedido que o profissional aceita/recusa). Inclui `is_open` efetivo (OPEN **E** dentro de `[opening,closing_time]`) como campo de leitura. **Filtro `?includeAll=true` ja CONCLUIDO (parte A); gate ao fechar com fila ativa `409` ja CONCLUIDO (BUG6).** |
-| 3 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono; move ao indice 0, empurra os demais). `start` ja atende qualquer id fora de ordem; falta o "promover ao topo sem atender". |
-| 4 | Intencao de atendimento -> promocao automatica a fila | ⬜ aberto — spec fechada 2026-07-05 | **Partner S3 / Client C6 (substitui o antigo `/swap-offers`).** Novo status **`INTENTION`**: attendance com `desiredTime` fica **fora da fila** e e **promovido a `SCHEDULED`** quando falta **≤15min**. Ponto UNICO de entrada (create/edit passam pelo algoritmo), promocao **event-driven** (timer reagendado p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem), invariante do slot futuro alcancavel, promocao atomica, reconstruir timer no boot. Endpoints: `POST/PATCH/DELETE /attendances/intentions[/{id}]`. Detalhe completo no `HANDOFF_BACKEND.md` (Partner) secao "Detalhe — S3". |
-| 5 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
-| 6 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 + Client #14** — `POST /auth/forgot-password {email}` + `POST /auth/reset-password {token,newPassword}`; infra de e-mail (SMTP/SendGrid/SES) habilita o reset |
-| 7 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
-| 8 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
-| 9 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
-| 10 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner S10 / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
-| 11 | Apelido nao volta no `GET /professional/me` (BUG10) | ⬜ aberto | **Partner BUG10 (teste 2026-07-04).** `PATCH /profile/general-infos {nickname}` retorna 200, mas o `nickname` **nao vem** no `GET /professional/me`. Confirmar que persiste e projetar o campo no `/me` (a busca `ProfessionalSearchResponse` ja expoe). Front mitigou local. |
-| 12 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner S9** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao #2 (BUG5). |
-| 13 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 14 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 15 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 16 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 17 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 18 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 19 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 20 | Precificacao calculada no backend | ⬜ aberto (dep. #19) | secao "Item 36" |
-| 21 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 22 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 23 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 24 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 25 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 3 | Expor `available_professionals` na listagem publica | ⬜ aberto | **Client (Home) — reconciliacao 2026-07-11.** A listagem `GET /establishment` so traz `estimated_wait_minutes`; falta a contagem de **profissionais afiliados com servico** (`available_professionals`), que hoje so existe no detalhe `professionals-with-queue`. Sem ela o front-client **esconde todas as lojas fechadas** (nao sabe se ha profissional pra agendar a reabertura); com o campo, mostra so as fechadas com `available_professionals > 0`. Enriquecer o `EstablishmentResponse` da listagem no mesmo caminho do `estimatedWaitMinutes`. |
+| 4 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono; move ao indice 0, empurra os demais). `start` ja atende qualquer id fora de ordem; falta o "promover ao topo sem atender". |
+| 5 | Intencao de atendimento -> promocao automatica a fila | ⬜ aberto — spec fechada 2026-07-05 | **Partner S3 / Client C6 (substitui o antigo `/swap-offers`).** Novo status **`INTENTION`**: attendance com `desiredTime` fica **fora da fila** e e **promovido a `SCHEDULED`** quando falta **≤15min**. Ponto UNICO de entrada (create/edit passam pelo algoritmo), promocao **event-driven** (timer reagendado p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem), invariante do slot futuro alcancavel, promocao atomica, reconstruir timer no boot. Endpoints: `POST/PATCH/DELETE /attendances/intentions[/{id}]`. Detalhe completo no `HANDOFF_BACKEND.md` (Partner) secao "Detalhe — S3". |
+| 6 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
+| 7 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 + Client #14** — `POST /auth/forgot-password {email}` + `POST /auth/reset-password {token,newPassword}`; infra de e-mail (SMTP/SendGrid/SES) habilita o reset |
+| 8 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 9 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 10 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
+| 11 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner S10 / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
+| 12 | Apelido nao volta no `GET /professional/me` (BUG10) | ⬜ aberto | **Partner BUG10 (teste 2026-07-04).** `PATCH /profile/general-infos {nickname}` retorna 200, mas o `nickname` **nao vem** no `GET /professional/me`. Confirmar que persiste e projetar o campo no `/me` (a busca `ProfessionalSearchResponse` ja expoe). Front mitigou local. |
+| 13 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner S9** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao #2 (BUG5). |
+| 14 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 15 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 16 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 17 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 18 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 19 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 20 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 21 | Precificacao calculada no backend | ⬜ aberto (dep. #19) | secao "Item 36" |
+| 22 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 23 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 24 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 25 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 26 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi **corrigida**: por decisao do Andre (PRD-Partner) **NAO se auto-fecha** — fechar e sempre manual+confirmacao.
 
