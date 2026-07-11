@@ -10,6 +10,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgres
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
+import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
@@ -135,6 +136,13 @@ public class GlobalExceptionHandler {
             TargetTimeNotFeasibleException ex, HttpServletRequest req) {
         log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
+    }
+
+    @ExceptionHandler(ServiceItemNotOfProfessionalException.class)
+    public ResponseEntity<ErrorResponse> handleServiceItemNotOfProfessional(
+            ServiceItemNotOfProfessionalException ex, HttpServletRequest req) {
+        log.warn("[422] ServiceItemNotOfProfessional | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "SERVICE_ITEM_NOT_OF_PROFESSIONAL");
     }
 
     @ExceptionHandler(SwapNotAllowedException.class)

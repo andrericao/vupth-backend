@@ -106,11 +106,11 @@ Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Le
 | Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 
 ### 2.6 Attendance & Queue
-Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `QueueVisibilityBug8IntegrationTest` (5), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
+Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `QueueVisibilityBug8IntegrationTest` (6), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
 
 | Endpoint / Regra | Feliz | Erros | Notas |
 |---|---|---|---|
-| POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente |
+| POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente; **invariante serviço↔profissional (BUG8 c): item de outro prof → 422 `SERVICE_ITEM_NOT_OF_PROFESSIONAL`** (`QueueVisibilityBug8IntegrationTest` Order 60) |
 | PATCH /attendances/{id}/start·pause·resume·finish | ✅ | ✅ | transições inválidas cobertas (unit) |
 | PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | |
 | GET /attendances · /{id} · /client/me | ✅ | ✅ | histórico do cliente + filtros; **`?clientId=<self>` devolve os próprios atendimentos do cliente (Partner BUG8); clientId de outro → 403** (`QueueVisibilityBug8IntegrationTest`); consistência nos 3 read-models (waiting_list / ?clientId / client/me) |

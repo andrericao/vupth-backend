@@ -28,6 +28,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundExce
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.queue.service.QueueUtils;
+import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
@@ -89,6 +90,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — no serviceItems found for ids={}", request.serviceItemIds());
             throw new ServiceItemNotFoundException();
         }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();
@@ -104,6 +106,22 @@ public class AttendanceServiceImpl implements AttendanceService {
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
+    }
+
+    /**
+     * Partner BUG8 (sintoma c) — invariante "nao se marca profissional sem servico". Servico e
+     * capacidade do PROFISSIONAL (decisao de produto 2026-06-28): cada {@code ServiceItem} tem dono
+     * ({@code professional_id}). O atendimento so pode ser criado com itens do proprio profissional
+     * escolhido; qualquer item de outro profissional (ou da loja mas de outro prof) -> 422. Como
+     * profissional sem servico nao tem item algum, ele nunca passa por aqui (cai antes no vazio).
+     */
+    private void assertServiceItemsBelongToProfessional(List<ServiceItem> serviceItems, Professional professional) {
+        for (ServiceItem item : serviceItems) {
+            if (item.getProfessional() == null || !professional.getId().equals(item.getProfessional().getId())) {
+                log.warn("[Attendance] serviceItem={} nao pertence ao professional={}", item.getId(), professional.getId());
+                throw new ServiceItemNotOfProfessionalException(item.getId(), professional.getId());
+            }
+        }
     }
 
     /**
@@ -240,6 +258,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — no serviceItem ids={}", request.serviceItemIds());
             throw new ServiceItemNotFoundException();
         }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();
@@ -284,6 +303,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // serviceItemIds is optional in the MVP
         if (request.serviceItemIds() != null && !request.serviceItemIds().isEmpty()) {
             List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
+            assertServiceItemsBelongToProfessional(serviceItems, professional);
             attendance.setServiceItems(serviceItems);
             log.debug("[Attendance] createGuestAttendance — {} service items linked", serviceItems.size());
         } else {

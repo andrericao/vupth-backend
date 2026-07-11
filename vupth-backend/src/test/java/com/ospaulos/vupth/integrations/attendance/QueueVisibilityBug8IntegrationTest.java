@@ -64,6 +64,9 @@ class QueueVisibilityBug8IntegrationTest {
     // Profissional 1 (alvo da fila), na loja 1
     String prof1Token, prof1Id, estab1Id;
     UUID serviceItem1;
+    // Profissional 2 (outra loja) — dono do proprio item, usado para o caso-orfao (BUG8 c)
+    String prof2Token, estab2Id;
+    UUID serviceItem2;
     // Cliente
     String clientToken, clientId;
     UUID attendanceId;
@@ -81,6 +84,16 @@ class QueueVisibilityBug8IntegrationTest {
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, estab1Id, prof1Token,
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
         this.serviceItem1 = UUID.fromString(s1.id());
+
+        // Loja 2 com prof2, que cria o PROPRIO serviceItem2 (nao pertence ao prof1) — BUG8 (c)
+        var owner2 = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        this.prof2Token = owner2.token();
+        var estab2 = TestUserUtils.becomeOwner(mvc, mapper, faker, prof2Token);
+        this.estab2Id = estab2.id();
+        TestUserUtils.becomeProfessional(mvc, mapper, faker, prof2Token, estab2Id, "Prof 2");
+        var s2 = TestUserUtils.createServiceItem(mvc, mapper, estab2Id, prof2Token,
+                ServiceItemType.CORTE_MAQUINA, "Corte 2", BigDecimal.valueOf(30));
+        this.serviceItem2 = UUID.fromString(s2.id());
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientToken = client.token();
@@ -149,5 +162,18 @@ class QueueVisibilityBug8IntegrationTest {
         mvc.perform(get("/attendances").param("clientId", UUID.randomUUID().toString())
                         .header("Authorization", clientToken))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(60)
+    @DisplayName("(BUG8 c) agendar prof1 com serviceItem de OUTRO prof → 422 SERVICE_ITEM_NOT_OF_PROFESSIONAL")
+    void schedule_withServiceItemOfAnotherProfessional_unprocessable() throws Exception {
+        mvc.perform(post("/attendances")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(mapper.writeValueAsString(
+                                requestFor(UUID.fromString(prof1Id), UUID.fromString(estab1Id), List.of(serviceItem2)))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("SERVICE_ITEM_NOT_OF_PROFESSIONAL"));
     }
 }

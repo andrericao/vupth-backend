@@ -3919,6 +3919,7 @@
                   "  pm.expect(r.client_price).to.eql(52.90);",
                   "  pm.expect(r.uses_platform_pricing).to.eql(true);",
                   "  pm.collectionVariables.set(\"service_item_id\", r.id);",
+                  "  pm.collectionVariables.set(\"owner_service_item_id\", r.id);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -3954,6 +3955,59 @@
               {
                 "key": "token",
                 "value": "{{owner_token}}",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        {
+          "name": "add service item (prof) — BUG8 c: prof agenda com item PROPRIO",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201 - Service item do prof criado\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"BUG8 (c): service_item_id passa a ser do PROPRIO prof (agendar prof exige item dele)\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.id).to.be.a(\"string\");",
+                  "  pm.collectionVariables.set(\"service_item_id\", r.id);",
+                  "  pm.collectionVariables.set(\"prof_service_item_id\", r.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte do Profissional\",\"price\":30.00,\"estimatedMinutes\":30,\"client_price\":45.00,\"uses_platform_pricing\":true}"
+            },
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{prof_token}}",
                 "type": "string"
               }
             ]
@@ -8707,6 +8761,56 @@
           "response": [],
           "auth": {
             "type": "noauth"
+          }
+        },
+        {
+          "name": "[ERRO] (BUG8 c) agendar prof com item de OUTRO prof -> 422 SERVICE_ITEM_NOT_OF_PROFESSIONAL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 - item nao pertence ao profissional\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"code SERVICE_ITEM_NOT_OF_PROFESSIONAL\", () => {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"SERVICE_ITEM_NOT_OF_PROFESSIONAL\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{owner_service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+            },
+            "url": "{{base_url}}/attendances",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "bearer",
+            "bearer": [
+              {
+                "key": "token",
+                "value": "{{client_token}}",
+                "type": "string"
+              }
+            ]
           }
         }
       ]
