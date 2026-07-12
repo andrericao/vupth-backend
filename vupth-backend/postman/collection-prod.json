@@ -4284,6 +4284,62 @@
           }
         },
         {
+          "name": "janela dia inteiro (aberto agora p/ walk-ins — BUG5 C1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Gate de entrada (BUG5 C1): walk-in so entra com a loja 'aberta agora' = OPEN E",
+                  "// horario atual dentro de [opening_time, closing_time). A loja ja esta OPEN; aqui",
+                  "// abrimos uma janela de dia inteiro [00:00:00Z, 23:59:59Z) p/ que o walk-in passe em",
+                  "// QUALQUER horario de execucao da collection SEM tirar do expediente os intervalos de",
+                  "// refeicao em horario fixo (ex.: 14:00Z), que a pasta '12 - intervals' cria depois.",
+                  "pm.test(\"Status 200 - janela atualizada\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"is_open true (aberto agora)\", () => pm.expect(pm.response.json().is_open).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"opening_time\":\"00:00:00Z\",\"closing_time\":\"23:59:59Z\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "establishment",
+                "{{owner_establishment_id}}",
+                "general-infos"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
+        },
+        {
           "name": "list service items by professional",
           "event": [
             {

@@ -21,6 +21,7 @@ import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
@@ -248,6 +249,16 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — establishmentId={} does not belong to professional={}",
                     request.establishmentId(), request.professionalId());
             throw new EstablishmentNotFoundException(request.establishmentId());
+        }
+
+        // BUG5 parte C1 — gate de entrada: walk-in imediato (sem targetTime) so entra se a loja
+        // estiver "aberta agora" (open_status OPEN E dentro do horario). Fora disso o cliente nao
+        // entra sozinho na fila viva. A INTENCAO de fila (#40, com targetTime) NAO passa por aqui —
+        // mira um horario futuro dentro do expediente. Guest (adicionado pela loja) tampouco.
+        if (request.targetTime() == null && !establishment.isOpenNow()) {
+            log.warn("[Attendance] createAttendance — establishment={} nao esta aberto agora (walk-in bloqueado)",
+                    establishment.getId());
+            throw new EstablishmentNotOpenException(establishment.getId());
         }
 
         Client client = clientRepository.findById(request.clientId())

@@ -77,6 +77,8 @@ class ClientRescheduleIntegrationTest {
 
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerProfToken);
         this.establishmentId = estab.id();
+        // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
+        TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Owner Professional");
 
         // ETA puro = tempo de servico (sem refeicoes recorrentes).

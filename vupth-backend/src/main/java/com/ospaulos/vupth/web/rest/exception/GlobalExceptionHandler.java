@@ -18,6 +18,7 @@ import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
@@ -446,6 +447,13 @@ public class GlobalExceptionHandler {
             EstablishmentHasActiveAttendancesException ex, HttpServletRequest req) {
         log.warn("[409] EstablishmentHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES");
+    }
+
+    @ExceptionHandler(EstablishmentNotOpenException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentNotOpen(
+            EstablishmentNotOpenException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentNotOpen | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_NOT_OPEN");
     }
 
     // ─────────────────────────────────────────────
