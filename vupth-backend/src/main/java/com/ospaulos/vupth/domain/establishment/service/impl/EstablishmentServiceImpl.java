@@ -5,6 +5,9 @@ import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.ProfessionalWithQueueResponse;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
@@ -37,6 +40,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
     private final GetEstablishmentWithQueueUseCase getWithQueueUseCase;
+    private final AttendanceRepository attendanceRepository;
 
     @Override
     public EstablishmentResponse registerEstablishment(EstablishmentRequest request){
@@ -129,13 +133,18 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     @Override
-    public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID ownerId, OpenStatus newStatus) {
-        log.info("[Establishment] updateOpenStatus — id={} owner={} newStatus={}",
-                establishmentId, ownerId, newStatus);
+    public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus) {
+        log.info("[Establishment] updateOpenStatus — id={} requester={} newStatus={}",
+                establishmentId, requesterId, newStatus);
 
         Establishment establishment = establishmentRepository
-                .findByIdAndOwnerId(establishmentId, ownerId)
+                .findById(establishmentId)
                 .orElseThrow(() -> new EstablishmentNotFoundException(establishmentId));
+
+        // Acesso: dono da loja OU profissional afiliado a ela (S/BUG — funcionario tambem abre/fecha).
+        if (!canManageOpenStatus(establishment, requesterId)) {
+            throw new EstablishmentAccessDeniedException(requesterId, establishmentId);
+        }
 
         // Gate de abertura (só ao virar OPEN):
         if (newStatus == OpenStatus.OPEN) {
@@ -149,11 +158,31 @@ public class EstablishmentServiceImpl implements EstablishmentService {
             }
         }
 
+        // Gate de fechamento (Partner BUG6): não fechar com cliente na fila ou em atendimento.
+        // Só bloqueia a transição OPEN -> fechado (idempotência: re-fechar um já fechado não valida).
+        if ((newStatus == OpenStatus.CLOSED || newStatus == OpenStatus.TEMPORARILY_CLOSED)
+                && establishment.getOpenStatus() == OpenStatus.OPEN
+                && attendanceRepository.countActiveByEstablishment(establishmentId) > 0) {
+            throw new EstablishmentHasActiveAttendancesException(establishmentId);
+        }
+
         establishment.setOpenStatus(newStatus);
         establishment.setLastStatusChange(ZonedDateTime.now());
         Establishment saved = establishmentRepository.save(establishment);
 
         return EstablishmentResponse.fromEntity(saved);
+    }
+
+    /**
+     * Pode alterar o open-status quem é o dono da loja OU um profissional afiliado a ela.
+     * (Profissional-funcionário também abre/fecha a loja — decisão de produto do Andre.)
+     */
+    private boolean canManageOpenStatus(Establishment establishment, UUID requesterId) {
+        boolean isOwner = establishment.getOwner() != null
+                && establishment.getOwner().getId().equals(requesterId);
+        boolean isAffiliatedProfessional = establishment.getProfessionals().stream()
+                .anyMatch(prof -> prof.getId().equals(requesterId));
+        return isOwner || isAffiliatedProfessional;
     }
 
     /**

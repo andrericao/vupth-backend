@@ -51,6 +51,18 @@ public class Professional {
     @OneToMany(mappedBy = "professional", cascade = CascadeType.ALL)
     private List<ServiceItem> services = new ArrayList<>();
 
+    /**
+     * Agregados denormalizados de avaliacao (item #6). {@code ratingSum} = soma das notas recebidas,
+     * {@code ratingCount} = quantidade de votos; media = {@code ratingSum / ratingCount} (ver
+     * {@link #getRatingAverage()}). Incrementados a cada {@code AttendanceRating} — evitam rodar
+     * {@code AVG()} a cada leitura do card do profissional.
+     */
+    @Column(name = "rating_sum", nullable = false)
+    private long ratingSum = 0L;
+
+    @Column(name = "rating_count", nullable = false)
+    private long ratingCount = 0L;
+
     protected Professional() {};
 
     public Professional(BaseUser baseUser) {
@@ -60,6 +72,21 @@ public class Professional {
 
     public String getName(){
         return this.baseUser.getFirstName();
+    }
+
+    /** Registra uma nota (item #6): soma no total e incrementa a contagem de votos. */
+    public void addRating(int score) {
+        this.ratingSum += score;
+        this.ratingCount++;
+    }
+
+    /** Media de avaliacao (2 casas) ou {@code null} quando ainda nao ha votos. */
+    @Transient
+    public Double getRatingAverage() {
+        if (ratingCount == 0) {
+            return null;
+        }
+        return Math.round((double) ratingSum / ratingCount * 100.0) / 100.0;
     }
 
     public void addAttendance(Attendance attendance) {
@@ -93,10 +120,20 @@ public class Professional {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Atendimento "atual" do profissional: o IN_PROGRESS ou, na ausencia dele, o PAUSED
+     * (Partner BUG7). Um atendimento pausado continua sendo o atual — exposto e retomavel —
+     * ate resume/finish; sem esse fallback ele sumia de todos os read-models (orfao) e o
+     * profissional nao conseguia retomar. Tambem serve de guarda ("ja tem atendimento ativo"):
+     * nao se inicia um novo enquanto ha um pausado.
+     */
     public Optional<Attendance> getCurrentAttendance() {
         return attendances.stream()
                 .filter(a -> a.getStatus() == AttendanceStatus.IN_PROGRESS)
-                .findFirst();
+                .findFirst()
+                .or(() -> attendances.stream()
+                        .filter(a -> a.getStatus() == AttendanceStatus.PAUSED)
+                        .findFirst());
     }
 
     // Or more generic if other statuses are needed

@@ -34,10 +34,15 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
 """)
     Optional<Establishment> findByIdEager(@Param("id") UUID id);
 
+    // Read-back do owner (GET /establishment/mine). Mapeado FORA de transacao no controller
+    // e com OSIV off em prod, entao o endereco (Partner BUG4) precisa vir por FETCH aqui —
+    // senao acessar e.addresses/ea.address estoura LazyInitializationException.
     @Query("""
-    SELECT e FROM Establishment e
+    SELECT DISTINCT e FROM Establishment e
     LEFT JOIN FETCH e.services
     LEFT JOIN FETCH e.owner
+    LEFT JOIN FETCH e.addresses ea
+    LEFT JOIN FETCH ea.address
     WHERE e.owner.id = :ownerId
       AND e.status <> 'INACTIVE'
     ORDER BY e.createdAt DESC

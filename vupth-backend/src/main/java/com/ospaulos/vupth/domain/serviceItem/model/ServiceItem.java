@@ -56,10 +56,36 @@ public class ServiceItem {
     @Column(name = "weekly_average_duration_in_minutes")
     private Integer weeklyAverageDurationInMinutes;
 
+    /**
+     * Agregados denormalizados de avaliacao (item #6). Recebem a nota so quando o atendimento
+     * avaliado tinha exatamente 1 servico (este). A media por {@code serviceItemType} de um
+     * profissional e o rollup desses ServiceItems. Media = {@code ratingSum / ratingCount}.
+     */
+    @Column(name = "rating_sum", nullable = false)
+    private long ratingSum = 0L;
+
+    @Column(name = "rating_count", nullable = false)
+    private long ratingCount = 0L;
+
     @PrePersist
     public void prePersist() {
         if (estimatedMinutes == null) {
             estimatedMinutes = 30;
         }
+    }
+
+    /** Registra uma nota (item #6): soma no total e incrementa a contagem de votos. */
+    public void addRating(int score) {
+        this.ratingSum += score;
+        this.ratingCount++;
+    }
+
+    /** Media de avaliacao (2 casas) ou {@code null} quando ainda nao ha votos. */
+    @Transient
+    public Double getRatingAverage() {
+        if (ratingCount == 0) {
+            return null;
+        }
+        return Math.round((double) ratingSum / ratingCount * 100.0) / 100.0;
     }
 }

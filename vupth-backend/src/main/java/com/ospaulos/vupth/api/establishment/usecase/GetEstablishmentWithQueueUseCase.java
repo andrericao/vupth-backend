@@ -76,9 +76,13 @@ public class GetEstablishmentWithQueueUseCase {
 
         UUID profId = professional.getId();
 
-        // Atendimento IN_PROGRESS (max 1 por profissional)
+        // Atendimento atual: IN_PROGRESS ou, na ausencia dele, PAUSED (max 1 por profissional).
+        // Partner BUG7: um atendimento pausado precisa continuar exposto como current_attendance
+        // (e retomavel) ate resume/finish — sem o fallback ele sumia deste snapshot (orfao).
         Optional<Attendance> current = attendanceRepository
-                .findCurrentAttendanceByProfessional(profId, AttendanceStatus.IN_PROGRESS);
+                .findCurrentAttendanceByProfessional(profId, AttendanceStatus.IN_PROGRESS)
+                .or(() -> attendanceRepository
+                        .findCurrentAttendanceByProfessional(profId, AttendanceStatus.PAUSED));
 
         // Fila de espera (SCHEDULED), ordenada por scheduledTime
         List<Attendance> waiting = attendanceRepository

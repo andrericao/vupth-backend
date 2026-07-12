@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.establishment.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.ospaulos.vupth.api.address.dto.response.AddressResponse;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import jakarta.validation.constraints.NotNull;
@@ -35,8 +36,19 @@ public record EstablishmentResponse(
         @JsonProperty("open_status")
         String openStatus,
 
+        // "Aberto agora" efetivo (BUG5 parte B): open_status == OPEN E dentro de
+        // [opening_time, closing_time). Campo de LEITURA derivado — nao muda o
+        // open_status persistido. O front-client usa pra nao mostrar como aberta
+        // uma loja OPEN cujo horario ja passou.
+        @JsonProperty("is_open")
+        boolean isOpen,
+
         @JsonProperty("status")
-        String status
+        String status,
+
+        // Endereco principal da loja (Partner BUG4). null quando a loja ainda nao tem endereco.
+        // O front le data.address para exibir localizacao no read-back do establishment.
+        AddressResponse address
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return fromEntity(establishment, null);
@@ -56,7 +68,9 @@ public record EstablishmentResponse(
                 establishment.getClosingTime(),
                 estimatedWaitMinutes,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
-                establishment.getStatus() != null ? establishment.getStatus().name() : null
+                establishment.isOpenNow(),
+                establishment.getStatus() != null ? establishment.getStatus().name() : null,
+                AddressResponse.fromEntity(establishment.getMainAddress())
         );
     }
 }

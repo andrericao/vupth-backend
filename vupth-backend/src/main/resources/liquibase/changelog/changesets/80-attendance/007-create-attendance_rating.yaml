@@ -1,0 +1,118 @@
+databaseChangeLog:
+  # Rating / avaliacao de atendimentos (item #6). Apos um atendimento FINISHED, o cliente dono
+  # avalia com 1-5 estrelas (inteiro) + comentario opcional. Regra de atribuicao (Andre):
+  #   - atendimento com EXATAMENTE 1 servico -> nota vai pro profissional E pro service_item
+  #     (alimenta a media daquele service_item_type); service_item_id guarda a origem.
+  #   - atendimento com 2+ servicos -> nota vai SO pro profissional; service_item_id fica null.
+  # Agregados denormalizados (rating_sum + rating_count) em professional e service_item evitam
+  # rodar AVG() a cada leitura de card. 1 voto por atendimento (attendance_id UNIQUE, 409 no 2o).
+  - changeSet:
+      id: 007-create-attendance_rating
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: attendance_rating
+      changes:
+        - createTable:
+            tableName: attendance_rating
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_attendance_rating
+                    nullable: false
+              - column:
+                  name: attendance_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_attendance_rating_attendance
+              - column:
+                  name: score
+                  type: INT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: comment
+                  type: VARCHAR(500)
+              - column:
+                  name: service_item_id
+                  type: UUID
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: attendance_rating
+            baseColumnNames: attendance_id
+            constraintName: fk_attendance_rating_attendance
+            referencedTableName: ATTENDANCE
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: attendance_rating
+            baseColumnNames: service_item_id
+            constraintName: fk_attendance_rating_service_item
+            referencedTableName: service_item
+            referencedColumnNames: id
+            onDelete: SET NULL
+
+  # Agregados denormalizados no professional
+  - changeSet:
+      id: 007-add-rating-aggregates-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: rating_sum
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: rating_sum
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rating_count
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+  # Agregados denormalizados no service_item
+  - changeSet:
+      id: 007-add-rating-aggregates-to-service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: service_item
+                columnName: rating_sum
+      changes:
+        - addColumn:
+            tableName: service_item
+            columns:
+              - column:
+                  name: rating_sum
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: rating_count
+                  type: BIGINT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false

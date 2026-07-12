@@ -118,6 +118,25 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
+     * Fila de espera de TODOS os profissionais de um establishment (SCHEDULED + LATE),
+     * ordenada por profissional e horario — usada para detectar o "proximo" de cada fila
+     * (push do item de notificacoes). JOIN FETCH evita LazyInitialization ao ler client/professional.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH a.establishment
+        WHERE a.establishment.id = :establishmentId
+          AND a.status IN ('SCHEDULED', 'LATE')
+        ORDER BY a.professional.id ASC, a.scheduledTime ASC
+    """)
+    List<Attendance> findWaitingQueueByEstablishment(
+            @Param("establishmentId") UUID establishmentId
+    );
+
+    /**
      * Find o attendance atualmente em progresso — JOIN FETCH para serialização segura.
      */
     @Query("""
@@ -203,6 +222,18 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("professionalId") UUID professionalId,
             @Param("establishmentId") UUID establishmentId
     );
+
+    /**
+     * Conta os atendimentos ATIVOS de um establishment — fila de espera (SCHEDULED, LATE)
+     * mais os em curso (IN_PROGRESS, PAUSED). Base do gate que impede fechar a loja com
+     * cliente na fila ou em atendimento (Partner BUG6). FINISHED/CANCELLED nao contam.
+     */
+    @Query("""
+        SELECT COUNT(a) FROM Attendance a
+        WHERE a.establishment.id = :establishmentId
+          AND a.status IN ('SCHEDULED', 'LATE', 'IN_PROGRESS', 'PAUSED')
+    """)
+    long countActiveByEstablishment(@Param("establishmentId") UUID establishmentId);
 
     @Query(value = """
         SELECT DISTINCT a.* FROM attendance a

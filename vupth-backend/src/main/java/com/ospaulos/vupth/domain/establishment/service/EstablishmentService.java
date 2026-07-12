@@ -27,7 +27,7 @@ public interface EstablishmentService {
 
     List<EstablishmentResponse> searchByServiceTypeAndNeighborhood(ServiceType serviceType, String neighborhood);
 
-    EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID ownerId, OpenStatus newStatus);
+    EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus);
 
     List<ServiceItem> getServicesItemByEstablishment(UUID establishmentId);
 }

@@ -17,8 +17,10 @@ import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralIn
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.report.dto.response.EstablishmentReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
+import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.report.service.ReportService;
+import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
@@ -47,7 +49,7 @@ import java.util.UUID;
  *   GET    /establishment                                 — lista ativos (público, suporta ?name=, ?neighborhood= e ?serviceType=)
  *   GET    /establishment/id/{id}                        — busca por ID (público)
  *   GET    /establishment/id/{id}/professionals-with-queue — snapshot da fila (público)
- *   PATCH  /establishment/{id}/open-status               — atualiza status de abertura (OWNER)
+ *   PATCH  /establishment/{id}/open-status               — atualiza status de abertura (OWNER ou profissional afiliado)
  *   POST   /establishment/{establishmentId}/service-items — adiciona serviço (OWNER)
  *   POST   /establishment/{establishmentId}/professionals — owner adiciona profissional (OWNER)
  *   DELETE /establishment/{id}/professionals/{pid}       — owner remove profissional (OWNER)
@@ -73,6 +75,7 @@ public class EstablishmentController {
     private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
     private final ReportService                          reportService;
+    private final ServiceItemService                     serviceItemService;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -110,10 +113,11 @@ public class EstablishmentController {
     public ResponseEntity<List<EstablishmentResponse>> findAll(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String neighborhood,
-            @RequestParam(required = false) ServiceType serviceType) {
+            @RequestParam(required = false) ServiceType serviceType,
+            @RequestParam(required = false, defaultValue = "false") boolean includeAll) {
 
-        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={}",
-                name, neighborhood, serviceType);
+        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={} includeAll={}",
+                name, neighborhood, serviceType, includeAll);
 
         boolean hasNeighborhood = neighborhood != null && !neighborhood.isBlank();
 
@@ -128,6 +132,15 @@ public class EstablishmentController {
             result = service.findByServiceType(serviceType);
         } else {
             result = service.findAllActive();
+        }
+
+        // BUG5: por padrão a listagem pública só devolve lojas ABERTAS (OPEN).
+        // ?includeAll=true devolve todas as ativas (inclui CLOSED/TEMPORARILY_CLOSED),
+        // p/ o Front-Partner/gestão. Filtro pós-fetch: preserva a ordenação por tempo de espera.
+        if (!includeAll) {
+            result = result.stream()
+                    .filter(e -> OpenStatus.OPEN.name().equals(e.openStatus()))
+                    .toList();
         }
 
         return ResponseEntity.ok(result);
@@ -168,9 +181,9 @@ public class EstablishmentController {
 
     /**
      * PATCH /establishment/{id}/open-status
-     * Owner atualiza o status de abertura do establishment.
+     * Dono da loja OU profissional afiliado a ela atualiza o status de abertura.
      * Valores válidos: OPEN, CLOSED, TEMPORARILY_CLOSED
-     * Requer: ROLE_OWNER.
+     * Requer: ROLE_OWNER ou ROLE_PROFESSIONAL (vínculo verificado no serviço → 403 se não pertence).
      */
     @PatchMapping("/{id}/open-status")
     public ResponseEntity<EstablishmentResponse> updateOpenStatus(
@@ -178,7 +191,7 @@ public class EstablishmentController {
             @RequestBody @Valid UpdateOpenStatusRequest request,
             @AuthenticationPrincipal UserDetailsImpl user) {
 
-        log.info("[Establishment] updateOpenStatus — id={} owner={} status={}",
+        log.info("[Establishment] updateOpenStatus — id={} requester={} status={}",
                 id, user.getUserId(), request.openStatus());
 
         EstablishmentResponse response =
@@ -198,6 +211,48 @@ public class EstablishmentController {
         ServiceItemResponse response = professionalService.createServiceItemForEstablishment(
                 user.getUserId(), establishmentId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * PUT /establishment/{establishmentId}/service-items/{itemId}
+     *
+     * Edita um servico do establishment (parcial — campos null/branco ignorados).
+     * Autorizado ao OWNER da loja OU ao proprio profissional dono do item.
+     * 404 se a loja/item nao existir ou o item nao pertencer a esta loja;
+     * 403 se o requester nao for owner nem dono do item; 409 se o novo nome colidir.
+     */
+    @PutMapping("/{establishmentId}/service-items/{itemId}")
+    public ResponseEntity<ServiceItemResponse> updateServiceItem(
+            @PathVariable UUID establishmentId,
+            @PathVariable UUID itemId,
+            @RequestBody @Valid UpdateServiceItemRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] updateServiceItem — establishment={} item={} requester={}",
+                establishmentId, itemId, user.getUserId());
+
+        ServiceItemResponse response = serviceItemService.updateServiceItemForEstablishment(
+                user.getUserId(), establishmentId, itemId, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * DELETE /establishment/{establishmentId}/service-items/{itemId}
+     *
+     * Remove um servico do establishment.
+     * Autorizado ao OWNER da loja OU ao proprio profissional dono do item.
+     */
+    @DeleteMapping("/{establishmentId}/service-items/{itemId}")
+    public ResponseEntity<Void> deleteServiceItem(
+            @PathVariable UUID establishmentId,
+            @PathVariable UUID itemId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+
+        log.info("[Establishment] deleteServiceItem — establishment={} item={} requester={}",
+                establishmentId, itemId, user.getUserId());
+
+        serviceItemService.deleteServiceItemForEstablishment(user.getUserId(), establishmentId, itemId);
+        return ResponseEntity.noContent().build();
     }
 
     /**

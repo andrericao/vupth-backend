@@ -34,6 +34,11 @@ public record EstablishmentGeneralInfosResponse(
         @JsonProperty("open_status")
         String openStatus,
 
+        // "Aberto agora" efetivo (BUG5 parte B): open_status == OPEN E dentro da
+        // janela [opening_time, closing_time). Derivado, nao persistido.
+        @JsonProperty("is_open")
+        boolean isOpen,
+
         String status,
 
         @JsonProperty("owner_id")
@@ -54,6 +59,7 @@ public record EstablishmentGeneralInfosResponse(
                 e.getOpeningTime(),
                 e.getClosingTime(),
                 e.getOpenStatus() != null ? e.getOpenStatus().name() : null,
+                e.isOpenNow(),
                 e.getStatus() != null ? e.getStatus().name() : null,
                 e.getOwner().getId(),
                 modifiedFields

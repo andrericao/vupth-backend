@@ -82,11 +82,11 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | Acesso | Endpoints |
 |--------|-----------|
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
-| **CLIENT** | `POST /attendances`, `GET /attendances/client/me`, `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
-| **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
-| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/open-status`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
-| **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, todos os demais endpoints nao listados |
+| **CLIENT** | `POST /attendances`, `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `GET /attendances?clientId=<self>` (proprios atendimentos — Partner BUG8), `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
+| **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada por establishment/profissional; cliente usa a forma `?clientId=<self>`), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1), `PUT\|DELETE /establishment/{id}/service-items/{itemId}` (owner da loja ou o proprio profissional dono do item; checagem fina no service), `PATCH /establishment/{id}/open-status` (owner ou profissional afiliado a loja; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`) |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
+| **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
+| **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, `POST /devices`, `DELETE /devices/{token}` (push — implementado), todos os demais endpoints nao listados |
 
 ---
 
@@ -611,12 +611,16 @@ Lista establishments ativos com filtros opcionais.
 | name | String | Busca parcial por nome, case-insensitive |
 | neighborhood | String | Busca parcial por bairro do endereco, case-insensitive (`LIKE`). So retorna establishments que tem endereco no bairro |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
+| includeAll | Boolean | Default `false`. Se `false`, a listagem devolve **apenas lojas `open_status == OPEN`**. `true` devolve todas as ativas (inclui `CLOSED`/`TEMPORARILY_CLOSED`), p/ o Front-Partner/gestao |
+
+> **Filtro de open-status (BUG5):** por padrao (`includeAll` ausente ou `false`) a listagem publica so mostra lojas **abertas** (`open_status == OPEN`) — o cliente nao ve loja fechada. `?includeAll=true` inclui as fechadas. **NAO muda o open-status persistido nem mexe na fila** — e so filtro de leitura, aplicado a **todas** as variantes do `GET /establishment` (com ou sem `name`/`neighborhood`/`serviceType`). O front nao precisa mais filtrar localmente.
 
 > **Combinacao e precedencia:**
 > - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
 > - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais).
 > - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
 > - Sem filtro, lista todos os ativos.
+> - `includeAll` e ortogonal aos demais: o filtro de open-status roda **por cima** do resultado de qualquer combinacao acima.
 >
 > **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja.
 >
@@ -636,12 +640,26 @@ Lista establishments ativos com filtros opcionais.
     "instagram": "@barbearia | null",
     "estimated_wait_minutes": 25,
     "open_status": "OPEN",
-    "status": "ACTIVE"
+    "status": "ACTIVE",
+    "address": {
+      "street": "Rua das Flores",
+      "number": "123",
+      "complement": "Sala 2 | null",
+      "neighborhood": "Centro",
+      "city": "Sao Paulo",
+      "state": "SP",
+      "zipCode": "01310100",
+      "reference": "Ao lado do banco | null",
+      "latitude": -23.56,
+      "longitude": -46.65
+    }
   }
 ]
 ```
 
 > `estimated_wait_minutes` e preenchido **apenas na listagem** (`GET /establishment`). Em `GET /establishment/id/{id}` e nos demais usos do `EstablishmentResponse` vem `null`.
+
+> **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
 **Testes:** Integracao
 
@@ -782,6 +800,7 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "opening_time": "09:00Z",
   "closing_time": "18:00Z",
   "open_status": "OPEN",
+  "is_open": true,
   "status": "ACTIVE",
   "owner_id": "uuid",
   "modified_fields": ["name", "url_image"]
@@ -790,6 +809,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 
 > `phone`, `instagram`, `opening_time` e `closing_time` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
 
+> **`is_open` — "aberto agora" efetivo (BUG5 parte B).** Campo **booleano de LEITURA derivado**, presente no `EstablishmentResponse` (listagem `GET /establishment` + detalhe `GET /establishment/id/{id}` + `/mine`), no `EstablishmentWithProfessionalsResponse` (`professionals-with-queue`) e no `EstablishmentGeneralInfosResponse`. Vale `true` **somente** quando `open_status == OPEN` **E** o horario atual cai dentro de `[opening_time, closing_time)` (abertura inclusiva, fechamento exclusivo). Sem janela definida (`opening_time`/`closing_time` nulos) so o `open_status` manda. **NAO altera o `open_status` persistido** — nao ha auto-fechamento (fechar e sempre manual+confirmacao); `is_open` apenas informa. Casos tratados: janela normal, 24h (`opening == closing`), janela que atravessa a meia-noite (`closing < opening`) e offsets normalizados ao mesmo instante. O front-client usa pra nao exibir como aberta uma loja `OPEN` cujo horario ja passou; sera tambem a base do gate de entrada na fila (BUG5 parte C, ainda aberto).
+
 **Testes:** Integracao
 
 ---
@@ -797,7 +818,7 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 ### PATCH /establishment/{id}/open-status
 Atualiza status de abertura.
 
-**Acesso:** OWNER
+**Acesso:** OWNER (dono da loja) **ou** profissional **afiliado** a ela. Decisao de produto: o profissional-funcionario tambem abre/fecha a loja. O vinculo e verificado no servico — profissional de **outra** loja recebe `403 ESTABLISHMENT_ACCESS_DENIED`.
 
 **Request:**
 ```json
@@ -808,20 +829,27 @@ Atualiza status de abertura.
 
 Valores: `OPEN`, `CLOSED`, `TEMPORARILY_CLOSED`
 
-**Gates de abertura** (so ao virar `OPEN`; `CLOSED`/`TEMPORARILY_CLOSED` sem restricao), nesta ordem:
+**Gates de abertura** (so ao virar `OPEN`), nesta ordem:
 1. **#31** — >=1 profissional com >=1 servico, senao `422 ESTABLISHMENT_NOT_READY`.
 2. **#11g2c** — horario de funcionamento definido (`opening_time` e `closing_time` non-null), senao `422 ESTABLISHMENT_HOURS_REQUIRED`. O front usa esse 422 pra encaminhar a tela de horario (configuracoes) antes de abrir.
+
+**Gate de fechamento (Partner BUG6)** — so ao SAIR de `OPEN` para `CLOSED`/`TEMPORARILY_CLOSED`:
+- Se houver atendimento **ativo** (`SCHEDULED`, `LATE`, `IN_PROGRESS` ou `PAUSED`) na loja, retorna `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` e **nao muda** o status. O dono precisa finalizar/cancelar a fila antes de fechar — nao pode "sumir" com clientes na fila. Transicao entre dois estados fechados (ex.: `TEMPORARILY_CLOSED` -> `CLOSED`) nao valida (a loja ja nao estava aberta).
 
 **Response (200):** `EstablishmentResponse` (inclui `opening_time`/`closing_time`)
 
 **Erros:**
 | Status | Code | Quando |
 |--------|------|--------|
+| 409 | `ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` | Tentou fechar (`CLOSED`/`TEMPORARILY_CLOSED`) com atendimento ativo/fila (BUG6) |
 | 422 | `ESTABLISHMENT_NOT_READY` | Tentou abrir sem nenhum profissional com servico |
 | 422 | `ESTABLISHMENT_HOURS_REQUIRED` | Tentou abrir sem horario de funcionamento definido |
 | 401 | — | Sem token |
-| 403 | — | Token nao-owner |
-| 404 | `ESTABLISHMENT_NOT_FOUND` | Establishment inexistente ou de outro owner |
+| 403 | — | Token sem role OWNER nem PROFESSIONAL |
+| 403 | `ESTABLISHMENT_ACCESS_DENIED` | Profissional **nao afiliado** a esta loja (nem dono) |
+| 404 | `ESTABLISHMENT_NOT_FOUND` | Establishment inexistente |
+
+> **Handoff Front-Partner (BUG6):** ao receber `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` no toggle de fechar, avisar o dono que ainda ha clientes na fila/atendimento e nao permitir fechar ate concluir/cancelar. Sugestao de UX: exibir a fila pendente / botao "finalizar atendimentos".
 
 **Testes:** Integracao
 
@@ -900,6 +928,34 @@ O servico fica sob o professional do **requester** (`ServiceItem.professional` �
 **Response (201):** `ServiceItemResponse` (inclui `client_price` e `uses_platform_pricing`).
 
 **Testes:** Integracao
+
+---
+
+### PUT /establishment/{id}/service-items/{itemId}
+Edita um service item **pela otica do establishment** (edicao parcial).
+
+**Acesso:** OWNER da loja **ou** o **proprio profissional** dono do item. Qualquer outro (inclusive profissional afiliado que nao e o dono do item) recebe `403 ESTABLISHMENT_ACCESS_DENIED`. Complementa o `PATCH /professional-queue/{profId}/service-items/{itemId}` (edicao pelo proprio profissional): aqui o **owner** tambem consegue gerir o catalogo da loja inteira.
+
+**Request:** `UpdateServiceItemRequest` — todos os campos opcionais (null/branco ignorados): `customName`, `price` (>0), `estimatedMinutes` (>0), `client_price` (>0), `uses_platform_pricing`.
+
+**Response (200):** `ServiceItemResponse`.
+
+**Erros:** `404 ESTABLISHMENT_NOT_FOUND` (loja inexistente) · `404 SERVICE_ITEM_NOT_FOUND` (item inexistente **ou** que nao pertence a esta loja) · `403 ESTABLISHMENT_ACCESS_DENIED` · `409 SERVICE_ITEM_ALREADY_EXISTS` (novo `customName` colide com outro servico da loja, case-insensitive) · `422 VALIDATION_ERROR` (preco/duracao <= 0).
+
+**Testes:** Integracao (`ServiceItemIntegrationTest` — owner edita, 404 inexistente/loja errada, 403 alheio, 409 nome duplicado, afiliado edita o proprio).
+
+---
+
+### DELETE /establishment/{id}/service-items/{itemId}
+Remove um service item **pela otica do establishment**.
+
+**Acesso:** OWNER da loja **ou** o **proprio profissional** dono do item (mesma regra do PUT acima).
+
+**Response (204):** sem corpo.
+
+**Erros:** `404 ESTABLISHMENT_NOT_FOUND` · `404 SERVICE_ITEM_NOT_FOUND` (inexistente ou fora desta loja) · `403 ESTABLISHMENT_ACCESS_DENIED`.
+
+**Testes:** Integracao (`ServiceItemIntegrationTest` — owner remove + 404 na 2a vez, CLIENT 403).
 
 ---
 
@@ -1282,24 +1338,26 @@ Iniciador cancela a afiliacao pendente.
 ## 11. Endpoints — Attendance (Atendimento)
 
 ### GET /attendances
-Lista atendimentos filtrados por establishment, profissional, periodo e status. Usado para relatorios e historico no app partner.
+Lista atendimentos filtrados por establishment, profissional, periodo e status. Usado para relatorios e historico no app partner, **e** (via `clientId`) para o cliente listar os proprios atendimentos.
 
-**Acesso:** OWNER ou PROFESSIONAL (so ve dados do proprio establishment)
+**Acesso:** OWNER, PROFESSIONAL **ou CLIENT** (o CLIENT so com `clientId` = proprio JWT — ver Partner BUG8)
 
 **Query params (todos opcionais):**
 
 | Param | Tipo | Descricao |
 |-------|------|-----------|
-| establishmentId | UUID | Filtrar por establishment |
-| professionalId | UUID | Filtrar por profissional |
+| establishmentId | UUID | Filtrar por establishment (owner/profissional) |
+| professionalId | UUID | Filtrar por profissional (owner/profissional) |
+| clientId | UUID | **Lista os atendimentos do proprio cliente** (Partner BUG8). Deve ser igual ao `sub` do JWT — senao `403`. Delega ao mesmo caminho de `GET /attendances/client/me` |
 | dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
 | dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
 | status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED, LATE |
 
 **Regras de autorizacao:**
+- Se `clientId` informado: deve ser o proprio usuario (JWT) — senao `403 ESTABLISHMENT_ACCESS_DENIED`. Retorna so os atendimentos daquele cliente (walk-in normal `clientId!=null`). **Front-Client usa esta forma** (`?clientId=<self>`); alternativa equivalente e `GET /attendances/client/me`.
 - Se `establishmentId` informado: usuario deve ser owner ou profissional afiliado ao establishment
 - Se `professionalId` informado sem `establishmentId`: usuario so pode consultar a si mesmo
-- Se nenhum informado: retorna attendances do establishment do profissional logado
+- Se nenhum informado: retorna attendances do establishment do profissional logado (cliente puro sem `clientId` -> `403`)
 
 **Response (200):**
 ```json
@@ -1414,7 +1472,7 @@ Cliente autenticado entra na fila de um profissional. O clientId e extraido do J
 | professionalId | UUID | Sim | ID do profissional |
 | establishmentId | UUID | Sim | ID do establishment |
 | clientId | UUID | Ignorado | Extraido do JWT |
-| serviceItemIds | UUID[] | Nao | Lista de servicos |
+| serviceItemIds | UUID[] | Nao | Lista de servicos. **Cada item tem de pertencer ao `professionalId` escolhido** (BUG8 c) — senao `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` |
 | status | Enum | Nao | Default: SCHEDULED |
 | scheduledTime | OffsetDateTime | Nao | ISO-8601. Default: now() se nao informado |
 | estimatedMinutes | Integer | Nao | Estimativa em minutos |
@@ -1431,9 +1489,11 @@ Ao enviar `targetTime`, o cliente reserva um lugar mirando um horario futuro (ex
 
 **Response (201):** `AttendanceInQueueResponse` — inclui `isIntent` (boolean) e `targetTime` (ISO-8601 ou null). Intencao: `isIntent=true` + `targetTime` setado + `scheduledTime` = slot reservado. Walk-in: `isIntent=false`, `targetTime=null`.
 
-**Erros:** `400` (alvo no passado) · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo)
+**Invariante servico↔profissional (BUG8 c):** servico e capacidade do PROFISSIONAL — cada `ServiceItem` tem dono (`professional_id`). Todo `serviceItemId` do atendimento **tem de pertencer ao `professionalId` escolhido**; qualquer item de outro profissional → **422 `SERVICE_ITEM_NOT_OF_PROFESSIONAL`**. Como efeito, profissional **sem servico** nao pode ser marcado (nao ha item valido para ele). Vale tambem no guest (`add-quest-attendance`) quando ha itens.
 
-**Testes:** Unitario (funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`) + Integracao (`QueueIntentIntegrationTest`)
+**Erros:** `400` (alvo no passado) · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (serviceItem de outro profissional) · `404 SERVICE_ITEM_NOT_FOUND` (nenhum id valido)
+
+**Testes:** Unitario (funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`) + Integracao (`QueueIntentIntegrationTest`, `QueueVisibilityBug8IntegrationTest`)
 
 ---
 
@@ -1555,6 +1615,45 @@ nao reposiciona de volta). Usado quando o cliente chega mas ainda nao vai ser at
 
 ---
 
+### PATCH /attendances/{attendanceId}/no-show
+Escalada de no-show (item #39): remove da fila um cliente **em `LATE`** (ja caiu de posicao ao menos uma vez
+via `/late`) que nao compareceu ao ser chamado de novo. `LATE -> CANCELLED` (sai da fila de espera) e registra
+um strike **`NO_SHOW`** (`ClientPenaltyEvent` + incrementa `strikeCount` do cliente). O strike e **incondicional**
+(nao ha janela de 1h — o profissional ja declarou o no-show). **Convidados** (sem conta) sao removidos mas **nao
+acumulam** strike. So o profissional **dono** do attendance pode marcar.
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `QueueResponse` (overview da fila atualizado, sem o removido). Dispara broadcast WS da fila da loja.
+
+**Erros:** `400` quando o attendance **nao esta `LATE`** (use `/late` primeiro) · `403` nao-dono / sem role PROFESSIONAL · `404` inexistente · `401` sem token.
+
+**Testes:** Integracao (`NoShowEscalationIntegrationTest`)
+
+---
+
+### POST /attendances/{attendanceId}/rating
+Avaliacao de atendimento (item #6): o cliente **dono** avalia um atendimento **`FINISHED`** com 1-5 estrelas
+(inteiro) + comentario opcional (ate 500 chars). **1 voto por atendimento.** A nota alimenta os agregados
+denormalizados (`rating_sum`/`rating_count`) do **profissional** e, quando o atendimento tinha **exatamente 1
+servico**, tambem do **`ServiceItem`** correspondente (`serviceItemId` registra a origem); com 2+ servicos
+(combo) a nota vai **so ao profissional** (`serviceItemId=null`). Atendimento **guest** (sem `client`) nao avalia.
+
+**Acesso:** CLIENT (dono do attendance)
+
+**Body:** `{ "score": 1..5 (obrigatorio), "comment": "..." (opcional, <=500) }`
+
+**Response (201):** `{ id, attendanceId, score, comment, serviceItemId, createdAt, professionalRatingAverage,
+professionalRatingCount, serviceItemRatingAverage, serviceItemRatingCount }`. **Nao dispara WS.**
+
+**Erros:** `400` `ATTENDANCE_INVALID_STATUS` (nao esta `FINISHED`) · `403` `ESTABLISHMENT_ACCESS_DENIED` (nao-dono / guest) · `409` `ATTENDANCE_ALREADY_RATED` (2o voto) · `422` `VALIDATION_ERROR` (score fora de 1..5 ou comment > 500) · `404` inexistente · `401` sem token.
+
+**Exibicao:** as medias sao lidas em `GET /establishment/id/{id}/professionals-with-queue` (`rating_average`/`rating_count` no profissional e por `service_items`) e em `ServiceItemResponse` (`rating_average`/`rating_count`).
+
+**Testes:** Integracao (`AttendanceRatingIntegrationTest`)
+
+---
+
 ### PATCH /attendances/{attendanceId}/fit-in?aheadCount=N
 Encaixa o cliente no meio da fila (item #38): move o atendimento (`SCHEDULED` ou `LATE`) para logo apos
 `N` clientes (reposiciona via `scheduledTime`, ponto-medio — mesmo padrao do #19), marca `is_fit=true` e
@@ -1599,6 +1698,8 @@ SCHEDULED ──start──> IN_PROGRESS ──finish──> FINISHED
    LATE ───start───>   PAUSED
     │                    (LATE tambem pode ir direto a IN_PROGRESS)
     │
+    ├──no-show──> CANCELLED  (profissional; escalada #39: + strike NO_SHOW)
+    │
     └──cancel/leave──> CANCELLED  (cliente: so SCHEDULED)
 
 IN_PROGRESS ──remove──> CANCELLED  (profissional)
@@ -1606,6 +1707,7 @@ PAUSED      ──remove──> CANCELLED  (profissional)
 
 LATE: cliente atrasado (item #19) — cai 1 posicao mas continua na fila de espera (junto com SCHEDULED).
       `late` pode repetir (cai mais); `undo-late` volta a SCHEDULED na posicao atual; `start` atende direto.
+      `no-show` (item #39) remove o LATE reincidente da fila (CANCELLED) + registra strike NO_SHOW.
 ```
 
 ---
@@ -1757,6 +1859,10 @@ Service items sao criados via dois caminhos:
 E gerenciados pelo proprio profissional:
 - `PATCH /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — edita nome, preco e/ou duracao
 - `DELETE /professional-queue/{professionalId}/service-items/{itemId}` (PROFESSIONAL) — remove
+
+Ou pela otica do establishment (OWNER **ou** o proprio profissional dono do item):
+- `PUT /establishment/{id}/service-items/{itemId}` — edita (parcial); `409` se novo nome colidir na loja
+- `DELETE /establishment/{id}/service-items/{itemId}` — remove
 
 ### PATCH /professional-queue/{professionalId}/service-items/{itemId}
 Edicao parcial de um servico do profissional. So o proprio profissional (JWT) pode editar seus servicos.
@@ -2208,6 +2314,7 @@ A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` R
 | `PATCH /attendances/{id}/resume` | ✅ | — |
 | `PATCH /attendances/{id}/late` | ✅ | — |
 | `PATCH /attendances/{id}/undo-late` | ✅ | — |
+| `PATCH /attendances/{id}/no-show` | ✅ | — |
 | `PATCH /attendances/{id}/fit-in` | ✅ | — |
 | `PATCH /attendances/{id}/undo-fit` | ✅ | — |
 
@@ -2344,6 +2451,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 4. PATCH /attendances/{id}/finish   → IN_PROGRESS → FINISHED
    PATCH /attendances/{id}/late       → SCHEDULED → LATE  (atrasado: cai 1 posicao, opcional/repetivel)
    PATCH /attendances/{id}/undo-late  → LATE → SCHEDULED (opcional)
+   PATCH /attendances/{id}/no-show    → LATE → CANCELLED (escalada #39: ausente reincidente sai + strike NO_SHOW)
    PATCH /attendances/{id}/fit-in     → encaixe: move apos N clientes, is_fit=true (ETA rampado), opcional
    PATCH /attendances/{id}/undo-fit   → encaixe: is_fit=false, volta ao tempo cheio (opcional)
 ```
@@ -2430,6 +2538,8 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | DELETE /establishment/{id}/professionals/{pid} | ✅ |
 | PATCH /establishment/{id}/owner | ✅ |
 | POST /establishment/{id}/service-items | 🟡 Integracao |
+| PUT /establishment/{id}/service-items/{itemId} | ✅ |
+| DELETE /establishment/{id}/service-items/{itemId} | ✅ |
 | GET /professional (busca) | ✅ |
 | POST /professional/register | ✅ |
 | PATCH /professional/me | ✅ |
@@ -2456,6 +2566,8 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | PATCH /attendances/{id}/resume | ✅ |
 | PATCH /attendances/{id}/late | 🟡 Integracao |
 | PATCH /attendances/{id}/undo-late | 🟡 Integracao |
+| PATCH /attendances/{id}/no-show | 🟡 Integracao |
+| POST /attendances/{id}/rating | 🟡 Integracao |
 | PATCH /attendances/{id}/fit-in | 🟢 Unit + Integracao |
 | PATCH /attendances/{id}/undo-fit | 🟡 Integracao |
 | POST /professional-queue/add-attendance | 🟡 Integracao |
@@ -2544,29 +2656,45 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 > Os **commits referenciam o NOME** do item (ex.: `feat: intencao de fila com horario-alvo`), nao o numero (que e volatil).
 > As tabelas detalhadas mais abaixo (CRITICO/ALTA/MEDIA/BAIXA/PARTNER, numeracao historica 1-41) sao **referencia/detalhe** — esta lista aqui manda no "o que falta".
 
+> **Ordem revisada 2026-07-04:** consolidei aqui os gaps de backend levantados pelos fronts (Partner: `BUGx`/`Sx`; Client: handoffs do PRD-Client). Coloquei os **desbloqueios de front** acima dos grandes pos-MVP, porque travam trabalho ja pronto no front. **Andre: confirme/reordene a prioridade** — os numeros sao volateis, commits usam o NOME.
+>
+> **Reconciliacao 2026-07-07 (Partner `HANDOFF_BACKEND.md`):** incorporados os handoffs que so viviam no front — **BUG7/BUG8/BUG9** (bugs de fila/read-model, teste manual 2026-07-04; BUG7 CONFIRMADO), **BUG10** (nickname), **S10** (add servico a attendance na fila), **S9** (expediente nos relatorios). **BUG4** (address) e **S8** (profissional abre/fecha) do handoff **ja estavam CONCLUIDOS** aqui (ver lista abaixo) — o handoff do Partner e de 2026-07-04, anterior aos commits; front liga sozinho. O antigo item "oferta aberta `/swap-offers`" foi **substituido** pela spec **INTENTION -> promocao** (Partner redesenhou 2026-07-05).
+
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Multa / cancelamento tardio + escalada de no-show | ⬜ aberto | secao "Item 39" (reusa LATE/#19) |
-| 2 | Troca mutua de posicao na fila (aceite dos dois, `true && true`) | ⬜ aberto | NOVO — TODO ja existe em `ClientServiceImpl` |
-| 3 | Rating / avaliacao de atendimentos | ⬜ aberto | secao "Item 6" |
-| 4 | Notificacoes push (device token + disparo) | ⬜ aberto | — |
-| 5 | Editar/deletar ServiceItem do establishment | ⬜ aberto | `PUT/DELETE /establishment/{id}/service-items/{itemId}` |
-| 6 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 7 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 8 | Filtro openStatus na query (hoje o front filtra) | ⬜ aberto | `?includeAll=true` |
-| 9 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 10 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 11 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` |
-| 12 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 13 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 14 | Precificacao calculada no backend | ⬜ aberto (dep. #16) | secao "Item 36" |
-| 15 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 16 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao |
-| 17 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 18 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 19 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Fechamento com bloqueio de entrada + "solicitar corte" (BUG5 refinado) | 🟡 parte B feita | **Partner BUG5 (refinado Andre 2026-07-04) — NAO auto-fechar.** Ao chegar `closing_time` (ou parada manual): **(C1)** **bloquear NOVAS entradas** na fila (cliente nao entra sozinho); fila existente continua; **(C2)** cliente ainda pode **solicitar corte** (pedido que o profissional aceita/recusa). **(B) `is_open` efetivo (OPEN E dentro de `[opening,closing_time)`) como campo de leitura — ✅ CONCLUIDO** (ver Concluidos). **Restam C1** (gate de entrada) **e C2** (fluxo solicitar corte). Filtro `?includeAll=true` ja CONCLUIDO (parte A); gate ao fechar com fila ativa `409` ja CONCLUIDO (BUG6). |
+| 2 | Expor `available_professionals` na listagem publica | ⬜ aberto | **Client (Home) — reconciliacao 2026-07-11.** A listagem `GET /establishment` so traz `estimated_wait_minutes`; falta a contagem de **profissionais afiliados com servico** (`available_professionals`), que hoje so existe no detalhe `professionals-with-queue`. Sem ela o front-client **esconde todas as lojas fechadas** (nao sabe se ha profissional pra agendar a reabertura); com o campo, mostra so as fechadas com `available_professionals > 0`. Enriquecer o `EstablishmentResponse` da listagem no mesmo caminho do `estimatedWaitMinutes`. |
+| 3 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono; move ao indice 0, empurra os demais). `start` ja atende qualquer id fora de ordem; falta o "promover ao topo sem atender". |
+| 4 | Intencao de atendimento -> promocao automatica a fila | ⬜ aberto — spec fechada 2026-07-05 | **Partner S3 (= S2 na 2a rodada de feedback — mesmo item) / Client C6 (substitui o antigo `/swap-offers`).** Novo status **`INTENTION`**: attendance com `desiredTime` fica **fora da fila** e e **promovido a `SCHEDULED`** quando falta **≤15min**. Ponto UNICO de entrada (create/edit passam pelo algoritmo), promocao **event-driven** (timer reagendado p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem), invariante do slot futuro alcancavel, promocao atomica, reconstruir timer no boot. Endpoints: `POST/PATCH/DELETE /attendances/intentions[/{id}]`. Detalhe completo no `HANDOFF_BACKEND.md` (Partner) secao "Detalhe — S3". |
+| 5 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
+| 6 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 (= S7 fluxo de reset + S8 infra SMTP na 2a rodada — 1 unico item, agrupado de proposito: o SMTP habilita o reset) + Client #14** — `POST /auth/forgot-password {email}` + `POST /auth/reset-password {token,newPassword}`; infra de e-mail (SMTP/SendGrid/SES) habilita o reset |
+| 7 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 8 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 9 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
+| 10 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner S10 / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
+| 11 | Apelido nao volta no `GET /professional/me` (BUG10) | ⬜ aberto | **Partner BUG10 (teste 2026-07-04).** `PATCH /profile/general-infos {nickname}` retorna 200, mas o `nickname` **nao vem** no `GET /professional/me`. Confirmar que persiste e projetar o campo no `/me` (a busca `ProfessionalSearchResponse` ja expoe). Front mitigou local. |
+| 12 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner S9** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
+| 13 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 14 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 15 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 16 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 17 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 18 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 19 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 20 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
+| 21 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 22 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 23 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 24 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 25 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41).
+> **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi **corrigida**: por decisao do Andre (PRD-Partner) **NAO se auto-fecha** — fechar e sempre manual+confirmacao.
+
+**Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3** — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging.
+
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)** · **Endereco no read-back do establishment (Partner BUG4 — `EstablishmentResponse.address` embutido; endereco principal `isMain`, `null` sem endereco)** · **Gate ao fechar loja com fila/atendimento ativo (Partner BUG6 — `PATCH /open-status` da `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` ao sair de OPEN com atendimento SCHEDULED/LATE/IN_PROGRESS/PAUSED)** · **Profissional afiliado abre/fecha a loja (`PATCH /open-status` = OWNER **ou** profissional afiliado; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`)** · **Filtro de open-status na listagem publica (BUG5 parte A — `GET /establishment` por padrao so devolve `OPEN`; `?includeAll=true` inclui `CLOSED`/`TEMPORARILY_CLOSED`; filtro de leitura, nao muda status nem fila)** · **Atendimento pausado continua visivel e retomavel (Partner BUG7 — o "atual" do profissional cai para o `PAUSED` na ausencia de `IN_PROGRESS`; permanece em `current_attendance` do `professionals-with-queue` e no overview da fila ate `resume`/`finish`, e nao se inicia um novo enquanto ha um pausado)** · **Listagem dos proprios atendimentos pelo cliente (Partner BUG8 sintoma b — `GET /attendances?clientId=<self>` devolve os atendimentos do proprio cliente; antes o endpoint era owner/profissional-only e o cliente tomava `403`. So o proprio JWT; `clientId` de outro -> `403`. Delega ao mesmo caminho de `/attendances/client/me`; caminho feliz ja projetava nos 3 read-models)** · **Invariante servico↔profissional no create de atendimento (Partner BUG8 sintoma c — todo `serviceItem` do atendimento tem de pertencer ao profissional escolhido; item de outro prof -> `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`; como efeito, profissional sem servico nao pode ser marcado)** · **"Aberto agora" efetivo (BUG5 parte B — campo de leitura `is_open` no `EstablishmentResponse`/`EstablishmentWithProfessionalsResponse`/`EstablishmentGeneralInfosResponse` = `open_status == OPEN` E horario atual dentro de `[opening_time, closing_time)`; nao muda o `open_status` persistido, nao ha auto-fechamento. Trata janela normal/24h/virada-de-meia-noite/offsets. Cobertura: `EstablishmentIsOpenNowTest` unit + `IsOpenEffectiveIntegrationTest`)** · **Remover da fila reflete pro cliente no ato (Partner BUG9 / Client C9 — `DELETE /professional-queue/{id}/remove` ja marcava `CANCELLED`; agora tambem faz `broadcastQueue` + notifica o cliente com `ATTENDANCE_CANCELLED` no WS `/user/queue/notifications` + push, p/ o app-cliente sair de "em fila" sem reload. Guest = no-op nos dois publishers. Cobertura: `PushNotificationIntegrationTest` Order 22)**.
+
+> **BUG8 sintoma (c) — ✅ CONCLUIDO (decisao Andre 2026-07-10: vinculo POR PROFISSIONAL).** Invariante imposta no `createAttendance` (e no guest quando ha itens): todo `serviceItem` do atendimento **tem de pertencer ao profissional escolhido** (`serviceItem.professional == professional`), senao `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`. Casa com a decisao de produto "servico = capacidade do PROFISSIONAL" (cada `ServiceItem` tem dono `professional_id`) e com o `GET /professional/{id}/service-items` que o front ja usa. **Efeito colateral desejado:** profissional sem servico nao pode ser marcado (nao ha item valido para ele). A 1a tentativa quebrava porque a collection agendava o `prof` afiliado com o item do **owner**; corrigido dando ao `prof` o seu **proprio** serviceItem (folder 04 "add service item (prof)") antes das filas. Cobertura: `QueueVisibilityBug8IntegrationTest` (Order 60) + Postman folder 09 (`[ERRO] ... 422`).
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
 
 ---
@@ -2577,8 +2705,8 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 |---|------|-----------|-----------|
 | 1 | WebSocket / tempo real | Substituir polling de 30s por WebSocket STOMP. Topico: `/topic/queue/{professionalId}`. Publicar evento apos start/finish/pause/cancel. Cliente ve fila atualizar sem recarregar | **Backend** (STOMP broker + eventos) / **Front-Client** (subscribe na fila) / **Front-Partner** (subscribe na fila) |
 | 2 | Busca de establishment por bairro e geolocalizacao | **Fase 1 (prioridade):** `GET /establishment?neighborhood=X`. Requer cadastrar/expor o campo `neighborhood` no endereco do establishment; o response precisa trazer o **tempo de espera agregado por establishment** para ordenar (menor -> maior). **Fase 2:** busca por GPS `GET /establishment?lat=&lng=&radiusKm=`, ordenar por proximidade (lat/lng no Establishment, query espacial) | **Backend** (campo neighborhood + query + agregacao de tempo de espera + ordenacao + query espacial na fase 2) / **Front-Partner** e **Front-Client** (busca por bairro, exibir tempo de espera; fase 2: enviar coordenadas, exibir distancia) |
-| 3 | Notificacoes push | Avisar cliente quando esta em 2o lugar na fila e quando atendimento foi iniciado. Expo Push Notifications. Backend: endpoint para registrar device token | **Backend** (endpoint device token + disparo push) / **Front-Client** (registro token + receber push) / **Front-Partner** (registro token + receber push) |
-| 4 | Filtro real de establishment por openStatus | `GET /establishment` so retorna OPEN por padrao. Parametro `?includeAll=true` para ver fechados. Hoje o front filtra localmente | **Backend** (filtro na query) / **Front-Client** (remover filtro local) |
+| 3 | Notificacoes push ✅ **BACKEND CONCLUIDO** | Avisar cliente quando esta em 2o lugar na fila e quando atendimento foi iniciado. Expo Push Notifications. Backend: endpoint para registrar device token | **Backend** (endpoint device token + disparo push) / **Front-Client** (registro token + receber push) / **Front-Partner** (registro token + receber push) |
+| 4 | Filtro real de establishment por openStatus ✅ **BACKEND CONCLUIDO** | `GET /establishment` so retorna `OPEN` por padrao; `?includeAll=true` para ver fechados (filtro de leitura, uniforme a todas as variantes). | ~~**Backend**~~ ✅ / **Front-Client** (remover filtro local) |
 
 ### ALTA PRIORIDADE — proximo ciclo
 
@@ -2599,7 +2727,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | 12 | QR Code dinamico por profissional | Hoje e apenas link do estabelecimento. Futuro: link direto ao profissional especifico. Parametro `?professionalId=` na URL | **Front-Partner** (gerar QR) / **Front-Client** (ler QR e redirecionar) |
 | 13 | Fila de espera virtual com posicao nominal | Exibir ao cliente: "Voce e o 3o da fila". Esconder lista completa mas calcular posicao do cliente logado | **Backend** (endpoint posicao individual) / **Front-Client** (exibir posicao) |
 | 14 | Modo offline completo (partner-app) | Cache da fila atual no AsyncStorage. Acoes offline: fila local, sincroniza ao reconectar. Estrategia last-write-wins | **Front-Partner** (cache + sync) |
-| 15 | Editar e deletar ServiceItem (establishment e professional-queue) | **Establishment:** `PUT /establishment/{id}/service-items/{itemId}` e `DELETE ...` (validacao: nao deletar se ha attendances SCHEDULED vinculados). **Professional-queue:** `PATCH /professional-queue/{profId}/service-items/{itemId}` (editar nome e preco) e `DELETE /professional-queue/{profId}/service-items/{itemId}` — hoje so existe o POST de adicionar; validar owner/membership | **Backend** (endpoints + validacao nos dois escopos) / **Front-Partner** (UI de edicao/remocao) |
+| 15 | ~~Editar e deletar ServiceItem (establishment e professional-queue)~~ | ✅ **BACKEND CONCLUIDO** — **Establishment:** `PUT`/`DELETE /establishment/{id}/service-items/{itemId}` (OWNER ou o proprio profissional dono do item; `404` fora da loja, `403` alheio, `409` nome duplicado). **Professional-queue:** `PATCH`/`DELETE /professional-queue/{profId}/service-items/{itemId}` (proprio profissional). Ver secoes dos endpoints. → resta **Front-Partner** (UI de edicao/remocao). Nota: a delecao remove direto (o vinculo de servico com attendances passados nao bloqueia) | **Backend** ✅ / **Front-Partner** (UI de edicao/remocao) |
 | 16 | Transferencia de atendimento entre profissionais | Profissional pode passar cliente para colega. `PATCH /attendances/{id}/transfer?toProfessionalId=` | **Backend** (endpoint + logica de transferencia) / **Front-Partner** (botao transferir) |
 | 17 | Blacklist / bloquear cliente | Owner ou professional pode bloquear cliente. Tabela: `establishment_blocked_users` | **Backend** (entidade + endpoints) / **Front-Partner** (botao bloquear) |
 | 18 | Multiplos estabelecimentos por owner | Owner atual so ve o proprio establishment. Dashboard para owners com varios locais (franquias) | **Backend** (refatorar relacao Owner-Establishment) / **Front-Partner** (seletor de establishment) |
@@ -2635,13 +2763,42 @@ Itens levantados pelo front Partner. Ainda nao priorizados (Andre reordena). Num
 | 36 | Precificacao calculada no backend | **[Pos-MVP]** Hoje (#3) o backend so **persiste** `client_price` e `uses_platform_pricing` que o front calcula. Quando entrar o gateway de pagamento, o backend deve **calcular** `client_price` a partir de `price` + `uses_platform_pricing` (4% intermediador + 2% plataforma + arredondamento estetico R$X,90) e virar a fonte da verdade da formula, removendo a duplicacao do front. | **Backend** (calculo da formula + split real no gateway) / **Front** (parar de calcular, so exibir) |
 | 37 | Estabilizacao da estimativa de espera (lock da refeicao no ingresso) | ✅ **[BACKEND CONCLUIDO 2026-06-22]** Entregue em 2 commits: (1) **pre-req** — ETA client-facing meal-aware (passou a usar `QueueUtils`, antes ignorava refeicoes); (2) **lock** — no ingresso o `Attendance` grava o conjunto de refeicoes que estavam no ETA do cliente (`attendance_locked_intervals`, migration 025) e o ETA individual (`GET /client-queue/{attendanceId}/wait-time`) passa a somar `restante do atual + atendimentos a frente (recalc) + duracao das refeicoes TRAVADAS` — a refeicao nao sai mais por ritmo da fila. Cai so por mudanca estrutural (todos depois sairam → ahead vazio), skip #41 (override) ou inicio/remocao. Testes: unit `QueueUtilsTest` (lock/mealsCounted) + integracao `ClientEtaMealLockIntegrationTest`. **Resta:** Front-Client consumir a estimativa estavel. **Spec detalhada na secao "Item 37 — Estabilizacao da estimativa" abaixo do backlog.** | **Backend** ✅ / **Front-Client** (estimativa estavel) |
 | 38 | Encaixe com equalizacao de tempo | **✅ BACKEND CONCLUIDO** (Pos-MVP). Profissional **encaixa** um cliente no meio da fila via `PATCH /attendances/{id}/fit-in?aheadCount=N`. Os de tras absorvem o tempo do encaixe (D) **sem salto brusco**: o encaixe contribui um valor **rampado** (0 -> D em fatias de `D/fitAheadLength` a cada cliente que sai da frente). Damping do valor exibido (slew-rate). `undo-fit` reverte. **Spec detalhada na secao "Item 38 — Encaixe" abaixo do backlog.** | **Backend ✅** (colunas `is_fit`/`fit_ahead_length` + ramp em `QueueUtils.effectiveEstimatedMinutes` + endpoints) / **Front-Partner** (acao de encaixar, `aheadCount`) / **Front-Client** (estimativa ja suavizada vem da API) |
-| 39 | Multa / aviso de cancelamento tardio | **[Pos-MVP]** Desencorajar cancelamento de ultima hora: ao cancelar com ETA **< 1h** para o atendimento, aplica-se uma **"multa"** (afeta a organizacao da fila / proximo cliente). **MVP sem pagamento:** comeca como **aviso** (disclosure no momento do cancelamento) + **registro/strikes** (reputacao); a cobranca monetaria real depende do gateway (item #21) + meio de pagamento salvo. **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** (detectar ETA<1h no cancel + registrar/strikes; cobranca = #21) / **Front-Client** (aviso da politica no cancelamento) |
+| 39 | Multa / aviso de cancelamento tardio + no-show | 🟨 **[FASE 1 + ESCALADA NO-SHOW CONCLUIDAS]** **(Fase 1, 2026-06-29)** Cancelar (`PUT /attendances/{id}/cancel`) com o ETA da propria vez **< 1h** registra um strike (`ClientPenaltyEvent` tipo `LATE_CANCEL`, tabela `client_penalty_event`, migration 70-client/005) e incrementa `strikeCount` no `client`. `GET /clients/{id}` expoe `strikeCount`. **(Escalada no-show, 2026-07-03)** `PATCH /attendances/{id}/no-show` (PROFESSIONAL, dono): remove da fila (→ CANCELLED) um atendimento **em LATE** (#19) que nao compareceu ao ser chamado de novo e registra strike `NO_SHOW` (incondicional; exige status LATE senao `400`). Convidados sao removidos mas nao acumulam. Testes `LateCancelPenaltyIntegrationTest` + `NoShowEscalationIntegrationTest` + Postman folders 08f/08g. **Resta so:** Fase 2 cobranca monetaria (dep. gateway #21). **Spec detalhada na secao "Item 39 — Cancelamento tardio" abaixo do backlog.** | **Backend** 🟨 (Fase 1 ✅ + escalada no-show ✅; so cobranca = #21) / **Front-Client** (aviso da politica no cancelamento + exibir strikeCount) / **Front-Partner** (botao "marcar no-show" no cliente LATE) |
 | 40 | Intencao de fila com horario-alvo (entrada agendada, estilo agenda) | ✅ **[BACKEND CONCLUIDO 2026-06-28]** Opcao B (`is_intent` + `target_time`, migration 005). `POST /attendances` aceita `targetTime` opcional: presente = entra como **intencao** (cede a vez aos walk-ins enquanto o previsto for antes do alvo); ausente = walk-in normal. Trava de viabilidade no ingresso (`422 QUEUE_TARGET_NOT_FEASIBLE` se a fila ja preve atender em cima/depois do alvo), alvo no passado = `400`. Confirmacao automatica em evento de fila quando o previsto encosta no alvo (vira SCHEDULED normal, trava no inicio). Funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`. Testes: unit (`QueueUtilsTest`) + integracao (`QueueIntentIntegrationTest`). **Spec detalhada na secao "Item 40 — Intencao de fila com horario-alvo" abaixo do backlog.** | ~~**Backend**~~ ✅ / **Front-Client** (escolher horario-alvo + ver estado intencao/confirmado; tratar 422/400) / **Front-Partner** (ver intencoes/agendados na fila) |
 | 41 | Skip de refeicao por dia ("Nao almocar") | ✅ **[BACKEND CONCLUIDO 2026-06-21]** Entregue `PATCH .../intervals/{intervalId}/skip` (pula a refeicao recorrente so naquele dia, default hoje) + `DELETE .../intervals/{intervalId}/skip` (desfaz). Skip por `(intervalo, data)` na tabela `professional_interval_skips` (migration 024), consumido pelo `QueueUtils` (day-scoped) — refeicao pulada cai do ETA de todos na hora, recorrencia intacta. Rebroadcast WS apos a operacao. 409 se ja iniciada/encerrada no dia (usar `finish`). Testes integracao (`IntervalSkipIntegrationTest`) + unit (`QueueUtilsTest`) + Postman folder 12 + PRD secao 18. **Resta:** Front-Partner ligar a acao "Nao almocar" do popup (eles chamam de "backend #17"). | **Backend** ✅ / **Front-Partner** (ligar a acao "Nao almocar" do popup) |
 
 ### Item 6 — Rating / avaliacao de atendimentos (especificacao detalhada)
 
-Decisao 2026-06-13. **Status: especificado, nao implementado.**
+Decisao 2026-06-13. **Status: ✅ BACKEND CONCLUIDO (2026-07-03).**
+
+**Contrato entregue:**
+- **Endpoint:** `POST /attendances/{attendanceId}/rating` (ROLE_CLIENT). Body:
+  `{"score": 1..5 (obrigatorio, inteiro), "comment": "..." (opcional, ate 500 chars)}`.
+  - **201** com o voto criado + retrato imediato das medias:
+    `{ id, attendanceId, score, comment, serviceItemId, createdAt, professionalRatingAverage,
+    professionalRatingCount, serviceItemRatingAverage, serviceItemRatingCount }`.
+  - **403** `ESTABLISHMENT_ACCESS_DENIED` se nao for o cliente dono (inclui atendimento guest, sem `client`).
+  - **400** `ATTENDANCE_INVALID_STATUS` se o atendimento nao estiver `FINISHED`.
+  - **409** `ATTENDANCE_ALREADY_RATED` no segundo voto (1 voto por atendimento).
+  - **422** `VALIDATION_ERROR` se `score` fora de 1..5 ou `comment` > 500 chars.
+- **Modelo:** entidade `AttendanceRating` (`attendance_id` UNIQUE, `score`, `comment`, `service_item_id`
+  nullable, `created_at`) — migration `80-attendance/007-create-attendance_rating.yaml`.
+- **Agregados denormalizados:** `rating_sum` + `rating_count` em `professional` e em `service_item`
+  (mesma migration). Media (2 casas) via `getRatingAverage()` (null sem votos). O ServiceItem so recebe
+  a nota quando o atendimento tem **exatamente 1 servico** (regra abaixo); com combo, so o profissional.
+- **Exibicao (read models ja expostos p/ os fronts):**
+  - `GET /establishment/id/{id}/professionals-with-queue` → `rating_average` + `rating_count` no
+    profissional; e `rating_average` + `rating_count` em cada item de `service_items`.
+  - `GET /professional/{id}/service-items` (`ServiceItemResponse`) → `rating_average` + `rating_count` por servico.
+- **Cobertura:** integracao `AttendanceRatingIntegrationTest` (1 servico alimenta prof+servico; combo so prof;
+  409 no 2o voto; 400 nao-FINISHED; 403 nao-dono; 422 score invalido; media agrega multiplos votos) +
+  Postman folder `08i - avaliacao de atendimento (#6)` (homolog+prod).
+- **HANDOFF FRONTS:** **Front-Client** — apos um atendimento `FINISHED`, oferecer tela de avaliacao (1-5
+  estrelas + comentario opcional) chamando `POST /attendances/{id}/rating`; tratar 409 (ja avaliado) escondendo
+  o botao; exibir `rating_average (rating_count)` no card do profissional e por servico. **Front-Partner** —
+  exibir as avaliacoes recebidas (media geral + por servico) lendo os mesmos campos dos read models.
+
+**Especificacao original (mantida para referencia):**
 
 **Objetivo:** capturar nota do profissional E, quando possivel, do tipo de servico — um profissional pode ser otimo na pintura e ruim no corte. O `serviceItemType` (enum ja existente em `ServiceItem`) e o eixo de agregacao por tipo.
 
@@ -2661,6 +2818,29 @@ Decisao 2026-06-13. **Status: especificado, nao implementado.**
 **Endpoint:** `POST /attendances/{id}/rating` — apenas o `clientId` dono do attendance, apenas com `status = FINISHED`, bloqueia segundo voto (409). Atendimento guest (`guestName`, sem `client`) nao avalia.
 
 **Exibicao:** media geral no card do profissional; media por servico/tipo na lista de servicos do profissional.
+
+### Notificacoes push (Expo) — device token + disparo (especificacao detalhada)
+
+Decisao 2026-07-03. **Status: ✅ BACKEND CONCLUIDO.** Complementa o WebSocket (secao 18b): o WS atualiza a
+tela com o app aberto; o push alcanca o cliente com o **app em background/fechado**.
+
+**Registro de device token:**
+- `POST /devices` (qualquer autenticado — CLIENT/PROFESSIONAL/OWNER). Body `{ "token": "<ExpoPushToken>" (obrigatorio, <=512), "platform": "ios|android|web" (opcional) }`. **Idempotente por token** (upsert: se o token ja existe, reatribui dono/plataforma). `userId` sempre do JWT. **200** `{ id, token, platform }`. **401** sem token · **422** token em branco/ausente.
+- `DELETE /devices/{token}` (qualquer autenticado) — remove no logout. **204** (idempotente, 204 mesmo se nao existir). **⚠️ O token Expo tem colchetes (`ExponentPushToken[...]`); o Tomcat rejeita `[ ]` crus no path com 400 — o cliente DEVE url-encodar o segmento: `DELETE /devices/${encodeURIComponent(token)}` (colchetes viram `%5B`/`%5D`, o `@PathVariable` recebe o token original).**
+- Modelo: entidade `DeviceToken` (`user_id`, `token` UNIQUE, `platform`, `created_at`, `updated_at`) — migration `95-notification/001-create-device_token.yaml`. FK `user_id -> base_user` (ON DELETE CASCADE).
+
+**Gatilhos de disparo (decisao Andre 2026-07-03):**
+1. **"Voce e o proximo"** (`QUEUE_NEXT_IN_LINE`) — quando o cliente passa a ser o **1o da fila de espera** do seu profissional (o proximo a ser atendido). **Deduplicado** pela flag `attendance.next_notified` (migration `80-attendance/008`): 1 push por atendimento ao alcancar a frente — nao reenvia a cada nova mutacao. Disparado junto do broadcast WS da fila (`QueueWebSocketPublisher.broadcastQueue` → `QueuePushService.notifyNextInLine`), best-effort. **Nota:** entrar numa fila vazia ja torna o cliente a frente → recebe o aviso imediatamente (comportamento intencional; front decide a UX).
+2. **`ATTENDANCE_STARTED`** ("É a sua vez!") e **`ATTENDANCE_FINISHED`** — espelham as notificacoes pessoais WS ja existentes (mesmos pontos de `start`/`finish`).
+3. **Swap (#42)** — `SWAP_REQUESTED` (ao alvo) e `SWAP_ACCEPTED`/`SWAP_REJECTED` (ao proponente), espelhando o WS.
+
+Convidados (sem conta) nao recebem push. O payload leva `data.type` (o mesmo type do WS) + `attendanceId`/`establishmentId` para o front rotear.
+
+**Provedor:** Expo Push API (`POST https://exp.host/--/api/v2/push/send`, lotes de 100). Abstraido por `PushSender` (`ExpoPushSender` em prod; `NoOpPushSender` quando `vupth.push.provider=none`, usado nos testes/staging para nao chamar rede). Config: `vupth.push.provider` (env `PUSH_PROVIDER`, default `expo`), `vupth.push.expo.url`, `vupth.push.expo.access-token` (opcional). **Best-effort:** falha de rede/provedor e logada e nunca quebra a resposta HTTP.
+
+**HANDOFF FRONTS (Client e Partner):** ao abrir o app (apos o portao de readiness), pedir permissao de push, obter o Expo Push Token e chamar `POST /devices {token, platform}`; no logout, `DELETE /devices/${encodeURIComponent(token)}` (url-encodar por causa dos colchetes do token Expo — ver ⚠️ acima). Tratar as notificacoes por `data.type` (`QUEUE_NEXT_IN_LINE`, `ATTENDANCE_STARTED`, `ATTENDANCE_FINISHED`, `SWAP_*`). O WS continua para o app em foreground; o push cobre background/fechado.
+
+**Cobertura:** integracao `PushNotificationIntegrationTest` (registro upsert + delete + 401/422; "proximo" ao entrar; dedup do 2o + avanco ao iniciar; started/finished) + Postman folder `13 - device tokens / push (notificacoes)` (homolog+prod).
 
 ### Item 11 — Refeicoes/intervalos do profissional (especificacao detalhada)
 
@@ -2843,9 +3023,21 @@ Decisao 2026-06-16 (Andre). **✅ BACKEND CONCLUIDO (2026-06-25).** Pos-MVP. Mes
 
 ### Item 39 — Multa / aviso de cancelamento tardio
 
-Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
+Decisao 2026-06-16 (Andre). **Status: ✅ FASE 1 + ✅ ESCALADA DE NO-SHOW CONCLUIDAS (Fase 1 em 2026-06-29; escalada em 2026-07-03).** Resta so a Fase 2 (cobranca monetaria, dep. gateway #21). Pos-MVP.
 
 **Objetivo.** Desencorajar cancelamentos de ultima hora: cancelar com **ETA < 1h** para o atendimento desorganiza a fila e afeta o proximo cliente, entao gera uma **"multa"**.
+
+**✅ Implementado no backend (Fase 1 — strikes + aviso, sem pagamento; decisoes seladas com Andre 2026-06-29):**
+- **Janela avaliada no instante do cancel** (decisao): ao cancelar, calcula-se o ETA da PROPRIA vez AGORA via `QueueUtils.calculateWaitingTimeForPosition` (meal-aware, mesma base do ingresso #40 e do wait-time exibido). `ETA < 60min` (`LATE_CANCEL_THRESHOLD_MINUTES`) = cancelamento tardio.
+- **Persistencia (decisao): entidade dedicada + contador denormalizado.** `ClientPenaltyEvent` (`client`, `type` enum `PenaltyType{LATE_CANCEL, NO_SHOW}`, `attendanceId`, `etaMinutes`, `createdAt`) — tabela `client_penalty_event`; + coluna `strike_count` (INT, default 0) no `client` (entidade `Client.strikeCount` + `incrementStrike()`). Migration `70-client/005-create-client_penalty_event.yaml` (idempotente, preConditions).
+- **Gatilho:** `AttendanceServiceImpl.cancelAttendance(attendanceId, clientId)` chama `registerLateCancelPenaltyIfApplicable` ANTES de marcar CANCELLED (enquanto ainda esta na fila de espera). Convidados (sem conta, `client == null`) NAO acumulam strike. Cliente fora da fila de espera tambem nao.
+- **Exposicao (decisao: so registrar + expor):** `ClientResponse` (GET `/clients/{id}`) agora traz **`strikeCount`** (int). Sem bloqueio automatico nesta fase — definir gatilho de restricao depois, junto com a Blacklist (#11 do backlog).
+- **Testes:** integracao `LateCancelPenaltyIntegrationTest` (cancelar na frente ETA 0 -> strike LATE_CANCEL + count exposto; ETA>=1h atras de 3 -> sem strike; reincidencia acumula). Postman folder `08f - cancelamento tardio (#39)` (homolog+prod).
+
+**📣 HANDOFF PARA O FRONT-CLIENT (item #39 Fase 1):**
+- **Disclosure** no momento do cancelamento: quando o ETA da vez do cliente for `< 1h`, avisar que cancelar agora gera penalidade (strike) antes de confirmar.
+- **Contagem:** `GET /clients/{id}` retorna `strikeCount` (int) — exibir reputacao / aviso da politica. O strike e registrado pelo backend de forma autoritativa no cancel; o front pode reler o `strikeCount` apos cancelar.
+- Sem mudanca de status/erro no cancel (continua `PUT /attendances/{id}/cancel` -> 200). Fase 1 nao bloqueia nem cobra.
 
 **Faseamento (o MVP nao tem pagamento):**
 - **Fase 1 (sem gateway):** **aviso/disclosure** no momento do cancelamento ("cancelar agora, a <1h, gera penalidade") + **registro do evento** (strikes/reputacao do cliente). Sem cobranca real.
@@ -2859,17 +3051,59 @@ Decisao 2026-06-16 (Andre). **Status: especificado, nao implementado.** Pos-MVP.
 3. **Reincidencia e isencoes:** quantos strikes ate restringir; o que conta como motivo legitimo.
 4. **Efeito real na fila:** um cancelamento normalmente **adianta** o proximo; a "multa" aqui e dissuasao/compensacao, nao recalculo — confirmar o proposito (reduzir no-show) vs impacto tecnico.
 
-**Escalada de no-show (Andre 2026-06-25).** O *no-show* (cliente que nao comparece) ja tem o tratamento de **cair de posicao** no Item #19 (LATE): o profissional marca `/late`, o ausente cai 1 posicao e atende-se o seguinte. A regra desta secao adiciona a **escalada**: se o cliente, depois de cair, **nao aparece de novo** quando volta a ser chamado (ex.: cai de novo para a 2a posicao), ele e **removido da fila + recebe a multa/strike**. Ou seja: LATE (#19) cuida do "cai de posicao"; este item cuida do "ausente reincidente -> sai + penalidade". Presenca/no-show do Item 40 (intencao) tambem desagua aqui.
+**✅ Escalada de no-show (implementada 2026-07-03; decisao Andre 2026-06-25).** O *no-show* (cliente que nao comparece) ja tinha o tratamento de **cair de posicao** no Item #19 (LATE): o profissional marca `/late`, o ausente cai 1 posicao e atende-se o seguinte. Esta escalada adiciona o passo final: se o cliente, depois de cair, **nao aparece de novo** quando volta a ser chamado, ele e **removido da fila + recebe strike**. LATE (#19) cuida do "cai de posicao"; a escalada cuida do "ausente reincidente -> sai + penalidade". Presenca/no-show do Item 40 (intencao) tambem desagua aqui.
 
-### Item 42 — Troca mutua de posicao na fila (NOVO, 2026-06-25)
+**Contrato implementado:**
+- **`PATCH /attendances/{id}/no-show`** — role `PROFESSIONAL`, dono do atendimento. Exige que o atendimento esteja em **LATE** (a escalada pressupoe que ja caiu de posicao ao menos uma vez via `/late`); se nao estiver LATE → `400` (`AttendanceInvalidStatusException`). Sucesso: status → `CANCELLED` (sai da fila de espera, que ja exclui CANCELLED), broadcast WS da fila, retorna o overview da fila.
+- **Strike:** registra `ClientPenaltyEvent` do tipo **`NO_SHOW`** (mesma tabela `client_penalty_event` da Fase 1) e incrementa `strikeCount` do cliente. Diferente do `LATE_CANCEL`, o strike aqui e **incondicional** (nao ha janela de 1h — o profissional ja declarou o no-show); o `etaMinutes` guardado e o ETA da vez do cliente no instante (best-effort, so auditoria). **Convidados** (sem conta) sao removidos da fila mas **nao acumulam** strike.
+- **Motivo auditado:** a distincao "cancelou vs no-show" fica no `type` do `ClientPenaltyEvent` — reusa-se o status `CANCELLED` (sem novo enum de status, sem tocar findWaiting/lifecycle/relatorios).
+- **Decisoes seladas:** (1) gatilho = endpoint dedicado `/no-show` (nao sobrecarrega a semantica do `/late`); (2) status final = `CANCELLED` (menor superficie). Registrado como recomendacao aprovada; ver [[project_pending_work]].
+- **Testes:** integracao `NoShowEscalationIntegrationTest` (LATE→no-show remove+strike+count; nao-LATE→400; convidado removido sem strike; token CLIENT→403). Postman folder `08g - escalada de no-show (#39)` (homolog+prod).
+- **📣 Handoff Front-Partner:** botao "marcar no-show" disponivel **so** para clientes ja em LATE (apos ao menos um `/late`); a acao remove da fila e registra o strike. Front-Client: o `strikeCount` (GET `/clients/{id}`) ja reflete tambem os no-shows.
 
-Decisao 2026-06-25 (Andre). **Status: especificado, nao implementado.** (Numeracao historica; na lista-fonte e a pendencia **#3**.)
+### Item 42 — Troca de posicao na fila por consentimento mutuo (cliente<->cliente)
 
-**Objetivo.** Dois clientes **trocam de posicao** (indice) na fila, **por consentimento mutuo** — independente de atraso. Casos: um cliente que sabe que vai se atrasar pede para trocar para **depois**; outro que quer ser atendido antes troca para **antes**. E uma troca simples de indice entre dois atendimentos da mesma fila.
+Decisao 2026-06-25 (Andre). ✅ **Status: BACKEND CONCLUIDO (2026-06-28).** Resta so os fronts.
 
-**Regra de autorizacao (chave).** A troca so efetiva se **os dois aceitarem**: `aceiteA && aceiteB` (booleano AND). Um inicia a proposta; o outro confirma; so entao os indices/`scheduledTime` sao trocados. Sem o aceite dos dois, nada muda.
+**Objetivo.** Dois clientes **trocam de posicao** (indice) na fila, **por consentimento mutuo** — independente de atraso. Um cliente que sabe que vai se atrasar pede para trocar para **depois**; outro que quer ser atendido antes troca para **antes**. Troca simples de indice entre dois atendimentos da mesma fila.
 
-**Notas de implementacao (a detalhar quando entrar):** ja existe o placeholder `// TODO: Trocar lugar na fila` em `ClientServiceImpl`. Reusar o padrao de reposicionamento por `scheduledTime` (mesmo do #19/#38): trocar os `scheduledTime` dos dois atendimentos. Broadcast WS da fila apos a troca. Pontos a definir: quem pode propor (cliente<->cliente; profissional media?), expiracao da proposta pendente, e se vale so para `SCHEDULED` (nao `IN_PROGRESS`).
+**Regra de autorizacao (chave).** A troca so efetiva se **os dois aceitarem**: `aceiteA && aceiteB`. O cliente A propoe; B confirma; so entao os `scheduledTime` dos dois sao trocados. Sem aceite dos dois, nada muda.
+
+**Decisoes (Andre 2026-06-28):** (a) cliente<->cliente direto (profissional nao participa); (b) persistencia em **entidade dedicada** `QueueSwapRequest` (proposer/target/status/createdAt); (c) escopo **so SCHEDULED**; (d) **sem expiracao por tempo** — expira **por evento**: quando proposer ou target sai da fila (atendido/cancelado/removido), a proposta PENDING vira CANCELLED.
+
+**✅ Implementado no backend:**
+- ✅ Entidade `QueueSwapRequest` + enum `SwapRequestStatus` (PENDING/ACCEPTED/REJECTED/CANCELLED) + migration `006-create-queue-swap-request.yaml`.
+- ✅ `POST /swap-requests` (CLIENT): body `{proposerAttendanceId, targetAttendanceId}`. proposer validado contra o token. Cria PENDING + notifica B via WS. Erros: `403` (nao e o dono do proposer), `422 QUEUE_SWAP_NOT_ALLOWED` (fila diferente / nao SCHEDULED / mesmo atendimento), `409 QUEUE_SWAP_ALREADY_PENDING` (ja ha PENDING entre o par).
+- ✅ `PATCH /swap-requests/{id}?accept=true|false` (CLIENT, so o **target** B responde): `true` troca os `scheduledTime` + `updateQueueEstimates` + broadcast WS + notifica A; `false` = REJECTED. `403` se nao for o target; `422` se ja nao estiver PENDING ou se algum saiu do SCHEDULED.
+- ✅ `GET /swap-requests/me` (CLIENT): propostas PENDING que envolvem o cliente (recebidas/enviadas).
+- ✅ Expiracao por evento: hooks em `start`/`cancel`/`leave-queue`/`remove` chamam `expirePendingForAttendance` (PENDING -> CANCELLED).
+- ✅ Testes: integracao (`QueueSwapIntegrationTest`: propor 201/403/409/422, aceitar troca posicoes, recusar, responder-nao-target 403, responder-nao-pendente 422, expiracao em atendido/cancelado).
+
+**🟦 Lado do profissional (atender fora de ordem quando o da vez esta atrasado) — JA SUPORTADO, sem codigo novo.** `PATCH /attendances/{id}/start` ja aceita iniciar **qualquer** atendimento SCHEDULED/LATE por id (em qualquer posicao) — o profissional atende quem quiser fora de ordem; ninguem mais e reordenado. Para o atrasado (indice 0) virar LATE e cair de posicao, usa-se `PATCH /attendances/{id}/late` (#19). O front orquestra o fluxo: escolhe o proximo, marca o da vez como LATE, e (opcional) inicia. *(Se o front precisar promover um escolhido qualquer ao indice 0 SEM atender, e uma adicao pequena a fazer sob demanda.)*
+
+**📣 HANDOFF PARA OS FRONTS (item #42):**
+- **Front-Client** — botao "trocar de posicao": escolhe outro cliente da fila e chama `POST /swap-requests`. Recebe via WS `SWAP_REQUESTED` (notificacao de proposta recebida) — exibe aceitar/recusar -> `PATCH /swap-requests/{id}?accept=`. WS `SWAP_ACCEPTED`/`SWAP_REJECTED` para o proponente. `GET /swap-requests/me` lista pendentes. Tratar `409` (ja pendente), `422` (fila diferente/ja atendido).
+- **Front-Partner** — sem mudanca obrigatoria; o profissional ja atende fora de ordem via `start` + marca `late` no atrasado.
+
+### Item 43 — Remanejar cliente com espera longa (escolher horario / ir pro fim da fila)
+
+Decisao 2026-06-28. ✅ **Status: BACKEND CONCLUIDO (2026-07-03).** Resta so os fronts.
+
+**Objetivo.** Quando a espera do cliente fica **longa** (o front mostra os botoes quando o ETA da vez passa de ~1h), dar-lhe **autonomia** em vez de so abandonar a fila. Duas acoes **client-facing** sobre a **propria** vez (validado por JWT), ambas so em `SCHEDULED`:
+
+- **Opcao A — "Escolher um horario" (`PATCH /attendances/{id}/reschedule?targetTime=`).** O atendimento vira **INTENCAO de fila** reusando integralmente a maquina do Item #40 (`isIntent=true` + `target_time` + slot cronologico via `assignAgendaSlot`): ele passa a ceder a vez aos walk-ins ate o previsto encostar no alvo, quando e reconfirmado automaticamente. Trava de viabilidade (`isTargetFeasible`): **422** `QUEUE_TARGET_NOT_FEASIBLE` se a fila (excluindo o proprio) ja preve atender em cima/depois do alvo; alvo no passado = **400**.
+- **Opcao B — "Ir pro fim da fila" (`PATCH /attendances/{id}/move-to-end`).** Desce a propria vez para **depois do ultimo em espera** (empurra o `scheduledTime`, mesmo padrao de reposicao do #19), sem sair da fila e sem strike. Limpa qualquer intencao. **No-op** (200) se ja for o ultimo.
+
+**Decisoes seladas (Andre 2026-07-03):** (a) o **gatilho de 1h e responsabilidade do front** — o backend expoe os endpoints sempre, mais simples e reusavel; (b) ambos exigem **`SCHEDULED`** (nao deixamos o cliente escapar de um `LATE` marcado pelo profissional -> **400** `AttendanceInvalidStatus`); (c) so o **proprio** cliente pode remanejar sua vez (**403** `EstablishmentAccessDenied`); (d) a Opcao A **reusa** `#40` (nao duplica logica — o nucleo `applyIntent` agora serve ingresso E remanejar).
+
+**✅ Implementado no backend:**
+- ✅ `AttendanceService.rescheduleWithTargetTime(attendanceId, clientId, targetTime)` + `moveToEndOfQueue(attendanceId, clientId)`; nucleo `applyIntent(..., alreadyInQueue)` extraido do ingresso do #40 (exclui o proprio atendimento do ETA e das intencoes reservadas ao remanejar).
+- ✅ `PATCH /attendances/{id}/reschedule?targetTime=` e `PATCH /attendances/{id}/move-to-end` (controller) — CLIENT role (SecurityConfig), broadcast WS da fila + expira propostas de troca #42 pendentes do atendimento.
+- ✅ Testes: integracao (`ClientRescheduleIntegrationTest`: reschedule factivel vira intencao, infactivel 422, alvo passado 400, nao-SCHEDULED 400, nao-dono 403; move-to-end vai pro fim, ja-ultimo no-op, nao-SCHEDULED 400, nao-dono 403). Postman folder 08h (homolog+prod).
+
+**📣 HANDOFF PARA OS FRONTS (item #43):**
+- **Front-Client** — quando o ETA da vez do cliente passar de ~1h, exibir 2 botoes: **"Escolher horario"** -> `PATCH /attendances/{id}/reschedule?targetTime=<ISO>` (tratar `422` alvo infactivel e `400` alvo no passado; sucesso = vira intencao, mesmo estado do #40); **"Ir pro fim da fila"** -> `PATCH /attendances/{id}/move-to-end`. Ambos so aparecem em atendimento `SCHEDULED`.
+- **Front-Partner** — sem mudanca obrigatoria; a fila ao vivo (WS) ja reflete o remanejamento (intencao ou nova posicao).
 
 ### Item 40 — Intencao de fila com horario-alvo (entrada agendada, estilo agenda)
 

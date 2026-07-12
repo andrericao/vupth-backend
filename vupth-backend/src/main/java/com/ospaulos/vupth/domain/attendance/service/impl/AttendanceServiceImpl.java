@@ -13,6 +13,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusExc
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
+import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
@@ -27,6 +28,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundExce
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.queue.service.QueueUtils;
+import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
@@ -56,6 +58,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final ProfessionalRepository professionalRepository;
     private final ClientRepository clientRepository;
     private final EstablishmentRepository establishmentRepository;
+    private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
+    private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRatingRepository attendanceRatingRepository;
+
+    /**
+     * Janela (minutos) abaixo da qual cancelar a vez e considerado tardio (item #39). Cancelar com o
+     * ETA da propria vez a menos disso gera um strike (penalidade) ao cliente registrado.
+     */
+    private static final int LATE_CANCEL_THRESHOLD_MINUTES = 60;
 
     // ─────────────────────────────────────────────────────────────
     // CREATE
@@ -80,6 +90,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — no serviceItems found for ids={}", request.serviceItemIds());
             throw new ServiceItemNotFoundException();
         }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();
@@ -95,6 +106,22 @@ public class AttendanceServiceImpl implements AttendanceService {
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
+    }
+
+    /**
+     * Partner BUG8 (sintoma c) — invariante "nao se marca profissional sem servico". Servico e
+     * capacidade do PROFISSIONAL (decisao de produto 2026-06-28): cada {@code ServiceItem} tem dono
+     * ({@code professional_id}). O atendimento so pode ser criado com itens do proprio profissional
+     * escolhido; qualquer item de outro profissional (ou da loja mas de outro prof) -> 422. Como
+     * profissional sem servico nao tem item algum, ele nunca passa por aqui (cai antes no vazio).
+     */
+    private void assertServiceItemsBelongToProfessional(List<ServiceItem> serviceItems, Professional professional) {
+        for (ServiceItem item : serviceItems) {
+            if (item.getProfessional() == null || !professional.getId().equals(item.getProfessional().getId())) {
+                log.warn("[Attendance] serviceItem={} nao pertence ao professional={}", item.getId(), professional.getId());
+                throw new ServiceItemNotOfProfessionalException(item.getId(), professional.getId());
+            }
+        }
     }
 
     /**
@@ -146,6 +173,22 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (targetTime == null) {
             return; // ingresso normal (walk-in)
         }
+        // Ingresso novo: o atendimento ainda nao esta persistido, entao NAO esta na fila.
+        applyIntent(attendance, professional, establishment, targetTime, false);
+    }
+
+    /**
+     * Nucleo da intencao de fila (#40), reusado no ingresso ({@link #applyIntentIfRequested}) e no
+     * remanejamento de um atendimento ja na fila ({@link #rescheduleWithTargetTime}, item #43 Opcao A).
+     * Valida a viabilidade do alvo, calcula o slot cronologico e marca o atendimento como intencao.
+     * Nao persiste — o caller salva em seguida.
+     *
+     * @param alreadyInQueue {@code true} quando o atendimento ja consta na fila de espera (remanejar):
+     *                       o proprio atendimento e excluido do calculo de ETA e das intencoes reservadas.
+     */
+    private void applyIntent(com.ospaulos.vupth.domain.attendance.model.Attendance attendance,
+                             Professional professional, Establishment establishment,
+                             OffsetDateTime targetTime, boolean alreadyInQueue) {
         OffsetDateTime now = OffsetDateTime.now();
         if (!targetTime.isAfter(now)) {
             throw new IllegalArgumentException("targetTime deve estar no futuro: " + targetTime);
@@ -159,6 +202,13 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         List<Attendance> waiting = attendanceRepository
                 .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        if (alreadyInQueue) {
+            // Ao remanejar, o proprio atendimento ja esta na fila -> tira ele do calculo de viabilidade
+            // e da lista de intencoes reservadas (senao colidiria com o proprio slot).
+            waiting = waiting.stream()
+                    .filter(a -> !a.getId().equals(attendance.getId()))
+                    .collect(Collectors.toList());
+        }
         int eta = QueueUtils.calculateWaitingTimeForPosition(
                 waiting, professional.getIntervals(), now, waiting.size());
 
@@ -175,7 +225,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setIntent(true);
         attendance.setTargetTime(targetTime);
         attendance.setScheduledTime(slot);
-        log.info("[Attendance] intencao de fila — target={} slot={} duration={}", targetTime, slot, duration);
+        log.info("[Attendance] intencao de fila — target={} slot={} duration={} (remanejar={})",
+                targetTime, slot, duration, alreadyInQueue);
     }
 
     @Override
@@ -207,6 +258,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — no serviceItem ids={}", request.serviceItemIds());
             throw new ServiceItemNotFoundException();
         }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();
@@ -251,6 +303,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // serviceItemIds is optional in the MVP
         if (request.serviceItemIds() != null && !request.serviceItemIds().isEmpty()) {
             List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
+            assertServiceItemsBelongToProfessional(serviceItems, professional);
             attendance.setServiceItems(serviceItems);
             log.debug("[Attendance] createGuestAttendance — {} service items linked", serviceItems.size());
         } else {
@@ -360,6 +413,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceCancelNotAllowedException(attendanceId);
         }
 
+        // Item #39 (Fase 1): cancelar a <1h da propria vez desorganiza a fila — registra strike.
+        // Avalia o ETA AGORA (antes de marcar CANCELLED, enquanto ainda esta na fila de espera).
+        registerLateCancelPenaltyIfApplicable(attendance);
+
         attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
 
@@ -370,6 +427,165 @@ public class AttendanceServiceImpl implements AttendanceService {
                 clientName, attendance.getProfessional().getName());
 
         return AttendanceInQueueResponse.fromEntity(saved);
+    }
+
+    /**
+     * Item #39 (Fase 1, sem pagamento). Se o atendimento que esta sendo cancelado pertence a um
+     * cliente registrado e o ETA ate a vez dele AGORA e menor que {@link #LATE_CANCEL_THRESHOLD_MINUTES},
+     * registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
+     * {@code LATE_CANCEL} e incrementa o contador denormalizado {@code strikeCount} do cliente.
+     *
+     * <p>O ETA usa {@link QueueUtils#calculateWaitingTimeForPosition} (meal-aware) sobre a fila de
+     * espera atual, ate a posicao do proprio atendimento — a mesma base do ingresso (#40) e do
+     * wait-time exibido ao cliente. Convidados (sem conta) nao acumulam strikes.</p>
+     */
+    private void registerLateCancelPenaltyIfApplicable(
+            com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        Client client = attendance.getClient();
+        if (client == null) {
+            return; // convidado — sem conta, sem strike
+        }
+
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+        if (professional == null || establishment == null) {
+            return;
+        }
+
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        int position = -1;
+        for (int i = 0; i < waiting.size(); i++) {
+            if (waiting.get(i).getId().equals(attendance.getId())) {
+                position = i;
+                break;
+            }
+        }
+        if (position < 0) {
+            return; // ja nao esta na fila de espera — nada a penalizar
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        int eta = QueueUtils.calculateWaitingTimeForPosition(
+                waiting, professional.getIntervals(), now, position);
+
+        if (eta < LATE_CANCEL_THRESHOLD_MINUTES) {
+            penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+                    client,
+                    com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL,
+                    attendance.getId(),
+                    eta));
+            // client e gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
+            client.incrementStrike();
+            log.info("[Attendance] cancelAttendance — LATE_CANCEL strike: client={} eta={}min strikes={}",
+                    client.getId(), eta, client.getStrikeCount());
+        }
+    }
+
+    /**
+     * Item #39 — escalada de no-show. Diferente do late-cancel, o strike aqui e
+     * <b>incondicional</b> (nao ha janela de 1h): quem chama ja constatou que o cliente,
+     * mesmo depois de cair de posicao (LATE #19), nao compareceu ao ser chamado de novo.
+     * Registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
+     * {@code NO_SHOW} e incrementa o {@code strikeCount}. O {@code etaMinutes} guardado e o
+     * ETA da vez do cliente AGORA (best-effort; 0 se ja fora da fila de espera), apenas para
+     * auditoria. Convidados (sem conta) nao acumulam strikes.
+     */
+    @Override
+    public void registerNoShowPenalty(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        Client client = attendance.getClient();
+        if (client == null) {
+            return; // convidado — sem conta, sem strike
+        }
+
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+
+        int eta = 0;
+        if (professional != null && establishment != null) {
+            List<Attendance> waiting = attendanceRepository
+                    .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+            int position = -1;
+            for (int i = 0; i < waiting.size(); i++) {
+                if (waiting.get(i).getId().equals(attendance.getId())) {
+                    position = i;
+                    break;
+                }
+            }
+            if (position >= 0) {
+                eta = QueueUtils.calculateWaitingTimeForPosition(
+                        waiting, professional.getIntervals(), OffsetDateTime.now(), position);
+            }
+        }
+
+        penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+                client,
+                com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW,
+                attendance.getId(),
+                eta));
+        // client gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
+        client.incrementStrike();
+        log.info("[Attendance] registerNoShowPenalty — NO_SHOW strike: client={} eta={}min strikes={}",
+                client.getId(), eta, client.getStrikeCount());
+    }
+
+    /**
+     * Item #6 — avaliar atendimento concluido. Ver contrato em {@link AttendanceService#rateAttendance}.
+     *
+     * <p>Regra de atribuicao (Andre): 1 servico -> nota vai ao profissional E ao ServiceItem
+     * (alimenta a media daquele tipo, {@code serviceItemId} registra a origem); 2+ servicos ->
+     * so ao profissional ({@code serviceItemId} null). Profissional e ServiceItem sao entidades
+     * gerenciadas pela sessao (carregadas eager) -> dirty checking persiste os agregados no commit.</p>
+     */
+    @Override
+    public com.ospaulos.vupth.api.attendance.dto.response.AttendanceRatingResponse rateAttendance(
+            UUID attendanceId, UUID clientId,
+            com.ospaulos.vupth.api.attendance.dto.request.AttendanceRatingRequest request) {
+        log.info("[Attendance] rateAttendance — attendanceId={} clientId={} score={}",
+                attendanceId, clientId, request.score());
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        // Só o próprio cliente dono avalia. Convidado (sem conta) nao tem dono -> 403.
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only rate your own attendance.");
+        }
+
+        // Só atendimento concluido pode ser avaliado.
+        if (attendance.getStatus() != AttendanceStatus.FINISHED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.FINISHED);
+        }
+
+        // 1 voto por atendimento.
+        if (attendanceRatingRepository.existsByAttendanceId(attendanceId)) {
+            throw new com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException(attendanceId);
+        }
+
+        Professional professional = attendance.getProfessional();
+        List<ServiceItem> serviceItems = attendance.getServiceItems();
+
+        // Atribuicao ao ServiceItem so quando ha exatamente 1 servico (senao null — combo).
+        ServiceItem ratedServiceItem = (serviceItems != null && serviceItems.size() == 1)
+                ? serviceItems.get(0)
+                : null;
+        UUID serviceItemId = ratedServiceItem != null ? ratedServiceItem.getId() : null;
+
+        AttendanceRating rating = attendanceRatingRepository.save(new AttendanceRating(
+                attendanceId, request.score(), request.comment(), serviceItemId));
+
+        // Agregados denormalizados: sempre o profissional; o ServiceItem so no caso de 1 servico.
+        professional.addRating(request.score());
+        if (ratedServiceItem != null) {
+            ratedServiceItem.addRating(request.score());
+        }
+
+        log.info("[Attendance] rateAttendance — rated attendance={} prof={} avg={} ({}) serviceItem={}",
+                attendanceId, professional.getId(), professional.getRatingAverage(),
+                professional.getRatingCount(), serviceItemId);
+
+        return com.ospaulos.vupth.api.attendance.dto.response.AttendanceRatingResponse.of(
+                rating, professional, ratedServiceItem);
     }
 
     @Override
@@ -409,6 +625,77 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] leaveQueue — client='{}' left the queue voluntarily",
                 attendance.getClient().getFirstName());
 
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
+    public AttendanceInQueueResponse rescheduleWithTargetTime(UUID attendanceId, UUID clientId, OffsetDateTime targetTime) {
+        log.info("[Attendance] rescheduleWithTargetTime — attendanceId={} clientId={} targetTime={}",
+                attendanceId, clientId, targetTime);
+
+        if (targetTime == null) {
+            throw new IllegalArgumentException("targetTime e obrigatorio para remanejar por horario-alvo");
+        }
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only reschedule your own queue position.");
+        }
+
+        // So um atendimento em espera comum (SCHEDULED) pode ser remanejado pelo cliente. LATE e
+        // um estado dirigido pelo profissional (#19) — nao deixamos o cliente escapar dele por aqui.
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Reusa a maquina de intencao do #40 sobre um atendimento JA na fila (alreadyInQueue=true).
+        applyIntent(attendance, attendance.getProfessional(), attendance.getEstablishment(), targetTime, true);
+        Attendance saved = attendanceRepository.save(attendance);
+
+        log.info("[Attendance] rescheduleWithTargetTime — attendance={} virou intencao slot={}",
+                attendanceId, saved.getScheduledTime());
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
+    public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId) {
+        log.info("[Attendance] moveToEndOfQueue — attendanceId={} clientId={}", attendanceId, clientId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only move your own queue position.");
+        }
+
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Fila de espera (SCHEDULED+LATE) ordenada por scheduledTime ASC — inclui o proprio atendimento.
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                attendance.getProfessional().getId(), attendance.getEstablishment().getId());
+
+        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
+        if (last == null || last.getId().equals(attendance.getId())) {
+            // Ja e o ultimo (ou fila vazia por corrida) — nada a fazer, mas garante que nao fique como intencao.
+            attendance.setIntent(false);
+            attendance.setTargetTime(null);
+            Attendance saved = attendanceRepository.save(attendance);
+            log.info("[Attendance] moveToEndOfQueue — attendance={} ja era o ultimo (no-op)", attendanceId);
+            return buildAttendanceInQueueResponse(saved);
+        }
+
+        // Desce para depois do ultimo em espera; limpa intencao (vira espera comum no fim).
+        attendance.setIntent(false);
+        attendance.setTargetTime(null);
+        attendance.setScheduledTime(last.getScheduledTime().plusMinutes(1));
+        Attendance saved = attendanceRepository.save(attendance);
+
+        log.info("[Attendance] moveToEndOfQueue — attendance={} foi para o fim (scheduledTime={})",
+                attendanceId, saved.getScheduledTime());
         return buildAttendanceInQueueResponse(saved);
     }
 
@@ -706,12 +993,23 @@ public class AttendanceServiceImpl implements AttendanceService {
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
+            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status) {
 
-        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} dateFrom={} dateTo={} status={}",
-                userId, establishmentId, professionalId, dateFrom, dateTo, status);
+        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} clientId={} dateFrom={} dateTo={} status={}",
+                userId, establishmentId, professionalId, clientId, dateFrom, dateTo, status);
+
+        // Partner BUG8 (sintoma b): o cliente lista os PROPRIOS atendimentos por aqui (?clientId=).
+        // clientId so pode ser o do proprio JWT — nao se lista fila de outro cliente. Delega ao
+        // mesmo caminho de /attendances/client/me (findByClientFilters), consistente com a queue.
+        if (clientId != null) {
+            if (!clientId.equals(userId)) {
+                throw new EstablishmentAccessDeniedException("You can only list your own attendances.");
+            }
+            return listClientAttendances(userId, status, dateFrom, dateTo);
+        }
 
         Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
         final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);

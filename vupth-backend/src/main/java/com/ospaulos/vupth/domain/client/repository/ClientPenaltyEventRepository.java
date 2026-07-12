@@ -1,0 +1,14 @@
+package com.ospaulos.vupth.domain.client.repository;
+
+import com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.UUID;
+
+public interface ClientPenaltyEventRepository extends JpaRepository<ClientPenaltyEvent, UUID> {
+
+    List<ClientPenaltyEvent> findByClientIdOrderByCreatedAtDesc(UUID clientId);
+
+    long countByClientId(UUID clientId);
+}

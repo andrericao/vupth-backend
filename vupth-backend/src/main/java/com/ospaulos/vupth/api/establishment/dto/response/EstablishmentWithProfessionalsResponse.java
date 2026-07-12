@@ -28,6 +28,11 @@ public record EstablishmentWithProfessionalsResponse(
         @JsonProperty("open_status")
         String openStatus,
 
+        // "Aberto agora" efetivo (BUG5 parte B): open_status == OPEN E dentro da
+        // janela [opening_time, closing_time). Derivado, nao persistido.
+        @JsonProperty("is_open")
+        boolean isOpen,
+
         @JsonProperty("total_in_queue")
         int totalInQueue,
 
@@ -56,6 +61,7 @@ public record EstablishmentWithProfessionalsResponse(
                 establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
                 establishment.getOwner().getId(),
                 establishment.getOpenStatus().name(),
+                establishment.isOpenNow(),
                 totalInQueue,
                 available,
                 professionals

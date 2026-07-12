@@ -4,14 +4,20 @@ import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAccessDeniedEx
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAlreadyPendingException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
+import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
@@ -130,6 +136,27 @@ public class GlobalExceptionHandler {
             TargetTimeNotFeasibleException ex, HttpServletRequest req) {
         log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
+    }
+
+    @ExceptionHandler(ServiceItemNotOfProfessionalException.class)
+    public ResponseEntity<ErrorResponse> handleServiceItemNotOfProfessional(
+            ServiceItemNotOfProfessionalException ex, HttpServletRequest req) {
+        log.warn("[422] ServiceItemNotOfProfessional | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "SERVICE_ITEM_NOT_OF_PROFESSIONAL");
+    }
+
+    @ExceptionHandler(SwapNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSwapNotAllowed(
+            SwapNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[422] SwapNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_SWAP_NOT_ALLOWED");
+    }
+
+    @ExceptionHandler(SwapRequestNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSwapRequestNotFound(
+            SwapRequestNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] SwapRequestNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_NOT_FOUND");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)
@@ -330,6 +357,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "EMAIL_NOT_AVAILABLE");
     }
 
+    @ExceptionHandler(SwapAlreadyPendingException.class)
+    public ResponseEntity<ErrorResponse> handleSwapAlreadyPending(
+            SwapAlreadyPendingException ex, HttpServletRequest req) {
+        log.warn("[409] SwapAlreadyPending | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "QUEUE_SWAP_ALREADY_PENDING");
+    }
+
     @ExceptionHandler(UserAlreadyProfessionalException.class)
     public ResponseEntity<ErrorResponse> handleAlreadyProfessional(
             UserAlreadyProfessionalException ex, HttpServletRequest req) {
@@ -372,6 +406,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), "ATTENDANCE_CANCEL_NOT_ALLOWED");
     }
 
+    @ExceptionHandler(AttendanceAlreadyRatedException.class)
+    public ResponseEntity<ErrorResponse> handleAlreadyRated(
+            AttendanceAlreadyRatedException ex, HttpServletRequest req) {
+        log.warn("[409] AttendanceAlreadyRated | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ATTENDANCE_ALREADY_RATED");
+    }
+
     @ExceptionHandler(ServiceItemAlreadyExistsException.class)
     public ResponseEntity<ErrorResponse> handleServiceItemExists(
             ServiceItemAlreadyExistsException ex, HttpServletRequest req) {
@@ -398,6 +439,13 @@ public class GlobalExceptionHandler {
             IntervalConflictException ex, HttpServletRequest req) {
         log.warn("[409] IntervalConflict | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "INTERVAL_CONFLICT");
+    }
+
+    @ExceptionHandler(EstablishmentHasActiveAttendancesException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentHasActiveAttendances(
+            EstablishmentHasActiveAttendancesException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES");
     }
 
     // ─────────────────────────────────────────────

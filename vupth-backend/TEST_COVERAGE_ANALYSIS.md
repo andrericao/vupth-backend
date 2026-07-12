@@ -68,27 +68,29 @@ Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegra
 | GET /users/email/{email} | ✅ | ⚠️ |
 
 ### 2.3 Establishment
-Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (9), `LegacyServiceItemTypeResilienceIntegrationTest` (1).
+Testes: `unit/establishment/*` (QuickCreate, AddProfessional, RemoveProfessional, TransferOwnership); `integrations/establishment/EstablishmentIntegrationTest` (51), `EstablishmentAddressIntegrationTest` (12), `CloseEstablishmentGateIntegrationTest` (3), `OpenStatusAccessIntegrationTest` (2), `OpenStatusListingFilterIntegrationTest` (3), `PausedAttendanceVisibilityIntegrationTest` (3), `IsOpenEffectiveIntegrationTest` (3), `LegacyServiceItemTypeResilienceIntegrationTest` (1); `unit/establishment/EstablishmentIsOpenNowTest` (is_open efetivo).
 
 | Endpoint | Feliz | Erros | Notas |
 |---|---|---|---|
 | POST /establishment/create · /quick-create | ✅ | ✅ | |
 | PATCH /{id}/general-infos (+ phone/instagram/horário) | ✅ | ✅ | |
-| PATCH /{id}/open-status | ✅ | ✅ | 422 ESTABLISHMENT_NOT_READY / HOURS_REQUIRED |
+| PATCH /{id}/open-status | ✅ | ✅ | 422 NOT_READY / HOURS_REQUIRED (abrir); **409 HAS_ACTIVE_ATTENDANCES** ao fechar com fila (BUG6, `CloseEstablishmentGateIntegrationTest`); **acesso OWNER ou profissional afiliado** — afiliado 200 / profissional de outra loja **403 ACCESS_DENIED** (`OpenStatusAccessIntegrationTest`) |
 | PATCH /{id}/owner (transfer) | ✅ (unit) | ⚠️ | falta integração de erro |
 | POST/DELETE /{id}/professionals | ✅ | ✅ | |
-| GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação |
-| GET /establishment/id/{id} · /mine | ✅ | ⚠️ | |
-| GET /establishment/id/{id}/professionals-with-queue | ✅ | — | ETA **meal-aware** (#37 pré-req) |
+| GET /establishment (listagem + filtros + ordenação #11) | ✅ | ✅ | nome/bairro/serviceType/combinação; **filtro open-status (BUG5): default só `OPEN`, `?includeAll=true` inclui fechados** (`OpenStatusListingFilterIntegrationTest`) |
+| GET /establishment/id/{id} · /mine | ✅ | ⚠️ | `address` embutido (Partner BUG4): `/mine` fora de tx com JOIN FETCH, `/id/{id}` transacional, `null` sem endereco |
+| `is_open` efetivo (BUG5 parte B) | ✅ | ✅ | `EstablishmentIsOpenNowTest` (unit: janela normal/borda/24h/virada-meia-noite/offsets/open_status) + `IsOpenEffectiveIntegrationTest` (OPEN dentro→true; OPEN fora→false; CLOSED dentro→false) |
+| GET /establishment/id/{id}/professionals-with-queue | ✅ | — | ETA **meal-aware** (#37 pré-req); **atendimento PAUSED continua em `current_attendance` e retomável (Partner BUG7)** — `PausedAttendanceVisibilityIntegrationTest` (IN_PROGRESS→current; pause→segue current status PAUSED; resume→200 volta IN_PROGRESS) |
 | GET /{id}/reports | ✅ | ⚠️ | `ReportIntegrationTest` |
 | 500 legado NAVALHA/PROCEDIMENTO | ✅ | ✅ | resiliência (hotfix) |
 
 ### 2.4 Service Item & Service Types
-Testes: `unit/serviceitem/ServiceItemServiceImplTest` (6); `integrations/service_item/ServiceItemIntegrationTest` (15), `serviceItem/ServiceTypeKeywordIntegrationTest` (10).
+Testes: `unit/serviceitem/ServiceItemServiceImplTest` (6); `integrations/service_item/ServiceItemIntegrationTest` (23), `serviceItem/ServiceTypeKeywordIntegrationTest` (10).
 
 | Endpoint | Feliz | Erros |
 |---|---|---|
 | POST /establishment/{id}/service-items | ✅ | ✅ (duplicado, validação) |
+| PUT/DELETE /establishment/{id}/service-items/{itemId} | ✅ (owner edita/remove; afiliado edita o próprio) | ✅ (404 inexistente/loja errada, 403 alheio/client, 409 nome duplicado) |
 | POST/PATCH/DELETE professional-queue service-items | ✅ | ✅ |
 | GET /service-types[?q=] (#34) | ✅ | ✅ (vazio/normalização) |
 | POST /service-types/{type}/keywords (#34) | ✅ | ✅ (409 duplicado, 403 client) |
@@ -105,15 +107,16 @@ Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Le
 | Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 
 ### 2.6 Attendance & Queue
-Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
+Testes: `unit/attendance/AttendanceServiceImplTest` (21), `AttendanceStatusTransitionTest` (15), `unit/queue/QueueUtilsTest` (19), `unit/client/ClientServiceImplTest` (7); `integrations/attendance/AttendanceIntegrationTest` (51), `QueueVisibilityBug8IntegrationTest` (6), `client/ClientQueueIntegrationTest` (9), `queue/ClientEtaMealAwareIntegrationTest` (5), `queue/ClientEtaMealLockIntegrationTest` (5).
 
 | Endpoint / Regra | Feliz | Erros | Notas |
 |---|---|---|---|
-| POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente |
+| POST /attendances · /professional-queue add-attendance/add-quest-attendance | ✅ | ✅ | guest e cliente; **invariante serviço↔profissional (BUG8 c): item de outro prof → 422 `SERVICE_ITEM_NOT_OF_PROFESSIONAL`** (`QueueVisibilityBug8IntegrationTest` Order 60) |
 | PATCH /attendances/{id}/start·pause·resume·finish | ✅ | ✅ | transições inválidas cobertas (unit) |
-| PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | |
-| GET /attendances · /{id} · /client/me | ✅ | ⚠️ | histórico do cliente + filtros |
+| PUT /{id}/cancel · DELETE /{id}/leave-queue·/remove | ✅ | ✅ | **`/remove` (BUG9): além de `CANCELLED`, faz broadcast da fila + notifica o cliente (`ATTENDANCE_CANCELLED` WS + push) p/ sair de "em fila" sem reload** (`PushNotificationIntegrationTest` Order 22) |
+| GET /attendances · /{id} · /client/me | ✅ | ✅ | histórico do cliente + filtros; **`?clientId=<self>` devolve os próprios atendimentos do cliente (Partner BUG8); clientId de outro → 403** (`QueueVisibilityBug8IntegrationTest`); consistência nos 3 read-models (waiting_list / ?clientId / client/me) |
 | GET /client-queue/{id}/wait-time (posição/ETA do cliente) | ✅ | ⚠️ | ETA **lock-aware** (#37): refeições travadas no ingresso |
+| POST /attendances/{id}/rating (#6) | ✅ | ✅ | `AttendanceRatingIntegrationTest` — 1 serviço alimenta prof+serviço; combo só prof; 409 2º voto; 400 não-FINISHED; 403 não-dono; 422 score inválido; média agrega votos |
 | QueueUtils ETA (previsto/iniciado/unexpected/skip/day-scoped) | ✅ | — | 19 cenários unit (inclui skip #41 + lock #37) |
 
 ### 2.7 Intervals / Refeições (#11, #41)
@@ -135,6 +138,15 @@ Testes: `integrations/websocket/WebSocketIntegrationTest` (2).
 |---|---|---|
 | STOMP connect + broadcast fila | ✅ | ❌ (falta auth inválida / canal negado) |
 | Notificação pessoal | ⚠️ | ❌ |
+
+### 2.9 Notificações push (backlog #1)
+Testes: `integrations/notification/PushNotificationIntegrationTest` (5) — `PushSender` mockado (`vupth.push.provider=none`). Inclui **BUG9** (Order 22): profissional remove da fila → push `ATTENDANCE_CANCELLED` ao cliente + status `CANCELLED`.
+
+| Endpoint / Regra | Feliz | Erros |
+|---|---|---|
+| POST /devices (registrar/upsert) · DELETE /devices/{token} | ✅ | ✅ (401 sem auth, 422 token em branco) |
+| Push "você é o próximo" (front da fila, dedup + avanço) | ✅ | — |
+| Push ATTENDANCE_STARTED / ATTENDANCE_FINISHED | ✅ | — |
 
 ---
 
@@ -180,6 +192,15 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 ---
 
 ## 6. CHANGELOG DE COBERTURA
+
+### 2026-07-03 (2)
+- **Notificações push (backlog #1)**: ✅ `PushNotificationIntegrationTest` (5) — registro de device token (`POST /devices` upsert idempotente + `DELETE /devices/{token}`), 401 sem auth + 422 token em branco; disparo do push "você é o próximo" ao entrar na fila (frente), dedup do 2º da fila + avanço ao 1º iniciar, `ATTENDANCE_STARTED`/`ATTENDANCE_FINISHED`, e **`ATTENDANCE_CANCELLED` ao remover da fila (BUG9, Order 22)**. `PushSender` mockado (perfil `test` usa `vupth.push.provider=none` → `NoOpPushSender`, sem HTTP). Novos: entidade `DeviceToken` + repo (migration 95-notification/001), flag `attendance.next_notified` (migration 80-attendance/008), `PushSender`/`ExpoPushSender`/`NoOpPushSender`/`PushNotificationPublisher`, `QueuePushService` (next-in-line via `broadcastQueue`), `DeviceController` + `DeviceTokenService`. Push espelha as notificações WS pessoais (started/finished/swap). Postman: folder `13 - device tokens / push (notificacoes)`. ⏳ aguardando André rodar.
+
+### 2026-07-03
+- **#6 rating / avaliação de atendimentos**: ✅ `AttendanceRatingIntegrationTest` (7) — feliz: 1 serviço alimenta agregados do profissional **e** do `ServiceItem` (`serviceItemId` presente); combo (2+ serviços) alimenta **só** o profissional (`serviceItemId=null`, serviços intactos); média denormalizada agrega múltiplos votos (5+3 → 4.0). Erros: 2º voto 409 (`ATTENDANCE_ALREADY_RATED`), não-FINISHED 400, não-dono 403, score inválido 422. Novos: entidade `AttendanceRating` + repo, agregados `rating_sum`/`rating_count` em `professional` e `service_item` (migration 80-attendance/007), endpoint `POST /attendances/{id}/rating`, exposição em `professionals-with-queue` + `ServiceItemResponse`. Postman: folder `08i - avaliacao de atendimento (#6)` (homolog+prod). ⏳ aguardando André rodar.
+
+### 2026-06-29
+- **#39 cancelamento tardio + strikes (Fase 1)**: ✅ `LateCancelPenaltyIntegrationTest` (3) — feliz: cancelar na frente (ETA 0 < 1h) registra `ClientPenaltyEvent` tipo `LATE_CANCEL` + incrementa `strikeCount` (exposto via `GET /clients/{id}`); cancelar atrás de 3 (ETA 90 ≥ 1h) NÃO penaliza; reincidência acumula (2 strikes). ETA avaliado no instante do cancel via `QueueUtils.calculateWaitingTimeForPosition`. Novos: entidade `ClientPenaltyEvent` + enum `PenaltyType` + repo, coluna `strike_count` no `client` (migration 70-client/005), `strikeCount` no `ClientResponse`. Postman: folder `08f - cancelamento tardio (#39)` (homolog+prod). ⏳ aguardando André rodar.
 
 ### 2026-06-24
 - **#19 status LATE (cliente atrasado / no-show parcial)**: ✅ `LateAttendanceIntegrationTest` (10) — feliz: cai 1 posição atrás do próximo (sem sair da fila); marcar de novo cai mais; `undo-late` volta a SCHEDULED; `start` aceita LATE direto. Erros: status inválido 400, undo de não-LATE 400, profissional de outra loja 403/404, sem token 401, token CLIENT 403, attendance inexistente 404. Endpoints novos `PATCH /attendances/{id}/late` e `/undo-late` + fila (`findWaitingQueueByProfessionalAndEstablishment`) passa a incluir LATE. Postman: folder `08c - prof attendance late (#19)` (6 requests, homolog+prod).

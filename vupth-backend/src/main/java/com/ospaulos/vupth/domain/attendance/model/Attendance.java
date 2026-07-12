@@ -122,6 +122,14 @@ public class Attendance implements Serializable {
     @Column(name = "target_time")
     private OffsetDateTime targetTime;
 
+    /**
+     * Notificacoes push (backlog #1): true depois que este atendimento ja recebeu o push
+     * "voce e o proximo" ao alcancar a frente da fila. Evita reenviar a cada nova mutacao
+     * enquanto continua na frente. Ver {@code QueuePushService.notifyNextInLine}.
+     */
+    @Column(name = "next_notified", nullable = false)
+    private boolean nextNotified = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;

@@ -79,13 +79,22 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
 
                         // ── ROLE_CLIENT (qualquer autenticado) ────────────────────────────
-                        .requestMatchers(HttpMethod.GET, "/attendances").hasAnyRole("OWNER", "PROFESSIONAL")
+                        .requestMatchers(HttpMethod.GET, "/attendances").hasAnyRole("OWNER", "PROFESSIONAL", "CLIENT")
                         .requestMatchers(HttpMethod.GET, "/attendances/client/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
                         .requestMatchers(HttpMethod.POST, "/attendances").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PUT, "/attendances/*/cancel").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.DELETE, "/attendances/*/leave-queue").hasRole("CLIENT")
+                        // Item #43 — cliente remaneja a propria vez (espera longa): horario-alvo ou fim da fila
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/reschedule").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/move-to-end").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/attendances/*/rating").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
+
+                        // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente
+                        .requestMatchers(HttpMethod.POST, "/swap-requests").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/swap-requests/me").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/swap-requests/*").hasRole("CLIENT")
 
                         .requestMatchers(HttpMethod.POST, "/establishment/quick-create").hasRole("CLIENT")
 
@@ -105,6 +114,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/resume").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-late").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/no-show").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/fit-in").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-fit").hasRole("PROFESSIONAL")
 
@@ -124,9 +134,12 @@ public class SecurityConfig {
                         // S1: alem do owner, um profissional AFILIADO a loja pode cadastrar o proprio servico
                         // (a checagem owner-ou-afiliado fica no service).
                         .requestMatchers(HttpMethod.POST, "/establishment/*/service-items").hasAnyRole("OWNER", "PROFESSIONAL")
+                        // Editar/remover servico da loja: owner OU o proprio profissional dono (checagem fina no service)
+                        .requestMatchers(HttpMethod.PUT, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
+                        .requestMatchers(HttpMethod.DELETE, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
-                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/owner").hasRole("OWNER")
 
                         // Owner adiciona/remove profissional do seu establishment

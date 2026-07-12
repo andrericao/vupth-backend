@@ -21,7 +21,14 @@ public record ServiceItemResponse(
         @JsonProperty("uses_platform_pricing")
         Boolean usesPlatformPricing,
 
-        Integer weeklyAverageDurationInMinutes
+        Integer weeklyAverageDurationInMinutes,
+
+        // Rating denormalizado por servico (item #6). Media (2 casas) null quando sem votos.
+        @JsonProperty("rating_average")
+        Double ratingAverage,
+
+        @JsonProperty("rating_count")
+        long ratingCount
 ){
 
     public static ServiceItemResponse fromEntity(ServiceItem item) {
@@ -34,7 +41,9 @@ public record ServiceItemResponse(
                 item.getPrice(),
                 item.getClientPrice(),
                 item.getUsesPlatformPricing(),
-                item.getWeeklyAverageDurationInMinutes()
+                item.getWeeklyAverageDurationInMinutes(),
+                item.getRatingAverage(),
+                item.getRatingCount()
         );
     }
 }
