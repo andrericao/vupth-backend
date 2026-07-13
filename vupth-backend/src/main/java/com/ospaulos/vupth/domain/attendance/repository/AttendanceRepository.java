@@ -118,6 +118,25 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
+     * Intencoes de atendimento (backlog #4 / status INTENTION) de um profissional, ordenadas pelo
+     * horario pretendido. NAO fazem parte da fila viva — servem para o encaixe cronologico da
+     * estimativa de uma nova intencao (sem reservar posicao) e para a visao de agenda (fatia 2).
+     * JOIN FETCH evita LazyInitialization ao serializar client/serviceItems.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.professional.id = :professionalId
+          AND a.status = 'INTENTION'
+        ORDER BY a.desiredTime ASC
+    """)
+    List<Attendance> findIntentionsByProfessional(@Param("professionalId") UUID professionalId);
+
+    /**
      * Fila de espera de TODOS os profissionais de um establishment (SCHEDULED + LATE),
      * ordenada por profissional e horario — usada para detectar o "proximo" de cada fila
      * (push do item de notificacoes). JOIN FETCH evita LazyInitialization ao ler client/professional.

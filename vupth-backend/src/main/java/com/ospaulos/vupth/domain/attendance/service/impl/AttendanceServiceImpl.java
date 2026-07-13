@@ -12,6 +12,10 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowed
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
+import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
+import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -228,6 +232,113 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setScheduledTime(slot);
         log.info("[Attendance] intencao de fila — target={} slot={} duration={} (remanejar={})",
                 targetTime, slot, duration, alreadyInQueue);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // INTENCAO DE ATENDIMENTO (backlog #4 / status INTENTION — fora da fila)
+    // ─────────────────────────────────────────────────────────────
+
+    /** Horizonte maximo (dias) para manifestar intencao enquanto nao existe "agenda liberada". */
+    private static final int INTENTION_HORIZON_DAYS = 30;
+
+    @Override
+    public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
+                                             OffsetDateTime desiredTime, UUID clientId) {
+        log.info("[Intention] createIntention — professionalId={} clientId={} desiredTime={}",
+                professionalId, clientId, desiredTime);
+
+        Professional professional = professionalRepository.findById(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+        if (professional.getEstablishment() == null) {
+            throw new ProfessionalNotAffiliatedException(professionalId);
+        }
+        Establishment establishment = professional.getEstablishment();
+
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new ClientNotFoundException(clientId));
+
+        List<ServiceItem> serviceItems = serviceItemRepository.findAllById(serviceItemIds);
+        if (serviceItems.isEmpty()) {
+            throw new ServiceItemNotFoundException();
+        }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!desiredTime.isAfter(now)) {
+            throw new IllegalArgumentException("desiredTime deve estar no futuro: " + desiredTime);
+        }
+        if (desiredTime.isAfter(now.plusDays(INTENTION_HORIZON_DAYS))) {
+            throw new IntentionHorizonExceededException(desiredTime, INTENTION_HORIZON_DAYS);
+        }
+        if (!establishment.isWithinBusinessHours(desiredTime.toOffsetTime())) {
+            throw new IntentionOutsideBusinessHoursException(desiredTime);
+        }
+
+        int duration = serviceItems.stream()
+                .filter(java.util.Objects::nonNull)
+                .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
+                .sum();
+
+        // Estimativa (Modelo A): encaixa cronologicamente entre as OUTRAS intencoes ja registradas do
+        // profissional — assim quem pede horarios proximos recebe estimativas SEQUENCIAIS (17:00 e 17:30)
+        // — SEM reservar posicao na fila viva (walk-ins seguem livres).
+        List<Attendance> otherIntentions = attendanceRepository.findIntentionsByProfessional(professionalId);
+        List<QueueUtils.AgendaSlot> reserved = otherIntentions.stream()
+                .map(a -> new QueueUtils.AgendaSlot(
+                        a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
+                        a.getEstimatedTotalMinutes()))
+                .collect(Collectors.toList());
+        OffsetDateTime estimatedStart = QueueUtils.assignAgendaSlot(desiredTime, duration, reserved);
+
+        // CHEIO/FULL: o fim projetado do encaixe ultrapassa o fechamento do dia pretendido? (definicao Andre)
+        if (!fitsBeforeClosing(establishment, estimatedStart, duration)) {
+            throw new ProfessionalAgendaFullException(desiredTime);
+        }
+
+        Attendance attendance = new Attendance();
+        attendance.setProfessional(professional);
+        attendance.setEstablishment(establishment);
+        attendance.setClient(client);
+        attendance.setServiceItems(serviceItems);
+        attendance.setStatus(AttendanceStatus.INTENTION);
+        attendance.setDesiredTime(desiredTime);
+        // scheduledTime e NOT NULL — guarda o slot estimado. Enquanto INTENTION o atendimento NAO
+        // aparece na fila viva (as queries filtram por status IN SCHEDULED/LATE/...), so serve para
+        // ordenar a agenda e o encaixe da estimativa.
+        attendance.setScheduledTime(estimatedStart);
+
+        Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        log.info("[Intention] createIntention — created id={} desiredTime={} estimatedStart={} status=INTENTION",
+                saved.getId(), saved.getDesiredTime(), estimatedStart);
+        return IntentionResponse.fromEntity(saved, estimatedStart);
+    }
+
+    /**
+     * O encaixe {@code [start, start+duration)} cabe antes do fechamento do dia de {@code start}?
+     * Trata janela normal (fecha no mesmo dia) e janela que vira a meia-noite (fecha no dia seguinte).
+     * Sem janela (opening/closing nulos) ou 24h ({@code open == close}) sempre cabe.
+     */
+    private boolean fitsBeforeClosing(Establishment establishment, OffsetDateTime start, int durationMinutes) {
+        java.time.OffsetTime opening = establishment.getOpeningTime();
+        java.time.OffsetTime closing = establishment.getClosingTime();
+        if (opening == null || closing == null) {
+            return true;
+        }
+        java.time.LocalTime open = opening.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        java.time.LocalTime close = closing.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        if (open.equals(close)) {
+            return true; // 24h
+        }
+        OffsetDateTime startUtc = start.withOffsetSameInstant(java.time.ZoneOffset.UTC);
+        OffsetDateTime end = startUtc.plusMinutes(durationMinutes);
+        OffsetDateTime closingDateTime =
+                OffsetDateTime.of(startUtc.toLocalDate(), close, java.time.ZoneOffset.UTC);
+        if (close.isBefore(open)) {
+            // janela que atravessa a meia-noite: o fechamento e no dia seguinte
+            closingDateTime = closingDateTime.plusDays(1);
+        }
+        return !end.isAfter(closingDateTime);
     }
 
     @Override

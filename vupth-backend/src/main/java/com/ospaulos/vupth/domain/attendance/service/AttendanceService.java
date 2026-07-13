@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendancePausedResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
@@ -65,6 +66,19 @@ public interface AttendanceService {
      * Só o proprio cliente (por JWT) e apenas em {@code SCHEDULED}. No-op se ja for o ultimo.
      */
     public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId);
+
+    /**
+     * Backlog #4 — manifestar intencao de atendimento (status {@code INTENTION}). O cliente
+     * registrado (por JWT) pede para ser atendido num horario PRETENDIDO futuro ({@code desiredTime}),
+     * tipicamente com a loja fechada ou o dia cheio. Nasce FORA da fila viva (nao aparece em
+     * professionals-with-queue) e sera promovido a {@code SCHEDULED} perto do horario (fatia 3).
+     * Valida: horario no futuro (400); dentro do horizonte (422 {@code INTENTION_HORIZON_EXCEEDED});
+     * dentro do expediente {@code [opening, closing)} (422 {@code INTENTION_OUTSIDE_BUSINESS_HOURS});
+     * cabe antes do fechamento (409 {@code PROFESSIONAL_AGENDA_FULL} = CHEIO). A resposta traz a
+     * estimativa de atendimento considerando as outras intencoes (encaixe cronologico, sem reservar).
+     */
+    public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
+                                             java.time.OffsetDateTime desiredTime, UUID clientId);
 
     /**
      * Item #6 — avaliar um atendimento concluido. Apenas o {@code clientId} dono do atendimento

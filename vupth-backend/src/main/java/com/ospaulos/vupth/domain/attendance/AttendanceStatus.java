@@ -11,5 +11,14 @@ public enum AttendanceStatus {
      * cai uma posicao na fila (item #19) — mas NAO sai. Continua na fila como LATE,
      * pode voltar a SCHEDULED (undo) ou ser atendido direto (start) quando chegar.
      */
-    LATE
+    LATE,
+    /**
+     * Intencao de atendimento (backlog #4): o cliente manifestou a intencao de ser atendido
+     * num horario PRETENDIDO futuro ({@code desiredTime}) — tipicamente com a loja fechada ou o
+     * dia cheio. A INTENTION fica <b>FORA da fila viva</b>: NAO aparece em {@code professionals-with-queue}
+     * (nem waiting_list nem current_attendance) e NAO conta como atendimento ativo. So passa a
+     * existir para a fila quando e <b>promovida a {@link #SCHEDULED}</b> ao se aproximar do horario
+     * (~15min antes), pegando a posicao do ETA daquele instante (Modelo A — sem reserva de slot).
+     */
+    INTENTION
 }

@@ -12,6 +12,9 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundExceptio
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
+import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
@@ -137,6 +140,27 @@ public class GlobalExceptionHandler {
             TargetTimeNotFeasibleException ex, HttpServletRequest req) {
         log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
+    }
+
+    @ExceptionHandler(IntentionOutsideBusinessHoursException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionOutsideBusinessHours(
+            IntentionOutsideBusinessHoursException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionOutsideBusinessHours | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_OUTSIDE_BUSINESS_HOURS");
+    }
+
+    @ExceptionHandler(IntentionHorizonExceededException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionHorizonExceeded(
+            IntentionHorizonExceededException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionHorizonExceeded | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_HORIZON_EXCEEDED");
+    }
+
+    @ExceptionHandler(ProfessionalAgendaFullException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalAgendaFull(
+            ProfessionalAgendaFullException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalAgendaFull | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_AGENDA_FULL");
     }
 
     @ExceptionHandler(ServiceItemNotOfProfessionalException.class)

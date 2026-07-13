@@ -7379,6 +7379,402 @@
       ]
     },
     {
+      "name": "08j - intencao de atendimento (#4)",
+      "description": "Backlog #4 (fatia 1) — POST /attendances/intentions. Cliente registrado manifesta intencao de ser atendido num horario PRETENDIDO futuro (desiredTime), mesmo com a loja fechada agora, desde que dentro do expediente. Nasce como status INTENTION, FORA da fila viva, com estimatedStartTime (encaixe cronologico Modelo A). Erros: 422 fora do expediente / horizonte 30d, 400 passado, 409 CHEIO (PROFESSIONAL_AGENDA_FULL).",
+      "item": [
+        {
+          "name": "setup: loja full-day (owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"opening_time\": \"00:00:00Z\", \"closing_time\": \"23:59:59Z\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "create intencao (loja pode estar fechada, dentro do expediente) -> 201",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"intent_desired\", new Date(Date.now() + 3*3600*1000).toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const r = pm.response.json();",
+                  "  pm.collectionVariables.set(\"intention_id\", r.id);",
+                  "  pm.test(\"status INTENTION\", () => pm.expect(r.status).to.equal(\"INTENTION\"));",
+                  "  pm.test(\"expoe desiredTime\", () => pm.expect(r.desiredTime).to.be.a(\"string\"));",
+                  "  pm.test(\"expoe estimatedStartTime\", () => pm.expect(r.estimatedStartTime).to.be.a(\"string\"));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/intentions",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"desiredTime\":\"{{intent_desired}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[ERRO] alem do horizonte (31 dias) -> 422 INTENTION_HORIZON_EXCEEDED",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"intent_far\", new Date(Date.now() + 31*24*3600*1000).toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"code INTENTION_HORIZON_EXCEEDED\", () => pm.expect(pm.response.text()).to.include(\"INTENTION_HORIZON_EXCEEDED\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/intentions",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"desiredTime\":\"{{intent_far}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[ERRO] desiredTime no passado -> 400",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"intent_past\", new Date(Date.now() - 3600*1000).toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/intentions",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"desiredTime\":\"{{intent_past}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: janela ao meio-dia (12:00-12:30Z, owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"opening_time\": \"12:00:00Z\", \"closing_time\": \"12:30:00Z\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[ERRO] fora do expediente -> 422 INTENTION_OUTSIDE_BUSINESS_HOURS",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var d = new Date(); d.setUTCDate(d.getUTCDate()+1); d.setUTCHours(20,0,0,0);",
+                  "pm.collectionVariables.set(\"intent_tomorrow20\", d.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"code INTENTION_OUTSIDE_BUSINESS_HOURS\", () => pm.expect(pm.response.text()).to.include(\"INTENTION_OUTSIDE_BUSINESS_HOURS\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/intentions",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"desiredTime\":\"{{intent_tomorrow20}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: janela que fecha logo apos o alvo (00:00-20:01Z, owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"opening_time\": \"00:00:00Z\", \"closing_time\": \"20:01:00Z\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[ERRO] nao cabe antes do fechamento -> 409 PROFESSIONAL_AGENDA_FULL (CHEIO)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var d = new Date(); d.setUTCDate(d.getUTCDate()+1); d.setUTCHours(20,0,0,0);",
+                  "pm.collectionVariables.set(\"intent_tomorrow20\", d.toISOString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code PROFESSIONAL_AGENDA_FULL\", () => pm.expect(pm.response.text()).to.include(\"PROFESSIONAL_AGENDA_FULL\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/intentions",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"desiredTime\":\"{{intent_tomorrow20}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "restore: loja full-day (owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/establishment/{{owner_establishment_id}}/general-infos",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"opening_time\": \"00:00:00Z\", \"closing_time\": \"23:59:59Z\"}"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "08b - prof attendance pause resume",
       "item": [
         {

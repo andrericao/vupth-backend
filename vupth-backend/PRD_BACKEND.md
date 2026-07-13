@@ -82,7 +82,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | Acesso | Endpoints |
 |--------|-----------|
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
-| **CLIENT** | `POST /attendances`, `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `GET /attendances?clientId=<self>` (proprios atendimentos — Partner BUG8), `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
+| **CLIENT** | `POST /attendances`, `POST /attendances/intentions` (intenção #4), `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `GET /attendances?clientId=<self>` (proprios atendimentos — Partner BUG8), `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada por establishment/profissional; cliente usa a forma `?clientId=<self>`), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1), `PUT\|DELETE /establishment/{id}/service-items/{itemId}` (owner da loja ou o proprio profissional dono do item; checagem fina no service), `PATCH /establishment/{id}/open-status` (owner ou profissional afiliado a loja; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`) |
 | **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
@@ -1499,6 +1499,48 @@ Ao enviar `targetTime`, o cliente reserva um lugar mirando um horario futuro (ex
 
 ---
 
+### POST /attendances/intentions
+**Acesso:** `ROLE_CLIENT` (o `clientId` vem sempre do JWT).
+
+Manifesta uma **intencao de atendimento** (backlog #4 / status **`INTENTION`**) — **fatia 1: criar**. O cliente registrado pede para ser atendido num **horario PRETENDIDO futuro** (`desiredTime`), tipicamente com a **loja fechada agora** ou o dia cheio. A intencao nasce **FORA da fila viva**: NAO aparece em `professionals-with-queue` (nem `waiting_list` nem `current_attendance`), NAO conta como atendimento ativo (nao bloqueia o fechamento da loja — BUG6) e NAO passa pelo gate "aberto agora" (BUG5 C1). Sera **promovida a `SCHEDULED`** ao se aproximar do horario (~15min antes) — **fatia 3, ainda nao implementada**; editar/cancelar (`PATCH`/`DELETE`) tambem ficam para a fatia 3.
+
+Diferenca para o **#40** (`targetTime` no `POST /attendances`): la a "intencao" e uma **flag `is_intent` sobre um `SCHEDULED` que ja vive DENTRO da fila**; aqui a `INTENTION` fica **fora** da fila ate ser promovida.
+
+**Request:**
+```json
+{
+  "professionalId": "uuid",
+  "serviceItemIds": ["uuid", "uuid"],
+  "desiredTime": "2026-07-14T17:00:00Z"
+}
+```
+
+| Campo | Tipo | Obrigatorio | Notas |
+|-------|------|-------------|-------|
+| professionalId | UUID | Sim | Profissional pretendido. Deve estar afiliado a uma loja (`404 PROFESSIONAL_NOT_FOUND` / `PROFESSIONAL_NOT_AFFILIATED`) |
+| serviceItemIds | UUID[] | Sim (nao vazio) | Servicos pretendidos. **Cada item tem de pertencer ao `professionalId`** (senao `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`) |
+| desiredTime | OffsetDateTime | Sim | ISO-8601, **no futuro**, **dentro do expediente** `[opening, closing)` e dentro do **horizonte de 30 dias** |
+| clientId | — | Ignorado | Extraido do JWT |
+
+**Estimativa (Modelo A — sem reserva de slot):** a resposta traz `estimatedStartTime` = encaixe cronologico do `desiredTime` entre as **OUTRAS intencoes** ja registradas do profissional (`QueueUtils.assignAgendaSlot`) — assim pedidos proximos recebem estimativas sequenciais (17:00, 17:30) — **sem** reservar posicao na fila viva (walk-ins seguem livres). O `scheduledTime` persistido guarda esse slot (coluna NOT NULL), mas so serve para ordenar a agenda enquanto o status for `INTENTION`.
+
+**Validacoes / erros:**
+- `400` — `desiredTime` no passado (`IllegalArgumentException`).
+- `422 INTENTION_HORIZON_EXCEEDED` — `desiredTime` alem de 30 dias.
+- `422 INTENTION_OUTSIDE_BUSINESS_HOURS` — `desiredTime` fora do expediente `[openingTime, closingTime)` (usa `Establishment.isWithinBusinessHours`, que **ignora o `open_status`** — a loja pode estar fechada agora e abrir depois; trata janela normal / 24h / virada de meia-noite).
+- `409 PROFESSIONAL_AGENDA_FULL` — **CHEIO**: o fim projetado do encaixe (`estimatedStart + duracao`) ultrapassa o `closingTime` do dia pretendido (rotulo por profissional/dia, derivado e temporario — reabre quando a fila drena).
+- `404 PROFESSIONAL_NOT_FOUND` / `PROFESSIONAL_NOT_AFFILIATED` / `SERVICE_ITEM_NOT_FOUND` · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`.
+
+**Response (201):** `IntentionResponse` — `id`, `establishmentId`/`establishmentName`, `professionalId`/`professionalName`, `clientId`/`clientName`, `services[]`, `status` (`INTENTION`), `totalValue`, `estimatedMinutes`, `desiredTime` (o que o cliente pediu), `estimatedStartTime` (o que o sistema projeta).
+
+**Migration:** `80-attendance/009-add-desired_time-to-attendance` (coluna `desired_time TIMESTAMPTZ`). O status e `VARCHAR` sem CHECK — o novo valor `INTENTION` do enum nao exige migration.
+
+**Testes:** Integracao (`IntentionCreateIntegrationTest`: CLOSED-mas-dentro-do-expediente 201 / fora do expediente 422 / alem do horizonte 422 / passado 400 / CHEIO 409 / invariante "nao vaza para a fila viva") + Postman folder `08j`.
+
+**Pendente (fatia 3):** `PATCH`/`DELETE /attendances/intentions/{id}` (editar/cancelar) + **promocao event-driven** a `SCHEDULED` (timer p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem, promocao atomica, reconstruir timer no boot).
+
+---
+
 ### PUT /attendances/{attendanceId}/cancel
 Cliente cancela seu proprio attendance.
 
@@ -2667,7 +2709,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | 1 | Fechamento com "solicitar corte" (BUG5 refinado) | 🟡 partes B+C1 feitas | **Partner BUG5 (refinado Andre 2026-07-04) — NAO auto-fechar.** Ao chegar `closing_time` (ou parada manual): **(C1) bloquear NOVAS entradas** na fila (cliente nao entra sozinho) — ✅ **CONCLUIDO** (`POST /attendances` walk-in sem `targetTime` da `409 ESTABLISHMENT_NOT_OPEN` quando a loja nao esta "aberta agora"; intencao #40 e guest nao passam pelo gate; ver Concluidos); fila existente continua; **(C2)** cliente ainda pode **solicitar corte** (pedido que o profissional aceita/recusa) — ⬜ aberto. **(B) `is_open` efetivo — ✅ CONCLUIDO** (ver Concluidos). **Resta so C2** (fluxo solicitar corte). Filtro `?includeAll=true` ja CONCLUIDO (parte A); gate ao fechar com fila ativa `409` ja CONCLUIDO (BUG6). |
 | 2 | Expor `available_professionals` na listagem publica | ⬜ aberto | **Client (Home) — reconciliacao 2026-07-11.** A listagem `GET /establishment` so traz `estimated_wait_minutes`; falta a contagem de **profissionais afiliados com servico** (`available_professionals`), que hoje so existe no detalhe `professionals-with-queue`. Sem ela o front-client **esconde todas as lojas fechadas** (nao sabe se ha profissional pra agendar a reabertura); com o campo, mostra so as fechadas com `available_professionals > 0`. Enriquecer o `EstablishmentResponse` da listagem no mesmo caminho do `estimatedWaitMinutes`. |
 | 3 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono; move ao indice 0, empurra os demais). `start` ja atende qualquer id fora de ordem; falta o "promover ao topo sem atender". |
-| 4 | Intencao de atendimento -> promocao automatica a fila | ⬜ aberto — spec fechada 2026-07-05 | **Partner S3 (= S2 na 2a rodada de feedback — mesmo item) / Client C6 (substitui o antigo `/swap-offers`).** Novo status **`INTENTION`**: attendance com `desiredTime` fica **fora da fila** e e **promovido a `SCHEDULED`** quando falta **≤15min**. Ponto UNICO de entrada (create/edit passam pelo algoritmo), promocao **event-driven** (timer reagendado p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem), invariante do slot futuro alcancavel, promocao atomica, reconstruir timer no boot. Endpoints: `POST/PATCH/DELETE /attendances/intentions[/{id}]`. Detalhe completo no `HANDOFF_BACKEND.md` (Partner) secao "Detalhe — S3". |
+| 4 | Intencao de atendimento -> promocao automatica a fila | 🟡 fatia 1 (criar) feita | **Partner S3 (= S2 na 2a rodada de feedback — mesmo item) / Client C6 (substitui o antigo `/swap-offers`).** Novo status **`INTENTION`**: attendance com `desiredTime` fica **fora da fila** e e **promovido a `SCHEDULED`** quando falta **≤15min**. **(fatia 1) ✅ CONCLUIDA** — `POST /attendances/intentions` cria a intencao (loja pode estar fechada agora desde que dentro do expediente; 422 fora do expediente/horizonte 30d, 400 passado, 409 CHEIO=`PROFESSIONAL_AGENDA_FULL`; estimativa Modelo A via encaixe cronologico entre as outras intencoes, sem reservar slot; nao vaza p/ a fila viva). **Resta:** (fatia 2) visao de agenda; **(fatia 3)** `PATCH`/`DELETE /attendances/intentions/{id}` + **promocao event-driven** (timer p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem, invariante do slot futuro alcancavel, promocao atomica, reconstruir timer no boot). Detalhe completo no `HANDOFF_BACKEND.md` (Partner) secao "Detalhe — S3". |
 | 5 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
 | 6 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 (= S7 fluxo de reset + S8 infra SMTP na 2a rodada — 1 unico item, agrupado de proposito: o SMTP habilita o reset) + Client #14** — `POST /auth/forgot-password {email}` + `POST /auth/reset-password {token,newPassword}`; infra de e-mail (SMTP/SendGrid/SES) habilita o reset |
 | 7 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |

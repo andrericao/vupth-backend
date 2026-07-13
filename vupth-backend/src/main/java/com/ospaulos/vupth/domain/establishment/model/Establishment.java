@@ -186,10 +186,23 @@ public class Establishment implements Serializable {
         if (openStatus != OpenStatus.OPEN) {
             return false;
         }
+        return isWithinBusinessHours(now);
+    }
+
+    /**
+     * A hora {@code t} cai dentro da janela de expediente {@code [openingTime, closingTime)}?
+     * <p>
+     * Diferente de {@link #isOpenAt(OffsetTime)}, <b>ignora o {@code openStatus}</b> — olha somente
+     * o horario de funcionamento. Serve para validar uma intencao de atendimento (backlog #4) para
+     * um horario futuro <b>mesmo com a loja fechada agora</b> (ela abre depois). Trata janela normal
+     * {@code [open, close)}, 24h ({@code open == close}) e janela que vira a meia-noite ({@code close < open}).
+     * Sem janela definida (opening/closing nulos) qualquer hora e valida.
+     */
+    public boolean isWithinBusinessHours(OffsetTime t) {
         if (openingTime == null || closingTime == null) {
-            return true; // sem janela: so o open_status manda
+            return true; // sem janela definida
         }
-        java.time.LocalTime n = now.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        java.time.LocalTime n = t.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
         java.time.LocalTime open = openingTime.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
         java.time.LocalTime close = closingTime.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
         if (open.equals(close)) {
