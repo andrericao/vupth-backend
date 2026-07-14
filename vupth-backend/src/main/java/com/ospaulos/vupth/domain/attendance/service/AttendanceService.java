@@ -81,6 +81,22 @@ public interface AttendanceService {
                                              java.time.OffsetDateTime desiredTime, UUID clientId);
 
     /**
+     * Backlog #4 (fatia 3) — editar uma intencao. O cliente dono (por JWT) altera o {@code desiredTime}.
+     * Passa pelo MESMO algoritmo do create (ponto unico de entrada): revalida futuro/expediente/horizonte/
+     * invariante-do-fim-da-fila e recalcula a estimativa. So enquanto {@code status = INTENTION}
+     * (400 {@code ATTENDANCE_INVALID_STATUS} se ja promovido/cancelado); 403 se nao for o dono.
+     */
+    public IntentionResponse updateIntention(UUID attendanceId, java.time.OffsetDateTime desiredTime, UUID clientId);
+
+    /**
+     * Backlog #4 (fatia 3) — cancelar uma intencao (status {@code INTENTION -> CANCELLED}). Apenas o
+     * cliente dono (por JWT). So enquanto {@code status = INTENTION} (400 {@code ATTENDANCE_INVALID_STATUS}
+     * se ja promovido/cancelado); 403 se nao for o dono. Como a INTENTION esta fora da fila viva, o
+     * cancelamento nao mexe em fila/broadcast.
+     */
+    public void cancelIntention(UUID attendanceId, UUID clientId);
+
+    /**
      * Item #6 — avaliar um atendimento concluido. Apenas o {@code clientId} dono do atendimento
      * (por JWT) e apenas com {@code status = FINISHED}. Bloqueia o 2o voto (409). Convidado (sem
      * conta) nao avalia. Se o atendimento tem exatamente 1 servico, a nota alimenta o profissional

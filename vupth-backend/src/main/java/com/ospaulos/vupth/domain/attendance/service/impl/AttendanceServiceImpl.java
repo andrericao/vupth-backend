@@ -14,7 +14,9 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundExceptio
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
 import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
+import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
@@ -242,6 +244,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final int INTENTION_HORIZON_DAYS = 30;
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
                                              OffsetDateTime desiredTime, UUID clientId) {
         log.info("[Intention] createIntention — professionalId={} clientId={} desiredTime={}",
@@ -263,37 +266,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
         assertServiceItemsBelongToProfessional(serviceItems, professional);
 
-        OffsetDateTime now = OffsetDateTime.now();
-        if (!desiredTime.isAfter(now)) {
-            throw new IllegalArgumentException("desiredTime deve estar no futuro: " + desiredTime);
-        }
-        if (desiredTime.isAfter(now.plusDays(INTENTION_HORIZON_DAYS))) {
-            throw new IntentionHorizonExceededException(desiredTime, INTENTION_HORIZON_DAYS);
-        }
-        if (!establishment.isWithinBusinessHours(desiredTime.toOffsetTime())) {
-            throw new IntentionOutsideBusinessHoursException(desiredTime);
-        }
-
-        int duration = serviceItems.stream()
-                .filter(java.util.Objects::nonNull)
-                .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
-                .sum();
-
-        // Estimativa (Modelo A): encaixa cronologicamente entre as OUTRAS intencoes ja registradas do
-        // profissional — assim quem pede horarios proximos recebe estimativas SEQUENCIAIS (17:00 e 17:30)
-        // — SEM reservar posicao na fila viva (walk-ins seguem livres).
-        List<Attendance> otherIntentions = attendanceRepository.findIntentionsByProfessional(professionalId);
-        List<QueueUtils.AgendaSlot> reserved = otherIntentions.stream()
-                .map(a -> new QueueUtils.AgendaSlot(
-                        a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
-                        a.getEstimatedTotalMinutes()))
-                .collect(Collectors.toList());
-        OffsetDateTime estimatedStart = QueueUtils.assignAgendaSlot(desiredTime, duration, reserved);
-
-        // CHEIO/FULL: o fim projetado do encaixe ultrapassa o fechamento do dia pretendido? (definicao Andre)
-        if (!fitsBeforeClosing(establishment, estimatedStart, duration)) {
-            throw new ProfessionalAgendaFullException(desiredTime);
-        }
+        // Ponto UNICO de entrada: create e edit passam pelo mesmo algoritmo antes de persistir.
+        OffsetDateTime estimatedStart = runIntentionAlgorithm(
+                professional, establishment, serviceItems, desiredTime, null);
 
         Attendance attendance = new Attendance();
         attendance.setProfessional(professional);
@@ -312,6 +287,132 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Intention] createIntention — created id={} desiredTime={} estimatedStart={} status=INTENTION",
                 saved.getId(), saved.getDesiredTime(), estimatedStart);
         return IntentionResponse.fromEntity(saved, estimatedStart);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public IntentionResponse updateIntention(UUID attendanceId, OffsetDateTime desiredTime, UUID clientId) {
+        log.info("[Intention] updateIntention — attendanceId={} clientId={} desiredTime={}",
+                attendanceId, clientId, desiredTime);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only edit your own intention.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.INTENTION) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.INTENTION);
+        }
+
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+        List<ServiceItem> serviceItems = attendance.getServiceItems();
+
+        // Ponto UNICO de entrada: o edit re-executa o algoritmo (excluindo a propria intencao do
+        // encaixe) — a cabeca/estimativa se corrigem na hora, inclusive "mudou pra mais cedo".
+        OffsetDateTime estimatedStart = runIntentionAlgorithm(
+                professional, establishment, serviceItems, desiredTime, attendance.getId());
+
+        attendance.setDesiredTime(desiredTime);
+        attendance.setScheduledTime(estimatedStart);
+        Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        log.info("[Intention] updateIntention — updated id={} desiredTime={} estimatedStart={}",
+                saved.getId(), saved.getDesiredTime(), estimatedStart);
+        return IntentionResponse.fromEntity(saved, estimatedStart);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void cancelIntention(UUID attendanceId, UUID clientId) {
+        log.info("[Intention] cancelIntention — attendanceId={} clientId={}", attendanceId, clientId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only cancel your own intention.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.INTENTION) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.INTENTION);
+        }
+
+        // INTENTION vive fora da fila viva — cancelar nao mexe em fila/broadcast (auto-limpante: a
+        // futura re-busca da promocao simplesmente nao encontra mais este id).
+        attendance.setStatus(AttendanceStatus.CANCELLED);
+        attendanceRepository.save(attendance);
+        log.info("[Intention] cancelIntention — cancelled id={}", attendanceId);
+    }
+
+    /**
+     * Ponto UNICO de entrada da intencao (create E edit passam por aqui). Valida as invariantes e
+     * devolve o horario estimado de inicio (encaixe cronologico Modelo A entre as OUTRAS intencoes).
+     * Nao persiste — quem chama seta {@code desiredTime}/{@code scheduledTime} e salva.
+     *
+     * @param excludeIntentionId no edit, a propria intencao (para nao colidir consigo mesma no
+     *                           encaixe); {@code null} no create.
+     */
+    private OffsetDateTime runIntentionAlgorithm(Professional professional, Establishment establishment,
+                                                 List<ServiceItem> serviceItems, OffsetDateTime desiredTime,
+                                                 UUID excludeIntentionId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!desiredTime.isAfter(now)) {
+            throw new IllegalArgumentException("desiredTime deve estar no futuro: " + desiredTime);
+        }
+        if (desiredTime.isAfter(now.plusDays(INTENTION_HORIZON_DAYS))) {
+            throw new IntentionHorizonExceededException(desiredTime, INTENTION_HORIZON_DAYS);
+        }
+        if (!establishment.isWithinBusinessHours(desiredTime.toOffsetTime())) {
+            throw new IntentionOutsideBusinessHoursException(desiredTime);
+        }
+
+        // Invariante (definicao Andre 2026-07-13): o horario pretendido nao pode ser ANTERIOR ao
+        // termino previsto dos atendimentos ja na fila viva. O horario EXATO do fim previsto e
+        // permitido (>=). Garante um slot futuro alcancavel — a intencao nunca "nasce atrasada".
+        OffsetDateTime projectedEnd = projectedQueueEnd(professional);
+        if (desiredTime.isBefore(projectedEnd)) {
+            throw new IntentionBeforeQueueEndException(desiredTime, projectedEnd);
+        }
+
+        int duration = serviceItems.stream()
+                .filter(java.util.Objects::nonNull)
+                .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
+                .sum();
+
+        // Estimativa (Modelo A): encaixa cronologicamente entre as OUTRAS intencoes ja registradas do
+        // profissional (excluindo a propria no edit) — quem pede horarios proximos recebe estimativas
+        // SEQUENCIAIS (17:00 e 17:30) — SEM reservar posicao na fila viva (walk-ins seguem livres).
+        List<Attendance> otherIntentions = attendanceRepository.findIntentionsByProfessional(professional.getId());
+        List<QueueUtils.AgendaSlot> reserved = otherIntentions.stream()
+                .filter(a -> excludeIntentionId == null || !a.getId().equals(excludeIntentionId))
+                .map(a -> new QueueUtils.AgendaSlot(
+                        a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
+                        a.getEstimatedTotalMinutes()))
+                .collect(Collectors.toList());
+        OffsetDateTime estimatedStart = QueueUtils.assignAgendaSlot(desiredTime, duration, reserved);
+
+        // CHEIO/FULL: o fim projetado do encaixe ultrapassa o fechamento do dia pretendido? (definicao Andre)
+        if (!fitsBeforeClosing(establishment, estimatedStart, duration)) {
+            throw new ProfessionalAgendaFullException(desiredTime);
+        }
+        return estimatedStart;
+    }
+
+    /**
+     * Fim projetado da fila VIVA do profissional = agora + tempo restante do atendimento atual +
+     * tempo estimado da fila de espera (meal-aware, mesma base do {@code getQueueOverview}). NAO conta
+     * INTENTIONs (que vivem fora da fila). Base da invariante da intencao.
+     */
+    private OffsetDateTime projectedQueueEnd(Professional professional) {
+        OffsetDateTime now = OffsetDateTime.now();
+        int currentRemaining = professional.getCurrentAttendance()
+                .map(Attendance::getRemainingMinutes)
+                .orElse(0);
+        List<Attendance> queue = professional.getScheduledAttendances();
+        List<ProfessionalInterval> intervals = professional.getIntervals();
+        int waitMinutes = QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, queue.size());
+        return now.plusMinutes((long) currentRemaining + waitMinutes);
     }
 
     /**

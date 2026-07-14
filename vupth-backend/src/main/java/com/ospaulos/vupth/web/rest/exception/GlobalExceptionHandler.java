@@ -14,6 +14,7 @@ import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfession
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
 import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
@@ -154,6 +155,13 @@ public class GlobalExceptionHandler {
             IntentionHorizonExceededException ex, HttpServletRequest req) {
         log.warn("[422] IntentionHorizonExceeded | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_HORIZON_EXCEEDED");
+    }
+
+    @ExceptionHandler(IntentionBeforeQueueEndException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionBeforeQueueEnd(
+            IntentionBeforeQueueEndException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionBeforeQueueEnd | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_BEFORE_QUEUE_END");
     }
 
     @ExceptionHandler(ProfessionalAgendaFullException.class)
