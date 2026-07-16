@@ -345,6 +345,35 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Intention] cancelIntention — cancelled id={}", attendanceId);
     }
 
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public java.util.Optional<PromotionResult> promoteIntention(UUID attendanceId) {
+        log.info("[Intention] promoteIntention — attendanceId={}", attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId).orElse(null);
+        // Flip ATOMICO: so promove se ainda for INTENTION. Corrida (ja promovido/cancelado/editado por
+        // outra thread) -> no-op auto-limpante; o scheduler simplesmente re-consulta a proxima cabeca.
+        if (attendance == null || attendance.getStatus() != AttendanceStatus.INTENTION) {
+            log.info("[Intention] promoteIntention — id={} nao esta mais INTENTION (corrida) — no-op", attendanceId);
+            return java.util.Optional.empty();
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        // Entra na CAUDA da fila viva: a ordenacao da espera e por scheduledTime ASC, entao "agora"
+        // posiciona a intencao promovida atras de quem ja espera = a posicao do ETA neste instante
+        // (Modelo A — sem reserva de slot; o desiredTime persistido segue como registro do pretendido).
+        attendance.setScheduledTime(now);
+        Attendance saved = attendanceRepository.save(attendance);
+        lockMealsAtIngress(saved, saved.getProfessional(), saved.getEstablishment());
+
+        UUID establishmentId = saved.getEstablishment() != null ? saved.getEstablishment().getId() : null;
+        UUID clientId = saved.getClient() != null ? saved.getClient().getId() : null;
+        log.info("[Intention] promoteIntention — id={} INTENTION->SCHEDULED scheduledTime={} desiredTime={}",
+                saved.getId(), now, saved.getDesiredTime());
+        return java.util.Optional.of(new PromotionResult(saved.getId(), establishmentId, clientId));
+    }
+
     /**
      * Ponto UNICO de entrada da intencao (create E edit passam por aqui). Valida as invariantes e
      * devolve o horario estimado de inicio (encaixe cronologico Modelo A entre as OUTRAS intencoes).

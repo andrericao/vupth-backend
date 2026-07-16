@@ -4,6 +4,7 @@ import com.ospaulos.vupth.api.attendance.dto.request.CreateIntentionRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.UpdateIntentionRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
+import com.ospaulos.vupth.domain.attendance.service.IntentionPromotionScheduler;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
@@ -34,6 +35,7 @@ import java.util.UUID;
 public class AttendanceIntentionController {
 
     private final AttendanceService attendanceService;
+    private final IntentionPromotionScheduler promotionScheduler;
 
     /**
      * POST /attendances/intentions — cria uma intencao para o cliente autenticado (clientId do JWT).
@@ -52,6 +54,8 @@ public class AttendanceIntentionController {
         IntentionResponse response = attendanceService.createIntention(
                 request.professionalId(), request.serviceItemIds(), request.desiredTime(), principal.getUserId());
 
+        // Pos-commit: a cabeca/timer de promocao se recalculam (a nova intencao pode ser a proxima a promover).
+        promotionScheduler.reschedule();
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -73,6 +77,8 @@ public class AttendanceIntentionController {
         IntentionResponse response = attendanceService.updateIntention(
                 id, request.desiredTime(), principal.getUserId());
 
+        // Pos-commit: horario mudou -> a cabeca e o gatilho se corrigem (inclusive "mudou pra mais cedo").
+        promotionScheduler.reschedule();
         return ResponseEntity.ok(response);
     }
 
@@ -90,6 +96,8 @@ public class AttendanceIntentionController {
 
         attendanceService.cancelIntention(id, principal.getUserId());
 
+        // Pos-commit: se a cabeca era esta, o timer avanca pra proxima (ou fica ocioso).
+        promotionScheduler.reschedule();
         return ResponseEntity.noContent().build();
     }
 }

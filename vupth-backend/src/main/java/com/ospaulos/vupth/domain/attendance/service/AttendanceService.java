@@ -97,6 +97,23 @@ public interface AttendanceService {
     public void cancelIntention(UUID attendanceId, UUID clientId);
 
     /**
+     * Backlog #4 (fatia 3 — promocao) — promove UMA intencao a fila viva ({@code INTENTION -> SCHEDULED}).
+     * Chamado pelo gatilho event-driven ({@code IntentionPromotionScheduler}) quando o horario se aproxima.
+     * <b>Flip atomico</b>: re-le o atendimento e so promove se ainda estiver {@code INTENTION} (corrida com
+     * cancelar/editar/outra promocao = no-op, devolve {@code Optional.empty()}, auto-limpante). Ao promover,
+     * o {@code scheduledTime} recebe o instante atual — a intencao entra na CAUDA da fila viva (a posicao do
+     * ETA daquele instante, Modelo A, sem reservar slot) — e as refeicoes a frente sao travadas no ingresso.
+     * A due-check ({@code now >= desiredTime - 15min}) é responsabilidade do scheduler (fonte da verdade = a
+     * re-query da cabeca); aqui so garante-se a atomicidade do flip.
+     *
+     * @return dados minimos para o scheduler notificar (WS + push) fora da transacao, ou vazio se nao promoveu.
+     */
+    public java.util.Optional<PromotionResult> promoteIntention(UUID attendanceId);
+
+    /** Resultado minimo de uma promocao, para o scheduler notificar (WS/push) apos o commit. */
+    record PromotionResult(UUID attendanceId, UUID establishmentId, UUID clientId) {}
+
+    /**
      * Item #6 — avaliar um atendimento concluido. Apenas o {@code clientId} dono do atendimento
      * (por JWT) e apenas com {@code status = FINISHED}. Bloqueia o 2o voto (409). Convidado (sem
      * conta) nao avalia. Se o atendimento tem exatamente 1 servico, a nota alimenta o profissional
