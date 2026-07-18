@@ -113,24 +113,39 @@ public class EstablishmentServiceImpl implements EstablishmentService {
      */
     private List<EstablishmentResponse> toResponsesSortedByWait(List<Establishment> establishments) {
         return establishments.stream()
-                .map(e -> EstablishmentResponse.fromEntity(e, minWaitMinutes(e.getId())))
+                .map(e -> {
+                    QueueSummary summary = queueSummary(e.getId());
+                    return EstablishmentResponse.fromEntity(
+                            e, summary.minWaitMinutes(), summary.availableProfessionals());
+                })
                 .sorted(Comparator.comparing(EstablishmentResponse::estimatedWaitMinutes,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 
-    /** Menor tempo de espera (min) entre os profissionais com servico da loja; null se nenhum. */
-    private Integer minWaitMinutes(UUID establishmentId) {
+    /**
+     * Resumo da fila usado pela listagem publica: menor tempo de espera + quantos
+     * profissionais afiliados COM servico a loja tem. Ambos derivam do mesmo snapshot
+     * ({@code professionals-with-queue}, que ja filtra profissional sem servico — #31),
+     * entao uma unica chamada do use case alimenta os dois campos.
+     */
+    private QueueSummary queueSummary(UUID establishmentId) {
         try {
-            return getWithQueueUseCase.execute(establishmentId).professionals().stream()
+            List<ProfessionalWithQueueResponse> professionals =
+                    getWithQueueUseCase.execute(establishmentId).professionals();
+            Integer minWait = professionals.stream()
                     .map(ProfessionalWithQueueResponse::estimatedWaitMinutes)
                     .min(Integer::compareTo)
                     .orElse(null);
+            return new QueueSummary(minWait, professionals.size());
         } catch (Exception e) {
-            log.warn("[Establishment] minWaitMinutes falhou para {}: {}", establishmentId, e.getMessage());
-            return null;
+            log.warn("[Establishment] queueSummary falhou para {}: {}", establishmentId, e.getMessage());
+            return new QueueSummary(null, 0);
         }
     }
+
+    /** Menor tempo de espera (min, null se nenhum) + nº de profissionais com servico da loja. */
+    private record QueueSummary(Integer minWaitMinutes, int availableProfessionals) {}
 
     @Override
     public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus) {

@@ -33,6 +33,14 @@ public record EstablishmentResponse(
         @JsonProperty("estimated_wait_minutes")
         Integer estimatedWaitMinutes,
 
+        // Quantidade de profissionais afiliados COM ao menos um servico (mesmo
+        // conjunto que alimenta estimated_wait_minutes). null fora da listagem publica.
+        // O front-client usa pra decidir se mostra uma loja FECHADA na Home: so exibe
+        // as fechadas com available_professionals > 0 (ha profissional pra agendar a
+        // reabertura). Independe de open_status e de o profissional estar ocupado agora.
+        @JsonProperty("available_professionals")
+        Integer availableProfessionals,
+
         @JsonProperty("open_status")
         String openStatus,
 
@@ -51,10 +59,12 @@ public record EstablishmentResponse(
         AddressResponse address
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
-        return fromEntity(establishment, null);
+        return fromEntity(establishment, null, null);
     }
 
-    public static EstablishmentResponse fromEntity(Establishment establishment, Integer estimatedWaitMinutes) {
+    public static EstablishmentResponse fromEntity(Establishment establishment,
+                                                   Integer estimatedWaitMinutes,
+                                                   Integer availableProfessionals) {
         return new EstablishmentResponse(
                 establishment.getId(),
                 establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
@@ -67,6 +77,7 @@ public record EstablishmentResponse(
                 establishment.getOpeningTime(),
                 establishment.getClosingTime(),
                 estimatedWaitMinutes,
+                availableProfessionals,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
                 establishment.isOpenNow(),
                 establishment.getStatus() != null ? establishment.getStatus().name() : null,
