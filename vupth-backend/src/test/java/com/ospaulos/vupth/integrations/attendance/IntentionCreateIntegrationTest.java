@@ -105,10 +105,16 @@ class IntentionCreateIntegrationTest {
         establishmentRepository.save(e);
     }
 
-    /** Janela de dia inteiro (UTC) — cobre qualquer horário futuro dentro do expediente. */
+    /**
+     * Janela 24h (UTC) via {@code opening == closing} — o modelo trata isso como expediente
+     * degenerado "sempre aberto" ({@code isWithinBusinessHours}/{@code fitsBeforeClosing}). Evita a
+     * borda de meia-noite: com {@code [00:00, 23:59:59)} um serviço que começa perto do fim do dia
+     * estoura o fechamento e vira 409 espúrio quando a suíte roda à noite (UTC). 24h real cobre
+     * qualquer horário futuro de forma determinística, independente do relógio.
+     */
     private void openFullDay(OpenStatus status) {
         setStatusAndHours(status, OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC),
-                OffsetTime.of(23, 59, 59, 0, ZoneOffset.UTC));
+                OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
     }
 
     @Test

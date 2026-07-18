@@ -84,11 +84,12 @@ class IntentionPromotionIntegrationTest {
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30)); // 30min
         this.serviceItemIds = List.of(UUID.fromString(s1.id()));
 
-        // Loja o dia inteiro para admitir a criação da intenção (dentro do expediente).
+        // Expediente 24h (UTC) via opening == closing — "sempre aberto" no modelo. Evita a borda de
+        // meia-noite (com [00:00, 23:59:59) desiredTimes à noite estouram o fechamento = 409 espúrio).
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(OpenStatus.CLOSED);
         e.setOpeningTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
-        e.setClosingTime(OffsetTime.of(23, 59, 59, 0, ZoneOffset.UTC));
+        e.setClosingTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
         establishmentRepository.save(e);
     }
 

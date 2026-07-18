@@ -53,6 +53,15 @@ public class IntentionPromotionScheduler {
     private final QueueWebSocketPublisher queuePublisher;
     private final PushNotificationPublisher pushPublisher;
 
+    /**
+     * Arma o timer no boot ({@link #onBoot()}). Default {@code true} (producao). Desligado no profile de
+     * teste ({@code vupth.intention-promotion.auto-arm=false}) para NAO subir um despertador de wall-clock
+     * em cada contexto de integracao — os testes exercitam {@code promoteIntention}/{@code runPromotionCycle}
+     * diretamente, sem depender de temporizacao real.
+     */
+    @org.springframework.beans.factory.annotation.Value("${vupth.intention-promotion.auto-arm:true}")
+    private boolean autoArm = true;
+
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> pending;
 
@@ -72,6 +81,11 @@ public class IntentionPromotionScheduler {
         scheduler.setPoolSize(1);
         scheduler.setThreadNamePrefix("intention-promo-");
         scheduler.setRemoveOnCancelPolicy(true);
+        // DAEMON: a thread do timer NUNCA pode segurar o encerramento da JVM. Sem isto, cada contexto de
+        // integracao cacheado deixa uma thread nao-daemon viva e o fork do surefire (reuseForks=false) nao
+        // encerra -> a suite trava ate o timeout do CI. Em producao o container tem sua propria thread
+        // nao-daemon; o graceful shutdown continua chamando @PreDestroy.
+        scheduler.setDaemon(true);
         scheduler.initialize();
         this.taskScheduler = scheduler;
     }
@@ -86,6 +100,10 @@ public class IntentionPromotionScheduler {
     /** No boot/restart, reconstroi o timer da cabeca a partir do banco (senao perde o despertador). */
     @EventListener(ApplicationReadyEvent.class)
     public void onBoot() {
+        if (!autoArm) {
+            log.info("[IntentionPromo] boot — auto-arm desligado (profile de teste); timer nao sera armado");
+            return;
+        }
         log.info("[IntentionPromo] boot — reconstruindo timer de promocao a partir do banco");
         reschedule();
     }
