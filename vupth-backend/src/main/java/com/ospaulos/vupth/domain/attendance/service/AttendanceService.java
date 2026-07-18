@@ -68,6 +68,14 @@ public interface AttendanceService {
     public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId);
 
     /**
+     * Partner S7 — promover ao 1o lugar. O PROFISSIONAL dono da fila move um atendimento em espera
+     * para o indice 0 (proximo a ser atendido), empurrando os demais — sem inicia-lo. Inverso do
+     * {@link #moveToEndOfQueue}: o {@code scheduledTime} recebe {@code cabeca.scheduledTime - 1min}.
+     * Só o profissional dono (por JWT) e apenas em {@code SCHEDULED}. No-op se ja for o 1o.
+     */
+    public AttendanceInQueueResponse promoteToFrontOfQueue(UUID attendanceId, UUID professionalId);
+
+    /**
      * Backlog #4 — manifestar intencao de atendimento (status {@code INTENTION}). O cliente
      * registrado (por JWT) pede para ser atendido num horario PRETENDIDO futuro ({@code desiredTime}),
      * tipicamente com a loja fechada ou o dia cheio. Nasce FORA da fila viva (nao aparece em

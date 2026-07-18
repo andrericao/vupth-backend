@@ -952,6 +952,43 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public AttendanceInQueueResponse promoteToFrontOfQueue(UUID attendanceId, UUID professionalId) {
+        log.info("[Attendance] promoteToFrontOfQueue — attendanceId={} professionalId={}",
+                attendanceId, professionalId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (!attendance.getProfessional().getId().equals(professionalId)) {
+            throw new EstablishmentAccessDeniedException(
+                    "You can only promote attendances in your own queue.");
+        }
+
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Fila de espera (SCHEDULED+LATE) ordenada por scheduledTime ASC — inclui o proprio atendimento.
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                attendance.getProfessional().getId(), attendance.getEstablishment().getId());
+
+        Attendance first = waiting.isEmpty() ? null : waiting.get(0);
+        if (first == null || first.getId().equals(attendance.getId())) {
+            // Ja e o 1o (ou fila vazia por corrida) — nada a fazer.
+            log.info("[Attendance] promoteToFrontOfQueue — attendance={} ja era o 1o (no-op)", attendanceId);
+            return buildAttendanceInQueueResponse(attendance);
+        }
+
+        // Sobe para antes da cabeca: scheduledTime = cabeca - 1min (ordenacao por scheduledTime ASC).
+        attendance.setScheduledTime(first.getScheduledTime().minusMinutes(1));
+        Attendance saved = attendanceRepository.save(attendance);
+
+        log.info("[Attendance] promoteToFrontOfQueue — attendance={} foi para o 1o lugar (scheduledTime={})",
+                attendanceId, saved.getScheduledTime());
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
     public AttendanceInQueueResponse removeFromQueue(UUID attendanceId, UUID professionalId) {
         log.info("[Attendance] removeFromQueue — attendanceId={} professionalId={}", attendanceId, professionalId);
 

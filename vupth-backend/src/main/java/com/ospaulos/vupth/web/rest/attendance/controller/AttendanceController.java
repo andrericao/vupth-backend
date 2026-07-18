@@ -218,6 +218,31 @@ public class AttendanceController {
     }
 
     /**
+     * PATCH /attendances/{attendanceId}/promote
+     *
+     * Partner S7 — o profissional dono da fila promove um atendimento em espera para o 1o lugar
+     * (indice 0), empurrando os demais, sem inicia-lo. So o profissional dono (JWT), so em SCHEDULED
+     * (400 caso contrario). No-op se ja for o 1o. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/promote")
+    public ResponseEntity<AttendanceInQueueResponse> promoteToFront(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER PROMOTE {} by professional={}", attendanceId, principal.getUserId());
+
+        AttendanceInQueueResponse response = attendanceService.promoteToFrontOfQueue(
+                attendanceId, principal.getUserId());
+
+        // #42: a posicao mudou → propostas de troca pendentes deixam de valer
+        queueSwapService.expirePendingForAttendance(attendanceId);
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * POST /attendances/{attendanceId}/rating
      *
      * Item #6 — o cliente dono avalia o atendimento concluido (1-5 estrelas + comentario opcional).
