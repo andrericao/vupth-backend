@@ -662,6 +662,8 @@ Lista establishments ativos com filtros opcionais.
 > `estimated_wait_minutes` e preenchido **apenas na listagem** (`GET /establishment`). Em `GET /establishment/id/{id}` e nos demais usos do `EstablishmentResponse` vem `null`.
 
 > **`available_professionals` (Client Home).** Quantidade de profissionais **afiliados COM ao menos um servico** — o mesmo conjunto que alimenta `estimated_wait_minutes` (deriva do snapshot `professionals-with-queue`, que ja filtra profissional sem servico — #31), calculado numa **unica** passada. Preenchido **apenas na listagem** (`null` fora dela, igual ao `estimated_wait_minutes`). Independe do `open_status` e de o profissional estar ocupado agora. O front-client usa pra decidir exibir uma loja **FECHADA** na Home: mostra so as fechadas com `available_professionals > 0` (ha profissional pra agendar a reabertura). Uma loja com profissional afiliado mas **sem servico** vem `0`.
+>
+> **Handoff Front-Client (pronto p/ ligar):** na Home, ao listar `GET /establishment` (com `?includeAll=true` para tambem trazer as fechadas), **filtrar as lojas `open_status != OPEN` por `available_professionals > 0`** — as fechadas sem profissional-com-servico somem (nao ha o que agendar). Loja aberta segue exibida normalmente. O campo vem `null` fora da listagem (detalhe/`/mine`), entao so confie nele na tela de listagem.
 
 > **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
@@ -1794,6 +1796,8 @@ No-op se ja for o 1o. Nao mexe no `IN_PROGRESS` (esse segue em atendimento; o pr
 **Response (200):** `AttendanceInQueueResponse`. Expira propostas de troca pendentes do attendance (#42) e dispara broadcast WS da fila da loja.
 
 **Erros:** `400` status invalido (so `SCHEDULED`) · `403` nao-dono / sem role PROFESSIONAL · `404` inexistente · `401` sem token.
+
+> **Handoff Front-Partner (pronto p/ ligar):** no card de um cliente **em espera** (`SCHEDULED`) da fila, adicionar a acao **"Promover ao 1o lugar"** → `PATCH /attendances/{id}/promote` com token PROFESSIONAL (dono). Sucesso `200` devolve o proprio atendimento (segue `SCHEDULED`) e a fila ao vivo ja chega atualizada pelo WS (`/topic/establishment/{id}/queue`) — nao precisa refazer GET. Esconder/desabilitar a acao para quem ja e o 1o (o backend responde `200` no-op de qualquer forma). So faz sentido para `SCHEDULED` (um `LATE` usa `/undo-late`; `IN_PROGRESS`/`PAUSED` ja estao em atendimento).
 
 **Testes:** Integracao (`PromoteToFrontIntegrationTest`)
 
