@@ -109,6 +109,9 @@ public class CutRequestServiceImpl implements CutRequestService {
     }
 
     @Override
+    // noRollbackFor: o aceite defensivo persiste o EXPIRED (auto-nega) mesmo lancando 409 —
+    // sem isso o rollback padrao da RuntimeException desfaz o flip e o pedido volta a PENDING.
+    @Transactional(noRollbackFor = CutRequestExpiredException.class)
     public CutRequestResponse acceptCutRequest(UUID cutRequestId, UUID professionalId) {
         log.info("[CutRequest] accept — id={} professional={}", cutRequestId, professionalId);
         CutRequest cut = loadOwnedPending(cutRequestId, professionalId);

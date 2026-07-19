@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.attendance.cut.repository.CutRequestRepository;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
@@ -41,6 +42,7 @@ class CutRequestCreateIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired CutRequestRepository cutRequestRepository;
 
     private final Faker faker = new Faker();
 
@@ -70,6 +72,14 @@ class CutRequestCreateIntegrationTest {
         this.otherServiceItemId = sB.id();
 
         log.info("[CutRequest] setup — estab={} prof={}", establishmentId, professionalId);
+    }
+
+    @AfterAll
+    void cleanup() {
+        // O Order 10 cria um CutRequest PENDING que persiste; sob reuseForks o Postgres e
+        // compartilhado e o join cut_request_service_item barraria o deleteAll de service_item
+        // no teardown de outras classes. CASCADE (fk_cut_req_si_cut_request) limpa o join.
+        cutRequestRepository.deleteAll();
     }
 
     private String body(String profId, String estId, String serviceItemId) {
