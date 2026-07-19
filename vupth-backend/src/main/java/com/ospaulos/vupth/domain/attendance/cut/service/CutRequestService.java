@@ -24,4 +24,11 @@ public interface CutRequestService {
      * Profissional dono RECUSA o pedido (fatia 2): vira REFUSED e o cliente e notificado. So PENDING.
      */
     CutRequestResponse refuseCutRequest(UUID cutRequestId, UUID professionalId);
+
+    /**
+     * Auto-nega (fatia 3): marca EXPIRED todos os pedidos PENDING ja vencidos ({@code expiresAt <= now})
+     * e notifica cada cliente. Chamado pelo {@code CutRequestExpiryScheduler} (timer server-side), 100%
+     * interno — sem endpoint REST. Devolve quantos foram expirados.
+     */
+    int expireDueCutRequests();
 }

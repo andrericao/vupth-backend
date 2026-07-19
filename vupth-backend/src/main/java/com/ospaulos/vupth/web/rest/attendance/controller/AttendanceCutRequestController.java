@@ -2,6 +2,7 @@ package com.ospaulos.vupth.web.rest.attendance.controller;
 
 import com.ospaulos.vupth.api.attendance.dto.request.CutRequestRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.CutRequestResponse;
+import com.ospaulos.vupth.domain.attendance.cut.service.CutRequestExpiryScheduler;
 import com.ospaulos.vupth.domain.attendance.cut.service.CutRequestService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
@@ -31,6 +32,7 @@ import java.util.UUID;
 public class AttendanceCutRequestController {
 
     private final CutRequestService cutRequestService;
+    private final CutRequestExpiryScheduler expiryScheduler;
 
     /**
      * POST /attendances/cut-requests — o cliente autenticado (clientId do JWT) solicita um corte.
@@ -46,6 +48,7 @@ public class AttendanceCutRequestController {
                 principal.getUserId(), request.professionalId(), request.establishmentId());
 
         CutRequestResponse response = cutRequestService.createCutRequest(request, principal.getUserId());
+        expiryScheduler.reschedule(); // pos-commit: arma o timer de auto-nega para a nova cabeca (fatia 3)
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -60,7 +63,9 @@ public class AttendanceCutRequestController {
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("CUT-REQUEST CONTROLLER ACCEPT — id={} professional={}", id, principal.getUserId());
-        return ResponseEntity.ok(cutRequestService.acceptCutRequest(id, principal.getUserId()));
+        CutRequestResponse response = cutRequestService.acceptCutRequest(id, principal.getUserId());
+        expiryScheduler.reschedule(); // a cabeca pode ter mudado (este saiu de PENDING) -> reaponta o timer
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -73,6 +78,8 @@ public class AttendanceCutRequestController {
             @PathVariable UUID id,
             @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("CUT-REQUEST CONTROLLER REFUSE — id={} professional={}", id, principal.getUserId());
-        return ResponseEntity.ok(cutRequestService.refuseCutRequest(id, principal.getUserId()));
+        CutRequestResponse response = cutRequestService.refuseCutRequest(id, principal.getUserId());
+        expiryScheduler.reschedule(); // a cabeca pode ter mudado (este saiu de PENDING) -> reaponta o timer
+        return ResponseEntity.ok(response);
     }
 }

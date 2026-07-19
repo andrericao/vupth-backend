@@ -170,6 +170,31 @@ public class CutRequestServiceImpl implements CutRequestService {
         return CutRequestResponse.fromEntity(saved);
     }
 
+    @Override
+    public int expireDueCutRequests() {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<CutRequest> due = cutRequestRepository.findByStatusAndExpiresAtBefore(CutRequestStatus.PENDING, now);
+        if (due.isEmpty()) {
+            return 0;
+        }
+        for (CutRequest cut : due) {
+            cut.setStatus(CutRequestStatus.EXPIRED);
+            cut.setRespondedAt(now);
+            cutRequestRepository.save(cut);
+
+            queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
+                    "CUT_EXPIRED", null, cut.getEstablishment().getId(),
+                    "Seu pedido de corte expirou sem resposta do profissional."));
+            pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte expirado",
+                    "Ninguem respondeu a tempo. Tente novamente quando a loja abrir.",
+                    Map.of("type", "CUT_EXPIRED",
+                            "cutRequestId", String.valueOf(cut.getId()),
+                            "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+            log.info("[CutRequest] expire — id={} PENDING -> EXPIRED (expiresAt={})", cut.getId(), cut.getExpiresAt());
+        }
+        return due.size();
+    }
+
     /** Carrega o pedido (eager nos serviceItems), valida dono e estado PENDING. */
     private CutRequest loadOwnedPending(UUID cutRequestId, UUID professionalId) {
         CutRequest cut = cutRequestRepository.findByIdEager(cutRequestId)
