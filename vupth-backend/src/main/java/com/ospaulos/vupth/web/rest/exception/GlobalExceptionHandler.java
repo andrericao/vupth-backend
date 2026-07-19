@@ -171,6 +171,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_AGENDA_FULL");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.CutRequestNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleCutRequestNotAllowed(
+            com.ospaulos.vupth.domain.attendance.exception.CutRequestNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[409] CutRequestNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_NOT_ALLOWED");
+    }
+
     @ExceptionHandler(ServiceItemNotOfProfessionalException.class)
     public ResponseEntity<ErrorResponse> handleServiceItemNotOfProfessional(
             ServiceItemNotOfProfessionalException ex, HttpServletRequest req) {

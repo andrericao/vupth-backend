@@ -1,0 +1,128 @@
+databaseChangeLog:
+  # Pedido de corte (BUG5 C2 — "solicitar corte"): quando a loja esta fechada p/ novos (gate C1),
+  # o cliente registra um PEDIDO SOB APROVACAO em vez de entrar sozinho. O profissional aceita
+  # (nasce um Attendance SCHEDULED) ou recusa; um timer server-side auto-nega em expires_at (5min).
+  # Entidade PROPRIA (nao um status de Attendance) — o pedido pode ser recusado e nunca virar
+  # atendimento, entao nao pode aparecer em nenhum read-model de fila. Mesmo padrao do queue_swap_request.
+  - changeSet:
+      id: 010-create-cut_request
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: cut_request
+      changes:
+        - createTable:
+            tableName: cut_request
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_cut_request
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: expires_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: responded_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: resulting_attendance_id
+                  type: UUID
+        - addForeignKeyConstraint:
+            baseTableName: cut_request
+            baseColumnNames: client_id
+            constraintName: fk_cut_request_client
+            referencedTableName: client
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: cut_request
+            baseColumnNames: professional_id
+            constraintName: fk_cut_request_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: cut_request
+            baseColumnNames: establishment_id
+            constraintName: fk_cut_request_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: cut_request
+            baseColumnNames: resulting_attendance_id
+            constraintName: fk_cut_request_attendance
+            referencedTableName: attendance
+            referencedColumnNames: id
+        - createIndex:
+            tableName: cut_request
+            indexName: idx_cut_request_professional_status
+            columns:
+              - column:
+                  name: professional_id
+              - column:
+                  name: status
+  - changeSet:
+      id: 010-create-cut_request_service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: cut_request_service_item
+      changes:
+        - createTable:
+            tableName: cut_request_service_item
+            columns:
+              - column:
+                  name: cut_request_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: service_item_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: cut_request_service_item
+            baseColumnNames: cut_request_id
+            constraintName: fk_cut_req_si_cut_request
+            referencedTableName: cut_request
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: cut_request_service_item
+            baseColumnNames: service_item_id
+            constraintName: fk_cut_req_si_service_item
+            referencedTableName: service_item
+            referencedColumnNames: id

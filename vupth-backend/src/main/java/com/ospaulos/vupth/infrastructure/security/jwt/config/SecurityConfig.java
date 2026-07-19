@@ -83,6 +83,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/attendances/client/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
                         .requestMatchers(HttpMethod.POST, "/attendances/intentions").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/attendances/cut-requests").hasRole("CLIENT")
                         // Intencao de atendimento (#4, fatia 3): dono edita/cancela a propria intencao
                         .requestMatchers(HttpMethod.PATCH, "/attendances/intentions/*").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.DELETE, "/attendances/intentions/*").hasRole("CLIENT")
