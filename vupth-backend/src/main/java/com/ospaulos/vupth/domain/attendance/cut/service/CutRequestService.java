@@ -13,4 +13,15 @@ public interface CutRequestService {
 
     /** Cliente (por JWT) registra um pedido de corte. Loja precisa estar fechada agora (senao 409). */
     CutRequestResponse createCutRequest(CutRequestRequest request, UUID clientId);
+
+    /**
+     * Profissional dono ACEITA o pedido (fatia 2): nasce um Attendance SCHEDULED na cauda da fila,
+     * o pedido vira ACCEPTED e o cliente e notificado. So PENDING e nao-expirado.
+     */
+    CutRequestResponse acceptCutRequest(UUID cutRequestId, UUID professionalId);
+
+    /**
+     * Profissional dono RECUSA o pedido (fatia 2): vira REFUSED e o cliente e notificado. So PENDING.
+     */
+    CutRequestResponse refuseCutRequest(UUID cutRequestId, UUID professionalId);
 }

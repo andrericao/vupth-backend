@@ -7,8 +7,13 @@ import com.ospaulos.vupth.domain.attendance.cut.CutRequestStatus;
 import com.ospaulos.vupth.domain.attendance.cut.model.CutRequest;
 import com.ospaulos.vupth.domain.attendance.cut.repository.CutRequestRepository;
 import com.ospaulos.vupth.domain.attendance.cut.service.CutRequestService;
+import com.ospaulos.vupth.domain.attendance.exception.CutRequestExpiredException;
 import com.ospaulos.vupth.domain.attendance.exception.CutRequestNotAllowedException;
+import com.ospaulos.vupth.domain.attendance.exception.CutRequestNotPendingException;
 import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
+import com.ospaulos.vupth.domain.attendance.model.Attendance;
+import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
@@ -48,6 +53,7 @@ public class CutRequestServiceImpl implements CutRequestService {
     private final EstablishmentRepository establishmentRepository;
     private final ClientRepository clientRepository;
     private final ServiceItemRepository serviceItemRepository;
+    private final AttendanceService attendanceService;
     private final QueueWebSocketPublisher queuePublisher;
     private final PushNotificationPublisher pushPublisher;
 
@@ -100,6 +106,79 @@ public class CutRequestServiceImpl implements CutRequestService {
 
         log.info("[CutRequest] create — id={} PENDING expiresAt={}", saved.getId(), saved.getExpiresAt());
         return CutRequestResponse.fromEntity(saved);
+    }
+
+    @Override
+    public CutRequestResponse acceptCutRequest(UUID cutRequestId, UUID professionalId) {
+        log.info("[CutRequest] accept — id={} professional={}", cutRequestId, professionalId);
+        CutRequest cut = loadOwnedPending(cutRequestId, professionalId);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (now.isAfter(cut.getExpiresAt())) {
+            // Defensivo: mesmo antes do timer da fatia 3 rodar, um aceite fora da janela auto-nega.
+            cut.setStatus(CutRequestStatus.EXPIRED);
+            cut.setRespondedAt(now);
+            cutRequestRepository.save(cut);
+            throw new CutRequestExpiredException(cutRequestId);
+        }
+
+        // Aceite explicito = autorizacao: nasce um Attendance SCHEDULED na cauda (bypassa o gate C1).
+        Attendance attendance = attendanceService.createScheduledFromCutRequest(
+                cut.getProfessional(), cut.getEstablishment(), cut.getClient(), cut.getServiceItems());
+
+        cut.setStatus(CutRequestStatus.ACCEPTED);
+        cut.setRespondedAt(now);
+        cut.setResultingAttendance(attendance);
+        CutRequest saved = cutRequestRepository.save(cut);
+
+        queuePublisher.broadcastQueue(cut.getEstablishment().getId());
+        queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
+                "CUT_ACCEPTED", attendance.getId(), cut.getEstablishment().getId(),
+                "Seu pedido de corte foi aceito — voce entrou na fila."));
+        pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte aceito",
+                "Voce entrou na fila.",
+                Map.of("type", "CUT_ACCEPTED",
+                        "attendanceId", String.valueOf(attendance.getId()),
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+
+        log.info("[CutRequest] accept — id={} ACCEPTED -> attendance={}", cutRequestId, attendance.getId());
+        return CutRequestResponse.fromEntity(saved);
+    }
+
+    @Override
+    public CutRequestResponse refuseCutRequest(UUID cutRequestId, UUID professionalId) {
+        log.info("[CutRequest] refuse — id={} professional={}", cutRequestId, professionalId);
+        CutRequest cut = loadOwnedPending(cutRequestId, professionalId);
+
+        cut.setStatus(CutRequestStatus.REFUSED);
+        cut.setRespondedAt(OffsetDateTime.now());
+        CutRequest saved = cutRequestRepository.save(cut);
+
+        queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
+                "CUT_REFUSED", null, cut.getEstablishment().getId(),
+                "Seu pedido de corte foi recusado."));
+        pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte recusado",
+                "O profissional nao pode te atender agora.",
+                Map.of("type", "CUT_REFUSED",
+                        "cutRequestId", String.valueOf(cutRequestId),
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+
+        log.info("[CutRequest] refuse — id={} REFUSED", cutRequestId);
+        return CutRequestResponse.fromEntity(saved);
+    }
+
+    /** Carrega o pedido (eager nos serviceItems), valida dono e estado PENDING. */
+    private CutRequest loadOwnedPending(UUID cutRequestId, UUID professionalId) {
+        CutRequest cut = cutRequestRepository.findByIdEager(cutRequestId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
+                        "cut request not found: " + cutRequestId));
+        if (cut.getProfessional() == null || !cut.getProfessional().getId().equals(professionalId)) {
+            throw new EstablishmentAccessDeniedException("You can only decide cut requests directed to you.");
+        }
+        if (cut.getStatus() != CutRequestStatus.PENDING) {
+            throw new CutRequestNotPendingException(cutRequestId, String.valueOf(cut.getStatus()));
+        }
+        return cut;
     }
 
     /** Avisa o profissional (WS pessoal + push) que ha um pedido de corte aguardando decisao. */

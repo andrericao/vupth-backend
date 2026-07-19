@@ -13777,6 +13777,506 @@
       ]
     },
     {
+      "name": "08l - solicitar corte (C2)",
+      "item": [
+        {
+          "name": "setup: register dono (C2)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"cut_owner_email\",\"cutowner_\"+Date.now()+\"@vupth.test\");",
+                  "pm.collectionVariables.set(\"cut_owner_pass\",\"Senha123!\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201) pm.collectionVariables.set(\"cut_owner_id\", pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/register",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{cut_owner_email}}\",\"password\":\"{{cut_owner_pass}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: login dono (C2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200) pm.collectionVariables.set(\"cut_owner_token\", pm.response.json().tokens.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{cut_owner_email}}\",\"password\":\"{{cut_owner_pass}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: quick-create loja (nasce CLOSED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201) pm.collectionVariables.set(\"cut_estab_id\", pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/establishment/quick-create",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Loja C2 {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: dono vira profissional afiliado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/professional/quick-create",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Prof C2\",\"establishmentId\":\"{{cut_estab_id}}\",\"specialty\":\"Barber\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: cria service item do prof",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201) pm.collectionVariables.set(\"cut_service_item_id\", pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/establishment/{{cut_estab_id}}/service-items",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte C2\",\"price\":35.00,\"estimatedMinutes\":30}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: register cliente (C2)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set(\"cut_client_email\",\"cutclient_\"+Date.now()+\"@vupth.test\");",
+                  "pm.collectionVariables.set(\"cut_client_pass\",\"Senha123!\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/register",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{cut_client_email}}\",\"password\":\"{{cut_client_pass}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "setup: login cliente (C2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200) pm.collectionVariables.set(\"cut_client_token\", pm.response.json().tokens.access_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{cut_client_email}}\",\"password\":\"{{cut_client_pass}}\"}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "cliente solicita corte (loja fechada) -> 201 PENDING",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201){ const r=pm.response.json();",
+                  "  pm.test(\"PENDING + expires_at\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.a(\"string\"); });",
+                  "  pm.collectionVariables.set(\"cut_id\", r.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/cut-requests",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "profissional ACEITA -> 200 ACCEPTED (nasce atendimento)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if(pm.response.code===200){ const r=pm.response.json();",
+                  "  pm.test(\"ACCEPTED + resulting_attendance_id\", () => { pm.expect(r.status).to.equal(\"ACCEPTED\"); pm.expect(r.resulting_attendance_id).to.be.a(\"string\"); });",
+                  "  pm.collectionVariables.set(\"cut_attendance_id\", r.resulting_attendance_id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/cut-requests/{{cut_id}}/accept",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "cliente solicita corte 2 -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if(pm.response.code===201) pm.collectionVariables.set(\"cut_id2\", pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_client_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/cut-requests",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "profissional RECUSA -> 200 REFUSED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"REFUSED\", () => pm.expect(pm.response.json().status).to.equal(\"REFUSED\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/cut-requests/{{cut_id2}}/refuse",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[ERRO] aceitar pedido ja recusado -> 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"code CUT_REQUEST_NOT_PENDING\", () => pm.expect(pm.response.json().code).to.equal(\"CUT_REQUEST_NOT_PENDING\"));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/attendances/cut-requests/{{cut_id2}}/accept",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "[ERRO] solicitar corte sem token -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{base_url}}/attendances/cut-requests",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "cleanup: remove o atendimento aceito",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cut_owner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/professional-queue/{{cut_attendance_id}}/remove",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "99 - cleanup",
       "item": [
         {

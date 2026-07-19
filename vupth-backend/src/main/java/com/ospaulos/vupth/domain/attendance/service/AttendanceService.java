@@ -10,6 +10,7 @@ import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -74,6 +75,14 @@ public interface AttendanceService {
      * Só o profissional dono (por JWT) e apenas em {@code SCHEDULED}. No-op se ja for o 1o.
      */
     public AttendanceInQueueResponse promoteToFrontOfQueue(UUID attendanceId, UUID professionalId);
+
+    /**
+     * Cria um {@code Attendance} SCHEDULED na CAUDA da fila a partir de um pedido de corte aceito
+     * (BUG5 C2 fatia 2). O aceite explicito do profissional e a autorizacao — bypassa o gate C1
+     * (a loja esta fechada p/ novos, mas o profissional consentiu). Reusa o meal-lock (#37).
+     */
+    public Attendance createScheduledFromCutRequest(Professional professional, Establishment establishment,
+                                                    Client client, List<ServiceItem> serviceItems);
 
     /**
      * Backlog #4 — manifestar intencao de atendimento (status {@code INTENTION}). O cliente

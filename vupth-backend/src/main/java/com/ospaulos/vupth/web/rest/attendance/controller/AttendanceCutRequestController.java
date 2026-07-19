@@ -10,10 +10,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 /**
  * Pedido de corte (BUG5 C2 — "solicitar corte"). Quando a loja esta fechada p/ novos (gate C1), o
@@ -43,5 +47,32 @@ public class AttendanceCutRequestController {
 
         CutRequestResponse response = cutRequestService.createCutRequest(request, principal.getUserId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * PATCH /attendances/cut-requests/{id}/accept — o profissional dono ACEITA (fatia 2): nasce um
+     * Attendance SCHEDULED na cauda da fila e o cliente e notificado. Requer PROFESSIONAL role.
+     * Erros: 409 nao-PENDING (`CUT_REQUEST_NOT_PENDING`) / expirado (`CUT_REQUEST_EXPIRED`),
+     * 403 nao-dono, 404 inexistente.
+     */
+    @PatchMapping("/{id}/accept")
+    public ResponseEntity<CutRequestResponse> accept(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("CUT-REQUEST CONTROLLER ACCEPT — id={} professional={}", id, principal.getUserId());
+        return ResponseEntity.ok(cutRequestService.acceptCutRequest(id, principal.getUserId()));
+    }
+
+    /**
+     * PATCH /attendances/cut-requests/{id}/refuse — o profissional dono RECUSA (fatia 2): o pedido
+     * vira REFUSED e o cliente e notificado. Requer PROFESSIONAL role. Mesmos erros do accept
+     * (exceto expirado).
+     */
+    @PatchMapping("/{id}/refuse")
+    public ResponseEntity<CutRequestResponse> refuse(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("CUT-REQUEST CONTROLLER REFUSE — id={} professional={}", id, principal.getUserId());
+        return ResponseEntity.ok(cutRequestService.refuseCutRequest(id, principal.getUserId()));
     }
 }

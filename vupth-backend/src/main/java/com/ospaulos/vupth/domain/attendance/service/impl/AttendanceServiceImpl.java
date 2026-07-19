@@ -952,6 +952,30 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromCutRequest(
+            Professional professional, Establishment establishment, Client client, List<ServiceItem> serviceItems) {
+        log.info("[Attendance] createScheduledFromCutRequest — professional={} client={}",
+                professional.getId(), client.getId());
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
+                new com.ospaulos.vupth.domain.attendance.model.Attendance();
+        attendance.setProfessional(professional);
+        attendance.setEstablishment(establishment);
+        attendance.setClient(client);
+        // COPIA a lista: serviceItems vem da colecao gerenciada do CutRequest; compartilhar a mesma
+        // instancia entre duas entidades dispara "Found shared references to a collection" no flush.
+        attendance.setServiceItems(new java.util.ArrayList<>(serviceItems));
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        attendance.setScheduledTime(java.time.OffsetDateTime.now()); // cauda da fila viva (walk-in)
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        lockMealsAtIngress(saved, professional, establishment);
+        log.info("[Attendance] createScheduledFromCutRequest — created id={}", saved.getId());
+        return saved;
+    }
+
+    @Override
     public AttendanceInQueueResponse promoteToFrontOfQueue(UUID attendanceId, UUID professionalId) {
         log.info("[Attendance] promoteToFrontOfQueue — attendanceId={} professionalId={}",
                 attendanceId, professionalId);

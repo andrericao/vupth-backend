@@ -178,6 +178,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_NOT_ALLOWED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.CutRequestNotPendingException.class)
+    public ResponseEntity<ErrorResponse> handleCutRequestNotPending(
+            com.ospaulos.vupth.domain.attendance.exception.CutRequestNotPendingException ex, HttpServletRequest req) {
+        log.warn("[409] CutRequestNotPending | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_NOT_PENDING");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.CutRequestExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleCutRequestExpired(
+            com.ospaulos.vupth.domain.attendance.exception.CutRequestExpiredException ex, HttpServletRequest req) {
+        log.warn("[409] CutRequestExpired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_EXPIRED");
+    }
+
     @ExceptionHandler(ServiceItemNotOfProfessionalException.class)
     public ResponseEntity<ErrorResponse> handleServiceItemNotOfProfessional(
             ServiceItemNotOfProfessionalException ex, HttpServletRequest req) {
