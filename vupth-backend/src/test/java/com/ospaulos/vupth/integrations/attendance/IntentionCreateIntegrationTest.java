@@ -169,8 +169,13 @@ class IntentionCreateIntegrationTest {
     @Order(50)
     @DisplayName("não cabe antes do fechamento — 409 PROFESSIONAL_AGENDA_FULL (CHEIO)")
     void agendaFull_409() throws Exception {
-        OffsetDateTime desired = OffsetDateTime.now().plusHours(2);
-        OffsetTime desiredUtc = desired.toOffsetTime().withOffsetSameInstant(ZoneOffset.UTC);
+        // Ancorado ao MEIO-DIA UTC de amanhã (determinístico, independe do relógio da suíte):
+        // com `now.plusHours(2)` rodando à noite (UTC) o horário caía ~23:5x, e `closing =
+        // desired+5min` cruzava a meia-noite; a aritmética de OffsetTime dá a volta (23:5x+30min
+        // → 00:2x < closing) e o serviço PARECIA caber → 201 espúrio. Ao meio-dia não há wrap.
+        OffsetDateTime desired = OffsetDateTime.now(ZoneOffset.UTC)
+                .plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0);
+        OffsetTime desiredUtc = desired.toOffsetTime();
         // Fecha só 5min depois do horário pretendido; o serviço dura 30min => estoura o fechamento.
         setStatusAndHours(OpenStatus.CLOSED, OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC),
                 desiredUtc.plusMinutes(5));
