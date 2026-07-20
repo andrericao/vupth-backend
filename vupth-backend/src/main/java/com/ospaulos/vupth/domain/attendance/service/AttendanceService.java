@@ -114,6 +114,21 @@ public interface AttendanceService {
     public void cancelIntention(UUID attendanceId, UUID clientId);
 
     /**
+     * Backlog #4 (fatia 2 — visao de agenda) — agenda de UM profissional: as suas intencoes futuras
+     * ({@code INTENTION}, fora da fila viva), congeladas no estimado da criacao, ordenadas por horario,
+     * mais o "quadro" da barra de encaixe (1 frame: {@code projectedQueueEnd} + expediente). O front
+     * agrupa por dia. Read-only.
+     */
+    public com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse getProfessionalAgenda(UUID professionalId);
+
+    /**
+     * Backlog #4 (fatia 2 — visao de agenda) — agenda do CLIENTE: os proprios agendamentos
+     * ({@code INTENTION}) em qualquer loja, ordenados por horario, mais um frame por profissional
+     * distinto. Mesma forma da agenda do profissional. Read-only.
+     */
+    public com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse getClientAgenda(UUID clientId);
+
+    /**
      * Backlog #4 (fatia 3 — promocao) — promove UMA intencao a fila viva ({@code INTENTION -> SCHEDULED}).
      * Chamado pelo gatilho event-driven ({@code IntentionPromotionScheduler}) quando o horario se aproxima.
      * <b>Flip atomico</b>: re-le o atendimento e so promove se ainda estiver {@code INTENTION} (corrida com

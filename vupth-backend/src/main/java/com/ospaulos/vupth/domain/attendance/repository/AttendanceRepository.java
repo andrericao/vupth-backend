@@ -137,6 +137,23 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     List<Attendance> findIntentionsByProfessional(@Param("professionalId") UUID professionalId);
 
     /**
+     * Intencoes de atendimento (status INTENTION) de um CLIENTE, em qualquer loja, ordenadas pelo
+     * horario pretendido. Base da visao de agenda do cliente ("meus agendamentos", fatia 2) — os
+     * agendamentos futuros que ainda nao entraram na fila viva. JOIN FETCH evita LazyInitialization
+     * ao serializar professional/establishment/serviceItems.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.client.id = :clientId
+          AND a.status = 'INTENTION'
+        ORDER BY a.desiredTime ASC
+    """)
+    List<Attendance> findIntentionsByClient(@Param("clientId") UUID clientId);
+
+    /**
      * Intencoes de atendimento (status INTENTION) de TODOS os profissionais, ordenadas pelo horario
      * pretendido (menor primeiro). Base do gatilho de promocao event-driven (backlog #4, fatia 3):
      * a "cabeca" da agenda global e o primeiro elemento. Sem JOIN FETCH de colecoes — o scheduler so

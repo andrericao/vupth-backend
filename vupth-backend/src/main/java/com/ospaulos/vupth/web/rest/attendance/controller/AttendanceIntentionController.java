@@ -2,6 +2,7 @@ package com.ospaulos.vupth.web.rest.attendance.controller;
 
 import com.ospaulos.vupth.api.attendance.dto.request.CreateIntentionRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.UpdateIntentionRequest;
+import com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.attendance.service.IntentionPromotionScheduler;
@@ -13,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,6 +59,29 @@ public class AttendanceIntentionController {
         // Pos-commit: a cabeca/timer de promocao se recalculam (a nova intencao pode ser a proxima a promover).
         promotionScheduler.reschedule();
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * GET /attendances/intentions/professional/me — visao de agenda do profissional (fatia 2): as
+     * suas intencoes futuras (fora da fila viva), congeladas no estimado da criacao, + o quadro da
+     * barra de encaixe (projectedQueueEnd + expediente). O front agrupa por dia. Requer PROFESSIONAL.
+     */
+    @GetMapping("/professional/me")
+    public ResponseEntity<IntentionAgendaResponse> professionalAgenda(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("INTENTION CONTROLLER AGENDA (professional) — professional={}", principal.getUserId());
+        return ResponseEntity.ok(attendanceService.getProfessionalAgenda(principal.getUserId()));
+    }
+
+    /**
+     * GET /attendances/intentions/client/me — visao de agenda do cliente (fatia 2): os proprios
+     * agendamentos (INTENTION) em qualquer loja, + um quadro por profissional distinto. Requer CLIENT.
+     */
+    @GetMapping("/client/me")
+    public ResponseEntity<IntentionAgendaResponse> clientAgenda(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("INTENTION CONTROLLER AGENDA (client) — client={}", principal.getUserId());
+        return ResponseEntity.ok(attendanceService.getClientAgenda(principal.getUserId()));
     }
 
     /**

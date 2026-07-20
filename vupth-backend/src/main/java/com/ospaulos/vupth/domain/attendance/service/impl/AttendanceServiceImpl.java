@@ -18,6 +18,8 @@ import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndExc
 import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.AgendaFrameResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -49,7 +51,9 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -343,6 +347,51 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setStatus(AttendanceStatus.CANCELLED);
         attendanceRepository.save(attendance);
         log.info("[Intention] cancelIntention — cancelled id={}", attendanceId);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public IntentionAgendaResponse getProfessionalAgenda(UUID professionalId) {
+        Professional professional = professionalRepository.findById(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        List<Attendance> intentions = attendanceRepository.findIntentionsByProfessional(professionalId);
+        List<IntentionResponse> items = intentions.stream()
+                .map(a -> IntentionResponse.fromEntity(a, a.getScheduledTime()))
+                .collect(Collectors.toList());
+
+        return new IntentionAgendaResponse(List.of(frameFor(professional)), items);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public IntentionAgendaResponse getClientAgenda(UUID clientId) {
+        List<Attendance> intentions = attendanceRepository.findIntentionsByClient(clientId);
+        List<IntentionResponse> items = intentions.stream()
+                .map(a -> IntentionResponse.fromEntity(a, a.getScheduledTime()))
+                .collect(Collectors.toList());
+
+        // Um frame por profissional distinto entre os agendamentos (o front casa por professionalId).
+        Map<UUID, Professional> byProfessional = new LinkedHashMap<>();
+        for (Attendance a : intentions) {
+            byProfessional.putIfAbsent(a.getProfessional().getId(), a.getProfessional());
+        }
+        List<AgendaFrameResponse> frames = byProfessional.values().stream()
+                .map(this::frameFor)
+                .collect(Collectors.toList());
+
+        return new IntentionAgendaResponse(frames, items);
+    }
+
+    /** Monta o "quadro" da barra de encaixe de um profissional (piso da fila viva + expediente). */
+    private AgendaFrameResponse frameFor(Professional professional) {
+        Establishment establishment = professional.getEstablishment();
+        return new AgendaFrameResponse(
+                professional.getId(),
+                establishment != null ? establishment.getId() : null,
+                projectedQueueEnd(professional),
+                establishment != null ? establishment.getOpeningTime() : null,
+                establishment != null ? establishment.getClosingTime() : null);
     }
 
     @Override
