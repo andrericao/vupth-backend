@@ -45,6 +45,8 @@ import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalExce
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
 import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
+import com.ospaulos.vupth.api.user.exception.InvalidResetCodeException;
+import com.ospaulos.vupth.api.user.exception.ResetCodeExpiredException;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
@@ -360,6 +362,20 @@ public class GlobalExceptionHandler {
             InvalidCurrentPasswordException ex, HttpServletRequest req) {
         log.warn("[401] InvalidCurrentPassword | {} {}", req.getMethod(), req.getRequestURI());
         return build(HttpStatus.UNAUTHORIZED, "Current password does not match", "CURRENT_PASSWORD_INVALID");
+    }
+
+    @ExceptionHandler(InvalidResetCodeException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidResetCode(
+            InvalidResetCodeException ex, HttpServletRequest req) {
+        log.warn("[400] InvalidResetCode | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.BAD_REQUEST, "Invalid password reset code", "RESET_CODE_INVALID");
+    }
+
+    @ExceptionHandler(ResetCodeExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleResetCodeExpired(
+            ResetCodeExpiredException ex, HttpServletRequest req) {
+        log.warn("[400] ResetCodeExpired | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.BAD_REQUEST, "Password reset code expired", "RESET_CODE_EXPIRED");
     }
 
     @ExceptionHandler(RefreshTokenInvalidException.class)

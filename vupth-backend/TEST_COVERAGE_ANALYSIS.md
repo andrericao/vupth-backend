@@ -48,7 +48,7 @@ Convenções: ✅ coberto · ⚠️ parcial (falta um lado) · ❌ ausente · �
 ## 2. MATRIZ ENDPOINT → TESTE
 
 ### 2.1 Auth & Token
-Testes: `unit/user/LoginUseCaseTest`, `RegisterUseCaseTest`, `RefreshTokenUseCaseTest`; `integrations/user/AuthIntegrationTest` (19), `RefreshTokenIntegrationTest` (7), `BaseUserIntegrationTest` (10).
+Testes: `unit/user/LoginUseCaseTest`, `RegisterUseCaseTest`, `RefreshTokenUseCaseTest`, `PasswordResetUseCasesTest`; `integrations/user/AuthIntegrationTest` (19), `RefreshTokenIntegrationTest` (7), `BaseUserIntegrationTest` (10), `ForgotPasswordIntegrationTest` (7).
 
 | Endpoint | Feliz | Erros | Notas |
 |---|---|---|---|
@@ -56,6 +56,8 @@ Testes: `unit/user/LoginUseCaseTest`, `RegisterUseCaseTest`, `RefreshTokenUseCas
 | POST /auth/login | ✅ | ✅ | senha errada, email inexistente |
 | POST /auth/refresh | ✅ | ✅ | token inválido/expirado |
 | POST /auth/logout | ✅ | ⚠️ | falta logout sem token |
+| POST /auth/forgot-password | ✅ | ✅ | anti-enumeração (200 p/ e-mail inexistente, sem envio), 422 e-mail em branco (backlog #1 fatia 1) |
+| POST /auth/reset-password | ✅ | ✅ | ciclo feliz (código capturado via `@MockBean EmailSender`, login novo OK, reuso bloqueado); 400 `RESET_CODE_INVALID`/`RESET_CODE_EXPIRED`, trava de 5 tentativas (unit), 422 campos em branco |
 
 ### 2.2 User / Profile / Address
 Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegrationTest` (26), `ProfileNicknameIntegrationTest` (8), `useraddress/UserAddressIntegrationTest` (8), `client/ClientIntegrationTest` (7).

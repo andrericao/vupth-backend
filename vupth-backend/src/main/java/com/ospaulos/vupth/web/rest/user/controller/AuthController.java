@@ -1,16 +1,20 @@
 package com.ospaulos.vupth.web.rest.user.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.ospaulos.vupth.api.user.dto.request.auth.ForgotPasswordRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LogoutRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.RefreshTokenRequest;
+import com.ospaulos.vupth.api.user.dto.request.auth.ResetPasswordRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserRegisterRequest;
 import com.ospaulos.vupth.api.user.dto.response.auth.RefreshTokenResponse;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosAndToken;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserRegisterResponse;
+import com.ospaulos.vupth.api.user.usecase.auth.ForgotPasswordUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.LoginUsecase;
 import com.ospaulos.vupth.api.user.usecase.auth.LogoutUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.RefreshTokenUseCase;
+import com.ospaulos.vupth.api.user.usecase.auth.ResetPasswordUseCase;
 import com.ospaulos.vupth.api.user.usecase.profile.RegisterUseCase;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +36,8 @@ public class AuthController {
     private final LogoutUseCase logoutUseCase;
     private final RegisterUseCase registerUseCase;
     private final RefreshTokenUseCase refreshTokenUseCase;
+    private final ForgotPasswordUseCase forgotPasswordUseCase;
+    private final ResetPasswordUseCase resetPasswordUseCase;
 
     @PostMapping("/register")
     public ResponseEntity<UserRegisterResponse> register(@RequestBody @Valid UserRegisterRequest request) throws JsonProcessingException {
@@ -66,5 +72,25 @@ public class AuthController {
     public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request){
         logoutUseCase.execute(request);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Esqueci minha senha (backlog #1) — dispara um código de 6 dígitos por e-mail.
+     * Sempre 200, exista o e-mail ou não (anti-enumeração).
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request){
+        forgotPasswordUseCase.execute(request);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Redefine a senha com o código recebido por e-mail (backlog #1).
+     * 400 RESET_CODE_INVALID / RESET_CODE_EXPIRED se o código não servir.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request){
+        resetPasswordUseCase.execute(request);
+        return ResponseEntity.ok().build();
     }
 }

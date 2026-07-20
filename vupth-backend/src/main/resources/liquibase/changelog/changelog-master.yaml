@@ -242,3 +242,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/010-create-cut-request.yaml
       relativeToChangeLogFile: true
+
+  # Esqueci minha senha (backlog #1): tabela password_reset_code (código de 6 dígitos, hash bcrypt)
+  - include:
+      file: changesets/20-auth/022-create-password_reset_code.yaml
+      relativeToChangeLogFile: true
