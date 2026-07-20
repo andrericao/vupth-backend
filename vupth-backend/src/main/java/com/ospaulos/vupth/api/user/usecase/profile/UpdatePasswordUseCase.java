@@ -3,6 +3,7 @@ package com.ospaulos.vupth.api.user.usecase.profile;
 import com.ospaulos.vupth.api.user.dto.request.profile.PasswordRequest;
 import com.ospaulos.vupth.api.user.dto.response.auth.RefreshTokenResponse;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosAndToken;
+import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.mapper.UserMapper;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
@@ -31,6 +32,11 @@ public class UpdatePasswordUseCase {
                 .orElseThrow(
                         () -> new UserNotFoundException(id)
                 );
+
+        // Client #13 — trocar a senha exige provar a senha ATUAL, nao basta o token de acesso.
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new InvalidCurrentPasswordException();
+        }
 
         user.setPassword(passwordEncoder.encode(request.password()));
         repository.save(user);

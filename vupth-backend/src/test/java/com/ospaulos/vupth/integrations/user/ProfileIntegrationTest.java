@@ -58,8 +58,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - 401 no token
  *
  * PATCH /profile/update-password/me:
+ * - 401 senha atual errada (CURRENT_PASSWORD_INVALID) — nada e alterado (Client #13)
  * - 200 success, new token returned
  * - 422 blank password
+ * - 422 blank current_password (obrigatorio)
  * - 401 no token
  *
  * DELETE /profile/delete/me:
@@ -395,6 +397,24 @@ class ProfileIntegrationTest {
     // ─────────────────────────────────────────────────────────────
 
     @Test
+    @Order(39)
+    @DisplayName("PATCH /profile/update-password/me — 401 senha atual errada (Client #13), nada e alterado")
+    void updatePassword_wrongCurrentPassword() throws Exception {
+        Assumptions.assumeTrue(token != null);
+
+        mvc.perform(patch("/profile/update-password/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(mapper.writeValueAsString(
+                                new PasswordRequest(this.password + "-errada", "novaSenha123"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CURRENT_PASSWORD_INVALID"))
+                .andDo(print());
+
+        // A senha NAO mudou: o Order(40) logo abaixo troca usando a senha atual original e passa.
+    }
+
+    @Test
     @Order(40)
     @DisplayName("PATCH /profile/update-password/me — 200 password updated, new token returned")
     void updatePassword_success() throws Exception {
@@ -405,7 +425,7 @@ class ProfileIntegrationTest {
         MvcResult result = mvc.perform(patch("/profile/update-password/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
-                        .content(mapper.writeValueAsString(new PasswordRequest(newPassword))))
+                        .content(mapper.writeValueAsString(new PasswordRequest(this.password, newPassword))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tokens.access_token", is(not(token.replace("Bearer ", "")))))
                 .andExpect(jsonPath("$.user.email").value(email))
@@ -428,7 +448,7 @@ class ProfileIntegrationTest {
         mvc.perform(patch("/profile/update-password/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
-                        .content(mapper.writeValueAsString(new PasswordRequest(""))))
+                        .content(mapper.writeValueAsString(new PasswordRequest(this.password, ""))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors.password").exists())
@@ -437,11 +457,27 @@ class ProfileIntegrationTest {
 
     @Test
     @Order(42)
+    @DisplayName("PATCH /profile/update-password/me — 422 current_password em branco (obrigatorio)")
+    void updatePassword_blankCurrentPassword() throws Exception {
+        Assumptions.assumeTrue(token != null);
+
+        mvc.perform(patch("/profile/update-password/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(mapper.writeValueAsString(new PasswordRequest("", "novaSenha123"))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.currentPassword").exists())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(43)
     @DisplayName("PATCH /profile/update-password/me — 401 no token")
     void updatePassword_noToken() throws Exception {
         mvc.perform(patch("/profile/update-password/me")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(mapper.writeValueAsString(new PasswordRequest("anyPassword123"))))
+                        .content(mapper.writeValueAsString(new PasswordRequest("anyPassword123", "anotherPassword123"))))
                 .andExpect(status().isUnauthorized())
                 .andDo(print());
     }

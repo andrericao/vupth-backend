@@ -9277,6 +9277,118 @@
       "name": "11 - profile updates",
       "item": [
         {
+          "name": "[ERRO] update password - senha atual errada (401 CURRENT_PASSWORD_INVALID)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401 - senha atual errada rejeitada\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"code CURRENT_PASSWORD_INVALID\", () => {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"CURRENT_PASSWORD_INVALID\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-password/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-password",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"current_password\":\"SenhaErrada@000\",\"password\":\"NovaSenha@456\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "[ERRO] update password - sem current_password (422)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 422 - current_password obrigatorio\", () => pm.response.to.have.status(422));",
+                  "pm.test(\"fieldErrors.currentPassword presente\", () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.code).to.eql(\"VALIDATION_ERROR\");",
+                  "  pm.expect(r.fieldErrors).to.have.property(\"currentPassword\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partner_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/profile/update-password/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update-password",
+                "me"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"password\":\"NovaSenha@456\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "update password (partner)",
           "event": [
             {
@@ -9329,7 +9441,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"password\":\"NovaSenha@456\"}",
+              "raw": "{\"current_password\":\"{{partner_password}}\",\"password\":\"NovaSenha@456\"}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -11549,7 +11661,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\"password\":\"HackerPass@123\"}",
+              "raw": "{\"current_password\":\"Qualquer@123\",\"password\":\"HackerPass@123\"}",
               "options": {
                 "raw": {
                   "language": "json"

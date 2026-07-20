@@ -58,11 +58,11 @@ Testes: `unit/user/LoginUseCaseTest`, `RegisterUseCaseTest`, `RefreshTokenUseCas
 | POST /auth/logout | ✅ | ⚠️ | falta logout sem token |
 
 ### 2.2 User / Profile / Address
-Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegrationTest` (24), `ProfileNicknameIntegrationTest` (8), `useraddress/UserAddressIntegrationTest` (8), `client/ClientIntegrationTest` (7).
+Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegrationTest` (26), `ProfileNicknameIntegrationTest` (8), `useraddress/UserAddressIntegrationTest` (8), `client/ClientIntegrationTest` (7).
 
 | Endpoint | Feliz | Erros |
 |---|---|---|
-| GET /profile/me · PATCH update-password/email | ✅ | ✅ |
+| GET /profile/me · PATCH update-password/email | ✅ | ✅ (update-password: 401 `CURRENT_PASSWORD_INVALID` senha atual errada, 422 nos dois campos em branco, 401 sem token — Client #13) |
 | DELETE /profile/delete/me | ✅ | ✅ |
 | POST/PATCH/DELETE /users/me/addresses, /{id}/main | ✅ | ✅ |
 | GET /users/email/{email} | ✅ | ⚠️ |

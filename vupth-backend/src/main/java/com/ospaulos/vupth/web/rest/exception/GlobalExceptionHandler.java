@@ -44,6 +44,7 @@ import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlready
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
+import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
@@ -352,6 +353,13 @@ public class GlobalExceptionHandler {
             LockedException ex, HttpServletRequest req) {
         log.warn("[401] AccountLocked | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
+    }
+
+    @ExceptionHandler(InvalidCurrentPasswordException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCurrentPassword(
+            InvalidCurrentPasswordException ex, HttpServletRequest req) {
+        log.warn("[401] InvalidCurrentPassword | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNAUTHORIZED, "Current password does not match", "CURRENT_PASSWORD_INVALID");
     }
 
     @ExceptionHandler(RefreshTokenInvalidException.class)
