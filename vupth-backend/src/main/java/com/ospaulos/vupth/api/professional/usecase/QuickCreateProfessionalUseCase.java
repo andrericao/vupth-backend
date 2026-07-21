@@ -97,6 +97,7 @@ public class QuickCreateProfessionalUseCase {
                 professional.getId(),
                 user.getFirstName(),
                 professional.getSpecialty(),
+                user.getNickname(),
                 establishment.getId(),
                 establishment.getName(),
                 professional.getIsAvailable(),

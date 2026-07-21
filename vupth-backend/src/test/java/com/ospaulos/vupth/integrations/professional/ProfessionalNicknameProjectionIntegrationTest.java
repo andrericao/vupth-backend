@@ -114,6 +114,31 @@ class ProfessionalNicknameProjectionIntegrationTest {
                 .andDo(print());
     }
 
+    @Test
+    @Order(12)
+    @DisplayName("GET /professional/me — 200 o proprio profissional ve seu apelido (BUG10)")
+    void me_exposesNickname() throws Exception {
+        mvc.perform(get("/professional/me")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nickname").value("Bibba"))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(13)
+    @DisplayName("PATCH /professional/me — 200 editar a especialidade nao derruba o apelido do read-back")
+    void patchMe_keepsNicknameInResponse() throws Exception {
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"specialty\":\"Barba\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.specialty").value("Barba"))
+                .andExpect(jsonPath("$.nickname").value("Bibba"))
+                .andDo(print());
+    }
+
     @AfterAll
     void tearDown() {
         serviceItemRepository.deleteAll();

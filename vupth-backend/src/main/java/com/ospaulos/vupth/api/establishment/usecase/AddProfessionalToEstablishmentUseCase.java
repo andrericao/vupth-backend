@@ -91,6 +91,7 @@ public class AddProfessionalToEstablishmentUseCase {
                 professional.getId(),
                 profName,
                 professional.getSpecialty(),
+                professional.getBaseUser() != null ? professional.getBaseUser().getNickname() : null,
                 establishment.getId(),
                 establishment.getName(),
                 professional.getIsAvailable(),

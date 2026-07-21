@@ -104,7 +104,7 @@ Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Le
 |---|---|---|---|
 | POST /professional/register · /quick-create | ✅ | ✅ | |
 | GET /professional (busca p/ convite, OWNER) | ✅ | ✅ | só candidatos sem establishment e sem PENDING (#18) |
-| GET/PATCH /professional/me · /me/reports | ✅ | ✅ | |
+| GET/PATCH /professional/me · /me/reports | ✅ | ✅ | **apelido (BUG10): `nickname` projetado no read-back do próprio profissional; `PATCH` da especialidade não derruba o campo** (`ProfessionalNicknameProjectionIntegrationTest` Order 12-13) |
 | POST /professional/affiliate · DELETE /me/establishment | ✅ | ✅ | 409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES |
 | Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 

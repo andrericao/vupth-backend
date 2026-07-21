@@ -15,6 +15,7 @@ public record ProfessionalQuickCreateResponse(
         UUID id,
         String name,
         String specialty,
+        String nickname,
 
         @JsonProperty("establishment_id")
         UUID establishmentId,
@@ -32,6 +33,7 @@ public record ProfessionalQuickCreateResponse(
                 p.getId(),
                 p.getBaseUser().getFirstName(),
                 p.getSpecialty(),
+                p.getBaseUser().getNickname(),
                 p.getEstablishment() != null ? p.getEstablishment().getId() : null,
                 p.getEstablishment() != null ? p.getEstablishment().getName() : null,
                 p.getIsAvailable(),

@@ -2199,6 +2199,51 @@
           }
         },
         {
+          "name": "[setup] define apelido do prof (PATCH /profile/general-infos)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{prof_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"nickname\": \"Bibba\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/general-infos",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "general-infos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Apelido persistido\", () => {",
+                  "  pm.expect(pm.response.json().nickname).to.eql(\"Bibba\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
           "name": "GET professional me (prof)",
           "request": {
             "method": "GET",
@@ -2231,6 +2276,9 @@
                   "  pm.expect(r.id).to.be.a(\"string\");",
                   "  pm.expect(r).to.have.property(\"specialty\");",
                   "  pm.expect(r).to.have.property(\"is_available\");",
+                  "});",
+                  "pm.test(\"BUG10: apelido volta no /professional/me\", () => {",
+                  "  pm.expect(pm.response.json().nickname).to.eql(\"Bibba\");",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -2278,6 +2326,9 @@
                   "  const r = pm.response.json();",
                   "  pm.expect(r.name).to.eql(\"Joao Editado\");",
                   "  pm.expect(r.specialty).to.eql(\"Barbeiro Senior\");",
+                  "});",
+                  "pm.test(\"BUG10: editar especialidade nao derruba o apelido\", () => {",
+                  "  pm.expect(pm.response.json().nickname).to.eql(\"Bibba\");",
                   "});"
                 ],
                 "type": "text/javascript"

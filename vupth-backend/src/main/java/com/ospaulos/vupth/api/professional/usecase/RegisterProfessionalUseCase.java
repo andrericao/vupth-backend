@@ -77,6 +77,7 @@ public class RegisterProfessionalUseCase {
                 professional.getId(),
                 user.getFirstName(),
                 professional.getSpecialty(),
+                user.getNickname(),
                 null,  // no establishment yet
                 null,
                 professional.getIsAvailable(),
