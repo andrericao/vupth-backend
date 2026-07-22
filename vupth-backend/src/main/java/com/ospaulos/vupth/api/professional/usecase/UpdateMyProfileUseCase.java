@@ -63,6 +63,7 @@ public class UpdateMyProfileUseCase {
                 professional.getEstablishment() != null ? professional.getEstablishment().getId() : null,
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
                 null
         );
     }

@@ -2,6 +2,7 @@ package com.ospaulos.vupth.api.professional.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 
 import java.util.UUID;
 
@@ -26,6 +27,9 @@ public record ProfessionalQuickCreateResponse(
         @JsonProperty("is_available")
         Boolean isAvailable,
 
+        @JsonProperty("work_status")
+        ProfessionalStatus workStatus,
+
         String message
 ) {
     public static ProfessionalQuickCreateResponse fromEntity(Professional p) {
@@ -37,6 +41,7 @@ public record ProfessionalQuickCreateResponse(
                 p.getEstablishment() != null ? p.getEstablishment().getId() : null,
                 p.getEstablishment() != null ? p.getEstablishment().getName() : null,
                 p.getIsAvailable(),
+                p.getWorkStatus(),
                 "Professional created! Your ID is permanent. Fill in the rest whenever you want."
         );
     }

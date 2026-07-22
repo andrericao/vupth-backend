@@ -105,6 +105,7 @@ Testes: `unit/professional/*` (Register, QuickCreate, ServiceImpl, Affiliate, Le
 | POST /professional/register · /quick-create | ✅ | ✅ | |
 | GET /professional (busca p/ convite, OWNER) | ✅ | ✅ | só candidatos sem establishment e sem PENDING (#18) |
 | GET/PATCH /professional/me · /me/reports | ✅ | ✅ | **apelido (BUG10): `nickname` projetado no read-back do próprio profissional; `PATCH` da especialidade não derruba o campo** (`ProfessionalNicknameProjectionIntegrationTest` Order 12-13) |
+| PATCH /professional/me/status (S1 fatia 1) | ✅ | ✅ | `ProfessionalStatusIntegrationTest` (4) — WORKING→ON_BREAK→OFF **200** e refletido no `GET /me` (`work_status`); sem serviço → **422 `PROFESSIONAL_HAS_NO_SERVICE`** (WORKING e ON_BREAK); OFF com fila própria (guest) → **409 `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES`**; status ausente → **422 `VALIDATION_ERROR`**. Nesta fatia o `open_status` ainda **não** é derivado |
 | POST /professional/affiliate · DELETE /me/establishment | ✅ | ✅ | 409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES |
 | Afiliação: convite/pedido/accept/reject/cancel + pendência única (#8b) | ✅ | ✅ | |
 

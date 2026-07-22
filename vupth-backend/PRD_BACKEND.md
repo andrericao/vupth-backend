@@ -84,7 +84,7 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 | **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
 | **CLIENT** | `POST /attendances`, `POST /attendances/cut-requests` (solicitar corte C2), `POST /attendances/intentions` (intenção #4), `PATCH /attendances/intentions/{id}` (editar #4), `DELETE /attendances/intentions/{id}` (cancelar #4), `GET /attendances/intentions/client/me` (agenda do cliente #4), `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `GET /attendances?clientId=<self>` (proprios atendimentos — Partner BUG8), `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada por establishment/profissional; cliente usa a forma `?clientId=<self>`), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1), `PUT\|DELETE /establishment/{id}/service-items/{itemId}` (owner da loja ou o proprio profissional dono do item; checagem fina no service), `PATCH /establishment/{id}/open-status` (owner ou profissional afiliado a loja; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit\|promote`, `GET /attendances/cut-requests` (pendentes de corte C2), `PATCH /attendances/cut-requests/{id}/accept\|refuse` (decidir corte C2), `GET /attendances/intentions/professional/me` (agenda do profissional #4), `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /professional/me/status` (status de trabalho S1), `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit\|promote`, `GET /attendances/cut-requests` (pendentes de corte C2), `PATCH /attendances/cut-requests/{id}/accept\|refuse` (decidir corte C2), `GET /attendances/intentions/professional/me` (agenda do profissional #4), `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, `POST /devices`, `DELETE /devices/{token}` (push — implementado), todos os demais endpoints nao listados |
 
@@ -1126,9 +1126,13 @@ Retorna os dados do profissional autenticado.
   "establishment_id": "uuid | null",
   "establishment_name": "Barbearia do Ricardo | null",
   "is_available": true,
+  "work_status": "OFF",
   "message": null
 }
 ```
+
+> **`work_status` (S1):** status de trabalho do profissional (`WORKING`/`ON_BREAK`/`OFF`), escrito por
+> `PATCH /professional/me/status`. Nasce `OFF`. Aqui e so de LEITURA. Ver a secao desse endpoint.
 
 > **`nickname` (apelido, BUG10):** so de LEITURA aqui — o ponto unico de escrita continua sendo
 > `PATCH /profile/general-infos` (vive na `BaseUser`). `null` quando nao definido. O mesmo campo ja
@@ -1166,6 +1170,36 @@ Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
 - 422 `VALIDATION_ERROR` — name/specialty acima de 100 chars
 
 **Testes:** Integracao
+
+---
+
+### PATCH /professional/me/status
+**S1 (fatia 1) — status de trabalho do profissional.** O profissional muda o **proprio** status; e a base do futuro `open_status` **derivado** (fatia 2, ainda nao ligada). Nesta fatia o status apenas e persistido e exposto (no `work_status` do `ProfessionalQuickCreateResponse`, inclusive no `GET /professional/me`).
+
+**Acesso:** PROFESSIONAL (por JWT).
+
+**Request:**
+```json
+{ "status": "WORKING" }
+```
+
+| Valor | PT (front) | Significado |
+|-------|-----------|-------------|
+| `WORKING` | trabalhando | em expediente — conta para a loja abrir (fatia 2). Exige ≥1 servico |
+| `ON_BREAK` | intervalo | sub-estado de trabalhando — **conta como aberto** (a loja nao fecha no almoco). Exige ≥1 servico |
+| `OFF` | indisponivel | fora de expediente — **nao conta**. Barrado com fila/atendimento ativo proprio |
+
+**Response (200):** `ProfessionalQuickCreateResponse` (com `work_status` atualizado, `message: null`).
+
+**Erros:**
+- 422 `PROFESSIONAL_HAS_NO_SERVICE` — tentar `WORKING`/`ON_BREAK` sem nenhum servico cadastrado (mesmo gate #31)
+- 409 `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` — tentar `OFF` com atendimento ativo ou fila propria (`SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED`); o caminho para sair com fila e "fechar fila" (drenar), que chega na fatia 3
+- 422 `VALIDATION_ERROR` — `status` ausente; 400 se valor de enum invalido
+- 404 `PROFESSIONAL_NOT_FOUND` · 401 sem token
+
+> **Nota de escopo (S1 fatia 1):** o `open_status` do estabelecimento **ainda e o toggle bruto** (`PATCH /establishment/{id}/open-status`); a **derivacao** (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), o `aceitandoNovos` ("fechar fila") + auto-`OFF`, o rotulo do cliente e o auto-fechamento por horario (BUG1) entram nas fatias 2-5. O `work_status` nasce `OFF` (profissional recem-criado nao esta em expediente). **Handoff Front-Partner:** as pills de status (hoje stub "em breve" no menu) passam a chamar `PATCH /professional/me/status`; enquanto a fatia 2 nao vem, mudar o status **nao** abre/fecha a loja sozinho.
+
+**Testes:** Integracao (`ProfessionalStatusIntegrationTest`)
 
 ---
 
@@ -2953,25 +2987,26 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
 | 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔧 configurado — **falta testar** | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. |
-| 2 | **Auto-fechamento da loja (prompt + carencia de 15min)** | ⬜ aberto | **Partner "BUG1 / fechamento pelo horario" — decisao Andre 2026-07-14, reconciliada 2026-07-20: a loja NAO pode dormir aberta.** Supersede o "NAO auto-fechar" de 2026-07-04. Modelo: (a) prompt "quer fechar?" ao finalizar atendimento apos o `closing_time` **ou** ao cruzar o `closing_time` com a loja aberta; (b) se o profissional nao sinalizar, **timer server-side de 15min** auto-fecha (auto-`indisponivel`; sendo o ultimo, o estabelecimento fecha). **O timer tem de ser do BACKEND** — `setTimeout` no app nao serve (o celular dorme). Reusar a mecanica event-driven ja provada em `IntentionPromotionScheduler`/`CutRequestExpiryScheduler`. O front so exibe countdown + prompt. Encadeia com o "fechar fila" do S1 do Partner. |
-| 3 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
-| 4 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
-| 5 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner "Refeicoes Modelo B (janela flexivel)"** — refeicao por janela + auto-supressao no ETA. Nota: o **stub ⏱ do front foi REMOVIDO em 2026-07-20** (saiu junto com a secao de refeicoes da fila); ao entregar, a acao adiantar/adiar sera recriada em `meals.tsx`, nao na fila. |
-| 6 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner "Cliente adiciona servico a um attendance ja na fila" / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
-| 7 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
-| 8 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 9 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 10 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 11 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 12 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 13 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 14 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 15 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
-| 16 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 17 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 18 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 19 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 20 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 2 | **Status do profissional → `open_status` derivado (S1)** | 🔧 em andamento — **fatia 1 de 5 CONCLUIDA** | **Partner "S1" (modelo acordado 2026-07-09).** O profissional muda o **proprio** status (`WORKING`/`ON_BREAK`/`OFF`) e o `open_status` da loja vira **projecao read-only** (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), eliminando o estado "aberto sem ninguem" e a corrida do booleano. Andre escolheu o **caminho B** (fazer o S1 completo antes do auto-fechamento). **Fatias:** (1) ✅ enum + campo + `PATCH /professional/me/status` + gates (feito); (2) `open_status` derivado nos read-models; (3) `aceitandoNovos` ("fechar fila") + auto-`OFF` ao finalizar o ultimo; (4) rotulo do cliente (DISPONIVEL/ENCERRANDO/INDISPONIVEL); (5) = auto-fechamento (item abaixo). |
+| 3 | **Auto-fechamento da loja (prompt + carencia de 15min)** | ⬜ aberto (fatia 5 do S1) | **Partner "BUG1 / fechamento pelo horario" — decisao Andre 2026-07-14, reconciliada 2026-07-20: a loja NAO pode dormir aberta.** ⚠️ **Acoplado ao S1 (#2):** o auto-fechar = auto-`OFF` por timer, reusando a mecanica do S1; entra como a **fatia 5** dele. Supersede o "NAO auto-fechar" de 2026-07-04. Modelo: (a) prompt "quer fechar?" ao finalizar atendimento apos o `closing_time` **ou** ao cruzar o `closing_time` com a loja aberta; (b) se o profissional nao sinalizar, **timer server-side de 15min** auto-fecha (auto-`indisponivel`; sendo o ultimo, o estabelecimento fecha). **O timer tem de ser do BACKEND** — `setTimeout` no app nao serve (o celular dorme). Reusar a mecanica event-driven ja provada em `IntentionPromotionScheduler`/`CutRequestExpiryScheduler`. O front so exibe countdown + prompt. Encadeia com o "fechar fila" do S1 do Partner. |
+| 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 5 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 6 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner "Refeicoes Modelo B (janela flexivel)"** — refeicao por janela + auto-supressao no ETA. Nota: o **stub ⏱ do front foi REMOVIDO em 2026-07-20** (saiu junto com a secao de refeicoes da fila); ao entregar, a acao adiantar/adiar sera recriada em `meals.tsx`, nao na fila. |
+| 7 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner "Cliente adiciona servico a um attendance ja na fila" / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
+| 8 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
+| 9 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 10 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 11 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 12 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 13 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 14 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
+| 15 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 16 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
+| 17 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 18 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 19 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 20 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 21 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). Ver o item "Auto-fechamento da loja" no backlog.
 

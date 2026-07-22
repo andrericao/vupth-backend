@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 009-add-work_status-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: work_status
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: work_status
+                  type: VARCHAR(20)
+                  defaultValue: "OFF"
+                  constraints:
+                    nullable: false

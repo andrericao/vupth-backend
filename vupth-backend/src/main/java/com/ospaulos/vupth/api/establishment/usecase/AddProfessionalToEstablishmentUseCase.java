@@ -95,6 +95,7 @@ public class AddProfessionalToEstablishmentUseCase {
                 establishment.getId(),
                 establishment.getName(),
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
                 "Professional successfully added to establishment."
         );
     }

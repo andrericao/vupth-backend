@@ -33,6 +33,7 @@ import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasNoServiceException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
@@ -510,6 +511,13 @@ public class GlobalExceptionHandler {
             ProfessionalHasActiveAttendancesException ex, HttpServletRequest req) {
         log.warn("[409] ProfessionalHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_HAS_ACTIVE_ATTENDANCES");
+    }
+
+    @ExceptionHandler(ProfessionalHasNoServiceException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalHasNoService(
+            ProfessionalHasNoServiceException ex, HttpServletRequest req) {
+        log.warn("[422] ProfessionalHasNoService | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "PROFESSIONAL_HAS_NO_SERVICE");
     }
 
     @ExceptionHandler(IntervalConflictException.class)

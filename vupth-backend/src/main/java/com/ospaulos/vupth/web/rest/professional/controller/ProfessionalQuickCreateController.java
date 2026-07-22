@@ -4,6 +4,7 @@ import com.ospaulos.vupth.api.professional.dto.request.AffiliateToEstablishmentR
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
 import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalRequest;
+import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalStatusRequest;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalSearchResponse;
 import com.ospaulos.vupth.api.professional.usecase.AffiliateToEstablishmentUseCase;
@@ -11,6 +12,7 @@ import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.UpdateMyProfileUseCase;
+import com.ospaulos.vupth.api.professional.usecase.UpdateProfessionalStatusUseCase;
 import com.ospaulos.vupth.api.report.dto.response.ProfessionalReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
@@ -72,6 +74,7 @@ public class ProfessionalQuickCreateController {
     private final AffiliateToEstablishmentUseCase affiliateUseCase;
     private final LeaveEstablishmentUseCase       leaveUseCase;
     private final UpdateMyProfileUseCase          updateMyProfileUseCase;
+    private final UpdateProfessionalStatusUseCase updateStatusUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
     private final ReportService                  reportService;
@@ -127,6 +130,7 @@ public class ProfessionalQuickCreateController {
                 professional.getEstablishment() != null ? professional.getEstablishment().getId() : null,
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
                 null
         ));
     }
@@ -146,6 +150,27 @@ public class ProfessionalQuickCreateController {
 
         ProfessionalQuickCreateResponse response =
                 updateMyProfileUseCase.execute(principal.getUserId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /professional/me/status
+     *
+     * S1 (fatia 1): o profissional muda o proprio status de trabalho
+     * ({@code WORKING}/{@code ON_BREAK}/{@code OFF}). Gates: entrar em expediente exige ≥1 servico
+     * ({@code 422 PROFESSIONAL_HAS_NO_SERVICE}); ficar indisponivel com fila/atendimento ativo e
+     * barrado ({@code 409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES}).
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @PatchMapping("/me/status")
+    public ResponseEntity<ProfessionalQuickCreateResponse> updateMyStatus(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid UpdateProfessionalStatusRequest request) {
+
+        log.info("PATCH /professional/me/status — user={} status={}", principal.getUserId(), request.status());
+
+        ProfessionalQuickCreateResponse response =
+                updateStatusUseCase.execute(principal.getUserId(), request);
         return ResponseEntity.ok(response);
     }
 

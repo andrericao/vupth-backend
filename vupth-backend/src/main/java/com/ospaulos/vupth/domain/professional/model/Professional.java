@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -36,6 +37,15 @@ public class Professional {
 
     @Column(name = "is_available", nullable = false)
     private Boolean isAvailable = true;
+
+    /**
+     * Status de trabalho (S1): trabalhando / intervalo / indisponivel. Base do {@code open_status}
+     * derivado (fatia 2). Nasce {@link ProfessionalStatus#OFF} — um profissional recem-criado nao
+     * esta em expediente ate sinalizar. Ver {@link ProfessionalStatus}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "work_status", nullable = false, length = 20)
+    private ProfessionalStatus workStatus = ProfessionalStatus.OFF;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")

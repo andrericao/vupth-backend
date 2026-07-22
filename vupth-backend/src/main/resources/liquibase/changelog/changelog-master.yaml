@@ -247,3 +247,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/022-create-password_reset_code.yaml
       relativeToChangeLogFile: true
+
+  # S1 (fatia 1): status de trabalho do profissional (WORKING/ON_BREAK/OFF), base do open_status derivado
+  - include:
+      file: changesets/60-professional/009-add-work_status-to-professional.yaml
+      relativeToChangeLogFile: true
