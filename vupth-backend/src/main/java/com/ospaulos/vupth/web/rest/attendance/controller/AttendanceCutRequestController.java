@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -50,6 +52,19 @@ public class AttendanceCutRequestController {
         CutRequestResponse response = cutRequestService.createCutRequest(request, principal.getUserId());
         expiryScheduler.reschedule(); // pos-commit: arma o timer de auto-nega para a nova cabeca (fatia 3)
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * GET /attendances/cut-requests — lista os pedidos PENDING dirigidos ao profissional logado
+     * (professionalId do JWT), do mais antigo ao mais novo. Desbloqueia a UI do Partner: caminho de
+     * recuperacao quando o WS `CUT_REQUESTED` foi perdido (app fechado) + fonte da lista de pendentes.
+     * 200 sempre (lista vazia se nenhum). Requer PROFESSIONAL role.
+     */
+    @GetMapping
+    public ResponseEntity<List<CutRequestResponse>> listPending(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("CUT-REQUEST CONTROLLER LIST PENDING — professional={}", principal.getUserId());
+        return ResponseEntity.ok(cutRequestService.listPendingForProfessional(principal.getUserId()));
     }
 
     /**

@@ -83,6 +83,8 @@ public class SecurityConfig {
                         // ── ROLE_CLIENT (qualquer autenticado) ────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/attendances").hasAnyRole("OWNER", "PROFESSIONAL", "CLIENT")
                         .requestMatchers(HttpMethod.GET, "/attendances/client/me").hasRole("CLIENT")
+                        // Pedidos de corte pendentes do profissional (BUG5 C2 — antes do generico /attendances/*)
+                        .requestMatchers(HttpMethod.GET, "/attendances/cut-requests").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
                         // Visao de agenda (#4, fatia 2): agenda do profissional e a do cliente (intencoes futuras)
                         .requestMatchers(HttpMethod.GET, "/attendances/intentions/professional/me").hasRole("PROFESSIONAL")

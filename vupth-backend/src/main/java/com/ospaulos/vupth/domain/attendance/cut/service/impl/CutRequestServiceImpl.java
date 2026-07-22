@@ -109,6 +109,15 @@ public class CutRequestServiceImpl implements CutRequestService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CutRequestResponse> listPendingForProfessional(UUID professionalId) {
+        List<CutRequest> pending = cutRequestRepository
+                .findByProfessionalIdAndStatusOrderByCreatedAtAsc(professionalId, CutRequestStatus.PENDING);
+        log.info("[CutRequest] list pending — professional={} count={}", professionalId, pending.size());
+        return pending.stream().map(CutRequestResponse::fromEntity).toList();
+    }
+
+    @Override
     // noRollbackFor: o aceite defensivo persiste o EXPIRED (auto-nega) mesmo lancando 409 —
     // sem isso o rollback padrao da RuntimeException desfaz o flip e o pedido volta a PENDING.
     @Transactional(noRollbackFor = CutRequestExpiredException.class)
@@ -137,7 +146,7 @@ public class CutRequestServiceImpl implements CutRequestService {
         queuePublisher.broadcastQueue(cut.getEstablishment().getId());
         queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
                 "CUT_ACCEPTED", attendance.getId(), cut.getEstablishment().getId(),
-                "Seu pedido de corte foi aceito — voce entrou na fila."));
+                "Seu pedido de corte foi aceito — voce entrou na fila.").withCutRequestId(cut.getId()));
         pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte aceito",
                 "Voce entrou na fila.",
                 Map.of("type", "CUT_ACCEPTED",
@@ -159,7 +168,7 @@ public class CutRequestServiceImpl implements CutRequestService {
 
         queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
                 "CUT_REFUSED", null, cut.getEstablishment().getId(),
-                "Seu pedido de corte foi recusado."));
+                "Seu pedido de corte foi recusado.").withCutRequestId(cut.getId()));
         pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte recusado",
                 "O profissional nao pode te atender agora.",
                 Map.of("type", "CUT_REFUSED",
@@ -184,7 +193,7 @@ public class CutRequestServiceImpl implements CutRequestService {
 
             queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
                     "CUT_EXPIRED", null, cut.getEstablishment().getId(),
-                    "Seu pedido de corte expirou sem resposta do profissional."));
+                    "Seu pedido de corte expirou sem resposta do profissional.").withCutRequestId(cut.getId()));
             pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte expirado",
                     "Ninguem respondeu a tempo. Tente novamente quando a loja abrir.",
                     Map.of("type", "CUT_EXPIRED",
@@ -213,8 +222,8 @@ public class CutRequestServiceImpl implements CutRequestService {
     private void notifyProfessional(CutRequest cut) {
         UUID profId = cut.getProfessional().getId(); // == user id (MapsId)
         queuePublisher.notifyClient(profId, QueueNotification.of(
-                "CUT_REQUESTED", cut.getId(), cut.getEstablishment().getId(),
-                "Um cliente solicitou um corte — aceite ou recuse."));
+                "CUT_REQUESTED", null, cut.getEstablishment().getId(),
+                "Um cliente solicitou um corte — aceite ou recuse.").withCutRequestId(cut.getId()));
         pushPublisher.notifyUser(profId, "Novo pedido de corte",
                 "Um cliente quer ser atendido. Aceite ou recuse antes de expirar.",
                 Map.of("type", "CUT_REQUESTED",

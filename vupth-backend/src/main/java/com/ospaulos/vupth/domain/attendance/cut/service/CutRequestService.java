@@ -3,6 +3,7 @@ package com.ospaulos.vupth.domain.attendance.cut.service;
 import com.ospaulos.vupth.api.attendance.dto.request.CutRequestRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.CutRequestResponse;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -13,6 +14,13 @@ public interface CutRequestService {
 
     /** Cliente (por JWT) registra um pedido de corte. Loja precisa estar fechada agora (senao 409). */
     CutRequestResponse createCutRequest(CutRequestRequest request, UUID clientId);
+
+    /**
+     * Lista os pedidos PENDING dirigidos ao profissional (por JWT), do mais antigo ao mais novo.
+     * Desbloqueia a UI do Partner: caminho de recuperacao quando o WS {@code CUT_REQUESTED} foi
+     * perdido (app fechado) e fonte da lista de "pedidos aguardando decisao".
+     */
+    List<CutRequestResponse> listPendingForProfessional(UUID professionalId);
 
     /**
      * Profissional dono ACEITA o pedido (fatia 2): nasce um Attendance SCHEDULED na cauda da fila,
