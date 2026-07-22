@@ -2,6 +2,7 @@ package com.ospaulos.vupth.api.professional.usecase;
 
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -21,9 +22,14 @@ public class LeaveEstablishmentUseCase {
 
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
+    private final EstablishmentOpenStatusService openStatusService;
 
+    /**
+     * @return o id do establishment deixado (para o broadcast pos-commit), ou {@code null}
+     *         se o profissional ja estava sem vinculo (no-op).
+     */
     @Transactional
-    public void execute(UUID professionalId) {
+    public UUID execute(UUID professionalId) {
         log.info("[LeaveEstablishment] execute — professional={}", professionalId);
 
         Professional professional = professionalRepository.findById(professionalId)
@@ -31,7 +37,7 @@ public class LeaveEstablishmentUseCase {
 
         if (professional.getEstablishment() == null) {
             log.info("[LeaveEstablishment] professional={} already has no establishment", professionalId);
-            return;
+            return null;
         }
 
         boolean hasActive = attendanceRepository.existsByProfessional_IdAndStatusIn(
@@ -46,6 +52,13 @@ public class LeaveEstablishmentUseCase {
         professional.setEstablishment(null);
         professionalRepository.save(professional);
 
+        // S1 fatia 2 — se saiu o ultimo WORKING/ON_BREAK, a loja fecha (recalculo atomico).
+        // Saida OFF nao muda a presenca -> nao recalcula (preserva override manual do hibrido).
+        if (professional.getWorkStatus() != null && professional.getWorkStatus().countsAsOpen()) {
+            openStatusService.deriveFromProfessionals(establishmentId);
+        }
+
         log.info("[LeaveEstablishment] professional={} left establishment={}", professionalId, establishmentId);
+        return establishmentId;
     }
 }

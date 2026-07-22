@@ -21,6 +21,7 @@ import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.report.service.ReportService;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
+import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,6 +79,7 @@ public class ProfessionalQuickCreateController {
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
     private final ReportService                  reportService;
+    private final QueueWebSocketPublisher        queuePublisher;
 
     /**
      * GET /professional?name=&specialty=
@@ -160,6 +162,8 @@ public class ProfessionalQuickCreateController {
      * ({@code WORKING}/{@code ON_BREAK}/{@code OFF}). Gates: entrar em expediente exige ≥1 servico
      * ({@code 422 PROFESSIONAL_HAS_NO_SERVICE}); ficar indisponivel com fila/atendimento ativo e
      * barrado ({@code 409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES}).
+     * Fatia 2: o open_status do estabelecimento e recalculado na mesma transacao e o snapshot da
+     * fila (que agora carrega o work_status) e broadcastado pos-commit.
      * Auth: ROLE_PROFESSIONAL
      */
     @PatchMapping("/me/status")
@@ -171,6 +175,10 @@ public class ProfessionalQuickCreateController {
 
         ProfessionalQuickCreateResponse response =
                 updateStatusUseCase.execute(principal.getUserId(), request);
+
+        // S1 fatia 2 — evento pos-commit: snapshot novo (work_status + open_status derivado).
+        queuePublisher.broadcastQueue(response.establishmentId());
+
         return ResponseEntity.ok(response);
     }
 
@@ -259,6 +267,10 @@ public class ProfessionalQuickCreateController {
 
         ProfessionalQuickCreateResponse response =
                 affiliateUseCase.execute(principal.getUserId(), request.establishmentId());
+
+        // S1 fatia 2 — a afiliacao muda o snapshot (e pode abrir a loja): broadcast pos-commit.
+        queuePublisher.broadcastQueue(response.establishmentId());
+
         return ResponseEntity.ok(response);
     }
 
@@ -275,7 +287,11 @@ public class ProfessionalQuickCreateController {
 
         log.info("DELETE /professional/me/establishment — user={}", principal.getUserId());
 
-        leaveUseCase.execute(principal.getUserId());
+        UUID leftEstablishmentId = leaveUseCase.execute(principal.getUserId());
+
+        // S1 fatia 2 — a saida muda o snapshot (e pode fechar a loja): broadcast pos-commit.
+        queuePublisher.broadcastQueue(leftEstablishmentId);
+
         return ResponseEntity.noContent().build();
     }
 

@@ -28,6 +28,7 @@ import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
+import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +77,7 @@ public class EstablishmentController {
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
     private final ReportService                          reportService;
     private final ServiceItemService                     serviceItemService;
+    private final QueueWebSocketPublisher                queuePublisher;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -282,6 +284,9 @@ public class EstablishmentController {
         ProfessionalQuickCreateResponse response =
                 addProfessionalUseCase.execute(user.getUserId(), establishmentId, request.professionalId());
 
+        // S1 fatia 2 — a afiliacao muda o snapshot (e pode abrir a loja): broadcast pos-commit.
+        queuePublisher.broadcastQueue(establishmentId);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -295,6 +300,10 @@ public class EstablishmentController {
                 establishmentId, user.getUserId(), professionalId);
 
         removeProfessionalUseCase.execute(user.getUserId(), establishmentId, professionalId);
+
+        // S1 fatia 2 — a saida muda o snapshot (e pode fechar a loja): broadcast pos-commit.
+        queuePublisher.broadcastQueue(establishmentId);
+
         return ResponseEntity.noContent().build();
     }
 

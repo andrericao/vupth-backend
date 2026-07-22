@@ -51,6 +51,12 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     @Query("SELECT p FROM Professional p JOIN FETCH p.baseUser LEFT JOIN FETCH p.establishment WHERE p.id = :id")
     Optional<Professional> findByIdWithBaseUserAndEstablishment(@Param("id") UUID id);
 
+    // S1 fatia 2 — ∃ prof afiliado "presente" (WORKING/ON_BREAK)? Query direta (nao a colecao lazy
+    // inversa, que fica stale quando a afiliacao muda na mesma transacao); flush AUTO garante o dado.
+    boolean existsByEstablishment_IdAndWorkStatusIn(
+            UUID establishmentId,
+            java.util.Collection<com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus> statuses);
+
     // Busca de profissionais por nome e/ou especialidade. Os parametros ja vem como
     // padroes LIKE prontos ("%" = sem filtro) — nunca null, para evitar problemas de
     // inferencia de tipo do Postgres (null vira bytea e quebra o LOWER). COALESCE

@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.queue.service.QueueUtils;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
@@ -27,6 +28,11 @@ public record ProfessionalWithQueueResponse(
 
         @JsonProperty("is_available")
         Boolean isAvailable,
+
+        // S1 fatia 2 — status de trabalho do profissional (WORKING/ON_BREAK/OFF); base do
+        // open_status derivado da loja. Pedido explicito do Partner (handoff S1).
+        @JsonProperty("work_status")
+        ProfessionalStatus workStatus,
 
         @JsonProperty("current_attendance")
         AttendanceInQueueResponse currentAttendance,
@@ -119,6 +125,7 @@ public record ProfessionalWithQueueResponse(
                 professional.getSpecialty(),
                 professional.getBaseUser() != null ? professional.getBaseUser().getNickname() : null,
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
                 currentDto,
                 waitingDtos,
                 waitingList.size(),

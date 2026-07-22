@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -47,6 +48,7 @@ public class AffiliateToEstablishmentUseCase {
     private final UserRepository          userRepository;
     private final ProfessionalRepository  professionalRepository;
     private final EstablishmentRepository establishmentRepository;
+    private final EstablishmentOpenStatusService openStatusService;
 
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, UUID establishmentId) {
@@ -81,6 +83,12 @@ public class AffiliateToEstablishmentUseCase {
         // 6. Set and persist
         professional.setEstablishment(establishment);
         professionalRepository.save(professional);
+
+        // S1 fatia 2 — quem chega WORKING/ON_BREAK pode abrir a loja (recalculo atomico).
+        // Chegada OFF nao muda a presenca -> nao recalcula (preserva override manual do hibrido).
+        if (professional.getWorkStatus() != null && professional.getWorkStatus().countsAsOpen()) {
+            openStatusService.deriveFromProfessionals(establishment.getId());
+        }
 
         log.info("[Affiliate] professional={} affiliated to establishment={} ({})",
                 userId, establishment.getId(), establishment.getName());

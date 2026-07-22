@@ -775,6 +775,7 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
       "specialty": "Corte masculino",
       "nickname": "Joca | null",
       "is_available": true,
+      "work_status": "WORKING | ON_BREAK | OFF",
       "current_attendance": null,
       "waiting_list": [
         {
@@ -893,6 +894,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 
 ### PATCH /establishment/{id}/open-status
 Atualiza status de abertura.
+
+> ⚠️ **S1 fatia 2 — toggle em modo HIBRIDO (decisao Andre 2026-07-22):** o `open_status` passou a ser **derivado** dos `work_status` dos profissionais (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), recalculado a cada mudanca de status/afiliacao com presenca. **Este toggle continua funcionando como override manual ENTRE recalculos** — mas o proximo recalculo vence (ex.: fechar na mao com um prof `WORKING` dura ate o proximo `PATCH /professional/me/status`). Sera absorvido/substituido nas fatias 3-5 do S1. Ver a nota completa em `PATCH /professional/me/status`.
 
 **Acesso:** OWNER (dono da loja) **ou** profissional **afiliado** a ela. Decisao de produto: o profissional-funcionario tambem abre/fecha a loja. O vinculo e verificado no servico — profissional de **outra** loja recebe `403 ESTABLISHMENT_ACCESS_DENIED`.
 
@@ -1174,7 +1177,7 @@ Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
 ---
 
 ### PATCH /professional/me/status
-**S1 (fatia 1) — status de trabalho do profissional.** O profissional muda o **proprio** status; e a base do futuro `open_status` **derivado** (fatia 2, ainda nao ligada). Nesta fatia o status apenas e persistido e exposto (no `work_status` do `ProfessionalQuickCreateResponse`, inclusive no `GET /professional/me`).
+**S1 (fatias 1-2) — status de trabalho do profissional + `open_status` derivado.** O profissional muda o **proprio** status (persistido e exposto no `work_status` do `ProfessionalQuickCreateResponse`, inclusive no `GET /professional/me`) e, na **mesma transacao**, o `open_status` do estabelecimento e **recalculado** (fatia 2): `aberto ⇔ ∃ prof afiliado em {WORKING, ON_BREAK}`. Pos-commit, o snapshot da fila (que agora carrega o `work_status` de cada profissional) e broadcastado no WS `/topic/establishment/{id}/queue`.
 
 **Acesso:** PROFESSIONAL (por JWT).
 
@@ -1197,9 +1200,9 @@ Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
 - 422 `VALIDATION_ERROR` — `status` ausente; 400 se valor de enum invalido
 - 404 `PROFESSIONAL_NOT_FOUND` · 401 sem token
 
-> **Nota de escopo (S1 fatia 1):** o `open_status` do estabelecimento **ainda e o toggle bruto** (`PATCH /establishment/{id}/open-status`); a **derivacao** (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), o `aceitandoNovos` ("fechar fila") + auto-`OFF`, o rotulo do cliente e o auto-fechamento por horario (BUG1) entram nas fatias 2-5. O `work_status` nasce `OFF` (profissional recem-criado nao esta em expediente). **Handoff Front-Partner:** as pills de status (hoje stub "em breve" no menu) passam a chamar `PATCH /professional/me/status`; enquanto a fatia 2 nao vem, mudar o status **nao** abre/fecha a loja sozinho.
+> **Nota de escopo (S1 fatia 2 — modelo HIBRIDO, decisao Andre 2026-07-22):** a **derivacao** esta LIGADA: o recalculo (atomico, mesma transacao) roda a cada `PATCH /professional/me/status` e a cada **afiliacao/saida** de profissional que **conta como presenca** (chegada/saida `OFF` nao muda a presenca e nao recalcula) — pontos de hook: affiliate, owner add, leave, owner remove. **Entre recalculos, o toggle manual (`PATCH /establishment/{id}/open-status`) continua valendo como override** (sera absorvido nas fatias seguintes). Regras do recalculo: derivado `OPEN` sobrescreve qualquer status; derivado `CLOSED` so sobrescreve `OPEN` (nao rebaixa um `TEMPORARILY_CLOSED` manual). A derivacao **nao mexe na fila** — fila existente segue sendo atendida com a loja derivada `CLOSED`. Faltam: `aceitandoNovos` ("fechar fila") + auto-`OFF` (fatia 3), rotulo do cliente (fatia 4), auto-fechamento por horario/BUG1 (fatia 5). O `work_status` nasce `OFF`. **Handoff Front-Partner:** as pills **ja abrem/fecham a loja sozinhas** — o card Abrir/Fechar (toggle) pode ser removido quando quiserem (segue funcional como override no hibrido). **Handoff Front-Client:** o `open_status`/`is_open` das listagens agora reflete presenca real de profissional; o `work_status` de cada profissional chega no `professionals-with-queue` (WS e GET).
 
-**Testes:** Integracao (`ProfessionalStatusIntegrationTest`)
+**Testes:** Integracao (`ProfessionalStatusIntegrationTest` fatia 1; `OpenStatusDerivationIntegrationTest` fatia 2)
 
 ---
 
@@ -2987,7 +2990,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
 | 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔧 configurado — **falta testar** | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. |
-| 2 | **Status do profissional → `open_status` derivado (S1)** | 🔧 em andamento — **fatia 1 de 5 CONCLUIDA** | **Partner "S1" (modelo acordado 2026-07-09).** O profissional muda o **proprio** status (`WORKING`/`ON_BREAK`/`OFF`) e o `open_status` da loja vira **projecao read-only** (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), eliminando o estado "aberto sem ninguem" e a corrida do booleano. Andre escolheu o **caminho B** (fazer o S1 completo antes do auto-fechamento). **Fatias:** (1) ✅ enum + campo + `PATCH /professional/me/status` + gates (feito); (2) `open_status` derivado nos read-models; (3) `aceitandoNovos` ("fechar fila") + auto-`OFF` ao finalizar o ultimo; (4) rotulo do cliente (DISPONIVEL/ENCERRANDO/INDISPONIVEL); (5) = auto-fechamento (item abaixo). |
+| 2 | **Status do profissional → `open_status` derivado (S1)** | 🔧 em andamento — **fatias 1-2 de 5 CONCLUIDAS** | **Partner "S1" (modelo acordado 2026-07-09).** O profissional muda o **proprio** status (`WORKING`/`ON_BREAK`/`OFF`) e o `open_status` da loja vira **projecao** (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), eliminando o estado "aberto sem ninguem" e a corrida do booleano. Andre escolheu o **caminho B** (fazer o S1 completo antes do auto-fechamento). **Fatias:** (1) ✅ enum + campo + `PATCH /professional/me/status` + gates; (2) ✅ **derivacao LIGADA (modelo HIBRIDO, decisao 2026-07-22)** — recalculo atomico a cada mudanca de status/afiliacao com presenca + `work_status` exposto no `professionals-with-queue` + broadcast WS; o toggle manual segue como override entre recalculos (ver nota no endpoint `PATCH /professional/me/status`); (3) `aceitandoNovos` ("fechar fila") + auto-`OFF` ao finalizar o ultimo; (4) rotulo do cliente (DISPONIVEL/ENCERRANDO/INDISPONIVEL); (5) = auto-fechamento (item abaixo). |
 | 3 | **Auto-fechamento da loja (prompt + carencia de 15min)** | ⬜ aberto (fatia 5 do S1) | **Partner "BUG1 / fechamento pelo horario" — decisao Andre 2026-07-14, reconciliada 2026-07-20: a loja NAO pode dormir aberta.** ⚠️ **Acoplado ao S1 (#2):** o auto-fechar = auto-`OFF` por timer, reusando a mecanica do S1; entra como a **fatia 5** dele. Supersede o "NAO auto-fechar" de 2026-07-04. Modelo: (a) prompt "quer fechar?" ao finalizar atendimento apos o `closing_time` **ou** ao cruzar o `closing_time` com a loja aberta; (b) se o profissional nao sinalizar, **timer server-side de 15min** auto-fecha (auto-`indisponivel`; sendo o ultimo, o estabelecimento fecha). **O timer tem de ser do BACKEND** — `setTimeout` no app nao serve (o celular dorme). Reusar a mecanica event-driven ja provada em `IntentionPromotionScheduler`/`CutRequestExpiryScheduler`. O front so exibe countdown + prompt. Encadeia com o "fechar fila" do S1 do Partner. |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
 | 5 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |

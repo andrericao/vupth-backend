@@ -4,6 +4,7 @@ import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalStatusR
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasNoServiceException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
@@ -31,8 +32,10 @@ import java.util.UUID;
  *       O caminho para sair com fila e "fechar fila" (drenar), que chega na fatia 3.</li>
  * </ul>
  *
- * <p>Nesta fatia o status apenas e persistido — a derivacao do {@code open_status} do estabelecimento
- * entra na fatia 2. HTTP: {@code PATCH /professional/me/status}, Auth: ROLE_PROFESSIONAL.</p>
+ * <p>Fatia 2: apos persistir, o {@code open_status} do estabelecimento e recalculado na MESMA
+ * transacao ({@code aberto ⇔ ∃ prof em {WORKING, ON_BREAK}} — ver
+ * {@link com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService#deriveFromProfessionals}).
+ * HTTP: {@code PATCH /professional/me/status}, Auth: ROLE_PROFESSIONAL.</p>
  */
 @Slf4j
 @Service
@@ -46,6 +49,7 @@ public class UpdateProfessionalStatusUseCase {
 
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
+    private final EstablishmentOpenStatusService openStatusService;
 
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, UpdateProfessionalStatusRequest request) {
@@ -67,6 +71,11 @@ public class UpdateProfessionalStatusUseCase {
 
         professional.setWorkStatus(target);
         professionalRepository.save(professional);
+
+        // S1 fatia 2 — recalculo atomico do open_status derivado (mesma transacao).
+        if (professional.getEstablishment() != null) {
+            openStatusService.deriveFromProfessionals(professional.getEstablishment().getId());
+        }
 
         log.info("[ProfessionalStatus] updated — id={} status={}", professional.getId(), target);
 
