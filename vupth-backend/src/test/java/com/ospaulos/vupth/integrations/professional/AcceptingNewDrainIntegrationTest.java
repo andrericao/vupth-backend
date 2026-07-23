@@ -138,12 +138,20 @@ class AcceptingNewDrainIntegrationTest {
                 .andExpect(jsonPath("$.open_status").value(expected));
     }
 
+    /** S1 fatia 4 — rotulo do cliente derivado no professionals-with-queue. */
+    private void assertAvailability(String expected) throws Exception {
+        mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')].availability").value(expected));
+    }
+
     @Test
     @Order(10)
     @DisplayName("fila aberta por padrao: WORKING abre a loja e o walk-in entra (201)")
     void defaultOpen_walkinEnters() throws Exception {
         patchStatus("WORKING"); // derivacao (fatia 2) abre a loja; sem janela de horario, isOpenNow=true
         assertOpenStatus("OPEN");
+        assertAvailability("DISPONIVEL"); // fatia 4: WORKING + aceitando
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.queuedClientId = client.id();
@@ -201,10 +209,11 @@ class AcceptingNewDrainIntegrationTest {
                         .header("Authorization", scheduler.token()))
                 .andExpect(status().isNoContent());
 
-        // Snapshot da fila expoe a flag.
+        // Snapshot da fila expoe a flag + o rotulo derivado (fatia 4: drenando = ENCERRANDO).
         mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')].accepting_new").value(false));
+                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')].accepting_new").value(false))
+                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')].availability").value("ENCERRANDO"));
     }
 
     @Test
@@ -226,6 +235,7 @@ class AcceptingNewDrainIntegrationTest {
                 .andExpect(jsonPath("$.work_status").value("OFF"))
                 .andExpect(jsonPath("$.accepting_new").value(false));
         assertOpenStatus("CLOSED");
+        assertAvailability("INDISPONIVEL"); // fatia 4: OFF
     }
 
     @Test
@@ -239,6 +249,7 @@ class AcceptingNewDrainIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accepting_new").value(true));
         assertOpenStatus("OPEN");
+        assertAvailability("DISPONIVEL"); // fatia 4: turno novo volta a DISPONIVEL
     }
 
     @Test

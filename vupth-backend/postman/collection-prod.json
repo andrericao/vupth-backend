@@ -15372,7 +15372,11 @@
        "script": {
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "if(pm.response.code===200) pm.test(\"work_status no snapshot (Partner S1)\", () => pm.expect(pm.response.json().professionals[0].work_status).to.equal(\"WORKING\"));"
+         "if(pm.response.code===200) pm.test(\"work_status no snapshot (Partner S1)\", () => pm.expect(pm.response.json().professionals[0].work_status).to.equal(\"WORKING\"));",
+         "pm.test(\"fatia 4: availability DISPONIVEL (WORKING + aceitando)\", () => {",
+         "    const prof = pm.response.json().professionals.find(p => p.id === pm.collectionVariables.get('ps_prof_id'));",
+         "    pm.expect(prof.availability).to.equal('DISPONIVEL');",
+         "});"
         ],
         "type": "text/javascript"
        }
@@ -16107,6 +16111,10 @@
          "  const me = profs.find(p => p.id === pm.collectionVariables.get(\"ps_prof_id\"));",
          "  pm.expect(me, \"prof no snapshot\").to.not.be.undefined;",
          "  pm.expect(me.accepting_new).to.be.false;",
+         "});",
+         "pm.test(\"fatia 4: availability ENCERRANDO (drenando)\", () => {",
+         "    const prof = pm.response.json().professionals.find(p => p.id === pm.collectionVariables.get('ps_prof_id'));",
+         "    pm.expect(prof.availability).to.equal('ENCERRANDO');",
          "});"
         ],
         "type": "text/javascript"
