@@ -17,12 +17,14 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeni
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
@@ -49,6 +51,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
     private final EstablishmentRepository establishmentRepository;
+    private final EstablishmentOpenStatusService openStatusService;
 
     // ─────────────────────────────────────────────────────────────
     // GUEST
@@ -397,6 +400,23 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         attendanceService.finishAttendance(attendance);
         log.info("[Professional] finishAttendance — attendance={} finalizado (FINISHED)", attendanceId);
+
+        // S1 fatia 3 — fim da drenagem: com a fila fechada (accepting_new=false), finalizar o
+        // ULTIMO atendimento (nada mais ativo: sem fila propria nem em andamento) vira OFF sozinho
+        // e recalcula o open_status derivado (mesma transacao) — sendo o ultimo presente, a loja
+        // fecha. "Drena e sai sozinho" (handoff Partner S1).
+        if (Boolean.FALSE.equals(professional.getAcceptingNew())
+                && professional.getWorkStatus().countsAsOpen()
+                && !attendanceRepository.existsByProfessional_IdAndStatusIn(professionalId, List.of(
+                        AttendanceStatus.SCHEDULED, AttendanceStatus.LATE,
+                        AttendanceStatus.IN_PROGRESS, AttendanceStatus.PAUSED))) {
+            professional.setWorkStatus(ProfessionalStatus.OFF);
+            professionalRepository.save(professional);
+            if (establishment != null) {
+                openStatusService.deriveFromProfessionals(establishment.getId());
+            }
+            log.info("[Professional] finishAttendance — drenagem concluida: professional={} auto-OFF", professionalId);
+        }
 
         // Reload after save to reflect FINISHED status and computed duration
         Attendance finished = attendanceRepository.findByIdEager(attendanceId)

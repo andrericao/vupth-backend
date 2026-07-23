@@ -102,6 +102,7 @@ public class QuickCreateProfessionalUseCase {
                 establishment.getName(),
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 "Professional created! Your ID is permanent. Fill in the rest whenever you want."
         );
     }

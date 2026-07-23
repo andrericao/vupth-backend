@@ -69,6 +69,12 @@ public class UpdateProfessionalStatusUseCase {
             throw new ProfessionalHasActiveAttendancesException(userId);
         }
 
+        // S1 fatia 3 — turno novo reabre a fila: voltar de OFF para expediente reseta o
+        // accepting_new. Alternar WORKING<->ON_BREAK durante a drenagem NAO reabre.
+        if (target.countsAsOpen() && professional.getWorkStatus() == ProfessionalStatus.OFF) {
+            professional.setAcceptingNew(true);
+        }
+
         professional.setWorkStatus(target);
         professionalRepository.save(professional);
 
@@ -88,6 +94,7 @@ public class UpdateProfessionalStatusUseCase {
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 null
         );
     }

@@ -32,6 +32,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundEx
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAcceptingNewException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -549,6 +550,17 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — establishment={} nao esta aberto agora (walk-in bloqueado)",
                     establishment.getId());
             throw new EstablishmentNotOpenException(establishment.getId());
+        }
+
+        // S1 fatia 3 — "fechar fila": com accepting_new=false o profissional esta drenando a fila
+        // e nao aceita CLIENTE NOVO na FILA VIVA — nem walk-in imediato nem intent de fila (#40,
+        // com targetTime: tambem nasce SCHEDULED na fila e prenderia a drenagem/auto-OFF).
+        // "Agendar data futura" que segue livre = INTENTION (#4, POST /attendances/intentions,
+        // fora da fila). Guest e aceite de corte (acoes do proprio profissional) NAO passam aqui.
+        if (Boolean.FALSE.equals(professional.getAcceptingNew())) {
+            log.warn("[Attendance] createAttendance — professional={} fechou a fila (entrada na fila viva bloqueada)",
+                    professional.getId());
+            throw new ProfessionalNotAcceptingNewException(professional.getId());
         }
 
         Client client = clientRepository.findById(request.clientId())

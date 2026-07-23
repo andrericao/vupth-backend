@@ -252,3 +252,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/009-add-work_status-to-professional.yaml
       relativeToChangeLogFile: true
+
+  # S1 (fatia 3): "fechar fila" — flag accepting_new (drenagem: fila fechada segue sendo atendida)
+  - include:
+      file: changesets/60-professional/010-add-accepting_new-to-professional.yaml
+      relativeToChangeLogFile: true

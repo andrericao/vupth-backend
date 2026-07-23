@@ -3,6 +3,7 @@ package com.ospaulos.vupth.web.rest.professional.controller;
 import com.ospaulos.vupth.api.professional.dto.request.AffiliateToEstablishmentRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
+import com.ospaulos.vupth.api.professional.dto.request.UpdateAcceptingNewRequest;
 import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalRequest;
 import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalStatusRequest;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
@@ -11,6 +12,7 @@ import com.ospaulos.vupth.api.professional.usecase.AffiliateToEstablishmentUseCa
 import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
+import com.ospaulos.vupth.api.professional.usecase.UpdateAcceptingNewUseCase;
 import com.ospaulos.vupth.api.professional.usecase.UpdateMyProfileUseCase;
 import com.ospaulos.vupth.api.professional.usecase.UpdateProfessionalStatusUseCase;
 import com.ospaulos.vupth.api.report.dto.response.ProfessionalReportResponse;
@@ -20,6 +22,8 @@ import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.report.service.ReportService;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
+import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
+import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
@@ -76,10 +80,12 @@ public class ProfessionalQuickCreateController {
     private final LeaveEstablishmentUseCase       leaveUseCase;
     private final UpdateMyProfileUseCase          updateMyProfileUseCase;
     private final UpdateProfessionalStatusUseCase updateStatusUseCase;
+    private final UpdateAcceptingNewUseCase       acceptingNewUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
     private final ReportService                  reportService;
     private final QueueWebSocketPublisher        queuePublisher;
+    private final PushNotificationPublisher      pushPublisher;
 
     /**
      * GET /professional?name=&specialty=
@@ -133,6 +139,7 @@ public class ProfessionalQuickCreateController {
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 null
         ));
     }
@@ -178,6 +185,45 @@ public class ProfessionalQuickCreateController {
 
         // S1 fatia 2 — evento pos-commit: snapshot novo (work_status + open_status derivado).
         queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /professional/me/accepting-new
+     *
+     * S1 (fatia 3) — "fechar fila". {@code {"value": false}} fecha a fila para CLIENTES NOVOS
+     * (walk-in imediato -> {@code 409 PROFESSIONAL_NOT_ACCEPTING_NEW}); quem ja esta segue sendo
+     * atendido (drenagem) e recebe o anuncio ({@code QUEUE_CLOSING}, WS pessoal + push). Sem nada
+     * ativo, o profissional ja vira {@code OFF} na hora; com fila, o auto-OFF acontece no finish do
+     * ultimo atendimento. {@code {"value": true}} reabre (tambem reabre sozinha ao voltar de OFF
+     * para expediente). Idempotente. Auth: ROLE_PROFESSIONAL
+     */
+    @PatchMapping("/me/accepting-new")
+    public ResponseEntity<ProfessionalQuickCreateResponse> updateMyAcceptingNew(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid UpdateAcceptingNewRequest request) {
+
+        log.info("PATCH /professional/me/accepting-new — user={} value={}", principal.getUserId(), request.value());
+
+        UpdateAcceptingNewUseCase.Result result =
+                acceptingNewUseCase.execute(principal.getUserId(), request.value());
+        ProfessionalQuickCreateResponse response = result.response();
+
+        // Pos-commit: snapshot novo (accepting_new; e open_status se houve auto-OFF).
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        // Anuncio aos clientes que JA estao na fila (eles seguem sendo atendidos — drenagem).
+        for (UpdateAcceptingNewUseCase.WaitingClient waiting : result.waitingClients()) {
+            queuePublisher.notifyClient(waiting.clientId(), QueueNotification.of(
+                    "QUEUE_CLOSING", waiting.attendanceId(), response.establishmentId(),
+                    "A fila foi encerrada para novas entradas — você ainda será atendido."));
+            pushPublisher.notifyUser(waiting.clientId(), "Fila encerrada para novas entradas",
+                    "Você continua na fila e ainda será atendido.",
+                    java.util.Map.of("type", "QUEUE_CLOSING",
+                            "attendanceId", waiting.attendanceId().toString(),
+                            "establishmentId", String.valueOf(response.establishmentId())));
+        }
 
         return ResponseEntity.ok(response);
     }

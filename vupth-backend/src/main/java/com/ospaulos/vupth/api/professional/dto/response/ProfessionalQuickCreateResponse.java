@@ -30,6 +30,10 @@ public record ProfessionalQuickCreateResponse(
         @JsonProperty("work_status")
         ProfessionalStatus workStatus,
 
+        // S1 fatia 3 — "fechar fila": false = fila fechada p/ novos clientes (drenagem)
+        @JsonProperty("accepting_new")
+        Boolean acceptingNew,
+
         String message
 ) {
     public static ProfessionalQuickCreateResponse fromEntity(Professional p) {
@@ -42,6 +46,7 @@ public record ProfessionalQuickCreateResponse(
                 p.getEstablishment() != null ? p.getEstablishment().getName() : null,
                 p.getIsAvailable(),
                 p.getWorkStatus(),
+                p.getAcceptingNew(),
                 "Professional created! Your ID is permanent. Fill in the rest whenever you want."
         );
     }

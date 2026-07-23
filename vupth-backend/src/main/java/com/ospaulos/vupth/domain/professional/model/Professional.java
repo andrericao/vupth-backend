@@ -47,6 +47,16 @@ public class Professional {
     @Column(name = "work_status", nullable = false, length = 20)
     private ProfessionalStatus workStatus = ProfessionalStatus.OFF;
 
+    /**
+     * "Fechar fila" (S1 fatia 3): {@code false} = fila fechada para NOVOS clientes (walk-in imediato
+     * -> 409 {@code PROFESSIONAL_NOT_ACCEPTING_NEW}); quem ja esta segue sendo atendido (drenagem).
+     * Intencao para data futura, guest e aceite de corte NAO passam pelo gate. Ao finalizar o ultimo
+     * atendimento com a fila fechada, o profissional vira {@code OFF} sozinho (auto-OFF). Reabre
+     * automaticamente ao voltar de OFF para expediente (turno novo).
+     */
+    @Column(name = "accepting_new", nullable = false)
+    private Boolean acceptingNew = true;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")
     @JsonBackReference("establishment-professionals")

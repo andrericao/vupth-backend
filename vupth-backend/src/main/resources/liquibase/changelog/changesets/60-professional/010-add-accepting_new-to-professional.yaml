@@ -1,0 +1,20 @@
+databaseChangeLog:
+  - changeSet:
+      id: 010-add-accepting_new-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: accepting_new
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: accepting_new
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

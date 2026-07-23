@@ -34,6 +34,7 @@ import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalExceptio
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasNoServiceException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAcceptingNewException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
@@ -511,6 +512,14 @@ public class GlobalExceptionHandler {
             ProfessionalHasActiveAttendancesException ex, HttpServletRequest req) {
         log.warn("[409] ProfessionalHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_HAS_ACTIVE_ATTENDANCES");
+    }
+
+    // S1 fatia 3 — fila fechada (accepting_new=false): cliente novo nao entra na fila viva.
+    @ExceptionHandler(ProfessionalNotAcceptingNewException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalNotAcceptingNew(
+            ProfessionalNotAcceptingNewException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalNotAcceptingNew | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_NOT_ACCEPTING_NEW");
     }
 
     @ExceptionHandler(ProfessionalHasNoServiceException.class)

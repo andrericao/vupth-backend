@@ -140,6 +140,7 @@ public class SecurityConfig {
 
                         // Profissional se afilia/desafilia de um establishment
                         .requestMatchers(HttpMethod.PATCH, "/professional/me/status").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/professional/me/accepting-new").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/professional/affiliate").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/establishment").hasRole("PROFESSIONAL")

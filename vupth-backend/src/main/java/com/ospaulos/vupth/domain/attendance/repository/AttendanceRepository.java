@@ -270,6 +270,11 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     boolean existsByProfessional_IdAndStatusIn(UUID professionalId, List<AttendanceStatus> statuses);
 
+    // S1 fatia 3 — fila propria do profissional (ex.: SCHEDULED/LATE) para o anuncio de "fila
+    // fechada" aos clientes que ja estao dentro (drenagem: eles seguem sendo atendidos).
+    List<Attendance> findByProfessional_IdAndStatusInOrderByScheduledTimeAsc(
+            UUID professionalId, List<AttendanceStatus> statuses);
+
     /**
      * Counts how many attendances are waiting in the queue (SCHEDULED + LATE, item #19).
      */

@@ -64,6 +64,7 @@ public class UpdateMyProfileUseCase {
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 null
         );
     }

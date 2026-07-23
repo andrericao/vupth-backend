@@ -34,6 +34,10 @@ public record ProfessionalWithQueueResponse(
         @JsonProperty("work_status")
         ProfessionalStatus workStatus,
 
+        // S1 fatia 3 — "fechar fila": false = fila fechada p/ novos clientes (drenando os atuais)
+        @JsonProperty("accepting_new")
+        Boolean acceptingNew,
+
         @JsonProperty("current_attendance")
         AttendanceInQueueResponse currentAttendance,
 
@@ -126,6 +130,7 @@ public record ProfessionalWithQueueResponse(
                 professional.getBaseUser() != null ? professional.getBaseUser().getNickname() : null,
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 currentDto,
                 waitingDtos,
                 waitingList.size(),

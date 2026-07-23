@@ -14901,7 +14901,7 @@
    ]
   },
   {
-   "name": "S1a - status do profissional (f1) + open_status derivado (f2)",
+   "name": "S1a - status do profissional (f1) + open_status derivado (f2) + fechar fila (f3)",
    "item": [
     {
      "name": "setup: register dono (S1)",
@@ -15023,7 +15023,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_prof_id\", pm.response.json().id);"
         ],
         "type": "text/javascript"
        }
@@ -15060,7 +15061,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_service_item_id\", pm.response.json().id);"
         ],
         "type": "text/javascript"
        }
@@ -15811,6 +15813,565 @@
       "body": {
        "mode": "raw",
        "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: register cliente (f3)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ps_client_email\",\"psclient_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ps_client_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ps_client_email}}\",\"password\":\"{{ps_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login cliente (f3)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ps_client_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ps_client_email}}\",\"password\":\"{{ps_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: prof WORKING (turno novo reabre a fila)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"accepting_new resetado a true (turno novo)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: cliente entra na fila (walk-in) -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - fila aberta aceita walk-in\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_f3_attendance_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ps_prof_id}}\",\"establishmentId\":\"{{ps_estab_id}}\",\"serviceItemIds\":[\"{{ps_service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: fechar fila -> 200 (segue WORKING drenando)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"accepting_new=false\", () => pm.expect(r.accepting_new).to.be.false);",
+         "pm.test(\"com fila viva NAO vira OFF (drenagem)\", () => pm.expect(r.work_status).to.equal(\"WORKING\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/accepting-new",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"value\":false}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] fatia 3: walk-in com fila fechada -> 409 PROFESSIONAL_NOT_ACCEPTING_NEW",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code PROFESSIONAL_NOT_ACCEPTING_NEW\", () => pm.expect(pm.response.json().code).to.equal(\"PROFESSIONAL_NOT_ACCEPTING_NEW\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ps_prof_id}}\",\"establishmentId\":\"{{ps_estab_id}}\",\"serviceItemIds\":[\"{{ps_service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] fatia 3: intent targetTime com fila fechada -> 409 (tambem e fila viva)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// intent de fila (#40) mira um alvo futuro, mas TAMBEM nasce SCHEDULED na fila viva",
+         "pm.variables.set('ps_target_future', new Date(Date.now() + 120*60000).toISOString());"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code PROFESSIONAL_NOT_ACCEPTING_NEW\", () => pm.expect(pm.response.json().code).to.equal(\"PROFESSIONAL_NOT_ACCEPTING_NEW\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ps_prof_id}}\",\"establishmentId\":\"{{ps_estab_id}}\",\"serviceItemIds\":[\"{{ps_service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\",\"targetTime\":\"{{ps_target_future}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: professionals-with-queue expoe accepting_new",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"accepting_new=false no snapshot\", () => {",
+         "  const profs = pm.response.json().professionals || [];",
+         "  const me = profs.find(p => p.id === pm.collectionVariables.get(\"ps_prof_id\"));",
+         "  pm.expect(me, \"prof no snapshot\").to.not.be.undefined;",
+         "  pm.expect(me.accepting_new).to.be.false;",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{ps_estab_id}}/professionals-with-queue",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: drenagem — start do atendimento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{ps_f3_attendance_id}}/start",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: drenagem — finish do ULTIMO -> auto-OFF",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{ps_f3_attendance_id}}/finish",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: /me apos drenagem — OFF e fila fechada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"auto-OFF no fim da drenagem\", () => pm.expect(r.work_status).to.equal(\"OFF\"));",
+         "pm.test(\"accepting_new segue false ate o turno novo\", () => pm.expect(r.accepting_new).to.be.false);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: loja fechou sozinha -> CLOSED",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"open_status CLOSED (ultimo presente saiu)\", () => pm.expect(pm.response.json().open_status).to.equal(\"CLOSED\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{ps_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: WORKING de novo -> fila reabre",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"accepting_new=true (turno novo)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: fechar fila SEM nada ativo -> auto-OFF imediato",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"accepting_new=false\", () => pm.expect(r.accepting_new).to.be.false);",
+         "pm.test(\"sem nada ativo ja vira OFF na hora\", () => pm.expect(r.work_status).to.equal(\"OFF\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/accepting-new",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"value\":false}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: reabrir na mao (value=true) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"accepting_new=true\", () => pm.expect(pm.response.json().accepting_new).to.be.true);",
+         "pm.test(\"reabrir NAO mexe no work_status (segue OFF)\", () => pm.expect(pm.response.json().work_status).to.equal(\"OFF\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/accepting-new",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"value\":true}"
       }
      },
      "response": []
