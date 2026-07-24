@@ -86,6 +86,7 @@ public class ProfessionalQuickCreateController {
     private final ReportService                  reportService;
     private final QueueWebSocketPublisher        queuePublisher;
     private final PushNotificationPublisher      pushPublisher;
+    private final com.ospaulos.vupth.domain.establishment.service.EstablishmentAutoCloseScheduler autoCloseScheduler;
 
     /**
      * GET /professional?name=&specialty=
@@ -186,6 +187,9 @@ public class ProfessionalQuickCreateController {
         // S1 fatia 2 — evento pos-commit: snapshot novo (work_status + open_status derivado).
         queuePublisher.broadcastQueue(response.establishmentId());
 
+        // S1 fatia 5 — entrar/sair de expediente muda o proximo closing_time relevante; re-arma o timer.
+        autoCloseScheduler.reschedule();
+
         return ResponseEntity.ok(response);
     }
 
@@ -224,6 +228,10 @@ public class ProfessionalQuickCreateController {
                             "attendanceId", waiting.attendanceId().toString(),
                             "establishmentId", String.valueOf(response.establishmentId())));
         }
+
+        // S1 fatia 5 — auto-OFF ao fechar a fila sem nada ativo tira o profissional do expediente;
+        // re-arma o timer para nao guardar um closing_time que ja nao se aplica.
+        autoCloseScheduler.reschedule();
 
         return ResponseEntity.ok(response);
     }

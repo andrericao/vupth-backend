@@ -257,3 +257,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/010-add-accepting_new-to-professional.yaml
       relativeToChangeLogFile: true
+
+  # S1 (fatia 5): auto-fechamento por horario — carencia de 15min apos o closing_time (BUG1)
+  - include:
+      file: changesets/60-professional/011-add-closing_grace_until-to-professional.yaml
+      relativeToChangeLogFile: true

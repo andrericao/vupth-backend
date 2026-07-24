@@ -14,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -56,6 +57,17 @@ public class Professional {
      */
     @Column(name = "accepting_new", nullable = false)
     private Boolean acceptingNew = true;
+
+    /**
+     * Auto-fechamento por horario (S1 fatia 5 / BUG1): instante-limite da carencia de 15min apos o
+     * {@code closing_time}. Setado pelo scheduler quando o profissional segue em expediente fora do
+     * horario (junto com o prompt "quer fechar?" — WS {@code CLOSING_PROMPT} + push); {@code null} =
+     * sem carencia pendente. Vencendo sem sinalizacao: sem nada ativo vira {@code OFF} sozinho; com
+     * atendimento/fila, a carencia e limpa e o auto-OFF fica com o fim da drenagem (fatia 3).
+     * Qualquer {@code PATCH /professional/me/status} (sinalizacao) limpa a carencia.
+     */
+    @Column(name = "closing_grace_until")
+    private OffsetDateTime closingGraceUntil;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")
