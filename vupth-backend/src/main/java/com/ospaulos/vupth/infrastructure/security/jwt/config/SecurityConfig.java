@@ -110,6 +110,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/swap-requests/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/swap-requests/*").hasRole("CLIENT")
 
+                        // Oferta ABERTA de troca de posicao (Client C13 / Partner S11) — cliente publica, elegivel aceita
+                        .requestMatchers(HttpMethod.POST, "/swap-offers").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/swap-offers").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/swap-offers/me").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/swap-offers/*/accept").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.DELETE, "/swap-offers/*").hasRole("CLIENT")
+
                         .requestMatchers(HttpMethod.POST, "/establishment/quick-create").hasRole("CLIENT")
 
                         // App parceiro — fluxo "sou profissional" (sem establishment)

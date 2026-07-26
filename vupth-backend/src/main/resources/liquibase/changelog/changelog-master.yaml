@@ -243,6 +243,11 @@ databaseChangeLog:
       file: changesets/80-attendance/010-create-cut-request.yaml
       relativeToChangeLogFile: true
 
+  # Oferta ABERTA de troca de posicao (Client C13 / Partner S11): tabela swap_offer + join swap_offer_service_item
+  - include:
+      file: changesets/80-attendance/011-create-swap-offer.yaml
+      relativeToChangeLogFile: true
+
   # Esqueci minha senha (backlog #1): tabela password_reset_code (código de 6 dígitos, hash bcrypt)
   - include:
       file: changesets/20-auth/022-create-password_reset_code.yaml

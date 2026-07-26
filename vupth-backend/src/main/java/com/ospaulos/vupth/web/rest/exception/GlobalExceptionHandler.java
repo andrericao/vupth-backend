@@ -17,6 +17,8 @@ import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededEx
 import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
 import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
+import com.ospaulos.vupth.domain.queue.offer.exception.SwapOfferNotAllowedException;
+import com.ospaulos.vupth.domain.queue.offer.exception.SwapOfferNotFoundException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
@@ -216,6 +218,20 @@ public class GlobalExceptionHandler {
             SwapRequestNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] SwapRequestNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_NOT_FOUND");
+    }
+
+    @ExceptionHandler(SwapOfferNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSwapOfferNotAllowed(
+            SwapOfferNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[422] SwapOfferNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_SWAP_OFFER_NOT_ALLOWED");
+    }
+
+    @ExceptionHandler(SwapOfferNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSwapOfferNotFound(
+            SwapOfferNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] SwapOfferNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_OFFER_NOT_FOUND");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)

@@ -10,6 +10,7 @@ import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.queue.offer.service.SwapOfferService;
 import com.ospaulos.vupth.domain.queue.swap.service.QueueSwapService;
 import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
@@ -34,6 +35,7 @@ public class ProfessionalController {
     private final ProfessionalService professionalService;
     private final ServiceItemService serviceItemService;
     private final QueueSwapService queueSwapService;
+    private final SwapOfferService swapOfferService;
     private final com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher queuePublisher;
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
 
@@ -78,6 +80,7 @@ public class ProfessionalController {
 
         // #42: removido da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
 
         // BUG9: o cliente precisa SAIR do estado "voce esta na fila" sem reload.
         // (1) fila ao vivo da loja atualiza; (2) aviso pessoal ATTENDANCE_CANCELLED via WS + push.
