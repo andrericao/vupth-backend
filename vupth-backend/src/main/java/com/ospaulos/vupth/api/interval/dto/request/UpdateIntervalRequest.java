@@ -3,7 +3,7 @@ package com.ospaulos.vupth.api.interval.dto.request;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 
-import java.time.OffsetTime;
+import java.time.LocalTime;
 
 /**
  * Edicao de intervalo (spec item #11b/c). Semantica PATCH: so os campos
@@ -13,6 +13,6 @@ import java.time.OffsetTime;
  */
 public record UpdateIntervalRequest(
         @Positive @Max(value = 240, message = "durationMinutes must be at most 240") Integer durationMinutes,
-        OffsetTime fixedStartTime,
+        LocalTime fixedStartTime,
         String description) {
 }

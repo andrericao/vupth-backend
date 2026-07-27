@@ -26,7 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -88,8 +88,8 @@ class IntentionPromotionIntegrationTest {
         // meia-noite (com [00:00, 23:59:59) desiredTimes à noite estouram o fechamento = 409 espúrio).
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(OpenStatus.CLOSED);
-        e.setOpeningTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
-        e.setClosingTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
+        e.setOpeningTime(LocalTime.MIDNIGHT);
+        e.setClosingTime(LocalTime.MIDNIGHT);
         establishmentRepository.save(e);
     }
 

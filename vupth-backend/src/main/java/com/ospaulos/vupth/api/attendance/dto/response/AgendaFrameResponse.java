@@ -1,7 +1,7 @@
 package com.ospaulos.vupth.api.attendance.dto.response;
 
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.util.UUID;
 
 /**
@@ -23,7 +23,7 @@ public record AgendaFrameResponse(
         UUID professionalId,
         UUID establishmentId,
         OffsetDateTime projectedQueueEnd,
-        OffsetTime openingTime,
-        OffsetTime closingTime
+        LocalTime openingTime,
+        LocalTime closingTime
 ) {
 }

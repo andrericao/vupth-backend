@@ -24,7 +24,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -104,8 +104,8 @@ class IntentionAgendaIntegrationTest {
     private void openFullDay(OpenStatus status) {
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(status);
-        e.setOpeningTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
-        e.setClosingTime(OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
+        e.setOpeningTime(LocalTime.MIDNIGHT);
+        e.setClosingTime(LocalTime.MIDNIGHT);
         establishmentRepository.save(e);
     }
 

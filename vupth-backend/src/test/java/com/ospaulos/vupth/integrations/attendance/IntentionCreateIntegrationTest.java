@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.integrations.attendance;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
@@ -24,7 +25,7 @@ import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -97,7 +98,7 @@ class IntentionCreateIntegrationTest {
                 .content(mapper.writeValueAsString(request)));
     }
 
-    private void setStatusAndHours(OpenStatus status, OffsetTime opening, OffsetTime closing) {
+    private void setStatusAndHours(OpenStatus status, LocalTime opening, LocalTime closing) {
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(status);
         e.setOpeningTime(opening);
@@ -113,8 +114,8 @@ class IntentionCreateIntegrationTest {
      * qualquer horário futuro de forma determinística, independente do relógio.
      */
     private void openFullDay(OpenStatus status) {
-        setStatusAndHours(status, OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC),
-                OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
+        setStatusAndHours(status, LocalTime.MIDNIGHT,
+                LocalTime.MIDNIGHT);
     }
 
     @Test
@@ -135,7 +136,7 @@ class IntentionCreateIntegrationTest {
     @DisplayName("desiredTime FORA do expediente — 422 INTENTION_OUTSIDE_BUSINESS_HOURS")
     void outsideBusinessHours_422() throws Exception {
         OffsetDateTime desired = OffsetDateTime.now().plusHours(2);
-        OffsetTime desiredUtc = desired.toOffsetTime().withOffsetSameInstant(ZoneOffset.UTC);
+        LocalTime desiredUtc = BusinessClock.timeAt(desired);
         // janela [desired+3h, desired+4h): o horário pretendido cai ANTES da abertura.
         setStatusAndHours(OpenStatus.CLOSED, desiredUtc.plusHours(3), desiredUtc.plusHours(4));
 
@@ -171,13 +172,13 @@ class IntentionCreateIntegrationTest {
     void agendaFull_409() throws Exception {
         // Ancorado ao MEIO-DIA UTC de amanhã (determinístico, independe do relógio da suíte):
         // com `now.plusHours(2)` rodando à noite (UTC) o horário caía ~23:5x, e `closing =
-        // desired+5min` cruzava a meia-noite; a aritmética de OffsetTime dá a volta (23:5x+30min
+        // desired+5min` cruzava a meia-noite; a aritmética de LocalTime dá a volta (23:5x+30min
         // → 00:2x < closing) e o serviço PARECIA caber → 201 espúrio. Ao meio-dia não há wrap.
         OffsetDateTime desired = OffsetDateTime.now(ZoneOffset.UTC)
                 .plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0);
-        OffsetTime desiredUtc = desired.toOffsetTime();
+        LocalTime desiredUtc = BusinessClock.timeAt(desired);
         // Fecha só 5min depois do horário pretendido; o serviço dura 30min => estoura o fechamento.
-        setStatusAndHours(OpenStatus.CLOSED, OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC),
+        setStatusAndHours(OpenStatus.CLOSED, LocalTime.MIDNIGHT,
                 desiredUtc.plusMinutes(5));
 
         postIntention(desired)

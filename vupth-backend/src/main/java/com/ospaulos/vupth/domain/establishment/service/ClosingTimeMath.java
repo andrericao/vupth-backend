@@ -1,21 +1,20 @@
 package com.ospaulos.vupth.domain.establishment.service;
 
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 
 import java.time.Duration;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
-import java.time.ZoneOffset;
 
 /**
  * Matematica pura da janela de expediente para o auto-fechamento (S1 fatia 5 / BUG1).
  *
- * <p>O {@code closing_time} e um horario RECORRENTE (hora do dia, {@link OffsetTime}) — nao um
- * instante. Estes helpers convertem a recorrencia em instantes concretos, sempre normalizando
- * offsets para UTC (mesma disciplina de {@code Establishment.isWithinBusinessHours}; ver BUG2
- * fuso). Sem janela definida ({@code opening}/{@code closing} nulos) ou 24h ({@code open == close})
- * nao existe "fechamento" — nada a disparar.</p>
+ * <p>O {@code closing_time} e um horario RECORRENTE de PAREDE (hora do dia, {@link LocalTime}) — nao
+ * um instante. Estes helpers convertem a recorrencia em instantes concretos usando o fuso da loja
+ * ({@link BusinessClock}; ver BUG2b — antes o campo era {@code OffsetTime} e tudo era normalizado
+ * para UTC, o que deslocava o dado gravado). Sem janela definida ({@code opening}/{@code closing}
+ * nulos) ou 24h ({@code open == close}) nao existe "fechamento" — nada a disparar.</p>
  *
  * <p><b>Ambiguidade fora-do-expediente:</b> um instante fora da janela e ao mesmo tempo "depois do
  * fechamento de hoje" e "antes da abertura de amanha". Para nao incomodar quem chega CEDO (antes de
@@ -29,12 +28,12 @@ public final class ClosingTimeMath {
 
     /** A loja tem um fechamento diario real? (janela definida e nao-24h) */
     public static boolean hasClosingEvent(Establishment establishment) {
-        OffsetTime opening = establishment.getOpeningTime();
-        OffsetTime closing = establishment.getClosingTime();
+        LocalTime opening = establishment.getOpeningTime();
+        LocalTime closing = establishment.getClosingTime();
         if (opening == null || closing == null) {
             return false;
         }
-        return !toUtc(opening).equals(toUtc(closing)); // open == close = 24h, nunca fecha
+        return !opening.equals(closing); // open == close = 24h, nunca fecha
     }
 
     /**
@@ -46,28 +45,23 @@ public final class ClosingTimeMath {
         if (!hasClosingEvent(establishment)) {
             return false;
         }
-        OffsetTime nowTime = now.toOffsetTime();
-        if (establishment.isWithinBusinessHours(nowTime)) {
+        if (establishment.isWithinBusinessHours(BusinessClock.timeAt(now))) {
             return false;
         }
         Duration since = Duration.between(mostRecentClosingInstant(establishment, now), now);
         return since.compareTo(horizon) <= 0;
     }
 
-    /** Ocorrencia mais recente ({@code <= now}) do {@code closing_time}, em UTC. */
+    /** Ocorrencia mais recente ({@code <= now}) do {@code closing_time}, no fuso da loja. */
     public static OffsetDateTime mostRecentClosingInstant(Establishment establishment, OffsetDateTime now) {
-        OffsetDateTime nowUtc = now.withOffsetSameInstant(ZoneOffset.UTC);
-        LocalTime close = toUtc(establishment.getClosingTime());
-        OffsetDateTime candidate = nowUtc.toLocalDate().atTime(close).atOffset(ZoneOffset.UTC);
-        return candidate.isAfter(nowUtc) ? candidate.minusDays(1) : candidate;
+        LocalTime close = establishment.getClosingTime();
+        OffsetDateTime candidate = BusinessClock.at(BusinessClock.dateAt(now), close);
+        return candidate.isAfter(now) ? BusinessClock.at(BusinessClock.dateAt(now).minusDays(1), close) : candidate;
     }
 
-    /** Proxima ocorrencia ({@code > now}) do {@code closing_time}, em UTC. */
+    /** Proxima ocorrencia ({@code > now}) do {@code closing_time}, no fuso da loja. */
     public static OffsetDateTime nextClosingInstant(Establishment establishment, OffsetDateTime now) {
-        return mostRecentClosingInstant(establishment, now).plusDays(1);
-    }
-
-    private static LocalTime toUtc(OffsetTime t) {
-        return t.withOffsetSameInstant(ZoneOffset.UTC).toLocalTime();
+        OffsetDateTime recent = mostRecentClosingInstant(establishment, now);
+        return BusinessClock.at(BusinessClock.dateAt(recent).plusDays(1), establishment.getClosingTime());
     }
 }

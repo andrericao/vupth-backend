@@ -6,10 +6,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
+
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
-import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -25,19 +27,21 @@ class ClosingTimeMathTest {
 
     private static final Duration HORIZON = Duration.ofHours(6);
 
-    private Establishment estab(OffsetTime opening, OffsetTime closing) {
+    private Establishment estab(LocalTime opening, LocalTime closing) {
         Establishment e = new Establishment();
         e.setOpeningTime(opening);
         e.setClosingTime(closing);
         return e;
     }
 
-    private OffsetTime utc(int h, int m) {
-        return OffsetTime.of(h, m, 0, 0, ZoneOffset.UTC);
+    /** Hora de PAREDE no fuso da loja (BUG2b — opening/closing deixaram de carregar offset). */
+    private LocalTime wall(int h, int m) {
+        return LocalTime.of(h, m);
     }
 
+    /** Instante em que o relogio da loja marca {@code h:m} no dia informado. */
     private OffsetDateTime at(int day, int h, int m) {
-        return OffsetDateTime.of(2026, 7, day, h, m, 0, 0, ZoneOffset.UTC);
+        return BusinessClock.at(LocalDate.of(2026, 7, day), LocalTime.of(h, m));
     }
 
     @Nested
@@ -47,21 +51,21 @@ class ClosingTimeMathTest {
         @Test
         @DisplayName("janela normal tem fechamento")
         void normalWindowHasEvent() {
-            assertThat(ClosingTimeMath.hasClosingEvent(estab(utc(9, 0), utc(18, 0)))).isTrue();
+            assertThat(ClosingTimeMath.hasClosingEvent(estab(wall(9, 0), wall(18, 0)))).isTrue();
         }
 
         @Test
         @DisplayName("janela nula (opening/closing null) nao tem fechamento")
         void nullWindowNoEvent() {
             assertThat(ClosingTimeMath.hasClosingEvent(estab(null, null))).isFalse();
-            assertThat(ClosingTimeMath.hasClosingEvent(estab(utc(9, 0), null))).isFalse();
-            assertThat(ClosingTimeMath.hasClosingEvent(estab(null, utc(18, 0)))).isFalse();
+            assertThat(ClosingTimeMath.hasClosingEvent(estab(wall(9, 0), null))).isFalse();
+            assertThat(ClosingTimeMath.hasClosingEvent(estab(null, wall(18, 0)))).isFalse();
         }
 
         @Test
         @DisplayName("24h (open == close) nunca fecha")
         void degenerate24hNoEvent() {
-            assertThat(ClosingTimeMath.hasClosingEvent(estab(utc(0, 0), utc(0, 0)))).isFalse();
+            assertThat(ClosingTimeMath.hasClosingEvent(estab(wall(0, 0), wall(0, 0)))).isFalse();
         }
     }
 
@@ -69,7 +73,7 @@ class ClosingTimeMathTest {
     @DisplayName("isJustAfterClosing (gatilho do prompt)")
     class IsJustAfterClosing {
 
-        private final Establishment e = estab(utc(9, 0), utc(18, 0));
+        private final Establishment e = estab(wall(9, 0), wall(18, 0));
 
         @Test
         @DisplayName("dentro da janela = nao (nada a fechar)")
@@ -94,7 +98,7 @@ class ClosingTimeMathTest {
         @Test
         @DisplayName("loja 24h nunca dispara o prompt")
         void store24hNeverPrompts() {
-            Establishment always = estab(utc(0, 0), utc(0, 0));
+            Establishment always = estab(wall(0, 0), wall(0, 0));
             assertThat(ClosingTimeMath.isJustAfterClosing(always, at(24, 3, 0), HORIZON)).isFalse();
         }
     }
@@ -103,7 +107,7 @@ class ClosingTimeMathTest {
     @DisplayName("ocorrencias do closing_time")
     class Occurrences {
 
-        private final Establishment e = estab(utc(9, 0), utc(18, 0));
+        private final Establishment e = estab(wall(9, 0), wall(18, 0));
 
         @Test
         @DisplayName("mostRecent: apos o fechamento de hoje = hoje 18:00")
@@ -129,7 +133,7 @@ class ClosingTimeMathTest {
     @DisplayName("virada de meia-noite [22:00, 02:00)")
     class Overnight {
 
-        private final Establishment e = estab(utc(22, 0), utc(2, 0));
+        private final Establishment e = estab(wall(22, 0), wall(2, 0));
 
         @Test
         @DisplayName("logo apos o fechamento das 02:00 = sim")

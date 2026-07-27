@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.integrations.attendance;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
@@ -27,7 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -122,7 +123,7 @@ class IntentionUpdateCancelIntegrationTest {
                 .header("Authorization", token));
     }
 
-    private void setStatusAndHours(OpenStatus status, OffsetTime opening, OffsetTime closing) {
+    private void setStatusAndHours(OpenStatus status, LocalTime opening, LocalTime closing) {
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(status);
         e.setOpeningTime(opening);
@@ -138,8 +139,8 @@ class IntentionUpdateCancelIntegrationTest {
      * cobre qualquer horário futuro de forma determinística, independente do relógio.
      */
     private void openFullDay(OpenStatus status) {
-        setStatusAndHours(status, OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC),
-                OffsetTime.of(0, 0, 0, 0, ZoneOffset.UTC));
+        setStatusAndHours(status, LocalTime.MIDNIGHT,
+                LocalTime.MIDNIGHT);
     }
 
     private String freshClientToken() throws Exception {
@@ -186,7 +187,7 @@ class IntentionUpdateCancelIntegrationTest {
         OwnedIntention intention = createIntention(OffsetDateTime.now().plusHours(2));
 
         OffsetDateTime newDesired = OffsetDateTime.now().plusHours(2);
-        OffsetTime newDesiredUtc = newDesired.toOffsetTime().withOffsetSameInstant(ZoneOffset.UTC);
+        LocalTime newDesiredUtc = BusinessClock.timeAt(newDesired);
         // janela [newDesired+3h, newDesired+4h): o novo horário pretendido cai ANTES da abertura.
         setStatusAndHours(OpenStatus.CLOSED, newDesiredUtc.plusHours(3), newDesiredUtc.plusHours(4));
 

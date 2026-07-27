@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.integrations.establishment;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
@@ -15,7 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
 
@@ -52,7 +53,7 @@ class IsOpenEffectiveIntegrationTest {
 
     @BeforeAll
     void setup() throws Exception {
-        OffsetTime now = OffsetTime.now(ZoneOffset.UTC);
+        LocalTime now = BusinessClock.nowTime();
 
         // Loja 1 — OPEN, janela [now-1h, now+1h): aberta agora
         openWithinId = createEstablishment();
@@ -76,7 +77,7 @@ class IsOpenEffectiveIntegrationTest {
         return estab.id();
     }
 
-    private void setHoursAndStatus(String id, OpenStatus status, OffsetTime opening, OffsetTime closing) {
+    private void setHoursAndStatus(String id, OpenStatus status, LocalTime opening, LocalTime closing) {
         Establishment e = establishmentRepository.findById(UUID.fromString(id)).orElseThrow();
         e.setOpenStatus(status);
         e.setOpeningTime(opening);

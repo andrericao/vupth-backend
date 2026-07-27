@@ -1771,8 +1771,8 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"opening_time 08:30Z\", () => pm.expect(pm.response.json().opening_time).to.eql(\"08:30Z\"));",
-         "pm.test(\"closing_time 19:00Z\", () => pm.expect(pm.response.json().closing_time).to.eql(\"19:00Z\"));",
+         "pm.test(\"opening_time 08:30 (parede)\", () => pm.expect(pm.response.json().opening_time).to.eql(\"08:30\"));",
+         "pm.test(\"closing_time 19:00 (parede)\", () => pm.expect(pm.response.json().closing_time).to.eql(\"19:00\"));",
          "pm.test(\"modified_fields inclui opening/closing\", () => {",
          "  const mf = pm.response.json().modified_fields || [];",
          "  pm.expect(mf).to.include(\"opening_time\");",
@@ -4378,8 +4378,8 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"opening_time 09:00Z\", () => pm.expect(pm.response.json().opening_time).to.eql(\"09:00Z\"));",
-         "pm.test(\"closing_time 18:00Z\", () => pm.expect(pm.response.json().closing_time).to.eql(\"18:00Z\"));"
+         "pm.test(\"opening_time 09:00 (parede)\", () => pm.expect(pm.response.json().opening_time).to.eql(\"09:00\"));",
+         "pm.test(\"closing_time 18:00 (parede)\", () => pm.expect(pm.response.json().closing_time).to.eql(\"18:00\"));"
         ]
        }
       }
@@ -7840,7 +7840,7 @@
      "response": []
     },
     {
-     "name": "setup: janela que fecha logo apos o alvo (00:00-20:01Z, owner)",
+     "name": "setup: janela que fecha logo apos o alvo (parede 00:00-23:31, owner)",
      "event": [
       {
        "listen": "test",
@@ -7871,7 +7871,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"opening_time\": \"00:00:00Z\", \"closing_time\": \"20:01:00Z\"}"
+       "raw": "{\"opening_time\": \"00:00\", \"closing_time\": \"23:31\"}"
       }
      },
      "response": []
@@ -7883,8 +7883,15 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "var d = new Date(); d.setUTCDate(d.getUTCDate()+1); d.setUTCHours(20,0,0,0);",
-         "pm.collectionVariables.set(\"intent_tomorrow20\", d.toISOString());"
+         "// BUG2b: opening_time/closing_time sao relogio de PAREDE no fuso da loja; o desiredTime continua",
+         "// sendo um INSTANTE. Para o caso 'nao cabe antes do fechamento' o alvo tem de cair DENTRO da",
+         "// janela [00:00, 23:31) e o servico nao terminar antes de fechar -> alvo 23:30 de parede, 1min",
+         "// de folga (qualquer duracao >= 2min estoura). O offset literal -03:00 e o fuso de negocio da",
+         "// API (vupth.timezone=America/Sao_Paulo); se esse default mudar, este literal muda junto.",
+         "// Nao da p/ derivar o offset aqui: o sandbox do newman nao expoe Intl.",
+         "var d = new Date(); d.setUTCDate(d.getUTCDate()+1);",
+         "var dia = d.toISOString().slice(0,10);",
+         "pm.collectionVariables.set(\"intent_tomorrow20\", dia + \"T23:30:00-03:00\");"
         ],
         "type": "text/javascript"
        }

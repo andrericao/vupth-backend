@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.domain.professional.model;
 
 import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -8,8 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
 import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.Set;
@@ -41,8 +42,11 @@ public class ProfessionalInterval {
     @Column
     private OffsetDateTime startTime;
 
+    // BUG2b: LocalTime (relogio de parede no fuso da loja), NAO OffsetTime — a coluna e TIME (sem
+    // timezone) e o Hibernate normalizava o offset para UTC (12:00-03:00 gravava 15:00). A projecao
+    // do horario no dia usa BusinessClock.at(dia, fixedStartTime).
     @Column
-    private OffsetTime fixedStartTime;
+    private LocalTime fixedStartTime;
 
     @Column
     private String recurrencePattern;
@@ -114,7 +118,7 @@ public class ProfessionalInterval {
     public boolean isStartedOn(java.time.LocalDate date) {
         return Boolean.TRUE.equals(this.isActive)
                 && this.actualStartTime != null
-                && this.actualStartTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
+                && BusinessClock.dateAt(this.actualStartTime).equals(date);
     }
 
     /**
@@ -123,7 +127,7 @@ public class ProfessionalInterval {
      */
     public boolean isDoneOn(java.time.LocalDate date) {
         return this.actualEndTime != null
-                && this.actualEndTime.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().equals(date);
+                && BusinessClock.dateAt(this.actualEndTime).equals(date);
     }
 
     /** True se a refeicao foi marcada como "pular" (Nao almocar) na data informada (item #41). */
@@ -155,7 +159,9 @@ public class ProfessionalInterval {
         this.actualStartTime = now;
 
         if (this.intervalType == IntervalType.RECURRENT && this.fixedStartTime != null) {
-            OffsetDateTime scheduledToday = now.toLocalDate().atTime(this.fixedStartTime);
+            // BUG2b: o horario fixo e relogio de parede — projeta no dia da LOJA, nao no dia UTC.
+            OffsetDateTime scheduledToday =
+                    BusinessClock.at(BusinessClock.dateAt(now), this.fixedStartTime);
             if (now.isBefore(scheduledToday.plusMinutes(5))) {
                 this.actualStartTime = scheduledToday;
             }
@@ -239,7 +245,7 @@ public class ProfessionalInterval {
         return createRecurring(
                 professional,
                 60,
-                OffsetTime.of(12, 0, 0, 0, ZoneOffset.UTC),
+                LocalTime.of(12, 0),
                 "WEEKDAYS",
                 "Lunch Break"
         );
@@ -249,7 +255,7 @@ public class ProfessionalInterval {
         return createRecurring(
                 professional,
                 60, // padronizado em 1h (spec item #11, regra 1)
-                OffsetTime.of(18, 0, 0, 0, ZoneOffset.UTC),
+                LocalTime.of(18, 0),
                 "WEEKDAYS",
                 "Dinner Break"
         );
@@ -258,7 +264,7 @@ public class ProfessionalInterval {
     public static ProfessionalInterval createRecurring(
             Professional professional,
             Integer durationMinutes,
-            OffsetTime fixedStartTime,
+            LocalTime fixedStartTime,
             String recurrencePattern,
             String description) {
 

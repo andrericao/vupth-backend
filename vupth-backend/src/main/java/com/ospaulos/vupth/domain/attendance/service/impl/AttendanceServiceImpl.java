@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.attendance.service.impl;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
@@ -442,7 +443,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (desiredTime.isAfter(now.plusDays(INTENTION_HORIZON_DAYS))) {
             throw new IntentionHorizonExceededException(desiredTime, INTENTION_HORIZON_DAYS);
         }
-        if (!establishment.isWithinBusinessHours(desiredTime.toOffsetTime())) {
+        if (!establishment.isWithinBusinessHours(BusinessClock.timeAt(desiredTime))) {
             throw new IntentionOutsideBusinessHoursException(desiredTime);
         }
 
@@ -500,23 +501,22 @@ public class AttendanceServiceImpl implements AttendanceService {
      * Sem janela (opening/closing nulos) ou 24h ({@code open == close}) sempre cabe.
      */
     private boolean fitsBeforeClosing(Establishment establishment, OffsetDateTime start, int durationMinutes) {
-        java.time.OffsetTime opening = establishment.getOpeningTime();
-        java.time.OffsetTime closing = establishment.getClosingTime();
-        if (opening == null || closing == null) {
+        java.time.LocalTime open = establishment.getOpeningTime();
+        java.time.LocalTime close = establishment.getClosingTime();
+        if (open == null || close == null) {
             return true;
         }
-        java.time.LocalTime open = opening.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
-        java.time.LocalTime close = closing.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
         if (open.equals(close)) {
             return true; // 24h
         }
-        OffsetDateTime startUtc = start.withOffsetSameInstant(java.time.ZoneOffset.UTC);
-        OffsetDateTime end = startUtc.plusMinutes(durationMinutes);
-        OffsetDateTime closingDateTime =
-                OffsetDateTime.of(startUtc.toLocalDate(), close, java.time.ZoneOffset.UTC);
+        // BUG2b: opening/closing sao relogio de parede — o fechamento do dia de `start` e o
+        // instante daquele dia (no fuso da loja) as `close` horas.
+        OffsetDateTime end = start.plusMinutes(durationMinutes);
+        java.time.LocalDate startDay = BusinessClock.dateAt(start);
+        OffsetDateTime closingDateTime = BusinessClock.at(startDay, close);
         if (close.isBefore(open)) {
             // janela que atravessa a meia-noite: o fechamento e no dia seguinte
-            closingDateTime = closingDateTime.plusDays(1);
+            closingDateTime = BusinessClock.at(startDay.plusDays(1), close);
         }
         return !end.isAfter(closingDateTime);
     }

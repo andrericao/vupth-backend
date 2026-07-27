@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.util.Set;
 
 @JsonIgnoreProperties(ignoreUnknown = false)
@@ -23,10 +23,12 @@ public record EstablishmentGeneralInfosRequest(
 
         String instagram,
 
-        // Horario de funcionamento (#11g2). Ex.: "09:00Z". null preserva (semantica PATCH).
+        // Horario de funcionamento (#11g2). Relogio de PAREDE no fuso da loja: "09:00" (BUG2b —
+        // sufixo de offset legado "09:00Z"/"09:00-03:00" e aceito e IGNORADO, os digitos e que
+        // valem). null preserva (semantica PATCH).
         @JsonProperty("opening_time")
-        OffsetTime openingTime,
+        LocalTime openingTime,
 
         @JsonProperty("closing_time")
-        OffsetTime closingTime
+        LocalTime closingTime
 ) {}

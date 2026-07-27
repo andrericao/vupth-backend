@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.integrations.attendance;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
@@ -22,7 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
@@ -100,7 +101,7 @@ class WalkInOpenGateIntegrationTest {
                 .content(mapper.writeValueAsString(request)));
     }
 
-    private void setStatusAndHours(OpenStatus status, OffsetTime opening, OffsetTime closing) {
+    private void setStatusAndHours(OpenStatus status, LocalTime opening, LocalTime closing) {
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(status);
         e.setOpeningTime(opening);
@@ -133,7 +134,7 @@ class WalkInOpenGateIntegrationTest {
     @Order(30)
     @DisplayName("walk-in com OPEN mas FORA do horário — 409 ESTABLISHMENT_NOT_OPEN (aberto agora efetivo)")
     void walkin_openOutsideHours_409() throws Exception {
-        OffsetTime now = OffsetTime.now(ZoneOffset.UTC);
+        LocalTime now = BusinessClock.nowTime();
         // Janela no futuro [now+2h, now+3h): open_status OPEN mas isOpenNow() == false.
         setStatusAndHours(OpenStatus.OPEN, now.plusHours(2), now.plusHours(3));
 

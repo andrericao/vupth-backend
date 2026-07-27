@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.establishment.service.impl;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
@@ -112,7 +113,7 @@ public class AutoCloseServiceImpl implements AutoCloseService {
 
             boolean autoOff = false;
             if (professional.getWorkStatus().countsAsOpen() && establishment != null) {
-                if (establishment.isWithinBusinessHours(now.toOffsetTime())) {
+                if (establishment.isWithinBusinessHours(BusinessClock.timeAt(now))) {
                     // Expediente foi ESTENDIDO (closing_time mudou) — auto-correcao, nada a fechar.
                     log.info("[AutoClose] grace — professional={} de volta DENTRO do expediente; carencia limpa",
                             professional.getId());

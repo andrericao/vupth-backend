@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.web.rest.interval.controller;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.events.CreateRecurringIntervalCommand;
 import com.ospaulos.vupth.domain.events.CreateUnexpectedIntervalCommand;
 import com.ospaulos.vupth.api.interval.dto.request.CreateRecurringIntervalRequest;
@@ -20,7 +21,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -104,7 +104,7 @@ public class ProfessionalIntervalController {
             @PathVariable UUID intervalId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
-        LocalDate target = Optional.ofNullable(date).orElse(LocalDate.now(ZoneOffset.UTC));
+        LocalDate target = Optional.ofNullable(date).orElse(BusinessClock.today());
         IntervalSkipResult result = intervalService.skipMeal(professionalId, intervalId, target);
         queuePublisher.broadcastQueue(result.establishmentId());
         return intervalMapper.toResponse(result.interval());
@@ -117,7 +117,7 @@ public class ProfessionalIntervalController {
             @PathVariable UUID intervalId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
-        LocalDate target = Optional.ofNullable(date).orElse(LocalDate.now(ZoneOffset.UTC));
+        LocalDate target = Optional.ofNullable(date).orElse(BusinessClock.today());
         IntervalSkipResult result = intervalService.unskipMeal(professionalId, intervalId, target);
         queuePublisher.broadcastQueue(result.establishmentId());
         return intervalMapper.toResponse(result.interval());
@@ -138,7 +138,7 @@ public class ProfessionalIntervalController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
         //Claude
-        LocalDate targetDate = Optional.ofNullable(date).orElse(LocalDate.now(ZoneOffset.UTC));
+        LocalDate targetDate = Optional.ofNullable(date).orElse(BusinessClock.today());
         //LocalDate targetDate = Optional.ofNullable(date).orElse(LocalDate.now());
 
         List<ProfessionalInterval> intervals = intervalService
