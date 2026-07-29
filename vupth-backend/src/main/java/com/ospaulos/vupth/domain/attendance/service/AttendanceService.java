@@ -85,6 +85,17 @@ public interface AttendanceService {
                                                     Client client, List<ServiceItem> serviceItems);
 
     /**
+     * Cria um {@code Attendance} SCHEDULED numa POSICAO especifica da fila, a partir de uma oferta
+     * aberta de troca aceita por quem estava na fila (Client C13, fatia 2 — solicitante FORA da fila).
+     * O {@code scheduledTime} recebe o slot CEDIDO por quem aceitou (que ja foi movido pro fim antes
+     * desta chamada), e nao "agora" como no walk-in. O aceite do outro cliente e a autorizacao —
+     * bypassa o gate C1 pelo mesmo motivo do corte aceito. Reusa o meal-lock (#37).
+     */
+    public Attendance createScheduledFromSwapOffer(Professional professional, Establishment establishment,
+                                                   Client client, List<ServiceItem> serviceItems,
+                                                   java.time.OffsetDateTime slot);
+
+    /**
      * Backlog #4 — manifestar intencao de atendimento (status {@code INTENTION}). O cliente
      * registrado (por JWT) pede para ser atendido num horario PRETENDIDO futuro ({@code desiredTime}),
      * tipicamente com a loja fechada ou o dia cheio. Nasce FORA da fila viva (nao aparece em

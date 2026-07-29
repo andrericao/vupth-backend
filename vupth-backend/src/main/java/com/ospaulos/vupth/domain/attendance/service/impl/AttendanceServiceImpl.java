@@ -1018,21 +1018,51 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] createScheduledFromCutRequest — professional={} client={}",
                 professional.getId(), client.getId());
 
+        // Corte aceito entra na CAUDA da fila viva (mesma posicao de um walk-in).
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved = createScheduledAt(
+                professional, establishment, client, serviceItems, java.time.OffsetDateTime.now());
+        log.info("[Attendance] createScheduledFromCutRequest — created id={}", saved.getId());
+        return saved;
+    }
+
+    @Override
+    public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromSwapOffer(
+            Professional professional, Establishment establishment, Client client,
+            List<ServiceItem> serviceItems, java.time.OffsetDateTime slot) {
+        log.info("[Attendance] createScheduledFromSwapOffer — professional={} client={} slot={}",
+                professional.getId(), client.getId(), slot);
+
+        // Troca aberta aceita: o solicitante assume o SLOT cedido por quem aceitou (que ja foi movido
+        // pro fim), e nao a cauda — por isso o scheduledTime vem de fora.
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved =
+                createScheduledAt(professional, establishment, client, serviceItems, slot);
+        log.info("[Attendance] createScheduledFromSwapOffer — created id={}", saved.getId());
+        return saved;
+    }
+
+    /**
+     * Nucleo comum do ingresso SEM gate C1 (corte aceito / troca aberta aceita): o consentimento de
+     * quem ja estava dentro e a autorizacao. O {@code scheduledTime} define a posicao na fila e por
+     * isso e gravado ANTES do meal-lock (#37), que conta as refeicoes a frente pela posicao.
+     */
+    private com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledAt(
+            Professional professional, Establishment establishment, Client client,
+            List<ServiceItem> serviceItems, java.time.OffsetDateTime scheduledTime) {
+
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();
         attendance.setProfessional(professional);
         attendance.setEstablishment(establishment);
         attendance.setClient(client);
-        // COPIA a lista: serviceItems vem da colecao gerenciada do CutRequest; compartilhar a mesma
-        // instancia entre duas entidades dispara "Found shared references to a collection" no flush.
+        // COPIA a lista: serviceItems vem da colecao gerenciada do CutRequest/SwapOffer; compartilhar
+        // a mesma instancia entre duas entidades dispara "Found shared references to a collection".
         attendance.setServiceItems(new java.util.ArrayList<>(serviceItems));
         attendance.setStatus(AttendanceStatus.SCHEDULED);
-        attendance.setScheduledTime(java.time.OffsetDateTime.now()); // cauda da fila viva (walk-in)
+        attendance.setScheduledTime(scheduledTime);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
         lockMealsAtIngress(saved, professional, establishment);
-        log.info("[Attendance] createScheduledFromCutRequest — created id={}", saved.getId());
         return saved;
     }
 

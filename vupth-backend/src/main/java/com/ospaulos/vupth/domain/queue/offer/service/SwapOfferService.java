@@ -14,7 +14,10 @@ import java.util.UUID;
  */
 public interface SwapOfferService {
 
-    /** Publica uma oferta. Na fila: {@code {attendanceId, direction}}. Fora da fila: fatia 2. */
+    /**
+     * Publica uma oferta. Na fila: {@code {attendanceId, direction}} (posicao explicita). Fora da fila:
+     * {@code {professionalId, serviceItemIds, direction: EARLIER}} (posicao implicita = fim).
+     */
     SwapOfferResponse create(SwapOfferCreateRequest request, UUID requesterClientId);
 
     /** Ofertas OPEN que o {@code callerClient} pode aceitar na fila do profissional (filtro por posicao/direcao). */
@@ -23,7 +26,11 @@ public interface SwapOfferService {
     /** Ofertas OPEN publicadas pelo proprio cliente ("meus pedidos de troca", para cancelar). */
     List<SwapOfferResponse> listMine(UUID requesterClientId);
 
-    /** O {@code callerClient} aceita a oferta: executa a troca 1-por-1 e notifica o solicitante. */
+    /**
+     * O {@code callerClient} aceita a oferta e a troca e executada, sempre 1-por-1 (so os dois se
+     * movem), notificando os DOIS lados. Solicitante NA fila: os {@code scheduledTime} sao trocados.
+     * Solicitante FORA da fila: quem aceitou vai pro fim e o solicitante nasce na vaga cedida.
+     */
     SwapOfferResponse accept(UUID offerId, UUID callerClientId);
 
     /** O solicitante cancela a propria oferta (OPEN -> CANCELLED). */

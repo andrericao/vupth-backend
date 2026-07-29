@@ -47,7 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests — oferta ABERTA de troca de posicao (Client C13 / Partner S11), fatia 1: o
  * solicitante JA esta na fila. Publica uma oferta ({@code EARLIER}/{@code LATER}); qualquer cliente
  * elegivel (por posicao/direcao na mesma fila) aceita -> troca 1-por-1 dos scheduledTime. Nunca multa.
- * Expira por evento (solicitante atendido/cancelado). Oferta de FORA da fila = 422 (fatia 2).
+ * Expira por evento (solicitante atendido/cancelado). A oferta de FORA da fila (fatia 2) tem classe
+ * propria: {@code SwapOfferOutOfQueueIntegrationTest}.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -214,9 +215,11 @@ class SwapOfferInQueueIntegrationTest {
     }
 
     @Test @Order(13)
-    @DisplayName("Publicar oferta de FORA da fila (professionalId) -> 422 (fatia 2)")
-    void create_outOfQueue_422() throws Exception {
+    @DisplayName("Quem JA esta na fila publicando como se estivesse fora dela -> 422 (use o attendanceId)")
+    void create_outOfQueueWhileInQueue_422() throws Exception {
         Q a = enqueue();
+        // A posicao implicita da oferta de fora e o FIM da fila — mentirosa para quem ja tem lugar.
+        // A oferta correta para ele e a de dentro ({attendanceId, direction}); ver a fatia 2.
         var body = new SwapOfferCreateRequest(null, UUID.fromString(professionalId),
                 serviceItemIds, SwapOfferDirection.EARLIER);
         MvcResult r = mvc.perform(post("/swap-offers")

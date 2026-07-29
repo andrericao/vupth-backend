@@ -16704,7 +16704,7 @@
    ]
   },
   {
-   "name": "08n - oferta aberta de troca (/swap-offers, fatia 1)",
+   "name": "08n - oferta aberta de troca (/swap-offers, fatias 1 e 2)",
    "description": "Oferta ABERTA de troca de posicao (Client C13 / Partner S11), fatia 1 = solicitante NA fila. Self-contained: cria dono+loja+profissional+servico, poe 2 clientes na fila viva, publica/lista/aceita/cancela oferta e confirma a expiracao por evento. Oferta de FORA da fila = 422 (fatia 2).",
    "item": [
     {
@@ -17242,12 +17242,14 @@
      "response": []
     },
     {
-     "name": "[ERRO] publicar oferta de FORA da fila -> 422 (fatia 2)",
+     "name": "[ERRO] quem JA esta na fila publica como se estivesse fora -> 422",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
+         "// A posicao implicita da oferta de fora e o FIM — mentirosa para quem ja tem lugar na fila.",
+         "// A oferta correta para ele e a de dentro ({attendanceId, direction}).",
          "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
          "pm.test(\"code QUEUE_SWAP_OFFER_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.equal(\"QUEUE_SWAP_OFFER_NOT_ALLOWED\"));"
         ],
@@ -17760,6 +17762,432 @@
        }
       ],
       "url": "{{base_url}}/swap-offers/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: register cliente C (fora da fila, C13)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"so_c_email\",\"soc_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"so_c_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"so_c_client_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{so_c_email}}\",\"password\":\"{{so_c_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login cliente C (C13)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"so_c_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{so_c_email}}\",\"password\":\"{{so_c_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] C publica de fora com direction LATER -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Fora da fila a posicao implicita JA e o fim — nao ha como atrasar mais.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code QUEUE_SWAP_OFFER_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.equal(\"QUEUE_SWAP_OFFER_NOT_ALLOWED\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_c_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{so_prof_id}}\",\"serviceItemIds\":[\"{{so_service_item_id}}\"],\"direction\":\"LATER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] C publica de fora sem servicos -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// O atendimento so nasce no aceite, entao os servicos (= duracao) tem de vir na publicacao.",
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code SERVICE_ITEM_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.equal(\"SERVICE_ITEM_NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_c_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{so_prof_id}}\",\"serviceItemIds\":[],\"direction\":\"EARLIER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "C publica oferta de FORA da fila -> 201 OPEN (fatia 2)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201){",
+         "  const o = pm.response.json();",
+         "  pm.collectionVariables.set(\"so_offer2_id\", o.id);",
+         "  pm.test(\"nasce OPEN / EARLIER\", () => { pm.expect(o.status).to.equal(\"OPEN\"); pm.expect(o.direction).to.equal(\"EARLIER\"); });",
+         "  pm.test(\"sem atendimento (posicao implicita = fim)\", () => pm.expect(o.requesterAttendanceId).to.be.null);",
+         "  pm.test(\"atendimento resultante so nasce no aceite\", () => pm.expect(o.resultingAttendanceId).to.be.null);",
+         "  pm.test(\"carrega os servicos escolhidos\", () => pm.expect(o.serviceItemIds).to.have.lengthOf(1));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_c_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{so_prof_id}}\",\"serviceItemIds\":[\"{{so_service_item_id}}\"],\"direction\":\"EARLIER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "A (na fila) lista aceitaveis -> contem a oferta de FORA",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// Quem esta fora da fila esta atras de todos -> a oferta e visivel a fila inteira.",
+         "pm.test(\"contem a oferta de fora\", () => {",
+         "  const ids = pm.response.json().map(o => o.id);",
+         "  pm.expect(ids).to.include(pm.collectionVariables.get(\"so_offer2_id\"));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_a_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers?professionalId={{so_prof_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "C lista /swap-offers/me -> contem a propria oferta OPEN",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"contem a propria\", () => {",
+         "  const ids = pm.response.json().map(o => o.id);",
+         "  pm.expect(ids).to.include(pm.collectionVariables.get(\"so_offer2_id\"));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_c_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] C aceita a PROPRIA oferta -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_c_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers/{{so_offer2_id}}/accept",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "A aceita a oferta de fora -> 200 ACCEPTED (cede a vaga)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const o = pm.response.json();",
+         "  pm.test(\"oferta consumida (ACCEPTED)\", () => pm.expect(o.status).to.equal(\"ACCEPTED\"));",
+         "  pm.test(\"nasceu o atendimento do solicitante\", () => pm.expect(o.resultingAttendanceId).to.not.be.null);",
+         "  pm.collectionVariables.set(\"so_att_c\", o.resultingAttendanceId);",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_a_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers/{{so_offer2_id}}/accept",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fila reflete: C assumiu a vaga e A foi pro FIM",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"C na frente de A\", () => {",
+         "  const prof = pm.response.json().professionals.find(p => p.id === pm.collectionVariables.get(\"so_prof_id\"));",
+         "  const ids = (prof.waiting_list || []).map(a => a.id);",
+         "  const posC = ids.indexOf(pm.collectionVariables.get(\"so_att_c\"));",
+         "  const posA = ids.indexOf(pm.collectionVariables.get(\"so_att_a\"));",
+         "  pm.expect(posC, \"C entrou na fila\").to.be.at.least(0);",
+         "  pm.expect(posA, \"A continua na fila\").to.be.at.least(0);",
+         "  pm.expect(posC).to.be.below(posA);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{so_estab_id}}/professionals-with-queue",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] aceitar a oferta de fora ja consumida -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_a_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/swap-offers/{{so_offer2_id}}/accept",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: remove o atendimento de C",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{so_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional-queue/{{so_att_c}}/remove",
       "auth": {
        "type": "noauth"
       }
