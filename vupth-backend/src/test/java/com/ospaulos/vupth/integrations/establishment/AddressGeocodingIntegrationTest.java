@@ -130,7 +130,8 @@ class AddressGeocodingIntegrationTest {
                 "Rio de Janeiro", "RJ", "21012000", null, null, null);
 
         mvc.perform(post("/establishments/" + establishment.id() + "/addresses")
-                        .header("Authorization", "Bearer " + owner.token())
+                        // token() do TestUserUtils JA vem com o prefixo "Bearer ".
+                        .header("Authorization", owner.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
