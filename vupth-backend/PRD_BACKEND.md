@@ -3670,3 +3670,20 @@ Como o seed roda em **staging** (`!prod`), os fronts conseguem exercitar a busca
 **📣 HANDOFF PARA OS FRONTS:**
 - **Front-Client** — pedir a **permissao de localizacao ANTES do login/cadastro**, junto do portao `waitForBackend` (secao 18c: o Render Free hiberna, o portao ja segura a tela inicial — a permissao de GPS cabe no mesmo momento). Com permissao: chamar a listagem publica com `lat`/`lng` (+ `radiusKm`) e **exibir `distance_km` nas informacoes do card** (o backend ja manda pronto e arredondado — nao calcular no app). Sem permissao: chamar **sem** os params e mostrar a lista normal — nunca tela vazia. **A listagem ja e publica hoje**, entao a tela de "estabelecimentos proximos" pode ser construida antes mesmo das fatias A/B; enquanto `distance_km` nao existir, so nao ha ordenacao por distancia.
 - **Front-Partner** — nada a fazer na busca. O unico impacto e no **cadastro/edicao do estabelecimento**: o endereco passa a ser geocodificado no backend, entao **CEP e numero corretos importam** (CEP errado = estabelecimento sem coordenada = invisivel na busca por proximidade). Nao e preciso o partner enviar `latitude`/`longitude` — o backend preenche.
+
+#### ✅ TESTES QUE CADA FRONT PRECISA IMPLEMENTAR (Andre 2026-07-27)
+O seed dos 4 pontos existe justamente para isto: os fronts conseguem rodar os casos abaixo contra **staging** (o seed roda em `!prod`), sem cadastrar nada e **sem login**. Buscas feitas a partir da **Penha** (`lat=-22.8422&lng=-43.2764`).
+
+**Front-Client:**
+1. **Vitrine anonima** — abrir o app **sem conta** e listar estabelecimentos. Nao pode exigir token (a listagem ja e publica hoje).
+2. **Portao de permissao** — o pedido de localizacao acontece **antes** do login/cadastro, junto do `waitForBackend` (secao 18c).
+3. **Raio** — `radiusKm=10` → **2** lojas (Penha, Caxias); `radiusKm=16` → **3** (+ Belford Roxo); `radiusKm=20` → **4** (+ Niteroi).
+4. **Ordenacao** — Barbearia do Ricardo (0) → Studio Beleza Total (7,2) → Salao Nova Era (15,3) → Barbearia Icarai (18,3).
+5. **Card** — a linha de distancia mostra o `distance_km` que veio do backend; **nao** recalcular no app.
+6. **Permissao NEGADA** — chamar **sem** `lat`/`lng`: a lista vem completa na ordenacao normal e o card **omite** a linha de distancia (`distance_km: null`). **A tela nunca pode ficar vazia por falta de permissao** — este e o caso de teste mais importante dos seis.
+7. **Troca de posicao FORA da fila** (`/swap-offers` fatia 2, ja ENTREGUE) — publicar `{professionalId, serviceItemIds, direction: "EARLIER"}` sem estar na fila; quando alguem aceita, o cliente **entra na fila** e o `attendanceId` novo chega em `resultingAttendanceId` / no WS `SWAP_OFFER_ACCEPTED`. Erros a cobrir: `422` (LATER, ou ja estar na fila daquele profissional), `404` (sem servicos), `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`.
+
+**Front-Partner:**
+1. **Cadastro com CEP valido** → apos salvar, o estabelecimento **aparece** na busca por raio (tem coordenada).
+2. **Cadastro com CEP que nao geocodifica** → o cadastro **conclui normalmente** (nao pode quebrar), mas a loja **nao aparece** no resultado com raio — e **continua aparecendo** na listagem sem raio. E o caso que expoe o dado incompleto pro dono.
+3. **Nada na busca por proximidade** — o partner nao consome `lat`/`lng`/`distance_km`.
