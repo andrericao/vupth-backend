@@ -479,7 +479,7 @@ databaseChangeLog:
               - column: { name: neighborhood, value:        "Penha" }
               - column: { name: city,         value:        "Rio de Janeiro" }
               - column: { name: state,        value:        "RJ" }
-              - column: { name: zip_code,     value:        "21012-000" }
+              - column: { name: zip_code,     value:        "21012000" }
               - column: { name: latitude,     valueNumeric: -22.8422 }
               - column: { name: longitude,    valueNumeric: -43.2764 }
               - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
@@ -503,7 +503,7 @@ databaseChangeLog:
               - column: { name: neighborhood, value:        "Centro" }
               - column: { name: city,         value:        "Duque de Caxias" }
               - column: { name: state,        value:        "RJ" }
-              - column: { name: zip_code,     value:        "25010-000" }
+              - column: { name: zip_code,     value:        "25010000" }
               - column: { name: latitude,     valueNumeric: -22.7858 }
               - column: { name: longitude,    valueNumeric: -43.3117 }
               - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
@@ -539,7 +539,7 @@ databaseChangeLog:
               - column: { name: neighborhood, value:        "Centro" }
               - column: { name: city,         value:        "Belford Roxo" }
               - column: { name: state,        value:        "RJ" }
-              - column: { name: zip_code,     value:        "26110-000" }
+              - column: { name: zip_code,     value:        "26110000" }
               - column: { name: latitude,     valueNumeric: -22.7642 }
               - column: { name: longitude,    valueNumeric: -43.3997 }
               - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
@@ -615,7 +615,7 @@ databaseChangeLog:
               - column: { name: neighborhood, value:        "Icarai" }
               - column: { name: city,         value:        "Niteroi" }
               - column: { name: state,        value:        "RJ" }
-              - column: { name: zip_code,     value:        "24230-100" }
+              - column: { name: zip_code,     value:        "24230100" }
               - column: { name: latitude,     valueNumeric: -22.8833 }
               - column: { name: longitude,    valueNumeric: -43.1036 }
               - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
