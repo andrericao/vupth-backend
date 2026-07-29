@@ -3635,7 +3635,9 @@ Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: espec
 
 **Fatia B — filtro e ordenacao por raio.** `GET /establishment?lat=&lng=&radiusKm=` (**sem token**, como hoje):
 - **Haversine em SQL puro** (`acos`/`radians` em query nativa), **sem PostGIS** — a extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume nao justifica indice espacial.
-- Resposta ganha **`distance_km`** (arredondado a 1 casa) em cada item; ordenacao por distancia crescente quando `lat`/`lng` vem.
+- Resposta ganha **`distance_km`** (arredondado a 1 casa) em **cada item da listagem** — **e esse o campo que o card do cliente exibe** (decisao Andre 2026-07-27: "a distancia entre o cliente e o estabelecimento vai nas informacoes do card"). O calculo e do BACKEND: o front **nao** deve derivar distancia por conta propria, pelo mesmo motivo do buffer de ETA (#9) — client e partner tem que mostrar o MESMO numero.
+- **`distance_km` so existe se `lat`/`lng` forem enviados.** Sem GPS (Fatia C) o campo vem **`null`** e o card simplesmente **omite a linha de distancia** — nunca mostrar "0 km" nem "-" nesse caso, que seria mentira.
+- Estabelecimento com coordenada ausente, numa busca **sem** raio: aparece na lista com `distance_km: null` (mesmo tratamento do sem-GPS).
 - **A definir na implementacao:** se a ordenacao por distancia vira mais um modo do sort atual ou o **default** quando `lat`/`lng` chegam; e o valor default de `radiusKm`.
 - Estabelecimento **sem coordenada** fica fora do resultado com raio (nao da para medir) — por isso a Fatia A vem antes.
 
@@ -3646,10 +3648,12 @@ Para testar distancia de verdade e preciso ter estabelecimentos **espalhados**. 
 
 | Estabelecimento (seed) | Bairro / municipio | Lat | Lng | Distancia da Penha |
 |---|---|---|---|---|
-| (ponto de referencia das buscas) | **Penha**, Rio de Janeiro | −22.8422 | −43.2764 | 0 km |
-| — | **Duque de Caxias** (centro) | −22.7858 | −43.3117 | **7,2 km** |
-| — | **Belford Roxo** (centro) | −22.7642 | −43.3997 | **15,3 km** |
-| — | **Niteroi** (centro) | −22.8833 | −43.1036 | **18,3 km** |
+| **Barbearia do Ricardo** (ja existia) | **Penha**, Rio de Janeiro | −22.8422 | −43.2764 | 0 km — **ponto de referencia das buscas** |
+| **Studio Beleza Total** (ja existia) | **Duque de Caxias** (centro) | −22.7858 | −43.3117 | **7,2 km** |
+| **Salao Nova Era** (novo no seed) | **Belford Roxo** (centro) | −22.7642 | −43.3997 | **15,3 km** |
+| **Barbearia Icarai** (nova no seed) | **Niteroi**, Icarai | −22.8833 | −43.1036 | **18,3 km** |
+
+As duas lojas que ja existiam no seed **ganharam endereco** (nenhum estabelecimento semeado fica sem); as duas novas nascem com **1 profissional + 1 servico** cada — sem servico elas sumiriam do `professionals-with-queue` (#31) e do filtro do client (`available_professionals > 0`), e um ponto do mapa invisivel nao testa nada. Enderecos ficticios, `context: "!prod"`.
 
 > As coordenadas acima sao **aproximadas do centro de cada bairro/municipio** — servem para teste de distancia, nao sao endereco real de ninguem. Conferir/ajustar se algum ponto precisar ser exato.
 
@@ -3664,5 +3668,5 @@ Para testar distancia de verdade e preciso ter estabelecimentos **espalhados**. 
 Como o seed roda em **staging** (`!prod`), os fronts conseguem exercitar a busca por proximidade no Render sem cadastrar nada.
 
 **📣 HANDOFF PARA OS FRONTS:**
-- **Front-Client** — pedir a **permissao de localizacao ANTES do login/cadastro**, junto do portao `waitForBackend` (secao 18c: o Render Free hiberna, o portao ja segura a tela inicial — a permissao de GPS cabe no mesmo momento). Com permissao: chamar a listagem publica com `lat`/`lng` (+ `radiusKm`) e exibir `distance_km` no card. Sem permissao: chamar **sem** os params e mostrar a lista normal — nunca tela vazia. **A listagem ja e publica hoje**, entao a tela de "estabelecimentos proximos" pode ser construida antes mesmo das fatias A/B; enquanto `distance_km` nao existir, so nao ha ordenacao por distancia.
+- **Front-Client** — pedir a **permissao de localizacao ANTES do login/cadastro**, junto do portao `waitForBackend` (secao 18c: o Render Free hiberna, o portao ja segura a tela inicial — a permissao de GPS cabe no mesmo momento). Com permissao: chamar a listagem publica com `lat`/`lng` (+ `radiusKm`) e **exibir `distance_km` nas informacoes do card** (o backend ja manda pronto e arredondado — nao calcular no app). Sem permissao: chamar **sem** os params e mostrar a lista normal — nunca tela vazia. **A listagem ja e publica hoje**, entao a tela de "estabelecimentos proximos" pode ser construida antes mesmo das fatias A/B; enquanto `distance_km` nao existir, so nao ha ordenacao por distancia.
 - **Front-Partner** — nada a fazer na busca. O unico impacto e no **cadastro/edicao do estabelecimento**: o endereco passa a ser geocodificado no backend, entao **CEP e numero corretos importam** (CEP errado = estabelecimento sem coordenada = invisivel na busca por proximidade). Nao e preciso o partner enviar `latitude`/`longitude` — o backend preenche.
