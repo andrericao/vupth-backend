@@ -18795,6 +18795,521 @@
    ]
   },
   {
+   "name": "18 - busca por proximidade (GPS, fatia B)",
+   "description": "GET /establishment?lat=&lng=[&radiusKm=] — ordenacao por distancia e campo distance_km. DECISAO DE PRODUTO (Andre 2026-07-27, opcao A): NAO ha raio default — com lat/lng e sem radiusKm a lista devolve TUDO reordenado, e a loja SEM coordenada vai para o FIM com distance_km null em vez de sumir; ela so sai quando o raio e pedido explicitamente. Um raio default deixaria a tela vazia para quem esta numa regiao sem loja, e o usuario nao distingue isso de 'o app quebrou'. Self-contained: cria dono+loja+endereco na Penha (mesma coordenada do seed) e apaga no fim; nenhuma assercao olha a lista inteira do banco, exceto as de ordenacao, que sao relativas. Endpoint publico — o ultimo request confere que a vitrine por proximidade funciona SEM token.",
+   "item": [
+    {
+     "name": "setup: register dono (GPS)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"geo_owner_email\",\"geoowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"geo_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{geo_owner_email}}\",\"password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (GPS)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"geo_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{geo_owner_email}}\",\"password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (GPS)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{geo_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja GPS {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: endereco na Penha, com a coordenada do aparelho",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"coordenada gravada\", () => {",
+         "  pm.expect(pm.response.json().latitude).to.eql(-22.8422);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{geo_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{geo_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":-22.8422,\"longitude\":-43.2764}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "listagem SEM lat/lng -> 200 e sem distance_km",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha, \"loja da folder 18\").to.exist);",
+         "pm.test(\"distance_km ausente/nulo quando a busca nao mandou coordenada\", () => {",
+         "  pm.expect(minha.distance_km == null).to.be.true;",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "radiusKm SEM lat/lng e IGNORADO -> 200 (a lista nunca fica vazia por isso)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// O app pode mandar um raio guardado de antes com a permissao de localizacao NEGADA agora.",
+         "// Raio sem origem nao quer dizer nada e e ignorado de proposito, sem erro.",
+         "pm.test(\"a loja continua na lista\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"sem distance_km\", () => pm.expect(minha.distance_km == null).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&radiusKm=1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "busca DA Penha -> distance_km = 0 na propria loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"distancia zero na propria coordenada\", () => pm.expect(minha.distance_km).to.eql(0));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "busca DE NITEROI -> distance_km ~18 km ate a Penha",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"distancia plausivel (16-20 km)\", () => {",
+         "  pm.expect(minha.distance_km).to.be.above(16);",
+         "  pm.expect(minha.distance_km).to.be.below(20);",
+         "});",
+         "pm.test(\"arredondado em 2 casas — e o numero que o card mostra\", () => {",
+         "  pm.expect(String(minha.distance_km).split(\".\")[1] || \"\").to.have.length.of.at.most(2);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ordenado por distancia: quem tem coordenada vem antes de quem nao tem",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const lista = pm.response.json();",
+         "pm.test(\"distancias em ordem nao-decrescente\", () => {",
+         "  const comDist = lista.filter(e => e.distance_km != null).map(e => e.distance_km);",
+         "  for(let i=1;i<comDist.length;i++) pm.expect(comDist[i]).to.be.at.least(comDist[i-1]);",
+         "});",
+         "pm.test(\"as SEM coordenada ficam no FIM (nao somem — nao ha raio default)\", () => {",
+         "  const primeiroSemDist = lista.findIndex(e => e.distance_km == null);",
+         "  if(primeiroSemDist >= 0){",
+         "    lista.slice(primeiroSemDist).forEach(e => pm.expect(e.distance_km == null).to.be.true);",
+         "  }",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "raio de 1km a partir da Penha -> a loja ESTA dentro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja cabe no raio\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"todo mundo que voltou tem distancia <= 1km\", () => {",
+         "  pm.response.json().forEach(e => {",
+         "    pm.expect(e.distance_km, e.name).to.not.be.null;",
+         "    pm.expect(e.distance_km).to.be.at.most(1);",
+         "  });",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764&radiusKm=1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "raio de 1km a partir de NITEROI -> a loja da Penha SAI",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja de 18km fora do raio nao volta\", () => pm.expect(minha).to.not.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036&radiusKm=1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] meia coordenada (so lat) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] ilha nula (0,0) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=0&lng=0",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] fora do globo (lat 91) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=91&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] radiusKm = 0 -> 422 (devolveria lista vazia sempre)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764&radiusKm=0",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "vitrine ANONIMA: busca por proximidade sem token -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 — a lista de perto e a isca do cadastro, nao o premio dele\",",
+         "  () => pm.response.to.have.status(200));",
+         "pm.test(\"distance_km vem mesmo sem login\", () => {",
+         "  const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "  pm.expect(minha.distance_km).to.eql(0);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono (GPS)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{geo_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -19283,6 +19798,22 @@
   },
   {
    "key": "ad_owner2_token",
+   "value": ""
+  },
+  {
+   "key": "geo_owner_email",
+   "value": ""
+  },
+  {
+   "key": "geo_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "geo_owner_token",
+   "value": ""
+  },
+  {
+   "key": "geo_estab_id",
    "value": ""
   }
  ],

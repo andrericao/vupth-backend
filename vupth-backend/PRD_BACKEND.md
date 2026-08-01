@@ -684,6 +684,8 @@ Lista establishments ativos com filtros opcionais.
 | neighborhood | String | Busca parcial por bairro do endereco, case-insensitive (`LIKE`). So retorna establishments que tem endereco no bairro |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
 | includeAll | Boolean | Default `false`. Se `false`, a listagem devolve **apenas lojas `open_status == OPEN`**. `true` devolve todas as ativas (inclui `CLOSED`/`TEMPORARILY_CLOSED`), p/ o Front-Partner/gestao |
+| lat, lng | Double | **Novo 2026-08-01 (GPS fatia B).** Coordenada do aparelho do cliente. Presentes, a lista passa a ser **ordenada por distancia** e cada item ganha `distance_km`. Tem de vir **o par** |
+| radiusKm | Double | **Opcional e explicito** — filtra ate X km. **NAO ha raio default** |
 
 > **Filtro de open-status (BUG5):** por padrao (`includeAll` ausente ou `false`) a listagem publica so mostra lojas **abertas** (`open_status == OPEN`) — o cliente nao ve loja fechada. `?includeAll=true` inclui as fechadas. **NAO muda o open-status persistido nem mexe na fila** — e so filtro de leitura, aplicado a **todas** as variantes do `GET /establishment` (com ou sem `name`/`neighborhood`/`serviceType`). O front nao precisa mais filtrar localmente.
 
@@ -694,9 +696,43 @@ Lista establishments ativos com filtros opcionais.
 > - Sem filtro, lista todos os ativos.
 > - `includeAll` e ortogonal aos demais: o filtro de open-status roda **por cima** do resultado de qualquer combinacao acima.
 >
-> **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja.
+> **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja. **Com `lat`/`lng`, essa ordenacao e SUBSTITUIDA pela distancia** (ver abaixo).
+
+#### Busca por proximidade — `?lat=&lng=[&radiusKm=]` (GPS fatia B, 2026-08-01)
+
+**Decisao de produto (Andre 2026-07-27, opcao A): NAO existe raio default.** Com `lat`/`lng` e sem
+`radiusKm`, a busca devolve **tudo** reordenado por distancia; o raio e filtro **opcional e
+explicito**. Um raio default deixaria a tela vazia para quem esta numa regiao sem loja — e o usuario
+**nao distingue "nao ha nada perto" de "o app quebrou"**.
+
+| Situacao | Comportamento |
+|---|---|
+| Sem `lat`/`lng` | Ordena por tempo de espera (o de sempre). `distance_km` vem `null` |
+| `lat`+`lng`, sem `radiusKm` | Ordena por distancia. **Ninguem some**: a loja sem coordenada vai para o **FIM** com `distance_km: null` |
+| `lat`+`lng`+`radiusKm` | Alem de ordenar, **filtra** ate X km — e a loja **sem coordenada sai** (nao da para afirmar que ela cabe no raio) |
+| `radiusKm` **sem** `lat`/`lng` | **Ignorado, sem erro.** O app pode mandar um raio guardado de antes com a permissao de localizacao NEGADA agora; a lista nunca pode vir vazia (nem quebrar) por isso |
+| Coordenada pela metade, fora do globo ou `(0,0)` | `422 ADDRESS_INVALID_COORDINATES` — mesmo portao de entrada do cadastro de endereco |
+| `radiusKm <= 0` | `422 ADDRESS_INVALID_COORDINATES`. Aqui o chamador disse o que queria e disse algo impossivel: raio nao-positivo devolveria lista vazia sempre, e o front leria isso como "nao ha lojas" |
+
+**Ordem ESTAVEL:** distancia e, no empate, `id`. Sem o desempate, duas lojas equidistantes trocariam
+de lugar entre requests e a paginacao (backlog) repetiria ou pularia item.
+
+**`distance_km`** e arredondado em **2 casas** — e o numero que o card mostra ("2,3 km"). **O front
+NAO recalcula**: se cada app fizesse a propria conta, a distancia mostrada divergiria entre client e
+partner. `null` significa duas coisas distintas: (a) a busca nao mandou coordenada, ou (b) mandou,
+mas **aquela** loja ainda nao tem coordenada resolvida.
+
+> **Custo zero:** Haversine em Java puro (`domain/address/valueObject/Haversine`), **sem PostGIS** e
+> sem servico externo — a distancia usa a coordenada **ja persistida** pelo geocoding (fatia A) ou
+> pelo GPS do dono (fatia A2). Nenhuma chamada externa acontece por request de busca.
 >
-> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog. No MVP nao ha ordenacao por distancia.
+> **Por que em Java e nao em SQL** (a nota antiga dizia "Haversine em SQL puro"): a listagem ja
+> calcula o tempo de espera com **uma query por establishment** (o N+1 documentado no `@apiNote` do
+> service). Filtrar o raio no banco pouparia uma fracao irrelevante perto disso, e exigiria duplicar
+> a formula em cada uma das 5 combinacoes de filtro que ja existiam. Em Java, a distancia vale para
+> **qualquer** combinacao de graca. **Quando mover para SQL:** junto com a **paginacao** (backlog) —
+> ai a ordenacao precisa acontecer no banco de qualquer jeito, e e o momento de somar o bounding box
+> com indice.
 
 **Response (200):**
 ```json
@@ -715,6 +751,7 @@ Lista establishments ativos com filtros opcionais.
     "open_status": "OPEN",
     "is_open": true,
     "status": "ACTIVE",
+    "distance_km": 2.31,
     "address": {
       "street": "Rua das Flores",
       "number": "123",
@@ -739,7 +776,17 @@ Lista establishments ativos com filtros opcionais.
 
 > **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
-**Testes:** Integracao
+> **Handoff Front-Client (o B7 deles — PRONTO PARA LIGAR).** O lado de voces ja esta feito desde
+> 29/07 (`expo-location`, permissao na primeira abertura, coordenadas em `locationStore.coords`).
+> Agora basta **mandar `lat`/`lng` no `GET /establishment`** e **exibir `distance_km`** no card, sem
+> recalcular nada. Tres avisos que mudam a UI: (1) **nao mande `radiusKm`** a menos que exista um
+> controle de raio na tela — sem ele a lista vem completa, so reordenada, que e o comportamento
+> desejado na Home; (2) uma loja pode vir com `distance_km: null` **mesmo com o GPS ligado** (ela
+> ainda nao tem coordenada) — o card precisa aguentar isso sem mostrar "null km"; (3) com a permissao
+> **negada**, simplesmente nao mande as coordenadas: a lista volta ordenada por tempo de espera e
+> **nunca vem vazia** por causa disso.
+
+**Testes:** `EstablishmentGeoSearchIntegrationTest`, `HaversineTest` · Postman folder **18**
 
 ---
 
@@ -3172,7 +3219,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
 | 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔧 configurado — **falta testar + investigar reenvio** | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). |
-| 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatias A (geocoding) e A2 (GPS do dono + reverso + validacao) ENTREGUES; restam B (filtro por raio) e C (fallback sem GPS)** | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine em SQL puro** (formula com `acos`/`radians` numa query nativa), **sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
+| 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatias A (geocoding), A2 (GPS do dono + reverso + validacao) e B (ordenacao + raio + `distance_km`) ENTREGUES; resta so a C (fallback sem GPS)** — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
 | 5 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |

@@ -24,6 +24,7 @@ import com.ospaulos.vupth.domain.serviceItem.service.ServiceItemService;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
+import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
@@ -109,36 +110,38 @@ public class EstablishmentController {
      *   ?serviceType=BARBER&neighborhood=centro — combina categoria + bairro ("barbearia no Centro")
      *   ?neighborhood=centro                 — so bairro
      *   ?serviceType=BARBER                  — so categoria
-     * Sem filtro, lista todos os ativos. Ordenacao sempre por createdAt DESC.
+     *   ?lat=-22.84&lng=-43.27               — ordena por PROXIMIDADE e devolve distance_km
+     *   ?lat=..&lng=..&radiusKm=10           — + filtra ate 10km (opcional; NAO ha raio default)
+     * Sem filtro, lista todos os ativos, ordenados por menor tempo de espera.
+     *
+     * <p><b>Endpoint publico</b> (`permitAll`) de proposito: a vitrine de lojas proximas e a isca do
+     * cadastro, nao o premio dele — o cliente baixa o app, concede o GPS e ja ve o que tem perto sem
+     * ter conta.</p>
      */
     @GetMapping
     public ResponseEntity<List<EstablishmentResponse>> findAll(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String neighborhood,
             @RequestParam(required = false) ServiceType serviceType,
-            @RequestParam(required = false, defaultValue = "false") boolean includeAll) {
+            @RequestParam(required = false, defaultValue = "false") boolean includeAll,
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) Double radiusKm) {
 
-        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={} includeAll={}",
-                name, neighborhood, serviceType, includeAll);
+        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={} includeAll={}"
+                        + " lat={} lng={} radiusKm={}",
+                name, neighborhood, serviceType, includeAll, lat, lng, radiusKm);
 
-        boolean hasNeighborhood = neighborhood != null && !neighborhood.isBlank();
+        // null quando nao veio coordenada — a listagem cai na ordenacao por tempo de espera.
+        // Coordenada invalida (meia, fora do globo, (0,0)) ou raio <= 0 param aqui, com 422.
+        GeoSearch geo = GeoSearch.from(lat, lng, radiusKm);
 
-        List<EstablishmentResponse> result;
-        if (name != null && !name.isBlank()) {
-            result = service.searchByName(name);
-        } else if (serviceType != null && hasNeighborhood) {
-            result = service.searchByServiceTypeAndNeighborhood(serviceType, neighborhood);
-        } else if (hasNeighborhood) {
-            result = service.searchByNeighborhood(neighborhood);
-        } else if (serviceType != null) {
-            result = service.findByServiceType(serviceType);
-        } else {
-            result = service.findAllActive();
-        }
+        List<EstablishmentResponse> result = service.searchPublic(name, serviceType, neighborhood, geo);
 
         // BUG5: por padrão a listagem pública só devolve lojas ABERTAS (OPEN).
         // ?includeAll=true devolve todas as ativas (inclui CLOSED/TEMPORARILY_CLOSED),
-        // p/ o Front-Partner/gestão. Filtro pós-fetch: preserva a ordenação por tempo de espera.
+        // p/ o Front-Partner/gestão. Filtro pós-fetch: preserva a ordenação que o service
+        // aplicou — por distância quando veio lat/lng, por tempo de espera caso contrário.
         if (!includeAll) {
             result = result.stream()
                     .filter(e -> OpenStatus.OPEN.name().equals(e.openStatus()))

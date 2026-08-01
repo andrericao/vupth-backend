@@ -56,7 +56,15 @@ public record EstablishmentResponse(
 
         // Endereco principal da loja (Partner BUG4). null quando a loja ainda nao tem endereco.
         // O front le data.address para exibir localizacao no read-back do establishment.
-        AddressResponse address
+        AddressResponse address,
+
+        // Distancia em km ate a coordenada enviada na busca (GET /establishment?lat=&lng=).
+        // Arredondada em 2 casas — e o numero que o card mostra ("2,3 km"), o front NAO recalcula.
+        // null em dois casos distintos: (a) a busca nao mandou lat/lng, ou (b) mandou, mas ESTA loja
+        // nao tem coordenada — nesse caso ela vai para o FIM da lista em vez de sumir (so some se a
+        // busca tambem mandar um radiusKm explicito).
+        @JsonProperty("distance_km")
+        Double distanceKm
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return fromEntity(establishment, null, null);
@@ -81,7 +89,20 @@ public record EstablishmentResponse(
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
                 establishment.isOpenNow(),
                 establishment.getStatus() != null ? establishment.getStatus().name() : null,
-                AddressResponse.fromEntity(establishment.getMainAddress())
+                AddressResponse.fromEntity(establishment.getMainAddress()),
+                null
         );
+    }
+
+    /**
+     * Copia com a distancia preenchida (fatia B do GPS). Wither em vez de mais um parametro no
+     * {@code fromEntity} de proposito: a distancia so existe na listagem publica quando a busca
+     * mandou coordenada, e ela e calculada DEPOIS do mapeamento, junto com a ordenacao.
+     */
+    public EstablishmentResponse withDistanceKm(Double distanceKm) {
+        return new EstablishmentResponse(
+                id, services, name, serviceType, urlImage, ownerId, phone, instagram,
+                openingTime, closingTime, estimatedWaitMinutes, availableProfessionals,
+                openStatus, isOpen, status, address, distanceKm);
     }
 }
