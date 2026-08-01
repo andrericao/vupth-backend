@@ -10,6 +10,7 @@ import com.ospaulos.vupth.api.user.dto.response.useraddress.UserAddressAndGenera
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.mapper.UserMapper;
 import com.ospaulos.vupth.domain.address.model.Address;
+import com.ospaulos.vupth.domain.address.valueObject.AddressCoordinates;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.UserAddress;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -34,6 +35,10 @@ public class RegisterAddressUseCase {
     public UserAddressAndGeneralInfosResponse execute(AddressRequest request, UUID id){
 
         log.info("USECASE REGISTER ADDRESS");
+
+        // Mesmo portao do endereco do estabelecimento (fatia A2): o DTO e o mesmo e ja aceitava
+        // lat/lng, entao um par invalido entrava aqui tambem.
+        AddressCoordinates.validate(request.latitude(), request.longitude());
 
             BaseUser user = userRepository.findById(id)
                     .orElseThrow(

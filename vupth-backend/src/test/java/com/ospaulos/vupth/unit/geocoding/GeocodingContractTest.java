@@ -2,6 +2,7 @@ package com.ospaulos.vupth.unit.geocoding;
 
 import com.ospaulos.vupth.infrastructure.geocoding.Coordinates;
 import com.ospaulos.vupth.infrastructure.geocoding.GeocodeQuery;
+import com.ospaulos.vupth.infrastructure.geocoding.HttpGeocoder;
 import com.ospaulos.vupth.infrastructure.geocoding.NoOpGeocoder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -63,6 +64,28 @@ class GeocodingContractTest {
         NoOpGeocoder geocoder = new NoOpGeocoder();
         assertThat(geocoder.geocode(query("21012000", "Rua X", "Rio de Janeiro"))).isEmpty();
         assertThat(geocoder.geocode(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("NoOpGeocoder tambem nao faz o reverso — nem com coordenada nula (fatia A2)")
+    void noOpNeverReverses() {
+        NoOpGeocoder geocoder = new NoOpGeocoder();
+        assertThat(geocoder.reverse(new Coordinates(-22.8422, -43.2764))).isEmpty();
+        assertThat(geocoder.reverse(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Reverso nem sai da maquina com coordenada implausivel (fatia A2)")
+    void reverseSkipsImplausibleCoordinates() {
+        // Mesma regra dos dois lados: se (0,0) nao pode ENTRAR como coordenada de endereco, tambem
+        // nao vale gastar request do Nominatim perguntando o que ha la.
+        HttpGeocoder geocoder = new HttpGeocoder(
+                "http://localhost:1/cep", "http://localhost:1/search", "http://localhost:1/reverse",
+                "vupth-test/1.0", 1);
+
+        assertThat(geocoder.reverse(new Coordinates(0, 0))).isEmpty();
+        assertThat(geocoder.reverse(new Coordinates(-91, 0))).isEmpty();
+        assertThat(geocoder.reverse(null)).isEmpty();
     }
 
     private GeocodeQuery query(String zip, String street, String city) {

@@ -1,5 +1,7 @@
 package com.ospaulos.vupth.web.rest.exception;
 
+import com.ospaulos.vupth.domain.address.exception.InvalidCoordinatesException;
+import com.ospaulos.vupth.domain.address.exception.ReverseGeocodeNotFoundException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAccessDeniedException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAlreadyPendingException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundException;
@@ -127,6 +129,20 @@ public class GlobalExceptionHandler {
             EstablishmentNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] EstablishmentNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "ESTABLISHMENT_NOT_FOUND");
+    }
+
+    @ExceptionHandler(ReverseGeocodeNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleReverseGeocodeNotFound(
+            ReverseGeocodeNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] ReverseGeocodeNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "GEOCODING_ADDRESS_NOT_FOUND");
+    }
+
+    @ExceptionHandler(InvalidCoordinatesException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCoordinates(
+            InvalidCoordinatesException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidCoordinates | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ADDRESS_INVALID_COORDINATES");
     }
 
     @ExceptionHandler(EstablishmentNotReadyException.class)

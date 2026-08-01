@@ -16,4 +16,12 @@ import java.util.Optional;
 public interface Geocoder {
 
     Optional<Coordinates> geocode(GeocodeQuery query);
+
+    /**
+     * Caminho inverso (fatia A2): dada a coordenada do aparelho do dono, devolve o endereco por
+     * extenso para ele conferir. Mesmo contrato de {@code geocode}: <b>nunca lanca</b>, nao resolveu
+     * devolve {@link Optional#empty()} — sem reverso o dono simplesmente digita o endereco na mao,
+     * como sempre fez.
+     */
+    Optional<ReverseGeocodeResult> reverse(Coordinates coordinates);
 }

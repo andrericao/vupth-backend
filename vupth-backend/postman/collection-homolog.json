@@ -18263,6 +18263,848 @@
    ]
   },
   {
+   "name": "17 - endereco (reverso + PATCH)",
+   "description": "GPS fatia A2 + backlog do PATCH do endereco. GET /geocoding/reverse (coordenada do aparelho do dono -> endereco por extenso, para ele CONFERIR antes de salvar) e PATCH /establishments/{id}/addresses/{addressId} (conserto do endereco ja cadastrado). Invariante central coberta aqui: texto e coordenada vem de fontes diferentes e AMBOS ficam — corrigir o numero NAO move o ponto no mapa. Self-contained (cria os proprios donos e apaga no fim). O reverso e a unica request que sai para a internet (Nominatim) e por isso aceita 200 OU 404 — e exatamente o que o contrato manda o front tratar igual; o shape e conferido quando vem 200. A retentativa do geocoding para endereco que ficou SEM coordenada nao esta aqui: e assincrona e depende de servico externo — quem cobre e o AddressCorrectionIntegrationTest, com o Geocoder mockado.",
+   "item": [
+    {
+     "name": "setup: register dono (endereco)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ad_owner_email\",\"adowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ad_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner_email}}\",\"password\":\"{{ad_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ad_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner_email}}\",\"password\":\"{{ad_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ad_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja Endereco {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "reverso: coordenada da Penha -> 200 (ou 404 se o Nominatim nao responder)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// O reverso e a UNICA request desta folder que sai para a internet (Nominatim, gratuito,",
+         "// policy de 1 req/s). O proprio contrato manda o front tratar \"nao ha endereco ali\" e",
+         "// \"servico fora do ar\" do mesmo jeito, entao o 404 aqui e resultado legitimo — nao ha o que",
+         "// asseverar sobre a disponibilidade de um servico de terceiro. O SHAPE, sim, e conferido.",
+         "pm.test(\"Status 200 ou 404 GEOCODING_ADDRESS_NOT_FOUND\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+         "  if(pm.response.code===404) pm.expect(pm.response.json().code).to.eql(\"GEOCODING_ADDRESS_NOT_FOUND\");",
+         "});",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"displayName presente — e o que o dono le para reconhecer o lugar\", () => {",
+         "    pm.expect(b.displayName).to.be.a(\"string\").and.not.empty;",
+         "  });",
+         "  pm.test(\"a coordenada volta EXATAMENTE como entrou (nao a do endereco encontrado)\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8422);",
+         "    pm.expect(b.longitude).to.eql(-43.2764);",
+         "  });",
+         "  pm.test(\"campos de texto podem ser nulos e o shape aguenta\", () => {",
+         "    [\"street\",\"number\",\"neighborhood\",\"city\",\"state\",\"zipCode\"].forEach(k => {",
+         "      pm.expect(b).to.have.property(k);",
+         "      if(b[k] !== null) pm.expect(b[k]).to.be.a(\"string\");",
+         "    });",
+         "  });",
+         "  pm.test(\"state em UF de 2 letras e zipCode em 8 digitos puros, quando vierem\", () => {",
+         "    if(b.state) pm.expect(b.state).to.match(/^[A-Z]{2}$/);",
+         "    if(b.zipCode) pm.expect(b.zipCode).to.match(/^\\d{8}$/);",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/geocoding/reverse?lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] reverso sem token -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401 — o login e o que segura o consumo do Nominatim\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/geocoding/reverse?lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] reverso na ilha nula (0,0) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));",
+         "// (0,0) no Golfo da Guine nao vem de erro de digitacao: vem de um objeto de localizacao",
+         "// vazio no front. Barrado ANTES de sair da maquina — nao gasta request do Nominatim."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/geocoding/reverse?lat=0&lng=0",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] reverso fora do globo (lat 91) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/geocoding/reverse?lat=91&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] cadastrar endereco na ilha nula (0,0) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"complement\":\"Loja 2\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":0,\"longitude\":0}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] cadastrar endereco com meia coordenada (so latitude) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));",
+         "// Meia coordenada nao e ponto nenhum. So as DUAS ausentes e valido — ai o cadastro e por",
+         "// texto e o geocoding resolve a coordenada depois do commit."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"complement\":\"Loja 2\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":-22.8422}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cadastrar endereco com a coordenada do aparelho -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201){",
+         "  const b = pm.response.json();",
+         "  pm.collectionVariables.set(\"ad_address_id\", b.addressId);",
+         "  pm.test(\"addressId no corpo — e o que o PATCH recebe\", () => {",
+         "    pm.expect(b.addressId).to.be.a(\"string\").and.not.empty;",
+         "  });",
+         "  pm.test(\"a coordenada do aparelho foi gravada como veio\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8422);",
+         "    pm.expect(b.longitude).to.eql(-43.2764);",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"complement\":\"Loja 2\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":-22.8422,\"longitude\":-43.2764}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "corrigir SO o numero -> 200 e a coordenada NAO se move",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"o numero foi corrigido\", () => pm.expect(b.number).to.eql(\"250\"));",
+         "  pm.test(\"INVARIANTE: editar o texto NAO move a coordenada\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8422);",
+         "    pm.expect(b.longitude).to.eql(-43.2764);",
+         "  });",
+         "  pm.test(\"campo omitido nao e apagado\", () => {",
+         "    pm.expect(b.street).to.eql(\"Rua Bras de Pina\");",
+         "    pm.expect(b.city).to.eql(\"Rio de Janeiro\");",
+         "    pm.expect(b.complement).to.eql(\"Loja 2\");",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"250\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "limpar o complemento com \"\" -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"complement limpo\", () => pm.expect(b.complement || \"\").to.eql(\"\"));",
+         "  pm.test(\"o resto continua de pe\", () => pm.expect(b.number).to.eql(\"250\"));",
+         "}",
+         "// Vazio LIMPA so nos opcionais (complement/reference). Em campo obrigatorio o \"\" e",
+         "// ignorado — a coluna e NOT NULL."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"complement\":\"\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "coordenada explicita no PATCH substitui a antiga -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"a coordenada nova entrou\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8500);",
+         "    pm.expect(b.longitude).to.eql(-43.2800);",
+         "  });",
+         "}",
+         "// O unico jeito de mover o ponto no mapa e mandar lat+lng de proposito."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"latitude\":-22.85,\"longitude\":-43.28}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH com CEP mascarado -> 422 VALIDATION_ERROR",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));",
+         "// A base guarda 8 digitos puros; a mascara e coisa do front."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"zipCode\":\"21012-000\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH com coordenada na ilha nula -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"latitude\":0,\"longitude\":0}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH sem token -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"999\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH com addressId que nao e daquela loja -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/00000000-0000-0000-0000-000000000000",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"999\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: register dono 2 (endereco)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ad_owner2_email\",\"adowner2_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ad_owner2_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner2_email}}\",\"password\":\"{{ad_owner2_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono 2 (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ad_owner2_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner2_email}}\",\"password\":\"{{ad_owner2_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] dono de OUTRA loja tentando corrigir -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404 — a posse e conferida no service, nao por role\", () => pm.response.to.have.status(404));",
+         "// 404 e nao 403 de proposito: para quem nao e dono, a loja dos outros nao existe."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner2_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"999\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono 2 (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner2_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -18719,6 +19561,38 @@
   },
   {
    "key": "agenda_desired",
+   "value": ""
+  },
+  {
+   "key": "ad_owner_email",
+   "value": ""
+  },
+  {
+   "key": "ad_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "ad_owner_token",
+   "value": ""
+  },
+  {
+   "key": "ad_estab_id",
+   "value": ""
+  },
+  {
+   "key": "ad_address_id",
+   "value": ""
+  },
+  {
+   "key": "ad_owner2_email",
+   "value": ""
+  },
+  {
+   "key": "ad_owner2_pass",
+   "value": ""
+  },
+  {
+   "key": "ad_owner2_token",
    "value": ""
   }
  ],

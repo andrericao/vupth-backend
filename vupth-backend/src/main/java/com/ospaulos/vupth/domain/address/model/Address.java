@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.domain.address.model;
 
 import com.ospaulos.vupth.api.address.dto.request.UpdateAddressRequest;
+import com.ospaulos.vupth.api.address.dto.request.UpdateEstablishmentAddressRequest;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -84,6 +85,49 @@ public class Address {
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    /**
+     * Correcao do endereco do estabelecimento (backlog #3). {@code null} = nao mexe.
+     *
+     * <p>Diferenca proposital em relacao ao {@link #update(UpdateAddressRequest)}: nos dois campos
+     * que a base aceita vazios ({@code complement} e {@code reference}), <b>string em branco
+     * LIMPA</b>. Sao justamente os que o dono digita errado e quer apagar — tratar branco como "nao
+     * mexe" nos dois deixaria um complemento errado preso para sempre. Nos campos obrigatorios,
+     * branco continua sendo ignorado (a coluna e {@code NOT NULL}).</p>
+     */
+    public void update(UpdateEstablishmentAddressRequest request) {
+        if (request.street() != null && !request.street().isBlank()) {
+            this.street = request.street();
+        }
+        if (request.number() != null && !request.number().isBlank()) {
+            this.number = request.number();
+        }
+        if (request.complement() != null) {
+            this.complement = request.complement().isBlank() ? null : request.complement();
+        }
+        if (request.neighborhood() != null && !request.neighborhood().isBlank()) {
+            this.neighborhood = request.neighborhood();
+        }
+        if (request.city() != null && !request.city().isBlank()) {
+            this.city = request.city();
+        }
+        if (request.state() != null && !request.state().isBlank()) {
+            this.state = request.state();
+        }
+        if (request.zipCode() != null && !request.zipCode().isBlank()) {
+            this.zipCode = request.zipCode();
+        }
+        if (request.reference() != null) {
+            this.reference = request.reference().isBlank() ? null : request.reference();
+        }
+        // A coordenada so muda quando vem explicita no corpo — editar o texto nao move o ponto.
+        if (request.latitude() != null) {
+            this.latitude = request.latitude();
+        }
+        if (request.longitude() != null) {
+            this.longitude = request.longitude();
+        }
+    }
 
     public void update(UpdateAddressRequest request) {
         if (request.street() != null && !request.street().isBlank()) {

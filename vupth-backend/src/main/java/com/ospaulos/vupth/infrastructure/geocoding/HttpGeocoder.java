@@ -41,6 +41,7 @@ public class HttpGeocoder implements Geocoder {
     private final RestClient restClient;
     private final String brasilApiUrl;
     private final String nominatimUrl;
+    private final String nominatimReverseUrl;
     private final String userAgent;
 
     private long lastNominatimCallAt = 0L;
@@ -48,11 +49,13 @@ public class HttpGeocoder implements Geocoder {
     public HttpGeocoder(
             @Value("${vupth.geocoding.brasilapi.url:https://brasilapi.com.br/api/cep/v2}") String brasilApiUrl,
             @Value("${vupth.geocoding.nominatim.url:https://nominatim.openstreetmap.org/search}") String nominatimUrl,
+            @Value("${vupth.geocoding.nominatim.reverse-url:https://nominatim.openstreetmap.org/reverse}") String nominatimReverseUrl,
             @Value("${vupth.geocoding.user-agent:vupth-backend/1.0 (contato: no-reply@vupth.app)}") String userAgent,
             @Value("${vupth.geocoding.timeout-seconds:5}") int timeoutSeconds) {
 
         this.brasilApiUrl = brasilApiUrl;
         this.nominatimUrl = nominatimUrl;
+        this.nominatimReverseUrl = nominatimReverseUrl;
         this.userAgent = userAgent;
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -80,6 +83,64 @@ public class HttpGeocoder implements Geocoder {
 
         log.info("[Geocoding] endereco sem CEP valido nem rua/cidade — nada a consultar");
         return Optional.empty();
+    }
+
+    /**
+     * Reverso (fatia A2): coordenada -> endereco por extenso, via Nominatim {@code /reverse}. Nao ha
+     * equivalente na BrasilAPI (ela so vai de CEP para coordenada), entao aqui e via unica.
+     *
+     * <p>Consome a MESMA cota do 1 req/s da busca — por isso divide o mesmo {@link #throttleNominatim()}.
+     * Diferente do geocoding do cadastro, este roda <b>dentro</b> do request do dono (ele esta olhando
+     * a tela, esperando o endereco aparecer), entao o timeout do RestClient e o que segura a espera.</p>
+     */
+    @Override
+    public Optional<ReverseGeocodeResult> reverse(Coordinates coordinates) {
+        if (coordinates == null || !coordinates.isPlausible()) {
+            return Optional.empty();
+        }
+        try {
+            throttleNominatim();
+
+            String uri = UriComponentsBuilder.fromUriString(nominatimReverseUrl)
+                    .queryParam("format", "jsonv2")
+                    .queryParam("addressdetails", 1)
+                    .queryParam("lat", coordinates.latitude())
+                    .queryParam("lon", coordinates.longitude())
+                    .encode()
+                    .toUriString();
+
+            Map<?, ?> body = restClient.get()
+                    .uri(uri)
+                    .header("User-Agent", userAgent)
+                    .retrieve()
+                    .body(Map.class);
+
+            if (body == null || !(body.get("address") instanceof Map<?, ?> address)) {
+                log.info("[Geocoding] reverso nao encontrou endereco em {},{}",
+                        coordinates.latitude(), coordinates.longitude());
+                return Optional.empty();
+            }
+
+            ReverseGeocodeResult result = new ReverseGeocodeResult(
+                    text(address.get("road")),
+                    text(address.get("house_number")),
+                    // O OSM nomeia o bairro de tres jeitos conforme a cidade — o primeiro que existir serve.
+                    firstNonNull(address.get("suburb"), address.get("neighbourhood"), address.get("city_district")),
+                    firstNonNull(address.get("city"), address.get("town"), address.get("village"),
+                            address.get("municipality")),
+                    toUf(address.get("ISO3166-2-lvl4"), address.get("state")),
+                    toZipCode(address.get("postcode")),
+                    text(body.get("display_name")));
+
+            log.info("[Geocoding] reverso resolveu {},{} -> {}",
+                    coordinates.latitude(), coordinates.longitude(), result.displayName());
+            return Optional.of(result);
+
+        } catch (Exception e) {
+            log.warn("[Geocoding] reverso falhou para {},{}: {}",
+                    coordinates.latitude(), coordinates.longitude(), e.toString());
+            return Optional.empty();
+        }
     }
 
     /** Via primaria: BrasilAPI CEP v2. Nem todo CEP tem coordenada — nesse caso cai no fallback. */
@@ -176,6 +237,47 @@ public class HttpGeocoder implements Geocoder {
             return Optional.empty();
         }
         return Optional.of(coordinates);
+    }
+
+    private String text(Object value) {
+        if (!(value instanceof String string) || string.isBlank()) {
+            return null;
+        }
+        return string.trim();
+    }
+
+    private String firstNonNull(Object... values) {
+        for (Object value : values) {
+            String text = text(value);
+            if (text != null) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * {@code Address.state} guarda 2 letras, mas o Nominatim escreve o estado por extenso ("Rio de
+     * Janeiro"). A UF vem de graca no codigo ISO ({@code "BR-RJ"}); sem ele, so devolvemos o texto se
+     * ele ja for uma sigla de 2 letras — chutar a partir do nome sairia errado.
+     */
+    private String toUf(Object isoCode, Object stateName) {
+        String iso = text(isoCode);
+        if (iso != null && iso.matches("(?i)BR-[A-Z]{2}")) {
+            return iso.substring(3).toUpperCase();
+        }
+        String name = text(stateName);
+        return name != null && name.matches("[A-Za-z]{2}") ? name.toUpperCase() : null;
+    }
+
+    /** O Nominatim escreve o CEP com hifen ("21012-000"); a base guarda 8 digitos puros. */
+    private String toZipCode(Object value) {
+        String text = text(value);
+        if (text == null) {
+            return null;
+        }
+        String digits = text.replaceAll("\\D", "");
+        return digits.matches("\\d{8}") ? digits : null;
     }
 
     /** Aceita numero ou string — a BrasilAPI manda string, o Nominatim tambem. */

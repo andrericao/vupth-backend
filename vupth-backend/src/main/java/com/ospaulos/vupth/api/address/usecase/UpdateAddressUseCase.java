@@ -8,6 +8,7 @@ import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosR
 import com.ospaulos.vupth.api.user.dto.response.useraddress.UserAddressAndGeneralInfosResponse;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.mapper.UserMapper;
+import com.ospaulos.vupth.domain.address.valueObject.AddressCoordinates;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.UserAddress;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -31,6 +32,10 @@ public class UpdateAddressUseCase {
     @Transactional
     public UserAddressAndGeneralInfosResponse execute(UpdateAddressRequest request, UUID id){
         log.info("USECASE UPDATE ADDRESS");
+
+        // Fatia A2: no update lat/lng sao opcionais (null = nao mexe), mas o que vier tem de ser um
+        // ponto valido — o Address.update() grava sem olhar.
+        AddressCoordinates.validate(request.latitude(), request.longitude());
 
         BaseUser user = userRepository.findById(id)
                 .orElseThrow(

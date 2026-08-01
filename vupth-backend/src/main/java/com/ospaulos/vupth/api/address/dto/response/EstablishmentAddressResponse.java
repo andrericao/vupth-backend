@@ -11,6 +11,13 @@ public record EstablishmentAddressResponse(
 
         UUID establishmentId,
 
+        /**
+         * Id do endereco — e o que o {@code PATCH /establishments/{id}/addresses/{addressId}}
+         * (backlog #3) recebe. Antes dele nao havia por que expor o id; sem correcao possivel, o
+         * front so lia os campos.
+         */
+        UUID addressId,
+
         @NotNull String establishmentName,
 
         @NotBlank(message = "Street is required")
@@ -42,6 +49,7 @@ public record EstablishmentAddressResponse(
         public static EstablishmentAddressResponse fromEntity(EstablishmentAddress address) {
                 return new EstablishmentAddressResponse(
                         address.getEstablishment().getId(),
+                        address.getAddress().getId(),
                         address.getEstablishment().getName(),
                         address.getAddress().getStreet(),
                         address.getAddress().getNumber(),

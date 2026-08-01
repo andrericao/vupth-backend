@@ -23,4 +23,10 @@ public class NoOpGeocoder implements Geocoder {
                 query == null ? null : query.zipCode());
         return Optional.empty();
     }
+
+    @Override
+    public Optional<ReverseGeocodeResult> reverse(Coordinates coordinates) {
+        log.debug("[Geocoding] provider=none — reverso nao sera consultado ({})", coordinates);
+        return Optional.empty();
+    }
 }
