@@ -717,6 +717,14 @@ explicito**. Um raio default deixaria a tela vazia para quem esta numa regiao se
 **Ordem ESTAVEL:** distancia e, no empate, `id`. Sem o desempate, duas lojas equidistantes trocariam
 de lugar entre requests e a paginacao (backlog) repetiria ou pularia item.
 
+> ⚠️ **Armadilha para quem for fazer a paginacao:** o desempate compara o id **como texto**, nao como
+> `java.util.UUID`. O `UUID.compareTo` do Java compara as duas metades como `long` **com sinal**, entao
+> um id que comeca em `8`-`f` (bit alto ligado = long negativo) ordena **antes** de um que comeca em
+> `0`-`7` — o oposto do que se le no hexadecimal. O Postgres compara `uuid` byte a byte, **sem sinal**.
+> Comparar como texto e o que faz esta ordenacao bater com a do `ORDER BY distancia, id` quando ela
+> migrar para SQL; com `UUID.compareTo`, a lista mudaria de ordem no dia da migracao. Descoberto pelo
+> teste de empate em 2026-08-01.
+
 **`distance_km`** e arredondado em **2 casas** — e o numero que o card mostra ("2,3 km"). **O front
 NAO recalcula**: se cada app fizesse a propria conta, a distancia mostrada divergiria entre client e
 partner. `null` significa duas coisas distintas: (a) a busca nao mandou coordenada, ou (b) mandou,

@@ -68,7 +68,6 @@ class EstablishmentGeoSearchIntegrationTest {
     private String caxiasId;
     private String niteroiId;
     private String semCoordenadaId;
-    private String semCoordenadaNome;
 
     @BeforeAll
     void setup() throws Exception {
@@ -80,9 +79,7 @@ class EstablishmentGeoSearchIntegrationTest {
         caxiasId = criarLoja(CAXIAS_LAT, CAXIAS_LNG).id;
         niteroiId = criarLoja(NITEROI_LAT, NITEROI_LNG).id;
 
-        Loja semCoord = criarLoja(null, null);
-        semCoordenadaId = semCoord.id;
-        semCoordenadaNome = semCoord.nome;
+        semCoordenadaId = criarLoja(null, null).id;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -152,6 +149,10 @@ class EstablishmentGeoSearchIntegrationTest {
 
         assertThat(primeira).isEqualTo(segunda);
 
+        // O desempate compara o id como TEXTO (ordem hexadecimal, sem sinal) — que e a ordem do
+        // Postgres. Se o service usasse UUID.compareTo, que compara long COM sinal, um id comecando
+        // em 8-f viria antes de um comecando em 0-7 e a lista mudaria de ordem no dia em que a
+        // ordenacao migrar para SQL.
         String menor = penhaId.compareTo(penhaGemeaId) < 0 ? penhaId : penhaGemeaId;
         String maior = menor.equals(penhaId) ? penhaGemeaId : penhaId;
         assertThat(primeira).containsSubsequence(menor, maior);
@@ -194,15 +195,17 @@ class EstablishmentGeoSearchIntegrationTest {
 
     @Test
     @Order(23)
-    @DisplayName("proximidade combina com os filtros que ja existiam (?name=)")
+    @DisplayName("proximidade combina com os filtros que ja existiam (?neighborhood=)")
     void combinaComOutroFiltro() throws Exception {
         // A distancia vale para QUALQUER combinacao de filtros — foi por isso que o roteamento saiu
-        // do controller e virou uma porta so no service.
-        String query = "&name=" + java.net.URLEncoder.encode(semCoordenadaNome, java.nio.charset.StandardCharsets.UTF_8)
-                + geo(PENHA_LAT, PENHA_LNG);
-        List<Map<String, Object>> lista = buscar(query);
+        // do controller e virou uma porta so no service. Todas as lojas da suite ficam no bairro
+        // "Penha", entao o filtro devolve as cinco e a ordenacao por distancia tem de continuar
+        // valendo por cima dele.
+        List<Map<String, Object>> lista = buscar("&neighborhood=Penha" + geo(PENHA_LAT, PENHA_LNG));
+        List<String> ids = idsDoTeste(lista);
 
-        assertThat(idsDoTeste(lista)).contains(semCoordenadaId);
+        assertThat(ids).contains(penhaId, caxiasId, niteroiId, semCoordenadaId);
+        assertThat(ids).containsSubsequence(caxiasId, niteroiId, semCoordenadaId);
         assertThat(porId(lista, semCoordenadaId).get("distance_km")).isNull();
     }
 

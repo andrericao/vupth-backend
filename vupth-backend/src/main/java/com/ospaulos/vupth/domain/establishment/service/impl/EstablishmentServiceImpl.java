@@ -146,6 +146,14 @@ public class EstablishmentServiceImpl implements EstablishmentService {
      *       pularia item.</li>
      * </ol>
      *
+     * <p><b>O desempate compara o id como TEXTO, nao como {@link java.util.UUID}, de proposito.</b>
+     * {@code UUID.compareTo} compara os dois metades como {@code long} <b>com sinal</b>, entao um id
+     * que comeca em {@code 8}-{@code f} (bit alto ligado = long negativo) ordena ANTES de um que
+     * comeca em {@code 0}-{@code 7} — o oposto do que qualquer um espera lendo o hexadecimal. O
+     * Postgres compara {@code uuid} byte a byte, <b>sem sinal</b>. Usar o texto faz esta ordenacao
+     * bater com a que o {@code ORDER BY distancia, id} vai produzir quando ela migrar para SQL junto
+     * com a paginacao; com {@code UUID.compareTo}, a lista mudaria de ordem no dia da migracao.</p>
+     *
      * <p>O filtro do raio usa a distancia CRUA e so o valor exposto e arredondado: arredondar antes
      * deixaria entrar uma loja a 10,004km num raio de 10km.</p>
      */
@@ -155,7 +163,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 .filter(l -> !geo.hasRadius() || (l.distanceKm != null && l.distanceKm <= geo.radiusKm()))
                 .sorted(Comparator.comparing((Located l) -> l.distanceKm,
                                 Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(l -> l.response.id()))
+                        .thenComparing(l -> l.response.id().toString()))
                 .map(l -> l.response.withDistanceKm(
                         l.distanceKm == null ? null : Haversine.roundKm(l.distanceKm)))
                 .toList();
