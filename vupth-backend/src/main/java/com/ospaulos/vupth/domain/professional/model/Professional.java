@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -13,6 +14,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,6 +38,36 @@ public class Professional {
 
     @Column(name = "is_available", nullable = false)
     private Boolean isAvailable = true;
+
+    /**
+     * Status de trabalho (S1): trabalhando / intervalo / indisponivel. Base do {@code open_status}
+     * derivado (fatia 2). Nasce {@link ProfessionalStatus#OFF} — um profissional recem-criado nao
+     * esta em expediente ate sinalizar. Ver {@link ProfessionalStatus}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "work_status", nullable = false, length = 20)
+    private ProfessionalStatus workStatus = ProfessionalStatus.OFF;
+
+    /**
+     * "Fechar fila" (S1 fatia 3): {@code false} = fila fechada para NOVOS clientes (walk-in imediato
+     * -> 409 {@code PROFESSIONAL_NOT_ACCEPTING_NEW}); quem ja esta segue sendo atendido (drenagem).
+     * Intencao para data futura, guest e aceite de corte NAO passam pelo gate. Ao finalizar o ultimo
+     * atendimento com a fila fechada, o profissional vira {@code OFF} sozinho (auto-OFF). Reabre
+     * automaticamente ao voltar de OFF para expediente (turno novo).
+     */
+    @Column(name = "accepting_new", nullable = false)
+    private Boolean acceptingNew = true;
+
+    /**
+     * Auto-fechamento por horario (S1 fatia 5 / BUG1): instante-limite da carencia de 15min apos o
+     * {@code closing_time}. Setado pelo scheduler quando o profissional segue em expediente fora do
+     * horario (junto com o prompt "quer fechar?" — WS {@code CLOSING_PROMPT} + push); {@code null} =
+     * sem carencia pendente. Vencendo sem sinalizacao: sem nada ativo vira {@code OFF} sozinho; com
+     * atendimento/fila, a carencia e limpa e o auto-OFF fica com o fim da drenagem (fatia 3).
+     * Qualquer {@code PATCH /professional/me/status} (sinalizacao) limpa a carencia.
+     */
+    @Column(name = "closing_grace_until")
+    private OffsetDateTime closingGraceUntil;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")

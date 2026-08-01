@@ -81,10 +81,10 @@ Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PR
 
 | Acesso | Endpoints |
 |--------|-----------|
-| **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
-| **CLIENT** | `POST /attendances`, `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `GET /attendances?clientId=<self>` (proprios atendimentos — Partner BUG8), `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
+| **Publico** | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /establishment/**`, `GET /users/**`, `GET /professional/{id}/service-items`, `GET /service-types/**`, `POST /professional-queue/add-quest-attendance` |
+| **CLIENT** | `POST /attendances`, `POST /attendances/cut-requests` (solicitar corte C2), `POST /attendances/intentions` (intenção #4), `PATCH /attendances/intentions/{id}` (editar #4), `DELETE /attendances/intentions/{id}` (cancelar #4), `GET /attendances/intentions/client/me` (agenda do cliente #4), `POST /attendances/{id}/rating`, `GET /attendances/client/me`, `GET /attendances?clientId=<self>` (proprios atendimentos — Partner BUG8), `PUT /attendances/{id}/cancel`, `DELETE /attendances/{id}/leave-queue`, `PATCH /attendances/{id}/reschedule\|move-to-end`, `GET /client-queue/**`, `POST /establishment/quick-create`, `POST /professional/register`, `POST /professional/quick-create`, `PATCH /profile/**`, `DELETE /profile/delete/me`, `POST /auth/logout` |
 | **OWNER ou PROFESSIONAL** | `GET /attendances` (listagem filtrada por establishment/profissional; cliente usa a forma `?clientId=<self>`), `POST /establishment/{id}/service-items` (owner ou afiliado da loja — item S1), `PUT\|DELETE /establishment/{id}/service-items/{itemId}` (owner da loja ou o proprio profissional dono do item; checagem fina no service), `PATCH /establishment/{id}/open-status` (owner ou profissional afiliado a loja; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`) |
-| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit`, `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
+| **PROFESSIONAL** | `GET /professional/me`, `GET /professional/me/reports`, `PATCH /professional/me`, `PATCH /professional/me/status` (status de trabalho S1), `PATCH /professional/me/accepting-new` ("fechar fila" S1 f3), `PATCH /attendances/{id}/start\|finish\|pause\|resume\|late\|undo-late\|no-show\|fit-in\|undo-fit\|promote`, `GET /attendances/cut-requests` (pendentes de corte C2), `PATCH /attendances/cut-requests/{id}/accept\|refuse` (decidir corte C2), `GET /attendances/intentions/professional/me` (agenda do profissional #4), `POST /professional-queue/**`, `PATCH /professional-queue/**`, `DELETE /professional-queue/**`, `POST /professional/affiliate`, `DELETE /professional/me/establishment`, `POST /professional/me/affiliations`, `GET /professional/me/affiliations`, `POST /service-types/{type}/keywords` |
 | **OWNER** | `GET /professional` (busca p/ convidar), `GET /establishment/mine`, `GET /establishment/{id}/reports`, `POST /establishment/create`, `PATCH /establishment/{id}/general-infos`, `PATCH /establishment/{id}/owner`, `POST /establishment/{id}/professionals`, `DELETE /establishment/{id}/professionals/{pid}`, `POST /establishment/{id}/affiliations`, `GET /establishment/{id}/affiliations` |
 | **Autenticado (qualquer)** | `GET /attendances/{id}`, `GET /profile/me`, `POST /devices`, `DELETE /devices/{token}` (push — implementado), todos os demais endpoints nao listados |
 
@@ -354,6 +354,58 @@ Invalida o refresh token.
 
 ---
 
+### POST /auth/forgot-password
+Inicia o "esqueci minha senha" (backlog #1). Envia um **codigo de 6 digitos** por e-mail. Validade **15min**, **uso unico**, no maximo **5 tentativas** por codigo.
+
+**Acesso:** publico
+
+**Request:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response (200):** sempre 200 (corpo vazio), **exista o e-mail ou nao**.
+
+> 🔒 **Anti-enumeracao:** a resposta e 200 mesmo para e-mail nao cadastrado — o backend nao revela se a conta existe. So dispara e-mail se o usuario existir.
+>
+> ⚠️ **Envio real = fatia 2 (SMTP).** Hoje o provedor default e `none` (`NoOpEmailSender` — o codigo so vai pro log). A fatia 2 liga o `SmtpEmailSender` setando `MAIL_PROVIDER=smtp` + `spring.mail.*` (env). Provedores gratuitos: Gmail (500/dia), Brevo (300/dia sem cartao), Mailtrap (sandbox de teste). Nenhuma mudanca de codigo entre eles.
+
+**Testes:** Integracao (`ForgotPasswordIntegrationTest`) + unit (`PasswordResetUseCasesTest`) + Postman folder `01 - auth`
+
+---
+
+### POST /auth/reset-password
+Consome o codigo e define a nova senha (backlog #1).
+
+**Acesso:** publico
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "code": "482913",
+  "new_password": "NovaSenha@1"
+}
+```
+
+**Response (200):** corpo vazio. A senha e trocada e o codigo e **queimado** (uso unico). O usuario ja pode logar com a nova senha; a antiga deixa de valer.
+
+**Erros:**
+
+| Status | code | Quando |
+|--------|------|--------|
+| 400 | `RESET_CODE_INVALID` | codigo inexistente, errado, ja usado, tentativas esgotadas (5) **ou** e-mail desconhecido (generico, nao vaza) |
+| 400 | `RESET_CODE_EXPIRED` | codigo correto mas fora da validade (15min) — o front pede um novo |
+| 422 | `VALIDATION_ERROR` | `email`/`code`/`new_password` ausente/invalido (`code` exige 6 digitos) |
+
+**Handoff de front (Client + Partner):** fluxo de 2 telas — (1) "esqueci senha" pede o e-mail → `forgot-password`; (2) tela de codigo + nova senha → `reset-password`. Tratar `RESET_CODE_EXPIRED` como "codigo expirou, reenviar" e `RESET_CODE_INVALID` como "codigo incorreto". Como o `forgot` sempre volta 200, a UX segue para a tela de codigo sem confirmar existencia do e-mail.
+
+**Testes:** Integracao (`ForgotPasswordIntegrationTest` — ciclo feliz captura o codigo via `@MockBean EmailSender`, login com senha nova, reuso bloqueado) + unit (`PasswordResetUseCasesTest` — expiracao, trava de tentativas, codigo consumido) + Postman folder `01 - auth`
+
+---
+
 ## 6. Endpoints — Profile
 
 > **`nickname` (apelido)** e um atributo da **pessoa** (`BaseUser`), compartilhado por
@@ -464,18 +516,36 @@ Altera o email. Retorna novos tokens (email muda o subject do JWT).
 ### PATCH /profile/update-password/me
 Altera a senha. Retorna novos tokens.
 
-**Acesso:** CLIENT
+**Acesso:** qualquer usuario autenticado (o proprio, pelo JWT)
 
 **Request:**
 ```json
 {
+  "current_password": "senhaAtual123",
   "password": "novaSenha123"
 }
 ```
 
-**Response (200):** `UserProfileGeneralInfosAndToken` (perfil + tokens)
+> ⚠️ **`current_password` e OBRIGATORIO (Client #13).** Trocar a senha exige provar a senha atual —
+> nao basta portar o token de acesso (protege sessao esquecida / token vazado). O backend compara com
+> `PasswordEncoder.matches`; se nao conferir, **nada e alterado e os tokens nao rodam**.
 
-**Testes:** Integracao
+**Response (200):** `UserProfileGeneralInfosAndToken` (perfil + tokens rotacionados)
+
+**Erros:**
+
+| Status | code | Quando |
+|--------|------|--------|
+| 401 | `CURRENT_PASSWORD_INVALID` | `current_password` nao confere com a senha do usuario |
+| 401 | — | sem token / token invalido |
+| 422 | `VALIDATION_ERROR` | `current_password` ou `password` ausente/em branco (`fieldErrors.currentPassword` / `fieldErrors.password`) |
+
+**Handoff de front (Client + Partner):** a tela de trocar senha ganha o campo "senha atual" e envia
+`current_password`. ⚠️ **Atencao ao interceptor global de 401**: muitos apps deslogam em qualquer 401 —
+esta rota precisa ser exceção, tratando `code == "CURRENT_PASSWORD_INVALID"` como erro **de campo**
+("senha atual incorreta") em vez de sessao expirada.
+
+**Testes:** Integracao (`ProfileIntegrationTest` — 401 senha errada / 200 sucesso / 422 nos dois campos em branco / 401 sem token) + unit (`UpdateProfileUseCasesTest`) + Postman folder `11 - profile updates`
 
 ---
 
@@ -639,7 +709,9 @@ Lista establishments ativos com filtros opcionais.
     "phone": "11999990000 | null",
     "instagram": "@barbearia | null",
     "estimated_wait_minutes": 25,
+    "available_professionals": 2,
     "open_status": "OPEN",
+    "is_open": true,
     "status": "ACTIVE",
     "address": {
       "street": "Rua das Flores",
@@ -658,6 +730,10 @@ Lista establishments ativos com filtros opcionais.
 ```
 
 > `estimated_wait_minutes` e preenchido **apenas na listagem** (`GET /establishment`). Em `GET /establishment/id/{id}` e nos demais usos do `EstablishmentResponse` vem `null`.
+
+> **`available_professionals` (Client Home).** Quantidade de profissionais **afiliados COM ao menos um servico** — o mesmo conjunto que alimenta `estimated_wait_minutes` (deriva do snapshot `professionals-with-queue`, que ja filtra profissional sem servico — #31), calculado numa **unica** passada. Preenchido **apenas na listagem** (`null` fora dela, igual ao `estimated_wait_minutes`). Independe do `open_status` e de o profissional estar ocupado agora. O front-client usa pra decidir exibir uma loja **FECHADA** na Home: mostra so as fechadas com `available_professionals > 0` (ha profissional pra agendar a reabertura). Uma loja com profissional afiliado mas **sem servico** vem `0`.
+>
+> **Handoff Front-Client (pronto p/ ligar):** na Home, ao listar `GET /establishment` (com `?includeAll=true` para tambem trazer as fechadas), **filtrar as lojas `open_status != OPEN` por `available_professionals > 0`** — as fechadas sem profissional-com-servico somem (nao ha o que agendar). Loja aberta segue exibida normalmente. O campo vem `null` fora da listagem (detalhe/`/mine`), entao so confie nele na tela de listagem.
 
 > **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
@@ -699,6 +775,9 @@ Retorna o establishment com todos os profissionais e suas filas ao vivo. Endpoin
       "specialty": "Corte masculino",
       "nickname": "Joca | null",
       "is_available": true,
+      "work_status": "WORKING | ON_BREAK | OFF",
+      "accepting_new": true,
+      "availability": "DISPONIVEL | ENCERRANDO | INDISPONIVEL",
       "current_attendance": null,
       "waiting_list": [
         {
@@ -771,8 +850,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "services": ["BARBER", "BEAUTY_SALON"],
   "phone": "11999990000",
   "instagram": "@barbearia",
-  "opening_time": "09:00:00Z",
-  "closing_time": "18:00:00Z"
+  "opening_time": "09:00",
+  "closing_time": "18:00"
 }
 ```
 
@@ -784,8 +863,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 | services | Set<Enum> | substitui o conjunto atual |
 | phone | String | opcional (max 20). String em branco **limpa** o campo (vira null) |
 | instagram | String | opcional (max 100). String em branco **limpa** o campo (vira null) |
-| opening_time | OffsetTime | horario de abertura (#11g2). null preserva. Serializa "HH:mmZ" |
-| closing_time | OffsetTime | horario de fechamento (#11g2). null preserva. Serializa "HH:mmZ" |
+| opening_time | LocalTime (parede) | horario de abertura (#11g2). null preserva. Aceita `"09:00"`, `"09:00:00"` e o sufixo de offset legado `"09:00Z"`/`"09:00-03:00"` (**ignorado** — valem os digitos). Serializa `"HH:MM"` |
+| closing_time | LocalTime (parede) | horario de fechamento (#11g2). Mesmas regras do `opening_time` |
 
 **Response (200):**
 ```json
@@ -797,8 +876,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
   "services": ["BARBER", "BEAUTY_SALON"],
   "phone": "11999990000",
   "instagram": "@barbearia",
-  "opening_time": "09:00Z",
-  "closing_time": "18:00Z",
+  "opening_time": "09:00",
+  "closing_time": "18:00",
   "open_status": "OPEN",
   "is_open": true,
   "status": "ACTIVE",
@@ -809,7 +888,21 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 
 > `phone`, `instagram`, `opening_time` e `closing_time` tambem sao expostos na busca publica (`GET /establishment` e `GET /establishment/id/{id}`).
 
-> **`is_open` — "aberto agora" efetivo (BUG5 parte B).** Campo **booleano de LEITURA derivado**, presente no `EstablishmentResponse` (listagem `GET /establishment` + detalhe `GET /establishment/id/{id}` + `/mine`), no `EstablishmentWithProfessionalsResponse` (`professionals-with-queue`) e no `EstablishmentGeneralInfosResponse`. Vale `true` **somente** quando `open_status == OPEN` **E** o horario atual cai dentro de `[opening_time, closing_time)` (abertura inclusiva, fechamento exclusivo). Sem janela definida (`opening_time`/`closing_time` nulos) so o `open_status` manda. **NAO altera o `open_status` persistido** — nao ha auto-fechamento (fechar e sempre manual+confirmacao); `is_open` apenas informa. Casos tratados: janela normal, 24h (`opening == closing`), janela que atravessa a meia-noite (`closing < opening`) e offsets normalizados ao mesmo instante. O front-client usa pra nao exibir como aberta uma loja `OPEN` cujo horario ja passou; sera tambem a base do gate de entrada na fila (BUG5 parte C, ainda aberto).
+> ### ⏰ Horario de PAREDE — contrato de `opening_time` / `closing_time` / `fixedStartTime` (BUG2b, 2026-07-26)
+>
+> **O que sao:** hora do dia no fuso da loja — "a loja abre 08:00" nao carrega offset nenhum. **NAO sao instantes.** Campos de instante (`scheduledTime`, `desiredTime`, `startTime`, `createdAt`, …) continuam ISO-8601 com offset, sem mudanca.
+>
+> **Por que mudou:** os campos eram `OffsetTime` sobre coluna `TIME` (sem timezone) — a coluna nao tem onde guardar o offset, entao o Hibernate normalizava para UTC: o Partner mandava `"08:00-03:00"`, gravava `11:00` e o read-back devolvia `"11:00Z"` (+3h na tela). Esse era o residuo do BUG2 que a auditoria de 2026-07-24 nao pegou (ela olhou a LOGICA de comparacao, que estava correta; o veneno estava na PERSISTENCIA). Agora sao `LocalTime` e o dado gravado e exatamente o que o usuario escolheu.
+>
+> **Entrada (tolerante — nao precisa de release em lockstep):** aceita `"09:00"`, `"9:00"`, `"09:00:00"`, `"09:00:00.500"`, com ou sem sufixo `Z` / `±HH:MM`. **O offset e ACEITO e IGNORADO** — em todos os casos os digitos ja sao a hora que o usuario escolheu na tela (o front antigo mandava `"12:00Z"` = offset errado + digitos certos; o front corrigido manda `"12:00-03:00"` = offset certo + digitos iguais; as duas gravam 12:00, que e o que se quer). Qualquer outro formato -> `400 INVALID_REQUEST_BODY`.
+>
+> **Saida (canonica):** `"HH:MM"` — **sem offset**. Segundos so aparecem quando existem (`"23:59:59"`, usado na janela 24h). ⚠️ **Handoff p/ os fronts:** o read-back **deixou de terminar em `Z`**. Quem faz `parse`/`slice` assumindo o sufixo precisa aceitar `"09:00"`; quem so exibe a string ja fica melhor (era `"11:00Z"` na tela, agora `"08:00"`). Enviar continua funcionando dos dois jeitos.
+>
+> **Comparacao com "agora":** como o dado deixou de carregar offset, todo `isOpenNow`/ETA/refeicao compara contra o relogio de **negocio** (`BusinessClock`, fuso `vupth.timezone`, default `America/Sao_Paulo`). Produto single-timezone; o dia em que houver loja em outro fuso, isso vira coluna do estabelecimento.
+>
+> **Dados legados:** quem salvou expediente/refeicao pelo front antigo tem o valor deslocado (+3h) no banco — **re-salvar pela tela** corrige (decisao Andre 2026-07-24, sem migration).
+
+> **`is_open` — "aberto agora" efetivo (BUG5 parte B).** Campo **booleano de LEITURA derivado**, presente no `EstablishmentResponse` (listagem `GET /establishment` + detalhe `GET /establishment/id/{id}` + `/mine`), no `EstablishmentWithProfessionalsResponse` (`professionals-with-queue`) e no `EstablishmentGeneralInfosResponse`. Vale `true` **somente** quando `open_status == OPEN` **E** o horario atual cai dentro de `[opening_time, closing_time)` (abertura inclusiva, fechamento exclusivo). Sem janela definida (`opening_time`/`closing_time` nulos) so o `open_status` manda. **NAO altera o `open_status` persistido** — `is_open` apenas informa. ⚠️ **Isso NAO significa mais "nunca auto-fecha"** (decisao de 2026-07-04 SUPERSEDIDA por Andre em 2026-07-14, reconciliada aqui em 2026-07-20): a loja **nao pode dormir aberta** e passa a existir **auto-fechamento com prompt + carencia de 15min** (backlog "Auto-fechamento da loja"). O que segue valendo e que **este campo** e read-only e nao escreve o `open_status` — quem vai escrever e o timer de auto-fechamento, nao o `is_open`. Casos tratados: janela normal, 24h (`opening == closing`) e janela que atravessa a meia-noite (`closing < opening`). A comparacao e de **relogio de parede** no fuso da loja (`BusinessClock`) — ver "Horario de PAREDE" acima (BUG2b). O front-client usa pra nao exibir como aberta uma loja `OPEN` cujo horario ja passou; e tambem a base do **gate de entrada na fila (BUG5 parte C1 — CONCLUIDO):** walk-in imediato so entra se `is_open` efetivo for `true`, senao `409 ESTABLISHMENT_NOT_OPEN` no `POST /attendances` (ver a secao do endpoint). A parte C2 (fluxo "solicitar corte" — criar/aceitar/recusar + auto-nega por timer em 5min) tambem esta **CONCLUIDA** (ver a secao "solicitar corte" e Concluidos).
 
 **Testes:** Integracao
 
@@ -817,6 +910,8 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 
 ### PATCH /establishment/{id}/open-status
 Atualiza status de abertura.
+
+> ⚠️ **S1 fatia 2 — toggle em modo HIBRIDO (decisao Andre 2026-07-22):** o `open_status` passou a ser **derivado** dos `work_status` dos profissionais (`aberto ⇔ ∃ prof em {WORKING, ON_BREAK}`), recalculado a cada mudanca de status/afiliacao com presenca. **Este toggle continua funcionando como override manual ENTRE recalculos** — mas o proximo recalculo vence (ex.: fechar na mao com um prof `WORKING` dura ate o proximo `PATCH /professional/me/status`). Sera absorvido/substituido nas fatias 3-5 do S1. Ver a nota completa em `PATCH /professional/me/status`.
 
 **Acesso:** OWNER (dono da loja) **ou** profissional **afiliado** a ela. Decisao de produto: o profissional-funcionario tambem abre/fecha a loja. O vinculo e verificado no servico — profissional de **outra** loja recebe `403 ESTABLISHMENT_ACCESS_DENIED`.
 
@@ -1046,16 +1141,25 @@ Retorna os dados do profissional autenticado.
   "id": "uuid",
   "name": "Carlos",
   "specialty": "Corte Masculino",
+  "nickname": "Bibba | null",
   "establishment_id": "uuid | null",
   "establishment_name": "Barbearia do Ricardo | null",
   "is_available": true,
+  "work_status": "OFF",
   "message": null
 }
 ```
 
+> **`work_status` (S1):** status de trabalho do profissional (`WORKING`/`ON_BREAK`/`OFF`), escrito por
+> `PATCH /professional/me/status`. Nasce `OFF`. Aqui e so de LEITURA. Ver a secao desse endpoint.
+
+> **`nickname` (apelido, BUG10):** so de LEITURA aqui — o ponto unico de escrita continua sendo
+> `PATCH /profile/general-infos` (vive na `BaseUser`). `null` quando nao definido. O mesmo campo ja
+> aparece em `professionals-with-queue` (cliente) e em `GET /professional` (busca do owner).
+
 **Erros:** 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
 
-**Testes:** Postman
+**Testes:** Integracao (`ProfessionalNicknameProjectionIntegrationTest`) + Postman folder `03`
 
 ---
 
@@ -1077,13 +1181,92 @@ Atualizacao parcial do proprio perfil profissional (nome e/ou especialidade).
 | name | String | Nao | Max 100 chars. Atualiza o `firstName` do usuario. null/em branco e ignorado |
 | specialty | String | Nao | Max 100 chars. String em branco limpa a especialidade (vira null) |
 
-**Response (200):** mesmo formato do `GET /professional/me` (com `message: null`).
+**Response (200):** mesmo formato do `GET /professional/me` (com `message: null`), **incluindo o `nickname`**
+(este endpoint nao escreve o apelido, mas devolve o valor atual — o front nao perde o campo ao salvar a especialidade).
 
 **Erros:**
 - 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
 - 422 `VALIDATION_ERROR` — name/specialty acima de 100 chars
 
 **Testes:** Integracao
+
+---
+
+### PATCH /professional/me/status
+**S1 (fatias 1-2) — status de trabalho do profissional + `open_status` derivado.** O profissional muda o **proprio** status (persistido e exposto no `work_status` do `ProfessionalQuickCreateResponse`, inclusive no `GET /professional/me`) e, na **mesma transacao**, o `open_status` do estabelecimento e **recalculado** (fatia 2): `aberto ⇔ ∃ prof afiliado em {WORKING, ON_BREAK}`. Pos-commit, o snapshot da fila (que agora carrega o `work_status` de cada profissional) e broadcastado no WS `/topic/establishment/{id}/queue`.
+
+**Acesso:** PROFESSIONAL (por JWT).
+
+**Request:**
+```json
+{ "status": "WORKING" }
+```
+
+| Valor | PT (front) | Significado |
+|-------|-----------|-------------|
+| `WORKING` | trabalhando | em expediente — conta para a loja abrir (fatia 2). Exige ≥1 servico |
+| `ON_BREAK` | intervalo | sub-estado de trabalhando — **conta como aberto** (a loja nao fecha no almoco). Exige ≥1 servico |
+| `OFF` | indisponivel | fora de expediente — **nao conta**. Barrado com fila/atendimento ativo proprio |
+
+**Response (200):** `ProfessionalQuickCreateResponse` (com `work_status` atualizado, `message: null`).
+
+**Erros:**
+- 422 `PROFESSIONAL_HAS_NO_SERVICE` — tentar `WORKING`/`ON_BREAK` sem nenhum servico cadastrado (mesmo gate #31)
+- 409 `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` — tentar `OFF` com atendimento ativo ou fila propria (`SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED`); o caminho para sair com fila e **"fechar fila"** (drenar — ver `PATCH /professional/me/accepting-new`)
+- 422 `VALIDATION_ERROR` — `status` ausente; 400 se valor de enum invalido
+- 404 `PROFESSIONAL_NOT_FOUND` · 401 sem token
+
+> **Fatia 3:** voltar de `OFF` para `WORKING`/`ON_BREAK` (turno novo) **reabre a fila** (`accepting_new=true`). Alternar `WORKING↔ON_BREAK` durante a drenagem NAO reabre.
+
+> **Nota de escopo (S1 fatia 2 — modelo HIBRIDO, decisao Andre 2026-07-22):** a **derivacao** esta LIGADA: o recalculo (atomico, mesma transacao) roda a cada `PATCH /professional/me/status` e a cada **afiliacao/saida** de profissional que **conta como presenca** (chegada/saida `OFF` nao muda a presenca e nao recalcula) — pontos de hook: affiliate, owner add, leave, owner remove. **Entre recalculos, o toggle manual (`PATCH /establishment/{id}/open-status`) continua valendo como override** (sera absorvido nas fatias seguintes). ⚠️ **Decisao Andre 2026-07-23 (handoff Partner, ainda NAO implementada — ver backlog "Toggle manual do profissional: SO ABRIR"):** o profissional NAO pode mais FECHAR a loja na mao (mataria a fila dos colegas) — pode so ABRIR quando fechada; o override de fechar fica exclusivo do OWNER. Regras do recalculo: derivado `OPEN` sobrescreve qualquer status; derivado `CLOSED` so sobrescreve `OPEN` (nao rebaixa um `TEMPORARILY_CLOSED` manual). A derivacao **nao mexe na fila** — fila existente segue sendo atendida com a loja derivada `CLOSED`. ✅ Fatia 3 ("fechar fila" + auto-`OFF`) ENTREGUE — ver `PATCH /professional/me/accepting-new`. ✅ Fatia 4 (rotulo do cliente `availability`) ENTREGUE — ver nota abaixo do endpoint accepting-new. ✅ Fatia 5 (auto-fechamento por horario/BUG1) ENTREGUE — **S1 COMPLETO** (ver Concluidos: `EstablishmentAutoCloseScheduler`). O `work_status` nasce `OFF`. **Handoff Front-Partner:** as pills **ja abrem/fecham a loja sozinhas** — o card Abrir/Fechar (toggle) pode ser removido quando quiserem (segue funcional como override no hibrido). **Handoff Front-Client:** o `open_status`/`is_open` das listagens agora reflete presenca real de profissional; o `work_status` de cada profissional chega no `professionals-with-queue` (WS e GET).
+
+**Testes:** Integracao (`ProfessionalStatusIntegrationTest` fatia 1; `OpenStatusDerivationIntegrationTest` fatia 2)
+
+---
+
+### PATCH /professional/me/accepting-new
+**S1 (fatia 3) — "fechar fila" (`accepting_new`) + drenagem + auto-`OFF`.** O profissional para de aceitar **clientes novos** na fila viva, mas **quem ja esta segue sendo atendido** (padrao drenagem). Decisoes Andre 2026-07-22: (a) endpoint **dedicado** (no front o botao fica no menu, com confirmacao); (b) o gate barra **so a entrada de cliente novo na fila viva** — para o proprio profissional nada muda, e o cliente ainda pode **agendar para data futura** via **INTENTION** (#4, `POST /attendances/intentions` — fora da fila). ⚠️ O **intent de fila** (#40, `POST /attendances` com `targetTime`) **tambem e barrado**: ele nasce `SCHEDULED` na fila viva e prenderia a drenagem (o auto-`OFF` nunca chegaria).
+
+**Acesso:** PROFESSIONAL (por JWT). **Idempotente.**
+
+**Request:**
+```json
+{ "value": false }
+```
+
+`false` = fechar a fila · `true` = reabrir. Campo obrigatorio (`422 VALIDATION_ERROR` se ausente).
+
+**Response (200):** `ProfessionalQuickCreateResponse` (com `accepting_new` e `work_status` atualizados, `message: null`).
+
+**Comportamento ao FECHAR (`value=false`):**
+- **Gate de entrada:** `POST /attendances` para esse profissional — walk-in imediato **OU** intent de fila (#40, com `targetTime`; ambos entram na fila viva) — passa a dar **409 `PROFESSIONAL_NOT_ACCEPTING_NEW`**. INTENTION (#4, `POST /attendances/intentions` — fora da fila), guest (`add-quest-attendance`) e aceite de corte (C2) **NAO** passam pelo gate (agendamento futuro fora da fila / acoes do proprio profissional).
+- **Anuncio a quem ja esta na fila:** cada cliente registrado com `SCHEDULED`/`LATE` na fila do profissional recebe **WS pessoal `QUEUE_CLOSING`** (`/user/queue/notifications`) + **push** — "a fila foi encerrada para novas entradas, voce ainda sera atendido". Convidado nao recebe.
+- **Auto-`OFF` imediato:** se NAO ha nada ativo (sem fila propria nem atendimento em andamento), o profissional ja vira `OFF` na mesma transacao ("drena vazio e sai na hora") e o `open_status` derivado e recalculado — sendo o ultimo presente, a loja fecha.
+- **Auto-`OFF` no fim da drenagem:** com fila, ao dar `finish` no **ultimo** atendimento (nada mais `SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED`) com a fila fechada, o profissional vira `OFF` sozinho (server-side, atomico) + recalculo do `open_status`. "Drena e sai sozinho" (handoff Partner S1).
+
+**Reabertura:** `value=true` manual (nao mexe no `work_status`), **ou automatica** ao voltar de `OFF` para expediente pelo `PATCH /professional/me/status` (turno novo). Alternar `WORKING↔ON_BREAK` drenando NAO reabre.
+
+**Leitura:** `accepting_new` exposto no `ProfessionalQuickCreateResponse` (`GET /professional/me` e demais retornos do DTO) e em cada profissional do `professionals-with-queue` (GET e WS).
+
+**S1 fatia 4 — rotulo do cliente (`availability`).** Cada profissional do `professionals-with-queue` (GET e WS) expoe tambem **`availability`** — projecao **read-only** (nunca persistida, derivada de `work_status` + `accepting_new`), enum `ProfessionalAvailability`:
+
+| `availability` | Condicao | Cliente novo entra na fila? |
+|---|---|---|
+| `DISPONIVEL` | `WORKING`/`ON_BREAK` com `accepting_new=true` | ✅ sim |
+| `ENCERRANDO` | `WORKING`/`ON_BREAK` com `accepting_new=false` (drenando) | ❌ nao (409) |
+| `INDISPONIVEL` | `OFF` | ❌ nao (agendar via INTENTION #4) |
+
+> Notas: (a) `ON_BREAK` projeta `DISPONIVEL` — nao ha rotulo "EM INTERVALO"; a espera ja embute o intervalo (ETA meal-aware #14). (b) `ON_BREAK` drenando projeta `ENCERRANDO` (a tabela do handoff Partner listava so `trabalhando`, mas o gate 409 nao distingue WORKING/ON_BREAK — o rotulo espelha o gate: `DISPONIVEL ⇔ o POST /attendances do cliente novo passaria`). (c) "CHEIO" (teto de fila) segue como evolucao futura, fora desta fatia.
+
+**Erros:**
+- 422 `VALIDATION_ERROR` — `value` ausente
+- 404 `PROFESSIONAL_NOT_FOUND` · 401 sem token · 403 sem role PROFESSIONAL
+
+> **Escopo:** o gatilho **automatico** de fechamento ao cruzar o `closing_time` e o timer de carencia de 15min sao a **fatia 5** (auto-fechamento/BUG1) — ✅ **ENTREGUE** (ver Concluidos: `EstablishmentAutoCloseScheduler`); aqui so o manual.
+
+> **Handoff Front-Partner:** ligar o botao "Fechar fila" (stub `comingSoon`) ao `PATCH /professional/me/accepting-new {"value":false}` (com dialogo de confirmacao). O read-back vem no `accepting_new` do `/me`; o estado dos colegas no `professionals-with-queue`. O auto-`OFF` chega sozinho pelo broadcast (a pill de status muda p/ "Fora" e a loja fecha quando for o ultimo). **Handoff Front-Client:** rotear o `data.type` **`QUEUE_CLOSING`** (WS pessoal + push) — mostrar "fila encerrada p/ novas entradas, voce AINDA sera atendido"; no `409 PROFESSIONAL_NOT_ACCEPTING_NEW` do `POST /attendances`, oferecer **agendar para depois** via **INTENTION** (#4, `POST /attendances/intentions`) em vez do "solicitar corte" (que e para loja fechada) — o intent com `targetTime` NAO serve aqui (tambem toma 409, pois entra na fila viva). **Fatia 4:** o card do profissional deve rotular pelo **`availability`** do `professionals-with-queue` (`DISPONIVEL` = botao entrar na fila; `ENCERRANDO` = "encerrando o expediente — sem novas entradas" (sem botao); `INDISPONIVEL` = oferecer agendamento/INTENTION) — nao precisa derivar localmente de `work_status`+`accepting_new`.
+
+**Testes:** Integracao (`AcceptingNewDrainIntegrationTest`) + Postman folder S1a
 
 ---
 
@@ -1140,6 +1323,7 @@ Cria perfil profissional SEM establishment (fluxo app parceiro).
   "id": "uuid",
   "name": "Joao Silva",
   "specialty": "Corte masculino",
+  "nickname": null,
   "establishment_id": null,
   "establishment_name": null,
   "is_available": true,
@@ -1491,9 +1675,119 @@ Ao enviar `targetTime`, o cliente reserva um lugar mirando um horario futuro (ex
 
 **Invariante servico↔profissional (BUG8 c):** servico e capacidade do PROFISSIONAL — cada `ServiceItem` tem dono (`professional_id`). Todo `serviceItemId` do atendimento **tem de pertencer ao `professionalId` escolhido**; qualquer item de outro profissional → **422 `SERVICE_ITEM_NOT_OF_PROFESSIONAL`**. Como efeito, profissional **sem servico** nao pode ser marcado (nao ha item valido para ele). Vale tambem no guest (`add-quest-attendance`) quando ha itens.
 
-**Erros:** `400` (alvo no passado) · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (serviceItem de outro profissional) · `404 SERVICE_ITEM_NOT_FOUND` (nenhum id valido)
+**Gate de entrada — "aberto agora" (BUG5 parte C1):** um **walk-in imediato** (sem `targetTime`) so entra na fila se a loja estiver **aberta agora** = `open_status == OPEN` **E** horario atual dentro de `[opening_time, closing_time)` (o mesmo `is_open` efetivo da parte B). Loja fechada — ou aberta mas **fora do horario** — devolve **409 `ESTABLISHMENT_NOT_OPEN`**; o cliente **nao entra sozinho** na fila viva. A fila ja existente continua sendo atendida normalmente. **A intencao de fila (`targetTime` presente, #40) NAO passa por esse gate** — mira um horario do expediente e e aceita mesmo com a loja marcada fechada. O guest (`add-quest-attendance`, adicionado pela loja) tambem nao passa pelo gate. O caminho "solicitar corte" (C2) fica para depois.
 
-**Testes:** Unitario (funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`) + Integracao (`QueueIntentIntegrationTest`, `QueueVisibilityBug8IntegrationTest`)
+**Erros:** `400` (alvo no passado) · `409 ESTABLISHMENT_NOT_OPEN` (walk-in com a loja nao "aberta agora" — BUG5 C1) · `409 PROFESSIONAL_NOT_ACCEPTING_NEW` (fila do profissional fechada — S1 fatia 3; vale p/ walk-in E intent com `targetTime`, ambos fila viva; agendar p/ data futura segue livre via INTENTION `POST /attendances/intentions`). **Nota (Client §12, decisao 2026-07-15/23):** o **intent #40 (`targetTime`) esta APOSENTADO como entrada de agendamento do CLIENTE** — o app-client agenda via INTENTION (#4); o `targetTime` segue no contrato p/ compatibilidade (`reschedule` interno o usa), mas nao e mais caminho de UI · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (serviceItem de outro profissional) · `404 SERVICE_ITEM_NOT_FOUND` (nenhum id valido)
+
+**Testes:** Unitario (funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`; gate no `AttendanceServiceImplTest`) + Integracao (`QueueIntentIntegrationTest`, `QueueVisibilityBug8IntegrationTest`, `WalkInOpenGateIntegrationTest`)
+
+---
+
+### POST /attendances/intentions
+**Acesso:** `ROLE_CLIENT` (o `clientId` vem sempre do JWT).
+
+Manifesta uma **intencao de atendimento** (backlog #4 / status **`INTENTION`**) — **fatia 1: criar**. O cliente registrado pede para ser atendido num **horario PRETENDIDO futuro** (`desiredTime`), tipicamente com a **loja fechada agora** ou o dia cheio. A intencao nasce **FORA da fila viva**: NAO aparece em `professionals-with-queue` (nem `waiting_list` nem `current_attendance`), NAO conta como atendimento ativo (nao bloqueia o fechamento da loja — BUG6) e NAO passa pelo gate "aberto agora" (BUG5 C1). Sera **promovida a `SCHEDULED`** ao se aproximar do horario (~15min antes) — **promocao event-driven, ✅ implementada** (ver "Promocao event-driven da intencao" abaixo). Editar/cancelar (`PATCH`/`DELETE`) tambem — ver abaixo.
+
+Diferenca para o **#40** (`targetTime` no `POST /attendances`): la a "intencao" e uma **flag `is_intent` sobre um `SCHEDULED` que ja vive DENTRO da fila**; aqui a `INTENTION` fica **fora** da fila ate ser promovida.
+
+**Request:**
+```json
+{
+  "professionalId": "uuid",
+  "serviceItemIds": ["uuid", "uuid"],
+  "desiredTime": "2026-07-14T17:00:00Z"
+}
+```
+
+| Campo | Tipo | Obrigatorio | Notas |
+|-------|------|-------------|-------|
+| professionalId | UUID | Sim | Profissional pretendido. Deve estar afiliado a uma loja (`404 PROFESSIONAL_NOT_FOUND` / `PROFESSIONAL_NOT_AFFILIATED`) |
+| serviceItemIds | UUID[] | Sim (nao vazio) | Servicos pretendidos. **Cada item tem de pertencer ao `professionalId`** (senao `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`) |
+| desiredTime | OffsetDateTime | Sim | ISO-8601, **no futuro**, **dentro do expediente** `[opening, closing)` e dentro do **horizonte de 30 dias** |
+| clientId | — | Ignorado | Extraido do JWT |
+
+**Estimativa (Modelo A — sem reserva de slot):** a resposta traz `estimatedStartTime` = encaixe cronologico do `desiredTime` entre as **OUTRAS intencoes** ja registradas do profissional (`QueueUtils.assignAgendaSlot`) — assim pedidos proximos recebem estimativas sequenciais (17:00, 17:30) — **sem** reservar posicao na fila viva (walk-ins seguem livres). O `scheduledTime` persistido guarda esse slot (coluna NOT NULL), mas so serve para ordenar a agenda enquanto o status for `INTENTION`.
+
+**Validacoes / erros:**
+- `400` — `desiredTime` no passado (`IllegalArgumentException`).
+- `422 INTENTION_HORIZON_EXCEEDED` — `desiredTime` alem de 30 dias.
+- `422 INTENTION_OUTSIDE_BUSINESS_HOURS` — `desiredTime` fora do expediente `[openingTime, closingTime)` (usa `Establishment.isWithinBusinessHours`, que **ignora o `open_status`** — a loja pode estar fechada agora e abrir depois; trata janela normal / 24h / virada de meia-noite).
+- `422 INTENTION_BEFORE_QUEUE_END` — `desiredTime` **anterior ao fim projetado da fila viva** do profissional (agora + tempo restante do atendimento atual + ETA meal-aware da espera; `INTENTION`s nao contam). Uma intencao so faz sentido para um horario que a fila ainda nao alcancou; o horario **exato** do fim previsto e permitido (`>=`), so o estritamente-antes e recusado (definicao Andre 2026-07-13).
+- `409 PROFESSIONAL_AGENDA_FULL` — **CHEIO**: o fim projetado do encaixe (`estimatedStart + duracao`) ultrapassa o `closingTime` do dia pretendido (rotulo por profissional/dia, derivado e temporario — reabre quando a fila drena).
+- `404 PROFESSIONAL_NOT_FOUND` / `PROFESSIONAL_NOT_AFFILIATED` / `SERVICE_ITEM_NOT_FOUND` · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`.
+
+**Response (201):** `IntentionResponse` — `id`, `establishmentId`/`establishmentName`, `professionalId`/`professionalName`, `clientId`/`clientName`, `services[]`, `status` (`INTENTION`), `totalValue`, `estimatedMinutes`, `desiredTime` (o que o cliente pediu), `estimatedStartTime` (o que o sistema projeta).
+
+**Migration:** `80-attendance/009-add-desired_time-to-attendance` (coluna `desired_time TIMESTAMPTZ`). O status e `VARCHAR` sem CHECK — o novo valor `INTENTION` do enum nao exige migration.
+
+**Testes:** Integracao (`IntentionCreateIntegrationTest`: CLOSED-mas-dentro-do-expediente 201 / fora do expediente 422 / alem do horizonte 422 / passado 400 / CHEIO 409 / invariante "nao vaza para a fila viva") + Postman folder `08j`.
+
+---
+
+### PATCH /attendances/intentions/{id}
+**Acesso:** `ROLE_CLIENT` — apenas o **cliente dono** (por JWT).
+
+Edita o horario pretendido de uma intencao (backlog #4 / fatia 3). O `desiredTime` novo passa pelo **MESMO algoritmo do create** (ponto unico de entrada `runIntentionAlgorithm`): revalida futuro / expediente / horizonte 30d / **invariante do fim-da-fila** e **recalcula a `estimatedStartTime`** (o encaixe cronologico exclui a propria intencao — inclusive "mudou pra mais cedo" se corrige). So enquanto `status = INTENTION`.
+
+**Request:** `{ "desiredTime": "2026-07-14T18:00:00Z" }`
+
+**Response (200):** `IntentionResponse` (mesmos campos do create, com a estimativa recalculada).
+
+**Validacoes / erros:**
+- `400` — `desiredTime` no passado (`IllegalArgumentException`).
+- `400 ATTENDANCE_INVALID_STATUS` — o atendimento nao e mais `INTENTION` (ja promovido a `SCHEDULED` ou cancelado).
+- `403` — o requisitante nao e o cliente dono (`ESTABLISHMENT_ACCESS_DENIED`).
+- `404` — intencao inexistente (`ATTENDANCE_NOT_FOUND`).
+- `422 INTENTION_OUTSIDE_BUSINESS_HOURS` / `INTENTION_HORIZON_EXCEEDED` / `INTENTION_BEFORE_QUEUE_END` · `409 PROFESSIONAL_AGENDA_FULL` — mesmas regras do create.
+
+---
+
+### DELETE /attendances/intentions/{id}
+**Acesso:** `ROLE_CLIENT` — apenas o **cliente dono** (por JWT).
+
+Cancela a intencao (`INTENTION -> CANCELLED`). Como a `INTENTION` vive **fora da fila viva**, o cancelamento **nao mexe em fila nem em broadcast WS** (auto-limpante: a futura promocao simplesmente nao encontra mais o id).
+
+**Response:** `204 No Content`.
+
+**Validacoes / erros:**
+- `400 ATTENDANCE_INVALID_STATUS` — o atendimento nao e mais `INTENTION` (ja promovido/cancelado).
+- `403` — nao e o cliente dono (`ESTABLISHMENT_ACCESS_DENIED`).
+- `404` — intencao inexistente (`ATTENDANCE_NOT_FOUND`).
+
+**Testes (fatia 3 editar/cancelar):** Integracao (`IntentionUpdateCancelIntegrationTest`: PATCH dono 200 recalcula / PATCH nao-dono 403 / PATCH re-valida 422 fora do expediente / PATCH inexistente 404 / DELETE dono 204+CANCELLED / DELETE nao-dono 403 / PATCH-apos-cancelar 400 / DELETE inexistente 404 / `INTENTION_BEFORE_QUEUE_END` com fila viva 422) + Postman folder `08j`.
+
+### GET /attendances/intentions/professional/me · /client/me — visao de agenda (fatia 2)
+
+Fecha o #4. **Leitura** dos agendamentos futuros que ainda **nao entraram na fila viva** (status `INTENTION`), **congelados no estimado da criacao** (`scheduledTime`, Modelo A — nada e recalculado na leitura). Mesma forma para as duas telas; o front **agrupa por dia** (pelo `desiredTime`).
+
+- **`GET /attendances/intentions/professional/me`** (`ROLE_PROFESSIONAL`) — a agenda do profissional logado (aba Agenda do Partner): **1 frame** + as suas intencoes.
+- **`GET /attendances/intentions/client/me`** (`ROLE_CLIENT`) — os proprios agendamentos do cliente em **qualquer loja** ("meus agendamentos"): **um frame por profissional distinto** + as intencoes do cliente.
+
+**Response (200) — `IntentionAgendaResponse`:**
+- `frames[]` (`AgendaFrameResponse`) — o "quadro" da barra de encaixe por profissional: `professionalId`, `establishmentId`, **`projectedQueueEnd`** (fim projetado da fila VIVA agora = piso do agendavel de hoje), **`openingTime`/`closingTime`** (janela de expediente). O front-client desenha a faixa agendavel (do `projectedQueueEnd`/abertura ao `closingTime`) e casa cada bloco pelo `professionalId`.
+- `intentions[]` (`IntentionResponse`, ordenadas por `desiredTime`) — os blocos congelados: `id`, `desiredTime`, `estimatedStartTime` (= `scheduledTime`), `estimatedMinutes`, `services`, `clientId`/`clientName`, `professionalId`/`professionalName`, `establishmentId`, `status`.
+
+Ambos read-only. Sem novos erros de negocio (403 fora da role; listas vazias quando nao ha agendamento).
+
+> **Handoff fronts (fatia 2):** Front-Partner: aba **Agenda** = as intencoes agrupadas por dia (o `frame` da a moldura de horario). Front-Client: **"meus agendamentos"** (client/me, agrupado por dia) e, ao **agendar** com um profissional, a **barra de encaixe** usa o `frame` (`projectedQueueEnd`→`closingTime`) + os blocos. **Nota / follow-up:** para o cliente ver os blocos de OUTROS clientes como blocos **opacos** ao agendar com um profissional especifico (sem revelar nomes), falta um endpoint proprio (`professional/{id}` publico p/ clientes com blocos anonimos) — nao entra nesta fatia; client/me so devolve os proprios agendamentos.
+
+**Testes:** Integracao (`IntentionAgendaIntegrationTest`: professional/me = 3 intencoes + 1 frame com `projectedQueueEnd`/`closingTime`; client/me = 2 proprios + 1 frame; client/me vazio = listas vazias; professional/me com token de cliente puro = 403) + Postman folder `08m`.
+
+### Promocao event-driven da intencao (fatia 3 — sem endpoint REST)
+
+Quando o horario se aproxima, a `INTENTION` vira **`SCHEDULED`** sozinha e entra na fila viva. Nao ha endpoint: e um **gatilho interno por timer**, disparado no backend. O front nao chama nada — apenas **recebe** o evento (WS/push) e ve a fila atualizar.
+
+- **Janela:** promove quando falta **≤ 15min** pro `desiredTime` (`now >= desiredTime − 15min`).
+- **Timer server-side (`IntentionPromotionScheduler`):** mantem **UM** timer agendado para `cabeca.desiredTime − 15min`, onde a **cabeca** = intencao de **menor `desiredTime` do sistema** (`AttendanceRepository.findEarliestIntention`, `ORDER BY desiredTime LIMIT 1` — sempre fresco; o timer e so um palpite). **Event-driven, nao polling** — custo ~zero ocioso. Usa um `ThreadPoolTaskScheduler` **proprio** (nao depende de `@Scheduled`/`@EnableScheduling`, deliberadamente ausentes no projeto). ⚠️ **Nota 2026-07-20:** a justificativa antiga ("a decisao NAO auto-fechar mantem os `@Scheduled` dormentes") **caiu** — o auto-fechamento voltou a valer (ver backlog "Auto-fechamento da loja"). Os `@Scheduled` seguem ausentes de proposito, mas por outro motivo: **este padrao de timer proprio event-driven e o preferido do projeto** (ver tambem `CutRequestExpiryScheduler`) e e a mecanica que o auto-fechamento deve reusar.
+- **No disparo (loop de drenagem):** re-consulta a cabeca, re-checa a janela; se vencida **promove** → re-consulta a proxima → repete enquanto houver vencida (cobre rajadas apos ociosidade) → reagenda pro proximo horario. Se a cabeca ainda nao venceu (ex.: foi **adiada**), so reagenda.
+- **`promoteIntention` (flip ATOMICO):** re-le o atendimento e so promove se ainda for `INTENTION` — corrida com **cancelar/editar/outra promocao** = **no-op auto-limpante**. Ao promover: `status = SCHEDULED`, **`scheduledTime = agora`** (entra na **CAUDA** da fila viva = a posicao do ETA naquele instante, **Modelo A**, sem reservar slot; o `desiredTime` persiste como registro do pretendido), **trava as refeicoes a frente** (mesmo `lockMealsAtIngress` do walk-in).
+- **Notificacao ao promover:** `broadcastQueue` (a fila viva agora inclui o promovido) + WS pessoal **`ATTENDANCE_PROMOTED`** em `/user/queue/notifications` + **push** (`type: ATTENDANCE_PROMOTED`). Convidado (sem conta) = so o broadcast.
+- **Correcao na hora:** todo `POST`/`PATCH`/`DELETE` de intencao chama **`reschedule()` pos-commit** — a cabeca e o gatilho se corrigem imediatamente (inclusive "mudou pra **mais cedo**": nao fica esperando um despertador atrasado). No **boot/restart** o timer se reconstroi do banco (`ApplicationReadyEvent`), senao perderia o despertador da cabeca (importante no Render, que hiberna).
+- **Testes:** `IntentionPromotionIntegrationTest` (flip INTENTION→SCHEDULED + entra na fila viva + no-op apos cancelar + idempotente + `findEarliestIntention` ordena pela menor) + `IntentionPromotionSchedulerTest` (loop de drenagem, due-check da cabeca nao-vencida, ocioso sem intencao, convidado sem push, corrida no-op).
+
+**HANDOFF FRONTS:** roteiar o novo `data.type` **`ATTENDANCE_PROMOTED`** (WS pessoal + push) — o cliente que criou a intencao passa de "agendado" para "na fila" (mostrar posicao/ETA; app-cliente ja consome `professionals-with-queue` e o WS pessoal, como no `ATTENDANCE_CANCELLED` do BUG9). Partner: a fila do profissional passa a incluir o atendimento promovido (ja vem via `professionals-with-queue`/broadcast).
+
+**Pendente (resto da fatia 3):** **promocao event-driven** a `SCHEDULED` (timer p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem, promocao atomica, reconstruir timer no boot).
 
 ---
 
@@ -1683,6 +1977,90 @@ o atendimento volta a contribuir o tempo **cheio** (deixa de rampar).
 **Erros:** `400` quando o attendance nao e encaixe (`is_fit=false`) · `403` / `404` / `401` (idem acima).
 
 **Testes:** Integracao (`FitInAttendanceIntegrationTest`)
+
+---
+
+### PATCH /attendances/{attendanceId}/promote
+Partner "Promover cliente ao 1o lugar" — o **profissional dono** da fila promove um atendimento em espera para o **1o lugar** (indice 0,
+proximo a ser atendido), empurrando os demais para tras — **sem inicia-lo**. Inverso do `move-to-end`: o
+`scheduledTime` recebe `cabeca.scheduledTime − 1min` (a ordenacao da espera e por `scheduledTime` ASC).
+No-op se ja for o 1o. Nao mexe no `IN_PROGRESS` (esse segue em atendimento; o promovido vira o proximo).
+
+**Acesso:** PROFESSIONAL (dono do attendance)
+
+**Response (200):** `AttendanceInQueueResponse`. Expira propostas de troca pendentes do attendance (#42) e dispara broadcast WS da fila da loja.
+
+**Erros:** `400` status invalido (so `SCHEDULED`) · `403` nao-dono / sem role PROFESSIONAL · `404` inexistente · `401` sem token.
+
+> **Handoff Front-Partner (pronto p/ ligar):** no card de um cliente **em espera** (`SCHEDULED`) da fila, adicionar a acao **"Promover ao 1o lugar"** → `PATCH /attendances/{id}/promote` com token PROFESSIONAL (dono). Sucesso `200` devolve o proprio atendimento (segue `SCHEDULED`) e a fila ao vivo ja chega atualizada pelo WS (`/topic/establishment/{id}/queue`) — nao precisa refazer GET. Esconder/desabilitar a acao para quem ja e o 1o (o backend responde `200` no-op de qualquer forma). So faz sentido para `SCHEDULED` (um `LATE` usa `/undo-late`; `IN_PROGRESS`/`PAUSED` ja estao em atendimento).
+
+**Testes:** Integracao (`PromoteToFrontIntegrationTest`)
+
+---
+
+### POST /attendances/cut-requests
+BUG5 **C2 — "solicitar corte"** (fatia 1 de 3). Quando a loja esta **fechada p/ novos** (gate C1,
+`is_open == false`), o cliente registrado **nao entra sozinho** na fila; registra este **pedido sob
+aprovacao**. Cria um `CutRequest` **`PENDING`** com validade de **5min** (`expires_at`). O profissional
+dono aceitara/recusara (fatia 2) e um timer server-side auto-nega o pedido se ninguem responder
+(fatia 3). `clientId` vem do JWT.
+
+**Entidade propria** (`cut_request`, migration `80-attendance/010`) — **nao** e um status de Attendance:
+o pedido pode ser recusado e nunca virar atendimento, entao **nunca aparece em read-model de fila**
+(mesmo padrao do `queue_swap_request` do #42). No aceite (fatia 2) nasce um `Attendance SCHEDULED` normal.
+
+**Acesso:** CLIENT (dono por JWT). Dispara notificacao ao profissional (WS pessoal `CUT_REQUESTED` + push).
+
+**Body:** `{ "professionalId": UUID, "establishmentId": UUID, "serviceItemIds": [UUID] }`
+
+**Response (201):** `CutRequestResponse` (`id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`).
+
+**Erros:** `409 CUT_REQUEST_NOT_ALLOWED` (loja **aberta agora** — deve entrar via `POST /attendances`) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (servico de outro profissional) · `404` profissional/servico/loja inexistente · `401` sem token.
+
+> **Handoff fronts (fatia 1):** ainda **incompleto** — falta o profissional aceitar/recusar (fatia 2) e o auto-nega em 5min (fatia 3). Front-Client: quando o `POST /attendances` retornar `409 ESTABLISHMENT_NOT_OPEN`, oferecer **"solicitar corte"** → `POST /attendances/cut-requests`. Front-Partner: escutar o WS `CUT_REQUESTED` p/ mostrar o pedido pendente (a acao de aceitar/recusar chega na fatia 2).
+
+**Testes:** Integracao (`CutRequestCreateIntegrationTest`)
+
+---
+
+### GET /attendances/cut-requests
+BUG5 **C2 — desbloqueio da UI do Partner.** Lista os pedidos **`PENDING`** dirigidos ao profissional logado (`professionalId` do JWT), do **mais antigo ao mais novo** (`createdAt ASC`). E o **caminho de recuperacao** quando o WS `CUT_REQUESTED` foi perdido (app estava fechado) e a fonte da lista de "pedidos aguardando decisao" na tela do Partner — sem ele, o profissional so soube do pedido pelo WS ao vivo e nao tinha como reencontra-lo.
+
+**Acesso:** PROFESSIONAL (por JWT).
+
+**Response (200):** lista de `CutRequestResponse` (vazia se nenhum); cada item traz `id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`. So o proprio profissional ve seus pedidos — pedidos de outra loja/prof nao aparecem.
+
+**Erros:** `403` sem role PROFESSIONAL (ex.: cliente) · `401` sem token.
+
+> **Handoff fronts:** Front-Partner: ao abrir a tela de fila/pedidos (e ao voltar do background), chamar `GET /attendances/cut-requests` para montar a lista de pendentes; ao receber o WS `CUT_REQUESTED` ao vivo, pode usar o `cutRequestId` do envelope (ver nota abaixo) direto ou re-consultar este GET.
+
+**Testes:** Integracao (`CutRequestListPendingIntegrationTest` — 2 pendentes ordenados / outro prof ve vazio / some apos aceitar / cliente 403)
+
+> **⚠️ Envelope do WS `CUT_REQUESTED` (corrigido no desbloqueio C2).** O `cutRequestId` agora viaja num **campo proprio** `cutRequestId` do `QueueNotification` — antes ele vinha embutido no campo `attendanceId` (semanticamente errado: nao e um Attendance). Todos os eventos de corte (`CUT_REQUESTED`/`CUT_ACCEPTED`/`CUT_REFUSED`/`CUT_EXPIRED`) passaram a preencher `cutRequestId`; o `CUT_ACCEPTED` traz **ambos** (`attendanceId` = o atendimento gerado, `cutRequestId` = o pedido que fechou). Os demais eventos (nao-corte) seguem com `cutRequestId=null`. **Front-Partner:** ler `cutRequestId` do envelope (nao mais `attendanceId`). O push ja carregava `cutRequestId` correto — inalterado.
+
+### PATCH /attendances/cut-requests/{id}/accept · /refuse
+BUG5 **C2 — "solicitar corte"** (fatia 2 de 3). O **profissional dono** decide o pedido `PENDING`:
+
+- **`/accept`** — nasce um **`Attendance SCHEDULED`** na **cauda** da fila (`scheduledTime = now`, bypassa o gate C1 — o aceite explicito e a autorizacao), reusa o meal-lock (#37); o `CutRequest` vira **`ACCEPTED`** e passa a apontar `resulting_attendance_id`. Notifica o cliente (WS `CUT_ACCEPTED` + push) + broadcast da fila.
+- **`/refuse`** — o `CutRequest` vira **`REFUSED`**; nenhum atendimento e criado. Notifica o cliente (WS `CUT_REFUSED` + push).
+
+**Acesso:** PROFESSIONAL (dono do pedido).
+
+**Response (200):** `CutRequestResponse` (status `ACCEPTED`/`REFUSED`; no accept, `resulting_attendance_id` preenchido).
+
+**Erros:** `409 CUT_REQUEST_NOT_PENDING` (ja decidido) · `409 CUT_REQUEST_EXPIRED` (accept apos os 5min — checagem defensiva; alem do timer da fatia 3, o proprio accept fora da janela auto-nega o pedido para `EXPIRED` antes de retornar o 409) · `403` nao-dono / sem role PROFESSIONAL · `404` inexistente · `401` sem token.
+
+> **Handoff fronts (fatia 2):** Front-Partner: no pedido pendente (da lista `GET /attendances/cut-requests` ou do WS `CUT_REQUESTED`, usando o `cutRequestId` do envelope), botoes **Aceitar** → `PATCH .../accept` e **Recusar** → `PATCH .../refuse`. Front-Client: escutar `CUT_ACCEPTED` (entrou na fila) / `CUT_REFUSED` (pedido negado) / `CUT_EXPIRED` (venceu sem resposta — ver fatia 3).
+
+**Testes:** Integracao (`CutRequestAcceptRefuseIntegrationTest`)
+
+### Auto-nega do pedido de corte (C2 — fatia 3, sem endpoint REST)
+
+Fecha o C2. Um `CutRequest` **`PENDING`** vale 5min (`expiresAt = createdAt + 5min`); passou disso sem o profissional responder, ele vira **`EXPIRED`** sozinho e o cliente e avisado. **Gatilho por TIMER server-side** (`CutRequestExpiryScheduler`, `ThreadPoolTaskScheduler` **proprio** com thread **daemon** — mesmo padrao do `IntentionPromotionScheduler`; **NAO** usa `@Scheduled`/`@EnableScheduling`, ausentes de proposito), **event-driven, nao polling**: mantem **um unico timer** agendado para o `expiresAt` da **cabeca** (o `PENDING` que vence primeiro, via `findFirstByStatusOrderByExpiresAtAsc`). No disparo NAO age cego — `expireDueCutRequests()` marca `EXPIRED` **todos** os `PENDING` ja vencidos de uma vez (`findByStatusAndExpiresAtBefore`), notifica cada cliente e **reagenda** para a proxima cabeca. Todo create/accept/refuse chama `reschedule()` pos-commit (a cabeca/timer se corrigem na hora); no boot o timer se reconstroi do banco (`ApplicationReadyEvent`). Ao expirar: **`CUT_EXPIRED`** no WS pessoal `/user/queue/notifications` + push (`type: CUT_EXPIRED`, `cutRequestId`/`establishmentId`). Nenhum atendimento e criado; o pedido nunca esteve na fila, entao nao ha broadcast. Sem endpoint REST (100% interno).
+
+> **Handoff fronts (fatia 3):** Front-Client: rotear o `data.type` **`CUT_EXPIRED`** (WS pessoal + push) → o pedido pendente sai da tela ("expirou — tente novamente quando a loja abrir"). Front-Partner: o pedido pendente (recebido via `CUT_REQUESTED`) deve sumir apos 5min mesmo sem acao — pode escutar `CUT_EXPIRED` (o cliente e o alvo do WS pessoal; para o Partner, expirar a UI local pelo `expiresAt` ja recebido tambem resolve).
+
+**Testes:** Integracao (`CutRequestExpiryIntegrationTest` — vencido→EXPIRED / no-prazo→PENDING / so o vencido expira / `reschedule` smoke), exercitando o ciclo direto (sem relogio real; `vupth.cut-request.auto-arm=false` nos testes).
 
 ---
 
@@ -2114,7 +2492,7 @@ Cria intervalo recorrente.
 ```json
 {
   "durationMinutes": 60,
-  "fixedStartTime": "12:00:00Z",
+  "fixedStartTime": "12:00",
   "recurrencePattern": "WEEKDAYS",
   "description": "Almoco"
 }
@@ -2123,7 +2501,7 @@ Cria intervalo recorrente.
 | Campo | Validacao |
 |-------|-----------|
 | durationMinutes | `@NotNull @Positive @Max(240)` |
-| fixedStartTime | `@NotNull` (OffsetTime) |
+| fixedStartTime | `@NotNull` (LocalTime de parede — ver "Horario de PAREDE") |
 | recurrencePattern | `@NotBlank`, restrito a **`WEEKDAYS` \| `DAILY` \| `WEEKENDS`** |
 
 **Response (201):** `IntervalResponse`
@@ -2166,7 +2544,7 @@ Edita um intervalo (refeicao recorrente). Semantica PATCH: envie apenas os campo
 ```json
 {
   "durationMinutes": 90,
-  "fixedStartTime": "11:30:00Z",
+  "fixedStartTime": "11:30",
   "description": "Almoco estendido"
 }
 ```
@@ -2174,7 +2552,7 @@ Edita um intervalo (refeicao recorrente). Semantica PATCH: envie apenas os campo
 | Campo | Tipo | Obrigatorio | Notas |
 |-------|------|-------------|-------|
 | durationMinutes | Integer | Nao | `@Positive`; null preserva |
-| fixedStartTime | OffsetTime | Nao | Horario previsto; null preserva |
+| fixedStartTime | LocalTime (parede) | Nao | Horario previsto; null preserva |
 | description | String | Nao | null preserva |
 
 **Response (200):** `IntervalResponse`
@@ -2265,7 +2643,7 @@ Exemplo de uma refeicao recorrente **prevista** (seed, ainda nao iniciada):
   "startTime": null,
   "endTime": null,
   "description": "Lunch Break",
-  "fixedStartTime": "12:00Z",
+  "fixedStartTime": "12:00",
   "recurrencePattern": "WEEKDAYS"
 }
 ```
@@ -2275,7 +2653,7 @@ Exemplo de uma refeicao recorrente **prevista** (seed, ainda nao iniciada):
 - `status`: calculado no mapper — `ACTIVE` se `isActive`, senao `SCHEDULED`. **So esses dois valores** sao emitidos hoje (o enum tem `FINISHED`/`CANCELLED`, mas o mapper nao os usa).
 - `startTime` (OffsetDateTime): preenchido **apenas para `UNEXPECTED`**. Para `RECURRENT` e sempre `null` (use `fixedStartTime`).
 - `endTime` (OffsetDateTime): mapeado de `plannedEndTime` — **null** enquanto a refeicao recorrente nao for iniciada; preenchido apos o `start`.
-- `fixedStartTime` (OffsetTime): horario previsto da recorrente. **Serializa com segundos omitidos quando zero** → `"12:00Z"`, `"11:30Z"` (nao `"12:00:00Z"`). O front deve parsear segundos como opcionais.
+- `fixedStartTime` (LocalTime de **parede**, BUG2b): horario previsto da recorrente, no fuso da loja. **Serializa `"HH:MM"`, sem offset** → `"12:00"`, `"11:30"` (antes saia `"12:00Z"`). Na entrada o sufixo de offset legado e aceito e ignorado. Ver a secao "Horario de PAREDE".
 - ⚠️ **Gap conhecido:** o `actualStartTime` (horario real em que a refeicao iniciou) **nao e exposto** no `IntervalResponse`. Apos `start`, o front so tem `endTime` (= inicio + `durationMinutes`); o inicio real teria de ser derivado. Avaliar expor `actualStartTime` se o front precisar mostrar "almoco iniciado as HH:MM".
 
 **Testes:** Integracao
@@ -2317,6 +2695,14 @@ A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` R
 | `PATCH /attendances/{id}/no-show` | ✅ | — |
 | `PATCH /attendances/{id}/fit-in` | ✅ | — |
 | `PATCH /attendances/{id}/undo-fit` | ✅ | — |
+| _(interno)_ promocao de intencao `INTENTION→SCHEDULED` (timer, #4) | ✅ | ✅ `ATTENDANCE_PROMOTED` ("voce entrou na fila") |
+| `POST /attendances/cut-requests` (solicitar corte C2) | — | ✅ `CUT_REQUESTED` (ao profissional dono; envelope com `cutRequestId` proprio) |
+| `PATCH /attendances/cut-requests/{id}/accept` (C2) | ✅ | ✅ `CUT_ACCEPTED` (ao cliente — entrou na fila) |
+| `PATCH /attendances/cut-requests/{id}/refuse` (C2) | — | ✅ `CUT_REFUSED` (ao cliente) |
+| _(interno)_ auto-nega de pedido de corte `PENDING→EXPIRED` (timer, C2 fatia 3) | — | ✅ `CUT_EXPIRED` (ao cliente) |
+| `PATCH /professional/me/status` (S1) | ✅ | — |
+| `PATCH /professional/me/accepting-new` (S1 fatia 3 — "fechar fila") | ✅ | ✅ `QUEUE_CLOSING` (a cada cliente na fila do prof, so ao fechar — "voce ainda sera atendido") |
+| `POST`/`DELETE` profissional↔loja (affiliate, owner add/remove, leave) | ✅ | — |
 
 O broadcast e disparado pela camada web **apos a transacao commitada**, entao o snapshot reflete o estado persistido. Envio e best-effort: falha de WS e logada e nunca quebra a resposta HTTP.
 
@@ -2524,7 +2910,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | POST /auth/logout | 🟡 Integracao |
 | PATCH /profile/general-infos | ✅ |
 | PATCH /profile/update-email/me | 🟡 Integracao |
-| PATCH /profile/update-password/me | 🟡 Integracao |
+| PATCH /profile/update-password/me | ✅ |
 | DELETE /profile/delete/me | 🟡 Integracao |
 | GET /users/** | 🟡 Integracao |
 | POST /establishment/quick-create | ✅ |
@@ -2658,41 +3044,57 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 > **Ordem revisada 2026-07-04:** consolidei aqui os gaps de backend levantados pelos fronts (Partner: `BUGx`/`Sx`; Client: handoffs do PRD-Client). Coloquei os **desbloqueios de front** acima dos grandes pos-MVP, porque travam trabalho ja pronto no front. **Andre: confirme/reordene a prioridade** — os numeros sao volateis, commits usam o NOME.
 >
-> **Reconciliacao 2026-07-07 (Partner `HANDOFF_BACKEND.md`):** incorporados os handoffs que so viviam no front — **BUG7/BUG8/BUG9** (bugs de fila/read-model, teste manual 2026-07-04; BUG7 CONFIRMADO), **BUG10** (nickname), **S10** (add servico a attendance na fila), **S9** (expediente nos relatorios). **BUG4** (address) e **S8** (profissional abre/fecha) do handoff **ja estavam CONCLUIDOS** aqui (ver lista abaixo) — o handoff do Partner e de 2026-07-04, anterior aos commits; front liga sozinho. O antigo item "oferta aberta `/swap-offers`" foi **substituido** pela spec **INTENTION -> promocao** (Partner redesenhou 2026-07-05).
+> **Reconciliacao 2026-07-07 (Partner `HANDOFF_BACKEND.md`):** incorporados os handoffs que so viviam no front — **BUG7/BUG8/BUG9** (bugs de fila/read-model, teste manual 2026-07-04; BUG7 CONFIRMADO), **BUG10** (nickname), **S10** (add servico a attendance na fila), **S9** (expediente nos relatorios). **BUG4** (address) e **S8** (profissional abre/fecha) do handoff **ja estavam CONCLUIDOS** aqui (ver lista abaixo) — o handoff do Partner e de 2026-07-04, anterior aos commits; front liga sozinho. ~~O antigo item "oferta aberta `/swap-offers`" foi **substituido** pela spec **INTENTION -> promocao** (Partner redesenhou 2026-07-05).~~ **⚠️ NOTA SUPERSEDIDA (2026-07-15, registrada aqui 2026-07-23):** troca ≠ agendamento — a INTENTION **nao** substitui a troca; `/swap-offers` voltou como item proprio (ver o item "Troca de posicao como OFERTA ABERTA" na tabela).
+
+> **Reconciliacao 2026-07-23 (handoffs Client `HANDOFF_BACKEND.md` 2026-07-23 + Partner `HANDOFF_BACKEND.md` 2026-07-22/23):** incorporados os pedidos que so viviam nos fronts — **BUG2 fuso horario** (raiz diagnosticada pelo front; front corrigido, resta acao backend), **troca aberta `/swap-offers`** (C13/S11, nota stale corrigida acima), **agenda publica com blocos anonimos** (Client B2), **toggle so-abrir p/ profissional** (decisao Andre 2026-07-23), **REMOVED vs CANCELLED** (S9), **ETA buffer −10min** (S10), **listar todos os profissionais** (S8), **melhorias de rating** (Client §3), **`client_name` no CutRequestResponse**, **filtro de periodo no GET /attendances** (S12). Nota do Client (§12, decisao 2026-07-15/23): **o intent #40 (`targetTime` no `POST /attendances`) esta APOSENTADO como entrada de agendamento do cliente** — agendar = INTENTION (#4); casa com o gate da fatia 3 do S1 (accepting_new barra walk-in E intent #40). Lista renumerada **1..28** (o S1 — status derivado + auto-fechamento — saiu inteiro pros Concluidos em 2026-07-24; o **BUG2 fuso** saiu em 2026-07-24 apos auditoria de codigo — ver Concluidos) — **Andre: confirme/reordene a prioridade** (posicoes dos novos sao proposta minha).
+
+> **Auditoria BUG2 fuso horario (2026-07-24) — codigo OK, sem alteracao.** Varri TODOS os pontos que leem `opening_time`/`closing_time`/`fixedStartTime`: `Establishment.isOpenAt`/`isWithinBusinessHours` (is_open, gate C1), `AttendanceServiceImpl.fitsBeforeClosing` (intencao/ETA), `ProfessionalIntervalService.validateWithinBusinessHours` (refeicoes), `QueueUtils.buildBlocks` (ETA meal-aware), `ClosingTimeMath` (auto-fechamento). **Todos ja normalizam offset** — via `withOffsetSameInstant(UTC).toLocalTime()` ou comparacao de `OffsetTime`/`OffsetDateTime` por INSTANTE (`isBefore`/`isAfter`/`atDate` preservam o offset). O unico `LocalTime.now()` cru (`EstablishmentOpenStatusServiceImpl`) esta em metodo COMENTADO + `@Scheduled` dormente (`@EnableScheduling` ausente de proposito) = codigo morto. **O veneno do BUG2 era 100% dado** (front mandava hora local rotulada "Z"); com o front ja corrigido (`toApiTime` com offset real), dado novo entra certo. **Dados ja salvos com "Z" (−3h):** decisao Andre 2026-07-24 = **re-salvar expediente + refeicoes apos o OTA** (sem migration).
+>
+> ⚠️ **Correcao (2026-07-26) — a auditoria acima estava certa mas INCOMPLETA: BUG2b.** Ela auditou a **logica de comparacao** (que de fato normalizava offset corretamente) e nao a **persistencia**. O campo era `OffsetTime` sobre coluna `TIME` **sem timezone**: a coluna nao tem onde guardar offset, entao o Hibernate era obrigado a descartar o dele normalizando para UTC — `"08:00-03:00"` gravava `11:00` e o read-back devolvia `"11:00Z"`. Ou seja, mesmo com o front CORRIGIDO o dado continuava deslocando +3h. Corrigido em **BUG2b** (ver Concluidos): os tres campos de hora do dia viraram `LocalTime` (relogio de parede) e a comparacao com "agora" passou pelo `BusinessClock`. A decisao de re-salvar o dado legado pela tela continua valendo.
+
+> **⚠️ Numeracao do Partner — NAO chavear por numero (reconciliado 2026-07-20).** As duas listas renumeram por
+> prioridade, entao os numeros `Sx` **cruzam** entre os documentos. Conferido contra o `HANDOFF_BACKEND.md` do Partner:
+> o "esqueci-senha + SMTP" que este PRD citava como *Partner S5/S6* e **S7/S8** la; o "expediente nos relatorios"
+> citado como *S9* e **S5**; o "add servico na fila" citado como *S10* e **S6**; o "promover ao 1o lugar" citado como
+> *S7* e **S4**. Pior: os **S9/S10/S11 do Partner sao outros itens** (listar todos os profissionais · status REMOVIDO ·
+> ETA com buffer −10min), entao citar numero aqui aponta para a coisa errada. **Todas as referencias cruzadas deste PRD
+> passaram a citar o NOME do item** (regra ja combinada dos dois lados; commits idem).
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Fechamento com bloqueio de entrada + "solicitar corte" (BUG5 refinado) | 🟡 parte B feita | **Partner BUG5 (refinado Andre 2026-07-04) — NAO auto-fechar.** Ao chegar `closing_time` (ou parada manual): **(C1)** **bloquear NOVAS entradas** na fila (cliente nao entra sozinho); fila existente continua; **(C2)** cliente ainda pode **solicitar corte** (pedido que o profissional aceita/recusa). **(B) `is_open` efetivo (OPEN E dentro de `[opening,closing_time)`) como campo de leitura — ✅ CONCLUIDO** (ver Concluidos). **Restam C1** (gate de entrada) **e C2** (fluxo solicitar corte). Filtro `?includeAll=true` ja CONCLUIDO (parte A); gate ao fechar com fila ativa `409` ja CONCLUIDO (BUG6). |
-| 2 | Expor `available_professionals` na listagem publica | ⬜ aberto | **Client (Home) — reconciliacao 2026-07-11.** A listagem `GET /establishment` so traz `estimated_wait_minutes`; falta a contagem de **profissionais afiliados com servico** (`available_professionals`), que hoje so existe no detalhe `professionals-with-queue`. Sem ela o front-client **esconde todas as lojas fechadas** (nao sabe se ha profissional pra agendar a reabertura); com o campo, mostra so as fechadas com `available_professionals > 0`. Enriquecer o `EstablishmentResponse` da listagem no mesmo caminho do `estimatedWaitMinutes`. |
-| 3 | Promover atendimento ao 1o lugar | ⬜ aberto | **Partner S7** — `PATCH /attendances/{id}/promote` (PROFESSIONAL, dono; move ao indice 0, empurra os demais). `start` ja atende qualquer id fora de ordem; falta o "promover ao topo sem atender". |
-| 4 | Intencao de atendimento -> promocao automatica a fila | ⬜ aberto — spec fechada 2026-07-05 | **Partner S3 (= S2 na 2a rodada de feedback — mesmo item) / Client C6 (substitui o antigo `/swap-offers`).** Novo status **`INTENTION`**: attendance com `desiredTime` fica **fora da fila** e e **promovido a `SCHEDULED`** quando falta **≤15min**. Ponto UNICO de entrada (create/edit passam pelo algoritmo), promocao **event-driven** (timer reagendado p/ `cabeca.desiredTime−15min`, re-busca no disparo, loop de drenagem), invariante do slot futuro alcancavel, promocao atomica, reconstruir timer no boot. Endpoints: `POST/PATCH/DELETE /attendances/intentions[/{id}]`. Detalhe completo no `HANDOFF_BACKEND.md` (Partner) secao "Detalhe — S3". |
-| 5 | Verificar senha atual na troca de senha | ⬜ aberto | **Client #13** — `PATCH /profile/update-password/me` recebe so `{password}`; aceitar `currentPassword` + verificar (**401/422** se errada) |
-| 6 | Esqueci minha senha + infra SMTP | ⬜ aberto | **Partner S5/S6 (= S7 fluxo de reset + S8 infra SMTP na 2a rodada — 1 unico item, agrupado de proposito: o SMTP habilita o reset) + Client #14** — `POST /auth/forgot-password {email}` + `POST /auth/reset-password {token,newPassword}`; infra de e-mail (SMTP/SendGrid/SES) habilita o reset |
-| 7 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
-| 8 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
-| 9 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner S4** — refeicao por janela + auto-supressao no ETA |
-| 10 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner S10 / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
-| 11 | Apelido nao volta no `GET /professional/me` (BUG10) | ⬜ aberto | **Partner BUG10 (teste 2026-07-04).** `PATCH /profile/general-infos {nickname}` retorna 200, mas o `nickname` **nao vem** no `GET /professional/me`. Confirmar que persiste e projetar o campo no `/me` (a busca `ProfessionalSearchResponse` ja expoe). Front mitigou local. |
-| 12 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner S9** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
-| 13 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 14 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 15 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 16 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 17 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 18 | Busca por GPS / proximidade (Haversine) | ⬜ aberto | geocoding no cadastro |
-| 19 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 20 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
-| 21 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 22 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 23 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 24 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 25 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔧 configurado — **falta testar + investigar reenvio** | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). |
+| 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatia A (geocoding) ENTREGUE 2026-07-27; restam B (filtro por raio) e C (fallback sem GPS)** | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine em SQL puro** (formula com `acos`/`radians` numa query nativa), **sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
+| 3 | **`PATCH` do endereco do estabelecimento — hoje nao ha como corrigir (GPS #2)** | ⬜ aberto (pequeno) | Existe so `POST /establishments/{id}/addresses`. Endereco cadastrado errado (ou com coordenada errada, ver fatia A2 do GPS) **nao tem conserto pela API** — e o dono e justamente quem descobre o erro, quando a loja nao aparece na busca por proximidade. Falta `PATCH /establishments/{id}/addresses/{addressId}` (OWNER): edita os campos de texto e/ou reenvia `latitude`/`longitude` do aparelho. Regra: **editar texto NAO regeocodifica** — a coordenada so muda se vier explicitamente no corpo. `UpdateAddressRequest` ja existe (usado no endereco de usuario) e ja traz lat/lng. |
+| 4 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
+| 5 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 6 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 7 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner "Refeicoes Modelo B (janela flexivel)"** — refeicao por janela + auto-supressao no ETA. Nota: o **stub ⏱ do front foi REMOVIDO em 2026-07-20** (saiu junto com a secao de refeicoes da fila); ao entregar, a acao adiantar/adiar sera recriada em `meals.tsx`, nao na fila. |
+| 8 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner "Cliente adiciona servico a um attendance ja na fila" / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
+| 9 | **Toggle manual do profissional: SO ABRIR, nunca fechar (decisao Andre 2026-07-23)** | ⬜ aberto (pequeno) | No hibrido da fatia 2, `PATCH /establishment/{id}/open-status` aceita OWNER ou profissional afiliado nas DUAS direcoes. Decisao nova (handoff Partner, S1): **o profissional NAO pode mais FECHAR a loja na mao** — fechar mataria a fila dos colegas (o proprio argumento do derivado); pode **so ABRIR** quando fechada (ponte; o toggle do profissional morre de vez com o auto-fechamento/fatia 5). O OWNER mantem o override de fechar (feriado/emergencia — presenca abre, owner/horario fecham; owner nunca forca aberto sem presenca). Ajustar o gate por DIRECAO no `updateOpenStatus`. |
+| 10 | **Status `REMOVED` (profissional retira) distinto de `CANCELLED` (cliente desiste) — Partner S9** | ⬜ aberto (pedido 2026-07-14) | Hoje `DELETE /professional-queue/{id}/remove` marca `CANCELLED` — nao diferencia QUEM agiu. Criar **`REMOVED`** (rotulo PT REMOVIDO) p/ remocao pelo profissional; `CANCELLED` fica so p/ o cliente. Refletir nos read-models (client+partner) e no WS `/user/queue/notifications`. **Sem escalonamento (Andre 2026-07-14):** LATE ilimitado e Remover a qualquer momento — NAO gatear o remove por LATE (strike/no-show interno pode continuar, sem gatear). **Decisao pendente do Andre:** rotulo do auto-nega do gate fora do horario (`REFUSED`/RECUSADO proprio vs reusar REMOVED). Client (C9) mostra mensagens distintas: "voce cancelou" vs "o estabelecimento removeu voce" vs "pedido recusado". |
+| 11 | **ETA com buffer de −10min (regra GLOBAL) — Partner S10** | ⬜ aberto (pedido 2026-07-14) | O tempo de espera EXIBIDO = ETA calculado **−10min (piso 0)**, p/ o cliente chegar antes. Decisao Andre: regra GLOBAL — **o backend calcula** e client+partner so exibem o MESMO numero (nada de cada front subtrair por conta). Definir: buffer embutido no valor exposto do read-model vs campo separado (`display_wait` vs `raw_eta`). |
+| 12 | **Listar TODOS os profissionais do estabelecimento (incl. sem servico) — Partner S8** | ⬜ aberto (pedido 2026-07-09) | `professionals-with-queue` ESCONDE profissional sem servico (#31). Falta `GET /establishment/{id}/professionals` (ou count) com **todos os vinculados** + flag/contagem de servicos. Desbloqueia: owner ver o profissional recem-vinculado que ainda nao cadastrou servico; checklist de prontidao separar "1+ vinculado" de "1+ com servico". |
+| 13 | **Melhorias de rating (Client §3 — nao bloqueiam o front)** | ⬜ aberto | (a) **`rated: boolean`** no `GET /attendances/client/me` — fonte da verdade p/ esconder o "Avaliar"; hoje o front usa `ratedStore` local (SecureStore) que nao sincroniza entre aparelhos nem sobrevive a reinstalar; (b) **rollup por ESTABELECIMENTO** em `GET /establishment` — media ponderada = Σ`ratingSum` ÷ Σ`ratingCount` dos profissionais, p/ os cards da Home; (c) **`rating_best`** (maior nota entre os profissionais) no card + considerar rating como desempate na ordenacao (#11); (d) **`establishmentName`** no `client/me` (hoje so `establishmentId`). |
+| 14 | **`client_name` no `CutRequestResponse` (Partner nice-to-have)** | ⬜ aberto (pequeno) | O `GET /attendances/cut-requests` traz so `client_id` — o partner monta o card com fallback "Cliente". O front JA consome o campo opcional: adicionar `client_name` (e avaliar `service_names`) faz o nome aparecer **sem nenhuma mudanca no front**. |
+| 15 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
+| 16 | **Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`) — Partner S12** | ⬜ aberto (nice-to-have, pedido 2026-07-22) | Aceitar `dateFrom`/`dateTo` como o `/professional/me/reports` ja faz. Motivo: a tela "Meu dia" do partner unificou resumo+historico — o resumo filtra por periodo e o historico nao consegue acompanhar (hoje so filtros de STATUS). |
+| 17 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 18 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 19 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 20 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 21 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 22 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 23 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
+| 24 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 25 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 26 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 27 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 28 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+> **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
-> **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi **corrigida**: por decisao do Andre (PRD-Partner) **NAO se auto-fecha** — fechar e sempre manual+confirmacao.
+**Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging.
 
-**Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3** — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging.
-
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)** · **Endereco no read-back do establishment (Partner BUG4 — `EstablishmentResponse.address` embutido; endereco principal `isMain`, `null` sem endereco)** · **Gate ao fechar loja com fila/atendimento ativo (Partner BUG6 — `PATCH /open-status` da `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` ao sair de OPEN com atendimento SCHEDULED/LATE/IN_PROGRESS/PAUSED)** · **Profissional afiliado abre/fecha a loja (`PATCH /open-status` = OWNER **ou** profissional afiliado; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`)** · **Filtro de open-status na listagem publica (BUG5 parte A — `GET /establishment` por padrao so devolve `OPEN`; `?includeAll=true` inclui `CLOSED`/`TEMPORARILY_CLOSED`; filtro de leitura, nao muda status nem fila)** · **Atendimento pausado continua visivel e retomavel (Partner BUG7 — o "atual" do profissional cai para o `PAUSED` na ausencia de `IN_PROGRESS`; permanece em `current_attendance` do `professionals-with-queue` e no overview da fila ate `resume`/`finish`, e nao se inicia um novo enquanto ha um pausado)** · **Listagem dos proprios atendimentos pelo cliente (Partner BUG8 sintoma b — `GET /attendances?clientId=<self>` devolve os atendimentos do proprio cliente; antes o endpoint era owner/profissional-only e o cliente tomava `403`. So o proprio JWT; `clientId` de outro -> `403`. Delega ao mesmo caminho de `/attendances/client/me`; caminho feliz ja projetava nos 3 read-models)** · **Invariante servico↔profissional no create de atendimento (Partner BUG8 sintoma c — todo `serviceItem` do atendimento tem de pertencer ao profissional escolhido; item de outro prof -> `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`; como efeito, profissional sem servico nao pode ser marcado)** · **"Aberto agora" efetivo (BUG5 parte B — campo de leitura `is_open` no `EstablishmentResponse`/`EstablishmentWithProfessionalsResponse`/`EstablishmentGeneralInfosResponse` = `open_status == OPEN` E horario atual dentro de `[opening_time, closing_time)`; nao muda o `open_status` persistido, nao ha auto-fechamento. Trata janela normal/24h/virada-de-meia-noite/offsets. Cobertura: `EstablishmentIsOpenNowTest` unit + `IsOpenEffectiveIntegrationTest`)** · **Remover da fila reflete pro cliente no ato (Partner BUG9 / Client C9 — `DELETE /professional-queue/{id}/remove` ja marcava `CANCELLED`; agora tambem faz `broadcastQueue` + notifica o cliente com `ATTENDANCE_CANCELLED` no WS `/user/queue/notifications` + push, p/ o app-cliente sair de "em fila" sem reload. Guest = no-op nos dois publishers. Cobertura: `PushNotificationIntegrationTest` Order 22)**.
+**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)** · **Endereco no read-back do establishment (Partner BUG4 — `EstablishmentResponse.address` embutido; endereco principal `isMain`, `null` sem endereco)** · **Gate ao fechar loja com fila/atendimento ativo (Partner BUG6 — `PATCH /open-status` da `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` ao sair de OPEN com atendimento SCHEDULED/LATE/IN_PROGRESS/PAUSED)** · **Profissional afiliado abre/fecha a loja (`PATCH /open-status` = OWNER **ou** profissional afiliado; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`)** · **Filtro de open-status na listagem publica (BUG5 parte A — `GET /establishment` por padrao so devolve `OPEN`; `?includeAll=true` inclui `CLOSED`/`TEMPORARILY_CLOSED`; filtro de leitura, nao muda status nem fila)** · **Atendimento pausado continua visivel e retomavel (Partner BUG7 — o "atual" do profissional cai para o `PAUSED` na ausencia de `IN_PROGRESS`; permanece em `current_attendance` do `professionals-with-queue` e no overview da fila ate `resume`/`finish`, e nao se inicia um novo enquanto ha um pausado)** · **Listagem dos proprios atendimentos pelo cliente (Partner BUG8 sintoma b — `GET /attendances?clientId=<self>` devolve os atendimentos do proprio cliente; antes o endpoint era owner/profissional-only e o cliente tomava `403`. So o proprio JWT; `clientId` de outro -> `403`. Delega ao mesmo caminho de `/attendances/client/me`; caminho feliz ja projetava nos 3 read-models)** · **Invariante servico↔profissional no create de atendimento (Partner BUG8 sintoma c — todo `serviceItem` do atendimento tem de pertencer ao profissional escolhido; item de outro prof -> `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`; como efeito, profissional sem servico nao pode ser marcado)** · **"Aberto agora" efetivo (BUG5 parte B — campo de leitura `is_open` no `EstablishmentResponse`/`EstablishmentWithProfessionalsResponse`/`EstablishmentGeneralInfosResponse` = `open_status == OPEN` E horario atual dentro de `[opening_time, closing_time)`; nao muda o `open_status` persistido (o auto-fechamento e item proprio do backlog, com prompt + carencia de 15min). Trata janela normal/24h/virada-de-meia-noite/offsets. Cobertura: `EstablishmentIsOpenNowTest` unit + `IsOpenEffectiveIntegrationTest`)** · **Remover da fila reflete pro cliente no ato (Partner BUG9 / Client C9 — `DELETE /professional-queue/{id}/remove` ja marcava `CANCELLED`; agora tambem faz `broadcastQueue` + notifica o cliente com `ATTENDANCE_CANCELLED` no WS `/user/queue/notifications` + push, p/ o app-cliente sair de "em fila" sem reload. Guest = no-op nos dois publishers. Cobertura: `PushNotificationIntegrationTest` Order 22)** · **Gate de entrada na fila / "aberto agora" (BUG5 parte C1 — `POST /attendances` de walk-in imediato (sem `targetTime`) exige a loja "aberta agora" (`open_status == OPEN` E dentro de `[opening_time, closing_time)`); loja fechada ou fora do horario → `409 ESTABLISHMENT_NOT_OPEN`. A intencao de fila (#40, com `targetTime`) e o guest (`add-quest-attendance`) NAO passam pelo gate. Fila ja existente segue sendo atendida. Cobertura: `AttendanceServiceImplTest` (unit) + `WalkInOpenGateIntegrationTest` (integracao). Resta a parte C2 — fluxo "solicitar corte")** · **Promocao event-driven da intencao (#4 fatia 3 — a `INTENTION` vira `SCHEDULED` sozinha ~15min antes do `desiredTime`). Gatilho por TIMER server-side (`IntentionPromotionScheduler`, `ThreadPoolTaskScheduler` proprio — NAO usa `@Scheduled`/`@EnableScheduling`, que seguem ausentes/dormentes de proposito), agendado para `cabeca.desiredTime − 15min` (cabeca = menor `desiredTime` do sistema, via `findEarliestIntention`). No disparo NAO promove cego: re-consulta a cabeca, re-checa a janela e roda um LOOP DE DRENAGEM (promove todas as vencidas em cadeia — cobre rajadas apos ociosidade) e reagenda pro proximo. `promoteIntention` faz o flip ATOMICO guardado por `status==INTENTION` (corrida com cancelar/editar = no-op auto-limpante); ao promover, `scheduledTime = agora` (a intencao entra na CAUDA da fila viva = posicao do ETA no instante, Modelo A, sem reservar slot) + trava refeicoes a frente + notifica o cliente (`ATTENDANCE_PROMOTED` no WS `/user/queue/notifications` + push) + rebroadcast da fila. Todo create/edit/cancel de intencao chama `reschedule()` pos-commit (a cabeca/timer se corrigem na hora, inclusive "mudou pra mais cedo"); no boot o timer se reconstroi do banco (`ApplicationReadyEvent`). Sem novo endpoint REST (100% interno). Cobertura: `IntentionPromotionIntegrationTest` (flip + fila viva + no-op de corrida + `findEarliestIntention`) + `IntentionPromotionSchedulerTest` (drenagem, due-check, convidado sem push, corrida))** · **Contagem de profissionais na listagem publica (Client Home — `available_professionals` no `EstablishmentResponse` da listagem `GET /establishment` = nº de profissionais afiliados COM servico; deriva do mesmo snapshot `professionals-with-queue` que ja alimenta `estimated_wait_minutes` (#31 filtra prof sem servico), calculado numa unica passada por loja; `null` fora da listagem. Front-client exibe lojas FECHADAS so com `available_professionals > 0`. Cobertura: `AvailableProfessionalsListingIntegrationTest` — prof com servico → 1, prof sem servico → 0)** · **Promover atendimento ao 1o lugar (Partner "Promover cliente ao 1o lugar" — `PATCH /attendances/{id}/promote`, PROFESSIONAL dono; move o atendimento em espera para o indice 0 (`scheduledTime = cabeca − 1min`, inverso do `move-to-end`), empurrando os demais, sem inicia-lo; so `SCHEDULED`, no-op se ja for o 1o; expira propostas de troca #42 + broadcast WS. Erros: 400 status invalido, 403 nao-dono/CLIENT, 404 inexistente, 401 sem token. Cobertura: `PromoteToFrontIntegrationTest`)** · **Fechamento com "solicitar corte" (BUG5 C2 — completo). Com a loja fechada p/ novos (gate C1), o cliente registrado registra um `CutRequest` PENDING (entidade propria, fora de qualquer read-model de fila; validade 5min) via `POST /attendances/cut-requests` (409 `CUT_REQUEST_NOT_ALLOWED` se aberta agora, 422 servico de outro prof; notifica o prof com `CUT_REQUESTED`). O profissional dono decide: `PATCH .../{id}/accept` (nasce um Attendance SCHEDULED na cauda, bypassa o gate C1, reusa meal-lock; vira ACCEPTED + `resulting_attendance_id`; notifica o cliente `CUT_ACCEPTED`) ou `PATCH .../{id}/refuse` (REFUSED; `CUT_REFUSED`); guard dono + so PENDING + accept fora da janela auto-nega defensivo. **Auto-nega por TIMER server-side** (`CutRequestExpiryScheduler`, `ThreadPoolTaskScheduler` proprio/daemon, event-driven — um timer p/ o `expiresAt` da cabeca `findFirstByStatusOrderByExpiresAtAsc`; no disparo `expireDueCutRequests` marca EXPIRED todos os PENDING vencidos e notifica `CUT_EXPIRED`, depois reagenda; create/accept/refuse chamam `reschedule()` pos-commit; timer reconstruido no boot). Sem endpoint REST na fatia 3. Migration `80-attendance/010` (`cut_request` + join `cut_request_service_item`). Cobertura: `CutRequestCreateIntegrationTest` + `CutRequestAcceptRefuseIntegrationTest` + `CutRequestExpiryIntegrationTest`; Postman folder 08l)** · **Desbloqueio da UI do Partner no C2 (`GET /attendances/cut-requests` lista os pedidos PENDING do profissional logado, `createdAt ASC` — caminho de recuperacao quando o WS foi perdido + fonte da lista de pendentes; 403 p/ nao-PROFESSIONAL. Alem disso, o `cutRequestId` passou a viajar num CAMPO PROPRIO do `QueueNotification` (antes vinha escondido no `attendanceId`, semanticamente errado): CUT_REQUESTED/ACCEPTED/REFUSED/EXPIRED preenchem `cutRequestId`; CUT_ACCEPTED traz ambos (attendance gerado + pedido fechado). Sem migration. Cobertura: `CutRequestListPendingIntegrationTest` — 2 pendentes ordenados / outro prof ve vazio / some apos aceitar / cliente 403; Postman folder 08l)** · **Visao de agenda das intencoes (#4 fatia 2 — fecha o #4). `GET /attendances/intentions/professional/me` (PROFESSIONAL) e `GET /attendances/intentions/client/me` (CLIENT) devolvem `IntentionAgendaResponse` = `{ frames[], intentions[] }`: as INTENTIONs futuras (fora da fila viva) congeladas no estimado da criacao (`estimatedStartTime` = `scheduledTime` persistido, nada recalculado na leitura), ordenadas por `desiredTime` (o front agrupa por dia), + o "quadro" da barra de encaixe por profissional (`projectedQueueEnd` = fim projetado da fila viva + `openingTime`/`closingTime`). professional/me = 1 frame; client/me = um frame por profissional distinto. Read-only, sem migration. Query `findIntentionsByClient` nova (a `findIntentionsByProfessional` ja existia). Follow-up nao-bloqueante: endpoint publico `professional/{id}` com blocos anonimos p/ o cliente ver a barra de OUTRO profissional ao agendar. Cobertura: `IntentionAgendaIntegrationTest` (professional/me 3+1frame / client/me 2+1frame / vazio / 403 cliente puro em professional/me); Postman folder 08m)** · **Verificar senha atual na troca de senha (Client #13 — `PATCH /profile/update-password/me` passou a exigir `current_password` no corpo (`@NotBlank`), conferido com `PasswordEncoder.matches` contra o hash do usuario do JWT. Nao confere -> `401 CURRENT_PASSWORD_INVALID` e NADA e alterado (senha intacta, tokens nao rotacionados); campo ausente/em branco -> `422 VALIDATION_ERROR` com `fieldErrors.currentPassword`. Portar o token de acesso deixa de bastar para trocar a senha. Sem migration. Handoff de front: campo "senha atual" na tela + excecao no interceptor global de 401 (tratar `CURRENT_PASSWORD_INVALID` como erro de campo, nao como sessao expirada). Cobertura: `ProfileIntegrationTest` (401 senha errada antes do sucesso / 200 / 422 nos dois campos / 401 sem token) + `UpdateProfileUseCasesTest` (unit: senha errada nao encoda, nao salva, nao rotaciona) ; Postman folder 11)** · **Esqueci minha senha — fatia 1 (backlog #1, codigo de 6 digitos). `POST /auth/forgot-password {email}` (publico) gera um codigo de 6 digitos, guarda so o **hash bcrypt** (`password_reset_code`, migration `20-auth/022`), validade 15min / uso unico / max 5 tentativas, e dispara por e-mail via `EmailSender` plugavel (`NoOpEmailSender` default so loga; `SmtpEmailSender` via `JavaMailSender` quando `MAIL_PROVIDER=smtp`). **Sempre 200, exista o e-mail ou nao** (anti-enumeracao). `POST /auth/reset-password {email, code, new_password}` (publico) confere o codigo e troca a senha (uso unico: queima o codigo); erros `400 RESET_CODE_INVALID` (inexistente/errado/usado/esgotado/e-mail desconhecido) e `400 RESET_CODE_EXPIRED` (vencido), `422` de validacao. **Envio real por SMTP = fatia 2** (so config env, sem codigo). Cobertura: `ForgotPasswordIntegrationTest` (ciclo feliz capturando o codigo via `@MockBean EmailSender` + login com senha nova + reuso bloqueado + anti-enumeracao) + `PasswordResetUseCasesTest` (unit: expiracao, trava de 5 tentativas, codigo consumido, e-mail desconhecido) ; Postman folder 01)** · **Apelido no read-back do proprio profissional (Partner BUG10 — `GET /professional/me` e `PATCH /professional/me` passaram a projetar o `nickname` no `ProfessionalQuickCreateResponse`. O apelido SEMPRE persistiu (`BaseUser`, escrito por `PATCH /profile/general-infos`) e ja aparecia em `professionals-with-queue` e na busca do owner — faltava so o campo no DTO do proprio profissional, que e o read-back da tela de perfil do Partner. Leitura pura: o ponto unico de escrita continua sendo `/profile/general-infos`, `PATCH /professional/me` nao altera o apelido (so devolve o valor atual, p/ o front nao perder o campo ao salvar a especialidade). `null` quando nao definido. Sem migration. O campo tambem passou a sair nos demais retornos do mesmo DTO (register/quick-create/affiliate/owner-adds-prof). Front-Partner pode remover a mitigacao local. Cobertura: `ProfessionalNicknameProjectionIntegrationTest` (+2 casos: `/me` expoe o apelido; editar a especialidade nao derruba o apelido do read-back) ; Postman folder 03)** · **Auto-fechamento por horario — prompt + carencia de 15min (S1 fatia 5 / BUG1; fecha o S1 inteiro). "A loja nao pode dormir aberta": quem segue em expediente (`WORKING`/`ON_BREAK`) logo apos o `closing_time` tem a fila fechada (`accepting_new=false`) e ganha uma carencia de 15min (`closing_grace_until`, migration `60-professional/011`), recebendo o prompt "quer fechar?" (WS `CLOSING_PROMPT` no `/user/queue/notifications` + push, com o novo campo `graceUntil` do `QueueNotification` p/ o countdown server-authoritative); os clientes na fila recebem `QUEUE_CLOSING` (seguem sendo atendidos). Vencida sem sinalizacao: sem nada ativo vira `OFF` sozinho (sendo o ultimo, a loja fecha via derivacao da fatia 2); drenando, a carencia e limpa e o auto-OFF fica com o fim da drenagem (fatia 3); expediente ESTENDIDO (o dono mudou o `closing_time` e "agora" voltou a cair dentro), carencia limpa sem fechar nada (auto-correcao — NAO reabre `accepting_new` sozinho, o profissional reabre na mao p/ nao pisar num fechamento manual). **Timer server-side EVENT-DRIVEN** (`EstablishmentAutoCloseScheduler`, `ThreadPoolTaskScheduler` proprio/daemon — mesmo padrao de `IntentionPromotionScheduler`/`CutRequestExpiryScheduler`, NAO usa `@Scheduled`): um unico timer p/ o proximo evento (`AutoCloseService.nextEventAt` = menor carencia pendente OU proximo `closing_time` de loja com presenca); no disparo roda as duas fases (`promptDueClosings`/`applyDueGraces`) e reagenda; `reschedule()` pos-commit engatado em `PATCH /me/status` e `/me/accepting-new`; timer reconstruido no boot (`ApplicationReadyEvent`). Guarda `isPromptDue` gateada em `accepting_new` ainda aberto p/ nao re-promar (nem entrar em busy-loop no `nextEventAt`) quem ja teve a fila fechada. Matematica da janela recorrente (relogio de PAREDE no fuso da loja via `BusinessClock`, mesma disciplina do `is_open`; ver BUG2b) em `ClosingTimeMath`, com horizonte "logo apos o fechamento" (default 6h) que poupa quem chega CEDO. Sem endpoint REST novo — 100% interno. Cobertura: `ClosingTimeMathTest` (matematica pura: janela normal/24h/nula/virada-de-meia-noite/horizonte) + `EstablishmentAutoCloseSchedulerTest` (orquestracao/notificacoes: prompt com e sem fila, auto-OFF rebroadcast, drenagem silenciosa, ocioso). `auto-arm=false` no profile de teste)** · **Auditoria de fuso horario (Partner BUG2 — SEM alteracao de codigo). Varredura de todos os pontos que comparam horario de funcionamento/refeicao (`Establishment.isOpenAt`/`isWithinBusinessHours`, `AttendanceServiceImpl.fitsBeforeClosing`, `ProfessionalIntervalService.validateWithinBusinessHours`, `QueueUtils.buildBlocks`, `ClosingTimeMath`): TODOS ja normalizam offset (`withOffsetSameInstant(UTC)` ou comparacao por instante de `OffsetTime`/`OffsetDateTime`). O deslocamento −3h reportado no QA vinha do DADO (front enviava hora local rotulada "Z"), nao da logica — front ja corrigido (`toApiTime` com offset real). Sem migration: dado ja salvo com "Z" sera re-salvo por Andre pos-OTA (decisao 2026-07-24). Unico `LocalTime.now()` sem offset esta em metodo comentado + `@Scheduled` dormente = codigo morto. ⚠️ **Incompleta — ver BUG2b logo abaixo**)** · **Horario de parede — persistencia do fuso (Partner BUG2b, 2026-07-26; residuo do BUG2 que a auditoria nao pegou). `opening_time`, `closing_time` e `fixedStartTime` eram `OffsetTime` sobre coluna `TIME` (sem timezone): a coluna nao tem onde guardar o offset, entao o Hibernate o descartava normalizando para UTC — o front mandava `"08:00-03:00"`, gravava `11:00` e devolvia `"11:00Z"` (+3h na tela) MESMO com o front ja corrigido. A auditoria de 2026-07-24 olhou a LOGICA de comparacao (correta) e nao a PERSISTENCIA. Agora os tres campos sao `LocalTime` = **relogio de parede no fuso da loja**, e toda comparacao com "agora" (e todo recorte de "hoje") passa pelo novo `BusinessClock` (`domain/shared`, fuso `vupth.timezone`, default `America/Sao_Paulo`, injetado no boot por `BusinessClockConfig`) — `Establishment.isOpenAt`/`isWithinBusinessHours`, `AttendanceServiceImpl.fitsBeforeClosing`, `ProfessionalIntervalService` (validacao da janela + "hoje" do start/skip), `QueueUtils.buildBlocks` (projecao da refeicao no dia da LOJA, nao no dia UTC) e `ClosingTimeMath` (auto-fechamento). **Contrato JSON:** entrada TOLERANTE (o sufixo `Z`/`±HH:MM` e aceito e IGNORADO — os digitos ja sao a hora que o usuario escolheu, valendo tanto pro front antigo quanto pro corrigido, entao o backend virou sem release em lockstep) e saida CANONICA `"HH:MM"` sem offset (`WallClockLocalTimeDeserializer`/`Serializer` no `JacksonConfig`). **Sem migration** — as colunas ja eram `TIME`; muda so o que o Hibernate escreve nelas. Dado legado deslocado se corrige re-salvando pela tela. Cobertura: `WallClockTimeJsonTest` (unit, contrato JSON dos dois lados) + `EstablishmentIsOpenNowTest`/`ClosingTimeMathTest`/`QueueUtilsTest` (unit, migrados p/ parede) + `EstablishmentIntegrationTest` (read-back `"09:00"`) + `IsOpenEffectiveIntegrationTest`; Postman: asserts de read-back sem `Z` nas duas collections)**.
 
 > **BUG8 sintoma (c) — ✅ CONCLUIDO (decisao Andre 2026-07-10: vinculo POR PROFISSIONAL).** Invariante imposta no `createAttendance` (e no guest quando ha itens): todo `serviceItem` do atendimento **tem de pertencer ao profissional escolhido** (`serviceItem.professional == professional`), senao `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`. Casa com a decisao de produto "servico = capacidade do PROFISSIONAL" (cada `ServiceItem` tem dono `professional_id`) e com o `GET /professional/{id}/service-items` que o front ja usa. **Efeito colateral desejado:** profissional sem servico nao pode ser marcado (nao ha item valido para ele). A 1a tentativa quebrava porque a collection agendava o `prof` afiliado com o item do **owner**; corrigido dando ao `prof` o seu **proprio** serviceItem (folder 04 "add service item (prof)") antes das filas. Cobertura: `QueueVisibilityBug8IntegrationTest` (Order 60) + Postman folder 09 (`[ERRO] ... 422`).
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
@@ -2833,6 +3235,7 @@ tela com o app aberto; o push alcanca o cliente com o **app em background/fechad
 1. **"Voce e o proximo"** (`QUEUE_NEXT_IN_LINE`) — quando o cliente passa a ser o **1o da fila de espera** do seu profissional (o proximo a ser atendido). **Deduplicado** pela flag `attendance.next_notified` (migration `80-attendance/008`): 1 push por atendimento ao alcancar a frente — nao reenvia a cada nova mutacao. Disparado junto do broadcast WS da fila (`QueueWebSocketPublisher.broadcastQueue` → `QueuePushService.notifyNextInLine`), best-effort. **Nota:** entrar numa fila vazia ja torna o cliente a frente → recebe o aviso imediatamente (comportamento intencional; front decide a UX).
 2. **`ATTENDANCE_STARTED`** ("É a sua vez!") e **`ATTENDANCE_FINISHED`** — espelham as notificacoes pessoais WS ja existentes (mesmos pontos de `start`/`finish`).
 3. **Swap (#42)** — `SWAP_REQUESTED` (ao alvo) e `SWAP_ACCEPTED`/`SWAP_REJECTED` (ao proponente), espelhando o WS.
+4. **Oferta aberta de troca (`/swap-offers`)** — `SWAP_OFFER_ACCEPTED` **aos DOIS lados** (solicitante e quem aceitou) quando a troca e executada, espelhando o WS pessoal. Cada um recebe o **proprio** `attendanceId` no payload (para recarregar a propria posicao).
 
 Convidados (sem conta) nao recebem push. O payload leva `data.type` (o mesmo type do WS) + `attendanceId`/`establishmentId` para o front rotear.
 
@@ -2849,7 +3252,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 **Conceito:** todo profissional tem duas refeicoes recorrentes — **almoco** e **janta** — que entram na estimativa de espera dos clientes, mas comecam e terminam **manualmente** (o horario cadastrado e so previsao).
 
 **O que JA existe (confirmado no codigo):**
-- `POST /api/v1/professionals/{professionalId}/intervals/recurring` (body: `durationMinutes`, `fixedStartTime` OffsetTime, `recurrencePattern` String, `description`).
+- `POST /api/v1/professionals/{professionalId}/intervals/recurring` (body: `durationMinutes`, `fixedStartTime` LocalTime de parede, `recurrencePattern` String, `description`).
 - `POST /api/v1/professionals/{professionalId}/intervals/unexpected` (body: `durationMinutes`, `startTime` OffsetDateTime, `description`).
 - `GET /api/v1/professionals/{professionalId}/intervals?date=YYYY-MM-DD`.
 - `QueueUtils.calculateWaitingTimeForPosition` — calculo de espera **recorrente-aware** (item d-calc): previsto projeta hoje, desloca pra frente, some na proxima; iniciado conta o restante. (A copia `AttendanceWaitTimeCalculator` foi deletada.)
@@ -2878,7 +3281,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 
   **Calculator vivo:** `QueueUtils.calculateWaitingTimeForPosition` (usado por `QueueServiceImpl`). A copia `AttendanceWaitTimeCalculator` (dead code) foi **deletada** no d-calc.
 
-  **Bug que motivou o d-calc (✅ corrigido):** o calculator antigo ordenava/usava `interval.getStartTime()` (OffsetDateTime), **null para recorrente** (usa `fixedStartTime` OffsetTime). Com o seed (item a) dando recorrentes a todo profissional, qualquer recorrente que chegasse ao calculator dava **NPE/500**. Resolvido pela reescrita do `QueueUtils` (projecao por bloco, null-safe).
+  **Bug que motivou o d-calc (✅ corrigido):** o calculator antigo ordenava/usava `interval.getStartTime()` (OffsetDateTime), **null para recorrente** (usa `fixedStartTime`, hora de parede). Com o seed (item a) dando recorrentes a todo profissional, qualquer recorrente que chegasse ao calculator dava **NPE/500**. Resolvido pela reescrita do `QueueUtils` (projecao por bloco, null-safe).
 
   **Semantica da estimativa (definida pelo Andre):**
   1. **Iniciado** (`isActive && actualStartTime != null`): bloco real, usa `actualStartTime`.
@@ -2901,7 +3304,7 @@ Fluxo definido pelo Andre em 2026-06-14; spec consolidada a partir da secao 11.2
 - (g) **Validacoes**:
   - ✅ **[g1 CONCLUIDO]** `recurrencePattern` restrito a `WEEKDAYS|DAILY|WEEKENDS` (`@Pattern` → 422); `durationMinutes` com teto `@Max(240)` (recurring, unexpected e update). Cobertura: integracao (`IntervalValidationIntegrationTest`) + Postman (folder 12).
   - ✅ **[g2 CONCLUIDO]** Horario de funcionamento estruturado + refeicao cabe na janela:
-    - **(g2a)** `Establishment.openingTime`/`closingTime` (`OffsetTime`, nullable, migration `021-add-establishment-hours`). Editaveis via `PATCH /establishment/{id}/general-infos` (`opening_time`/`closing_time`, semantica PATCH). Expostos em `EstablishmentResponse` e `EstablishmentGeneralInfosResponse`.
+    - **(g2a)** `Establishment.openingTime`/`closingTime` (`LocalTime` de parede, nullable, coluna `TIME`, migration `021-add-establishment-hours`). Editaveis via `PATCH /establishment/{id}/general-infos` (`opening_time`/`closing_time`, semantica PATCH). Expostos em `EstablishmentResponse` e `EstablishmentGeneralInfosResponse`.
     - **(g2b)** Refeicao recorrente tem de **caber na janela** ao criar/editar: `fixedStartTime ≥ abertura` e `fixedStartTime + duracao ≤ fechamento` (ex.: janta 60min nao inicia <60min antes de fechar). So valida quando o establishment tem horario definido; senao nao restringe. Fora da janela → `400 INTERVAL_INVALID_TIME`. Cobertura: `IntervalValidationIntegrationTest`.
     - **(g2c)** **Gate de abertura**: `PATCH /establishment/{id}/open-status → OPEN` exige horario definido; se `null` → `422 ESTABLISHMENT_HOURS_REQUIRED` (codigo proprio, separado do `ESTABLISHMENT_NOT_READY` do #31; o front usa pra encaminhar a tela de horario). Ordem do gate: primeiro #31 (prof+servico), depois horario. Cobertura: `EstablishmentIntegrationTest` (Order 68).
     - **Conflito horario × refeicao existente:** o backend **nao mexe** em refeicoes ja criadas; so impede criar/editar fora da janela. Refeicoes seed (almoco/janta) nascem antes do horario e nao sao revalidadas — o front avisa se ficarem fora.
@@ -3085,6 +3488,40 @@ Decisao 2026-06-25 (Andre). ✅ **Status: BACKEND CONCLUIDO (2026-06-28).** Rest
 - **Front-Client** — botao "trocar de posicao": escolhe outro cliente da fila e chama `POST /swap-requests`. Recebe via WS `SWAP_REQUESTED` (notificacao de proposta recebida) — exibe aceitar/recusar -> `PATCH /swap-requests/{id}?accept=`. WS `SWAP_ACCEPTED`/`SWAP_REJECTED` para o proponente. `GET /swap-requests/me` lista pendentes. Tratar `409` (ja pendente), `422` (fila diferente/ja atendido).
 - **Front-Partner** — sem mudanca obrigatoria; o profissional ja atende fora de ordem via `start` + marca `late` no atrasado.
 
+### Oferta ABERTA de troca de posicao (`/swap-offers`) — Client C13 / Partner S11 (modelo fechado 2026-07-15)
+
+**Status: ✅ COMPLETO (2026-07-27) — fatia 1 (solicitante NA fila, 2026-07-24) + fatia 2 (solicitante FORA da fila, 2026-07-27).**
+
+**Objetivo.** Diferente do `#42 /swap-requests` (DIRIGIDO a um alvo especifico, mantido em paralelo), aqui a troca e uma **oferta ABERTA**: o cliente publica uma direcao e **qualquer cliente elegivel** (por posicao/direcao na mesma fila) pode aceitar. Troca **1-por-1** (so os dois se movem). **NUNCA gera multa** (a troca e mutua, nao deixa buraco). O **partner e PASSIVO** — so reflete a fila pos-troca via `professionals-with-queue`/WS, nao marca LATE.
+
+**Direcao e elegibilidade.** `EARLIER` (o solicitante quer adiantar) aparece para quem esta **A FRENTE** dele (pode ceder o lugar); `LATER` (quer atrasar) aparece para quem esta **ATRAS** (pode subir). Quem aceita assume o outro lado da troca. A posicao e o **indice na fila viva** (`SCHEDULED`/`LATE` ordenados por `scheduledTime`).
+
+**Ciclo de vida (`SwapOfferStatus`):** `OPEN` -> `ACCEPTED` (alguem aceitou, troca executada) / `CANCELLED` (solicitante cancelou) / `EXPIRED` (solicitante saiu da fila — atendido/cancelou; **NAO** expira por fechamento).
+
+**Entidade propria `SwapOffer`** (migration `80-attendance/011` — `swap_offer` + join `swap_offer_service_item`, ja com as colunas da fatia 2: `requester_attendance_id` nullable, `resulting_attendance_id`, serviceItems). Fora de qualquer read-model de fila.
+
+**✅ FATIA 1 (solicitante NA fila) — implementado:**
+- ✅ `POST /swap-offers` (CLIENT): body **na fila** `{attendanceId, direction: EARLIER|LATER}`. attendance validado contra o token (`403` se nao for o dono); so **SCHEDULED** (`422 QUEUE_SWAP_OFFER_NOT_ALLOWED` senao). Cria `OPEN`.
+- ✅ `GET /swap-offers?professionalId=` (CLIENT): ofertas `OPEN` que **o caller pode aceitar**, filtradas por posicao/direcao (exclui as proprias). Quem nao esta na fila daquele profissional recebe lista vazia. Alimenta o **dot** + a lista.
+- ✅ `GET /swap-offers/me` (CLIENT): as ofertas `OPEN` do proprio cliente (para cancelar).
+- ✅ `PATCH /swap-offers/{id}/accept` (CLIENT): revalida elegibilidade (posicao/direcao), **troca os `scheduledTime`** do caller e do solicitante (1-por-1, mesmo padrao do #42) + `updateQueueEstimates` + broadcast WS + notifica **os DOIS lados** — solicitante e quem aceitou — (**`SWAP_OFFER_ACCEPTED`** no `/user/queue/notifications` + push; cada um recebe o **proprio** `attendanceId` no payload). Erros: `404 QUEUE_SWAP_OFFER_NOT_FOUND`, `422` (nao mais OPEN / aceitar a propria / nao elegivel / caller fora da fila).
+- ✅ `DELETE /swap-offers/{id}` (CLIENT): o solicitante cancela (`OPEN -> CANCELLED`, `204`); `403` se nao for o dono, `422` se nao estiver OPEN.
+- ✅ Expiracao por evento: `expireOpenOffersForAttendance` engatado nos MESMOS hooks do #42 (`start`/`cancel`/`leave-queue`/`remove`/...) — `OPEN -> EXPIRED`.
+- ✅ Testes: `SwapOfferInQueueIntegrationTest` (publicar 201/403/422/422-fora-da-fila; listar EARLIER visivel a frente / LATER visivel atras; aceitar troca posicoes / propria oferta 422 / nao-elegivel 422 / fora-da-fila 422 / ja-consumida 422; cancelar 204 + some do /me / nao-dono 403; expira em atendido/cancelado; o accept notifica os DOIS lados). Postman folder **08n** (32 requests, homolog+prod, self-contained).
+
+**✅ FATIA 2 (solicitante FORA da fila) — implementado (2026-07-27):**
+- ✅ `POST /swap-offers` (CLIENT) com body **fora da fila** `{professionalId, serviceItemIds, direction: EARLIER}` cria a oferta com `requester_attendance_id = null` e **posicao implicita = FIM** da fila. Os `serviceItems` vem ja na publicacao porque o atendimento so nasce no aceite — e nasce com a duracao ja escolhida, que a fila precisa para recalcular os ETAs.
+- ✅ **So `EARLIER`**: quem esta fora da fila esta, por definicao, atras de todos — `LATER` -> `422 QUEUE_SWAP_OFFER_NOT_ALLOWED`. Outros `422` do mesmo code: profissional sem estabelecimento; **quem JA esta na fila daquele profissional** publicando como se estivesse fora (a posicao implicita seria mentirosa — o caminho dele e a oferta de dentro, com `attendanceId`). Sem servicos / servico inexistente -> `404 SERVICE_ITEM_NOT_FOUND`; servico de OUTRO profissional -> `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (invariante BUG8c); profissional inexistente -> `404 PROFESSIONAL_NOT_FOUND`.
+- ✅ `GET /swap-offers?professionalId=`: a oferta de fora e visivel a **todos** os que estao na fila (todos estao a frente do "fim"). Ela **some da lista** se o solicitante entrar na fila por conta propria depois de publicar (a posicao implicita deixou de valer = oferta obsoleta, mesmo tratamento do solicitante que ja saiu da fila na fatia 1).
+- ✅ `PATCH /swap-offers/{id}/accept`: **quem aceitou cede a vaga e vai pro FIM** (`scheduledTime = ultimo + 1min`, mesma aritmetica do `move-to-end`, limpando intent/targetTime) e o **solicitante nasce naquela vaga** — `AttendanceService.createScheduledFromSwapOffer` cria o `Attendance` SCHEDULED **no slot cedido** (nao na cauda), reusando o meal-lock (#37) e bypassando o gate C1 pelo mesmo motivo do corte aceito: o consentimento de quem ja estava dentro e a autorizacao. O id vai em `resulting_attendance_id` na resposta. **Continua 1-por-1**: so os dois se movem. Notifica os DOIS lados (`SWAP_OFFER_ACCEPTED`). `422` se o solicitante entrou na fila no meio-tempo (oferta obsoleta).
+  - ⚠️ **Ordem importa:** quem aceitou sai da vaga **antes** de o atendimento novo ser criado nela — senao os dois dividiriam o mesmo `scheduledTime` e o meal-lock contaria a posicao errada.
+- ✅ **Expiracao:** a oferta de fora **nao** tem atendimento para expirar por evento (o solicitante nao esta na fila) — ela vive ate ser aceita ou cancelada, exatamente como o modelo pede ("expira SO quando o solicitante e atendido/sai da fila"). O `DELETE` do solicitante segue sendo o caminho de saida.
+- ✅ Testes: `SwapOfferOutOfQueueIntegrationTest` (publicar 201 sem `requesterAttendanceId` / LATER 422 / sem servicos 404 / servico de outro prof 422 / sem token 401; visivel a TODOS na fila e nao ao proprio; aceitar = solicitante na vaga cedida + quem aceitou pro fim + avisa os dois; aceitar sendo o ultimo; caller fora da fila 422; propria oferta 422; ja consumida 422; solicitante entrou na fila no meio-tempo -> some da lista e 422; cancelar 204 + some do `/me` / nao-dono 403). Postman folder **08n** (renomeada "fatias 1 e 2", +12 requests, homolog+prod).
+
+**📣 HANDOFF PARA OS FRONTS:**
+- **Front-Client** — botao **"Trocar"** + **dot** quando `GET /swap-offers?professionalId=` retorna oferta aceitavel. Criar na fila via `ChangeTurnModal` (Adiantar=`EARLIER`/Atrasar=`LATER`). Lista "meus pedidos" = `GET /swap-offers/me` (cancelar via `DELETE`). Rotear WS **`SWAP_OFFER_ACCEPTED`** — **chega para os DOIS lados** (quem ofertou E quem aceitou), cada um com o seu proprio `attendanceId`; o app so precisa recarregar a posicao (quem aceitou tambem tem a resposta HTTP do `accept`). **Fora da fila (fatia 2) JA VALE:** publicar com `{professionalId, serviceItemIds, direction: "EARLIER"}` (so EARLIER — fora da fila a posicao ja e o fim); ao ser aceita, o cliente **entra na fila** no lugar cedido e o `attendanceId` novo chega em `resultingAttendanceId` (resposta do `accept` para quem aceitou; WS `SWAP_OFFER_ACCEPTED` com o proprio `attendanceId` para o solicitante). Erros a tratar: `422` (LATER, ou ja estar na fila daquele profissional — nesse caso use a oferta de dentro), `404` (sem servicos), `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (servico de outro profissional). **Isto destrava a UI "Trocar" + dot (F8) por completo.**
+- **Front-Partner** — nada a fazer; a fila pos-troca ja chega via `professionals-with-queue`/WS.
+
 ### Item 43 — Remanejar cliente com espera longa (escolher horario / ir pro fim da fila)
 
 Decisao 2026-06-28. ✅ **Status: BACKEND CONCLUIDO (2026-07-03).** Resta so os fronts.
@@ -3174,3 +3611,112 @@ Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: espec
 3. **Reversao:** permitir **desfazer** o skip do dia (ex.: `DELETE .../skip?date=`) ou e irreversivel ate o dia seguinte.
 4. **Interacao com o lock (#37):** o "Nao almocar" **sobrepoe** o lock — derruba inclusive clientes que ja tinham travado a refeicao. Se o lock (#37) for implementado depois, este endpoint e o gatilho explicito do override.
 5. **Tempo real:** apos o skip, publicar atualizacao da fila (WebSocket, secao 18b) para os clientes verem o ETA cair.
+
+### Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro (backlog #2, modelo fechado 2026-07-27)
+
+**Status: ESPECIFICADO, nao implementado.** Esta secao e o handoff para os fronts — Client e Partner podem ler daqui.
+
+**Decisao de produto (Andre 2026-07-27).** O cliente baixa o app, **concede o GPS e ja ve os estabelecimentos proximos SEM ter conta**. A lista de perto e a **isca do cadastro**, nao o premio dele: o cadastro so e exigido quando ele for **entrar numa fila**.
+
+**⚠️ RESTRICAO DE CUSTO (inegociavel): implementar SEM gerar custo.** Nada de Google Maps / Geocoding API paga. O desenho abaixo existe para caber em free tier.
+
+#### O que JA existe (nao precisa construir)
+- **`GET /establishment` (e `/establishment/**`) ja e `permitAll`** (`SecurityConfig`) — a vitrine anonima **ja funciona hoje**, sem token. O front nao precisa esperar nada para listar sem login.
+- **`addresses` ja tem as colunas `latitude` / `longitude`** (`DOUBLE PRECISION`, nullable, migration `00-foundation/001`), expostas em `EstablishmentAddressResponse` / `AddressResponse` e aceitas em `AddressRequest` / `UpdateAddressRequest`.
+- **`RestClient`** ja e usado no projeto (`ExpoPushSender`) — **zero dependencia nova** para chamar o geocoder.
+
+#### O que falta (as 3 fatias)
+
+**Fatia A — preencher a coordenada (geocoding).** Hoje `latitude`/`longitude` so entram se quem cadastra mandar, entao na pratica estao **nulas** — sem elas nao ha de onde calcular distancia. Geocodificar o endereco **no cadastro/edicao do estabelecimento** (nunca por request de busca):
+1. **BrasilAPI CEP v2** — `GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates.{latitude,longitude}`. **Gratuita, sem chave, sem cadastro.** Primaria.
+2. **Nominatim / OpenStreetMap** — fallback quando o CEP nao trouxer coordenada. Gratuito, mas a **policy de uso e obrigatoria**: `User-Agent` proprio identificando o app, **maximo 1 req/s**, sem bulk.
+3. **Coordenada PERSISTIDA** em `addresses.latitude/longitude` = **cache permanente**. Geocodifica **uma vez por endereco**, nunca por busca — e isso que mantem o volume dentro de qualquer free tier.
+4. **Backfill** dos enderecos ja cadastrados: script/job unico, serializado a 1 req/s.
+5. **Falha do geocoding NAO pode quebrar o cadastro** — grava sem coordenada; o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior).
+
+**✅ FATIA A IMPLEMENTADA (2026-07-27).** Como ficou:
+- **`Geocoder`** (`infrastructure/geocoding`) — interface com um contrato duro: **nunca lanca**; nao resolveu, devolve `Optional.empty()`. Duas implementacoes, selecionadas por `vupth.geocoding.provider` (mesmo padrao de `vupth.push.provider` / `vupth.mail.provider`): **`HttpGeocoder`** (`http`, default) e **`NoOpGeocoder`** (`none`, **usado nos testes** — nenhuma suite toca a rede).
+- **`HttpGeocoder`** — BrasilAPI CEP v2 primeiro; se o CEP nao trouxer coordenada, cai no Nominatim por endereco textual (`countrycodes=br`, `limit=1`). A policy do Nominatim e cumprida no codigo: `User-Agent` proprio configuravel e **intervalo minimo de 1,1s** entre chamadas. Timeouts de conexao/leitura configuraveis (5s default). Tolera os valores virem como **string** (a BrasilAPI manda `"-43.2764"`).
+- **`Coordinates.isPlausible()`** — descarta coordenada fora do globo **e o par (0,0)**: a "ilha nula" no Golfo da Guine e o que um geocoder devolve quando na verdade nao achou nada, e gravar isso poria a loja como a mais distante do mundo em qualquer busca.
+- **`AddressGeocodingService`** (`domain/address/service`) — orquestra. **Roda FORA do request**: o cadastro registra a resolucao para **depois do commit** (`TransactionSynchronization.afterCommit`) numa **unica thread daemon**. Tres consequencias deliberadas: (1) o dono nao espera a chamada externa; (2) geocoder fora do ar **nao derruba o cadastro**; (3) serializar torna trivial respeitar o 1 req/s. A chamada externa acontece **fora da transacao** (rede nao segura conexao de banco) e a gravacao vem numa transacao curta.
+- **Nao regeocodifica**: endereco que ja tem `latitude`/`longitude` e ignorado. E o que garante "uma chamada externa por endereco na vida" — a base do custo zero.
+- **Backfill** — `AddressGeocodingService.backfillMissingCoordinates()` enfileira os enderecos sem coordenada (`AddressRepository.findByLatitudeIsNullOrLongitudeIsNull`). Disparado no boot **so** com `vupth.geocoding.backfill-on-boot=true` (default `false`): ligar quando houver dado legado, esperar drenar (1 req/s) e desligar.
+- **Hook**: `EstablishmentAddressServiceImpl.registerAddress`. **Sem migration** (as colunas ja existiam) e **sem dependencia nova** (`RestClient`).
+- **Config**: `vupth.geocoding.{provider,brasilapi.url,nominatim.url,user-agent,timeout-seconds,backfill-on-boot}`, todas com env var. ⚠️ **`GEOCODING_USER_AGENT` deve identificar a aplicacao e um contato real** — e exigencia da policy do Nominatim, requisicao anonima pode ser bloqueada.
+- **Testes**: `GeocodingContractTest` (unit, 6 — plausibilidade, ilha nula, CEP de 8 digitos, busca livre exige rua+cidade, NoOp) · `AddressGeocodingServiceTest` (unit Mockito, 7 — grava a coordenada, monta a query, **pula o ja geocodificado**, nao grava quando nao resolve, **engole a excecao do geocoder**, endereco inexistente, backfill) · `AddressGeocodingIntegrationTest` (4 — cadastro ganha coordenada pos-commit; **geocoder explodindo mantem o 201 e deixa sem coordenada**; nao encontrado idem; a query leva CEP/rua/cidade do cadastro).
+
+**Fatia A2 — coordenada do APARELHO DO DONO + confirmacao na tela (decisao Andre 2026-07-27).** ⬜ a implementar.
+
+**Ideia.** O dono esta *fisicamente na loja* quando cadastra, entao o GPS do aparelho dele e a **fonte mais precisa que existe** — melhor que qualquer CEP, que no Brasil resolve para faixa de logradouro e nao para a porta. O Partner pede a permissao de localizacao explicando que **e assim que a loja passa a ser encontrada** pelos clientes.
+
+**O backend JA aceita isso — sem codigo novo.** `AddressRequest` ja tem `latitude`/`longitude`, o `AddressMapper` (MapStruct puro) mapeia por nome, e o `AddressGeocodingService` **pula endereco que ja tem coordenada**. Coordenada enviada no cadastro e persistida e o geocoding externo nem roda.
+
+**Confirmacao na tela (geocodificacao REVERSA).** So mandar a coordenada nao basta: o dono pode estar em casa, e coordenada errada e **pior que coordenada nenhuma**, porque parece certa. Solucao: a partir do `lat`/`lng` do aparelho, devolver o **endereco por extenso** para ele conferir e completar. Isso substitui — com vantagem — a ideia anterior de comparar a coordenada com o CEP e "desconfiar" em silencio: o dono **ve** o endereco escrito e percebe o erro na hora.
+- **Endpoint novo:** `GET /geocoding/reverse?lat=&lng=` (autenticado, OWNER/PROFESSIONAL) -> sugestao `{street, neighborhood, city, state, zipCode}`. Implementado sobre **Nominatim `/reverse`** (`format=jsonv2`) — gratuito, mesma policy ja cumprida pelo `HttpGeocoder` (User-Agent proprio, 1 req/s). A BrasilAPI **nao** faz reverso (e so CEP -> dados).
+- **Por que passar pelo backend** e nao o app chamar o Nominatim direto: um unico `User-Agent` e um unico rate limiter para toda a aplicacao (a policy e por cliente, nao por usuario), sem CORS e sem espalhar a dependencia externa pelos fronts.
+- **A sugestao e EDITAVEL, nunca aplicada sozinha.** A cobertura de numero predial do OSM no Brasil e irregular: o reverso costuma acertar rua/bairro/cidade e errar ou omitir o numero. O dono confirma e **poli** numero, complemento e referencia.
+- **Regra central:** o texto do endereco e a coordenada vem de **fontes diferentes e ambos ficam**. Editar numero/complemento **nao move** a coordenada — ela continua sendo a do aparelho, que e a boa. Nao regeocodificar depois da edicao.
+- **Validar sempre** a coordenada recebida com `Coordinates.isPlausible()` (fora do globo ou `(0,0)` -> `422`). Hoje o backend aceita qualquer `latitude`/`longitude` do request **sem checar** — e o unico buraco real deste caminho.
+- **Prioridade da fonte:** GPS do aparelho (confirmado na tela) > BrasilAPI por CEP > Nominatim por endereco textual > sem coordenada.
+- ⚠️ **Depende do backlog #3** (`PATCH` do endereco): hoje so existe `POST`, entao um cadastro com coordenada errada nao tem conserto pela API.
+
+**Fatia B — filtro e ordenacao por raio.** `GET /establishment?lat=&lng=&radiusKm=` (**sem token**, como hoje):
+- **Haversine em SQL puro** (`acos`/`radians` em query nativa), **sem PostGIS** — a extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume nao justifica indice espacial.
+- Resposta ganha **`distance_km`** (arredondado a 1 casa) em **cada item da listagem** — **e esse o campo que o card do cliente exibe** (decisao Andre 2026-07-27: "a distancia entre o cliente e o estabelecimento vai nas informacoes do card"). O calculo e do BACKEND: o front **nao** deve derivar distancia por conta propria, pelo mesmo motivo do buffer de ETA (#9) — client e partner tem que mostrar o MESMO numero.
+- **`distance_km` so existe se `lat`/`lng` forem enviados.** Sem GPS (Fatia C) o campo vem **`null`** e o card simplesmente **omite a linha de distancia** — nunca mostrar "0 km" nem "-" nesse caso, que seria mentira.
+- Estabelecimento com coordenada ausente, numa busca **sem** raio: aparece na lista com `distance_km: null` (mesmo tratamento do sem-GPS).
+- **✅ DECIDIDO (Andre 2026-07-27) — opcao A: SEM raio default.** Com `lat`/`lng` e **sem** `radiusKm`, a busca devolve **tudo ordenado por distancia crescente** (a "lista de perto" e simplesmente o topo). `radiusKm` e filtro **opcional e explicito**: so corta quando o front pede. **Motivo:** raio default criaria tela vazia para quem abre o app numa regiao sem loja cadastrada — e o usuario nao distingue "nao tem nada perto" de "o app nao funciona". A alternativa (raio default + fallback para os N mais proximos quando vazio) e a opcao A com passos a mais.
+- **Estabelecimento sem coordenada:** **sem** `radiusKm` ele aparece no **fim** da lista com `distance_km: null` (nao some). **Com** `radiusKm` ele sai do resultado — a pergunta passa a ser "o que esta a ate X km" e sem coordenada nao ha resposta.
+- **Validar `lat`/`lng` de entrada** (`-90..90` / `-180..180`) -> `422`. Coordenada fora do globo faria a ordenacao inteira virar lixo silenciosamente.
+- **Ordenacao ESTAVEL** (`ORDER BY distancia, id`): sem desempate deterministico, dois estabelecimentos equidistantes podem trocar de lugar entre requests e a paginacao (#17) passaria a repetir/pular itens.
+- **Escala:** sem raio, o Haversine e calculado sobre a base toda a cada request (sequential scan + sort). Aceitavel no volume atual; se pesar, o passo seguinte e um **pre-filtro por bounding box** (`lat BETWEEN ? AND ?` com indice) para reduzir os candidatos ANTES do Haversine — e nao PostGIS.
+- Estabelecimento **sem coordenada** fica fora do resultado com raio (nao da para medir) — por isso a Fatia A vem antes.
+
+**Fatia C — fallback sem GPS.** Permissao negada / GPS indisponivel → o front chama **sem** `lat`/`lng` e recebe a listagem atual (ordenacao por cidade/nome). **A lista NUNCA pode vir vazia so porque o usuario negou a permissao.**
+
+> ⚠️ **A fatia C nao e opcional nem mesmo se 100% dos usuarios autorizarem o GPS.** "Permissao concedida" e "tem coordenada agora" sao coisas diferentes: o aparelho pode estar sem fix (dentro de loja/predio), com a localizacao do SISTEMA desligada, em modo aviao, ou simplesmente demorar mais que o timeout. O app precisa do caminho sem `lat`/`lng` para **todo** request em que a coordenada nao chegou a tempo — nao so para quem clicou "negar".
+
+#### Dados de teste — seed Liquibase com 4 pontos reais do Rio (Andre 2026-07-27)
+Para testar distancia de verdade e preciso ter estabelecimentos **espalhados**. Entram no seed existente (`changesets/10-stubs/012-seed-data.yaml`, **`context: "!prod"`** → dev, test e staging; **nunca em producao**), com endereco em `addresses` + vinculo em `establishment_addresses`:
+
+| Estabelecimento (seed) | Bairro / municipio | Lat | Lng | Distancia da Penha |
+|---|---|---|---|---|
+| **Barbearia do Ricardo** (ja existia) | **Penha**, Rio de Janeiro | −22.8422 | −43.2764 | 0 km — **ponto de referencia das buscas** |
+| **Studio Beleza Total** (ja existia) | **Duque de Caxias** (centro) | −22.7858 | −43.3117 | **7,2 km** |
+| **Salao Nova Era** (novo no seed) | **Belford Roxo** (centro) | −22.7642 | −43.3997 | **15,3 km** |
+| **Barbearia Icarai** (nova no seed) | **Niteroi**, Icarai | −22.8833 | −43.1036 | **18,3 km** |
+
+As duas lojas que ja existiam no seed **ganharam endereco** (nenhum estabelecimento semeado fica sem); as duas novas nascem com **1 profissional + 1 servico** cada — sem servico elas sumiriam do `professionals-with-queue` (#31) e do filtro do client (`available_professionals > 0`), e um ponto do mapa invisivel nao testa nada. Enderecos ficticios, `context: "!prod"`.
+
+> As coordenadas acima sao **aproximadas do centro de cada bairro/municipio** — servem para teste de distancia, nao sao endereco real de ninguem. Conferir/ajustar se algum ponto precisar ser exato.
+
+**Matriz de teste que esses 4 pontos permitem** (buscando a partir da Penha):
+- `radiusKm=10` → so **Penha + Duque de Caxias** (2 resultados);
+- `radiusKm=16` → **+ Belford Roxo** (3);
+- `radiusKm=20` → **os 4**;
+- **ordenacao esperada:** Penha (0) → Caxias (7,2) → Belford Roxo (15,3) → Niteroi (18,3);
+- **sem `lat`/`lng`** → os 4 aparecem na ordenacao normal (fallback da Fatia C);
+- estabelecimento **sem coordenada** → some do resultado com raio, aparece sem raio.
+
+Como o seed roda em **staging** (`!prod`), os fronts conseguem exercitar a busca por proximidade no Render sem cadastrar nada.
+
+**📣 HANDOFF PARA OS FRONTS:**
+- **Front-Client** — pedir a **permissao de localizacao ANTES do login/cadastro**, junto do portao `waitForBackend` (secao 18c: o Render Free hiberna, o portao ja segura a tela inicial — a permissao de GPS cabe no mesmo momento). Com permissao: chamar a listagem publica com `lat`/`lng` (+ `radiusKm`) e **exibir `distance_km` nas informacoes do card** (o backend ja manda pronto e arredondado — nao calcular no app). Sem permissao: chamar **sem** os params e mostrar a lista normal — nunca tela vazia. **A listagem ja e publica hoje**, entao a tela de "estabelecimentos proximos" pode ser construida antes mesmo das fatias A/B; enquanto `distance_km` nao existir, so nao ha ordenacao por distancia.
+- **Front-Partner** — nada a fazer na busca. O unico impacto e no **cadastro/edicao do estabelecimento**: o endereco passa a ser geocodificado no backend, entao **CEP e numero corretos importam** (CEP errado = estabelecimento sem coordenada = invisivel na busca por proximidade). Nao e preciso o partner enviar `latitude`/`longitude` — o backend preenche.
+
+#### ✅ TESTES QUE CADA FRONT PRECISA IMPLEMENTAR (Andre 2026-07-27)
+O seed dos 4 pontos existe justamente para isto: os fronts conseguem rodar os casos abaixo contra **staging** (o seed roda em `!prod`), sem cadastrar nada e **sem login**. Buscas feitas a partir da **Penha** (`lat=-22.8422&lng=-43.2764`).
+
+**Front-Client:**
+1. **Vitrine anonima** — abrir o app **sem conta** e listar estabelecimentos. Nao pode exigir token (a listagem ja e publica hoje).
+2. **Portao de permissao** — o pedido de localizacao acontece **antes** do login/cadastro, junto do `waitForBackend` (secao 18c).
+3. **Raio** — `radiusKm=10` → **2** lojas (Penha, Caxias); `radiusKm=16` → **3** (+ Belford Roxo); `radiusKm=20` → **4** (+ Niteroi).
+4. **Ordenacao** — Barbearia do Ricardo (0) → Studio Beleza Total (7,2) → Salao Nova Era (15,3) → Barbearia Icarai (18,3).
+5. **Card** — a linha de distancia mostra o `distance_km` que veio do backend; **nao** recalcular no app.
+6. **Permissao NEGADA** — chamar **sem** `lat`/`lng`: a lista vem completa na ordenacao normal e o card **omite** a linha de distancia (`distance_km: null`). **A tela nunca pode ficar vazia por falta de permissao** — este e o caso de teste mais importante dos seis.
+7. **Troca de posicao FORA da fila** (`/swap-offers` fatia 2, ja ENTREGUE) — publicar `{professionalId, serviceItemIds, direction: "EARLIER"}` sem estar na fila; quando alguem aceita, o cliente **entra na fila** e o `attendanceId` novo chega em `resultingAttendanceId` / no WS `SWAP_OFFER_ACCEPTED`. Erros a cobrir: `422` (LATER, ou ja estar na fila daquele profissional), `404` (sem servicos), `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`.
+
+**Front-Partner:**
+1. **Cadastro com CEP valido** → apos salvar, o estabelecimento **aparece** na busca por raio (tem coordenada).
+2. **Cadastro com CEP que nao geocodifica** → o cadastro **conclui normalmente** (nao pode quebrar), mas a loja **nao aparece** no resultado com raio — e **continua aparecendo** na listagem sem raio. E o caso que expoe o dado incompleto pro dono.
+3. **Nada na busca por proximidade** — o partner nao consome `lat`/`lng`/`distance_km`.

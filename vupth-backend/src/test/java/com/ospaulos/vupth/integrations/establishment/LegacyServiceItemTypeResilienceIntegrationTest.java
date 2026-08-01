@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -41,6 +42,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = VupthApplication.class)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+// Este teste depende do dado SEMEADO (012-seed-data) estar presente e listavel na
+// GET /establishment. Sob reuseForks=true o DB e compartilhado entre classes e varias
+// chamam deleteAll(), apagando o seed; um contexto reusado nao o restaura. BEFORE_CLASS
+// forca um contexto fresco -> Liquibase drop-first re-roda -> seed re-inserido antes desta
+// classe. Custo: um boot extra para esta unica classe (desprezivel perto do ganho do reuse).
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_CLASS)
 @DisplayName("GET /establishment — resiliente a service_item_type legado/invalido")
 class LegacyServiceItemTypeResilienceIntegrationTest {
 

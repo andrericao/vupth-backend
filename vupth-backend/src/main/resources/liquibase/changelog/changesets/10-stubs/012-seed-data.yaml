@@ -449,3 +449,224 @@ databaseChangeLog:
             tableName: client
             columns:
               - column: { name: id, value: "c2fe3d4e-c1bf-9ae2-8fca-65f73a7f324e" }
+  # ── ENDERECOS + GEO (backlog #2 — busca por proximidade / GPS) ─
+  # Todo estabelecimento semeado passa a ter endereco COM latitude/longitude, em 4 pontos
+  # espalhados do Grande Rio, para exercitar o filtro por raio de verdade:
+  #
+  #   Penha (RJ)        -22.8422 / -43.2764   <- ponto de referencia das buscas
+  #   Duque de Caxias   -22.7858 / -43.3117    7,2 km da Penha
+  #   Belford Roxo      -22.7642 / -43.3997   15,3 km da Penha
+  #   Niteroi           -22.8833 / -43.1036   18,3 km da Penha
+  #
+  # Buscando a partir da Penha: radiusKm=10 -> 2 lojas; 16 -> 3; 20 -> 4.
+  # Ordem esperada por distancia: Penha -> Caxias -> Belford Roxo -> Niteroi.
+  #
+  # As coordenadas sao aproximadas do CENTRO de cada bairro/municipio e os enderecos sao
+  # ficticios (dado de teste, nao e endereco real de ninguem). context "!prod" -> nunca em producao.
+  - changeSet:
+      id: seed-establishment-addresses-geo
+      author: vupth-seed
+      context: "!prod"
+      validCheckSum: ANY
+      changes:
+        # ── Barbearia do Ricardo -> Penha, Rio de Janeiro ──────────
+        - insert:
+            tableName: addresses
+            columns:
+              - column: { name: id,           value:        "b2789a58-d410-58f4-9b38-1853970710f6" }
+              - column: { name: street,       value:        "Avenida Bras de Pina" }
+              - column: { name: number,       value:        "100" }
+              - column: { name: neighborhood, value:        "Penha" }
+              - column: { name: city,         value:        "Rio de Janeiro" }
+              - column: { name: state,        value:        "RJ" }
+              - column: { name: zip_code,     value:        "21012000" }
+              - column: { name: latitude,     valueNumeric: -22.8422 }
+              - column: { name: longitude,    valueNumeric: -43.2764 }
+              - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,   valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: establishment_addresses
+            columns:
+              - column: { name: id,               value:        "f076bea8-c182-58e8-951a-b31104cad641" }
+              - column: { name: establishment_id, value:        "6908671e-aa13-7cfa-d99c-fea4a4102d66" }
+              - column: { name: address_id,       value:        "b2789a58-d410-58f4-9b38-1853970710f6" }
+              - column: { name: is_main,          valueBoolean: true }
+              - column: { name: is_active,        valueBoolean: true }
+
+        # ── Studio Beleza Total -> Duque de Caxias ─────────────────
+        - insert:
+            tableName: addresses
+            columns:
+              - column: { name: id,           value:        "0ee12cc3-9398-5e1d-8007-a5e4ae24b1be" }
+              - column: { name: street,       value:        "Avenida Presidente Vargas" }
+              - column: { name: number,       value:        "200" }
+              - column: { name: neighborhood, value:        "Centro" }
+              - column: { name: city,         value:        "Duque de Caxias" }
+              - column: { name: state,        value:        "RJ" }
+              - column: { name: zip_code,     value:        "25010000" }
+              - column: { name: latitude,     valueNumeric: -22.7858 }
+              - column: { name: longitude,    valueNumeric: -43.3117 }
+              - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,   valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: establishment_addresses
+            columns:
+              - column: { name: id,               value:        "b58acbc9-5a72-51e9-874b-0c2d20c09376" }
+              - column: { name: establishment_id, value:        "6c0e76f9-631b-1f6f-21c5-ddb8b9a21972" }
+              - column: { name: address_id,       value:        "0ee12cc3-9398-5e1d-8007-a5e4ae24b1be" }
+              - column: { name: is_main,          valueBoolean: true }
+              - column: { name: is_active,        valueBoolean: true }
+
+        # ── Salao Nova Era (NOVO) -> Belford Roxo ──────────────────
+        # Loja nova com 1 profissional + 1 servico: sem servico ela sumiria do
+        # professionals-with-queue (#31) e do filtro do client (available_professionals > 0).
+        - insert:
+            tableName: establishment
+            columns:
+              - column: { name: id,                 value:         "07c4550f-027c-510e-add7-cc35591ca385" }
+              - column: { name: name,               value:         "Salao Nova Era" }
+              - column: { name: status,             value:         "ACTIVE" }
+              - column: { name: current_open_status, value:        "OPEN" }
+              - column: { name: owner_id,           value:         "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: created_at,         valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: last_status_change, valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: addresses
+            columns:
+              - column: { name: id,           value:        "3a45515a-3728-5e35-a37b-78bca736d38b" }
+              - column: { name: street,       value:        "Avenida Joaquim da Costa Lima" }
+              - column: { name: number,       value:        "300" }
+              - column: { name: neighborhood, value:        "Centro" }
+              - column: { name: city,         value:        "Belford Roxo" }
+              - column: { name: state,        value:        "RJ" }
+              - column: { name: zip_code,     value:        "26110000" }
+              - column: { name: latitude,     valueNumeric: -22.7642 }
+              - column: { name: longitude,    valueNumeric: -43.3997 }
+              - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,   valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: establishment_addresses
+            columns:
+              - column: { name: id,               value:        "4183a825-482e-565f-aeab-59d6019af051" }
+              - column: { name: establishment_id, value:        "07c4550f-027c-510e-add7-cc35591ca385" }
+              - column: { name: address_id,       value:        "3a45515a-3728-5e35-a37b-78bca736d38b" }
+              - column: { name: is_main,          valueBoolean: true }
+              - column: { name: is_active,        valueBoolean: true }
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "66fbd472-2677-5265-b8dd-e889a2a4671d" }
+              - column: { name: first_name,  value:        "Juliana" }
+              - column: { name: last_name,   value:        "Rocha" }
+              - column: { name: email,       value:        "juliana.rocha@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: phone,       value:        "21999990021" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a5000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "66fbd472-2677-5265-b8dd-e889a2a4671d" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a5000001-0000-0000-0000-000000000002" }
+              - column: { name: base_user_id,  value:        "66fbd472-2677-5265-b8dd-e889a2a4671d" }
+              - column: { name: role_type,     value:        "PROFESSIONAL" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: professional
+            columns:
+              - column: { name: id,               value:        "66fbd472-2677-5265-b8dd-e889a2a4671d" }
+              - column: { name: specialty,        value:        "Escova e Hidratacao" }
+              - column: { name: is_available,     valueBoolean: true }
+              - column: { name: establishment_id, value:        "07c4550f-027c-510e-add7-cc35591ca385" }
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "7ba9fff9-244f-554f-a834-0ba1b064cb2d" }
+              - column: { name: professional_id,   value:        "66fbd472-2677-5265-b8dd-e889a2a4671d" }
+              - column: { name: service_item_type, value:        "PINTURA" }
+              - column: { name: custom_name,       value:        "Escova Modeladora" }
+              - column: { name: price,             valueNumeric:  60.00 }
+              - column: { name: estimated_minutes, valueNumeric:  40 }
+
+        # ── Barbearia Icarai (NOVO) -> Niteroi ─────────────────────
+        - insert:
+            tableName: establishment
+            columns:
+              - column: { name: id,                 value:         "4143d102-c041-55a1-bb53-0b6407708a9b" }
+              - column: { name: name,               value:         "Barbearia Icarai" }
+              - column: { name: status,             value:         "ACTIVE" }
+              - column: { name: current_open_status, value:        "OPEN" }
+              - column: { name: owner_id,           value:         "4ef5ba0c-918c-537f-adba-2ada54e3dd68" }
+              - column: { name: created_at,         valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: last_status_change, valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: addresses
+            columns:
+              - column: { name: id,           value:        "2036033d-865d-5730-8f34-cb04c7453746" }
+              - column: { name: street,       value:        "Rua Gaviao Peixoto" }
+              - column: { name: number,       value:        "400" }
+              - column: { name: neighborhood, value:        "Icarai" }
+              - column: { name: city,         value:        "Niteroi" }
+              - column: { name: state,        value:        "RJ" }
+              - column: { name: zip_code,     value:        "24230100" }
+              - column: { name: latitude,     valueNumeric: -22.8833 }
+              - column: { name: longitude,    valueNumeric: -43.1036 }
+              - column: { name: created_at,   valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,   valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: establishment_addresses
+            columns:
+              - column: { name: id,               value:        "63f916e3-5f73-59f5-8c16-d5dca1e12127" }
+              - column: { name: establishment_id, value:        "4143d102-c041-55a1-bb53-0b6407708a9b" }
+              - column: { name: address_id,       value:        "2036033d-865d-5730-8f34-cb04c7453746" }
+              - column: { name: is_main,          valueBoolean: true }
+              - column: { name: is_active,        valueBoolean: true }
+        - insert:
+            tableName: base_user
+            columns:
+              - column: { name: id,         value:        "0aee5fff-fb2e-5dee-9984-e1f35f5091b0" }
+              - column: { name: first_name,  value:        "Rafael" }
+              - column: { name: last_name,   value:        "Moreira" }
+              - column: { name: email,       value:        "rafael.moreira@seed.dev" }
+              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: phone,       value:        "21999990022" }
+              - column: { name: is_active,   valueBoolean: true }
+              - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
+              - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a6000001-0000-0000-0000-000000000001" }
+              - column: { name: base_user_id,  value:        "0aee5fff-fb2e-5dee-9984-e1f35f5091b0" }
+              - column: { name: role_type,     value:        "CLIENT" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: user_roles
+            columns:
+              - column: { name: id,           value:        "a6000001-0000-0000-0000-000000000002" }
+              - column: { name: base_user_id,  value:        "0aee5fff-fb2e-5dee-9984-e1f35f5091b0" }
+              - column: { name: role_type,     value:        "PROFESSIONAL" }
+              - column: { name: is_active,     valueBoolean: true }
+        - insert:
+            tableName: professional
+            columns:
+              - column: { name: id,               value:        "0aee5fff-fb2e-5dee-9984-e1f35f5091b0" }
+              - column: { name: specialty,        value:        "Corte Masculino" }
+              - column: { name: is_available,     valueBoolean: true }
+              - column: { name: establishment_id, value:        "4143d102-c041-55a1-bb53-0b6407708a9b" }
+        - insert:
+            tableName: service_item
+            columns:
+              - column: { name: id,                value:        "f3c33403-c81d-5055-9c79-1cda15ca2fed" }
+              - column: { name: professional_id,   value:        "0aee5fff-fb2e-5dee-9984-e1f35f5091b0" }
+              - column: { name: service_item_type, value:        "CORTE_MAQUINA" }
+              - column: { name: custom_name,       value:        "Corte Degrade" }
+              - column: { name: price,             valueNumeric:  45.00 }
+              - column: { name: estimated_minutes, valueNumeric:  30 }

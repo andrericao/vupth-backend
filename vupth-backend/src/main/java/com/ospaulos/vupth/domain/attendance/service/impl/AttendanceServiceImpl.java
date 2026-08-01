@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.attendance.service.impl;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
@@ -12,6 +13,14 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowed
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
+import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
+import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
+import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.AgendaFrameResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -21,8 +30,10 @@ import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAcceptingNewException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -42,7 +53,9 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -229,6 +242,285 @@ public class AttendanceServiceImpl implements AttendanceService {
                 targetTime, slot, duration, alreadyInQueue);
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // INTENCAO DE ATENDIMENTO (backlog #4 / status INTENTION — fora da fila)
+    // ─────────────────────────────────────────────────────────────
+
+    /** Horizonte maximo (dias) para manifestar intencao enquanto nao existe "agenda liberada". */
+    private static final int INTENTION_HORIZON_DAYS = 30;
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
+                                             OffsetDateTime desiredTime, UUID clientId) {
+        log.info("[Intention] createIntention — professionalId={} clientId={} desiredTime={}",
+                professionalId, clientId, desiredTime);
+
+        Professional professional = professionalRepository.findById(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+        if (professional.getEstablishment() == null) {
+            throw new ProfessionalNotAffiliatedException(professionalId);
+        }
+        Establishment establishment = professional.getEstablishment();
+
+        Client client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new ClientNotFoundException(clientId));
+
+        List<ServiceItem> serviceItems = serviceItemRepository.findAllById(serviceItemIds);
+        if (serviceItems.isEmpty()) {
+            throw new ServiceItemNotFoundException();
+        }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
+
+        // Ponto UNICO de entrada: create e edit passam pelo mesmo algoritmo antes de persistir.
+        OffsetDateTime estimatedStart = runIntentionAlgorithm(
+                professional, establishment, serviceItems, desiredTime, null);
+
+        Attendance attendance = new Attendance();
+        attendance.setProfessional(professional);
+        attendance.setEstablishment(establishment);
+        attendance.setClient(client);
+        attendance.setServiceItems(serviceItems);
+        attendance.setStatus(AttendanceStatus.INTENTION);
+        attendance.setDesiredTime(desiredTime);
+        // scheduledTime e NOT NULL — guarda o slot estimado. Enquanto INTENTION o atendimento NAO
+        // aparece na fila viva (as queries filtram por status IN SCHEDULED/LATE/...), so serve para
+        // ordenar a agenda e o encaixe da estimativa.
+        attendance.setScheduledTime(estimatedStart);
+
+        Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        log.info("[Intention] createIntention — created id={} desiredTime={} estimatedStart={} status=INTENTION",
+                saved.getId(), saved.getDesiredTime(), estimatedStart);
+        return IntentionResponse.fromEntity(saved, estimatedStart);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public IntentionResponse updateIntention(UUID attendanceId, OffsetDateTime desiredTime, UUID clientId) {
+        log.info("[Intention] updateIntention — attendanceId={} clientId={} desiredTime={}",
+                attendanceId, clientId, desiredTime);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only edit your own intention.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.INTENTION) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.INTENTION);
+        }
+
+        Professional professional = attendance.getProfessional();
+        Establishment establishment = attendance.getEstablishment();
+        List<ServiceItem> serviceItems = attendance.getServiceItems();
+
+        // Ponto UNICO de entrada: o edit re-executa o algoritmo (excluindo a propria intencao do
+        // encaixe) — a cabeca/estimativa se corrigem na hora, inclusive "mudou pra mais cedo".
+        OffsetDateTime estimatedStart = runIntentionAlgorithm(
+                professional, establishment, serviceItems, desiredTime, attendance.getId());
+
+        attendance.setDesiredTime(desiredTime);
+        attendance.setScheduledTime(estimatedStart);
+        Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        log.info("[Intention] updateIntention — updated id={} desiredTime={} estimatedStart={}",
+                saved.getId(), saved.getDesiredTime(), estimatedStart);
+        return IntentionResponse.fromEntity(saved, estimatedStart);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public void cancelIntention(UUID attendanceId, UUID clientId) {
+        log.info("[Intention] cancelIntention — attendanceId={} clientId={}", attendanceId, clientId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only cancel your own intention.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.INTENTION) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.INTENTION);
+        }
+
+        // INTENTION vive fora da fila viva — cancelar nao mexe em fila/broadcast (auto-limpante: a
+        // futura re-busca da promocao simplesmente nao encontra mais este id).
+        attendance.setStatus(AttendanceStatus.CANCELLED);
+        attendanceRepository.save(attendance);
+        log.info("[Intention] cancelIntention — cancelled id={}", attendanceId);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public IntentionAgendaResponse getProfessionalAgenda(UUID professionalId) {
+        Professional professional = professionalRepository.findById(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        List<Attendance> intentions = attendanceRepository.findIntentionsByProfessional(professionalId);
+        List<IntentionResponse> items = intentions.stream()
+                .map(a -> IntentionResponse.fromEntity(a, a.getScheduledTime()))
+                .collect(Collectors.toList());
+
+        return new IntentionAgendaResponse(List.of(frameFor(professional)), items);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public IntentionAgendaResponse getClientAgenda(UUID clientId) {
+        List<Attendance> intentions = attendanceRepository.findIntentionsByClient(clientId);
+        List<IntentionResponse> items = intentions.stream()
+                .map(a -> IntentionResponse.fromEntity(a, a.getScheduledTime()))
+                .collect(Collectors.toList());
+
+        // Um frame por profissional distinto entre os agendamentos (o front casa por professionalId).
+        Map<UUID, Professional> byProfessional = new LinkedHashMap<>();
+        for (Attendance a : intentions) {
+            byProfessional.putIfAbsent(a.getProfessional().getId(), a.getProfessional());
+        }
+        List<AgendaFrameResponse> frames = byProfessional.values().stream()
+                .map(this::frameFor)
+                .collect(Collectors.toList());
+
+        return new IntentionAgendaResponse(frames, items);
+    }
+
+    /** Monta o "quadro" da barra de encaixe de um profissional (piso da fila viva + expediente). */
+    private AgendaFrameResponse frameFor(Professional professional) {
+        Establishment establishment = professional.getEstablishment();
+        return new AgendaFrameResponse(
+                professional.getId(),
+                establishment != null ? establishment.getId() : null,
+                projectedQueueEnd(professional),
+                establishment != null ? establishment.getOpeningTime() : null,
+                establishment != null ? establishment.getClosingTime() : null);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public java.util.Optional<PromotionResult> promoteIntention(UUID attendanceId) {
+        log.info("[Intention] promoteIntention — attendanceId={}", attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId).orElse(null);
+        // Flip ATOMICO: so promove se ainda for INTENTION. Corrida (ja promovido/cancelado/editado por
+        // outra thread) -> no-op auto-limpante; o scheduler simplesmente re-consulta a proxima cabeca.
+        if (attendance == null || attendance.getStatus() != AttendanceStatus.INTENTION) {
+            log.info("[Intention] promoteIntention — id={} nao esta mais INTENTION (corrida) — no-op", attendanceId);
+            return java.util.Optional.empty();
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        // Entra na CAUDA da fila viva: a ordenacao da espera e por scheduledTime ASC, entao "agora"
+        // posiciona a intencao promovida atras de quem ja espera = a posicao do ETA neste instante
+        // (Modelo A — sem reserva de slot; o desiredTime persistido segue como registro do pretendido).
+        attendance.setScheduledTime(now);
+        Attendance saved = attendanceRepository.save(attendance);
+        lockMealsAtIngress(saved, saved.getProfessional(), saved.getEstablishment());
+
+        UUID establishmentId = saved.getEstablishment() != null ? saved.getEstablishment().getId() : null;
+        UUID clientId = saved.getClient() != null ? saved.getClient().getId() : null;
+        log.info("[Intention] promoteIntention — id={} INTENTION->SCHEDULED scheduledTime={} desiredTime={}",
+                saved.getId(), now, saved.getDesiredTime());
+        return java.util.Optional.of(new PromotionResult(saved.getId(), establishmentId, clientId));
+    }
+
+    /**
+     * Ponto UNICO de entrada da intencao (create E edit passam por aqui). Valida as invariantes e
+     * devolve o horario estimado de inicio (encaixe cronologico Modelo A entre as OUTRAS intencoes).
+     * Nao persiste — quem chama seta {@code desiredTime}/{@code scheduledTime} e salva.
+     *
+     * @param excludeIntentionId no edit, a propria intencao (para nao colidir consigo mesma no
+     *                           encaixe); {@code null} no create.
+     */
+    private OffsetDateTime runIntentionAlgorithm(Professional professional, Establishment establishment,
+                                                 List<ServiceItem> serviceItems, OffsetDateTime desiredTime,
+                                                 UUID excludeIntentionId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (!desiredTime.isAfter(now)) {
+            throw new IllegalArgumentException("desiredTime deve estar no futuro: " + desiredTime);
+        }
+        if (desiredTime.isAfter(now.plusDays(INTENTION_HORIZON_DAYS))) {
+            throw new IntentionHorizonExceededException(desiredTime, INTENTION_HORIZON_DAYS);
+        }
+        if (!establishment.isWithinBusinessHours(BusinessClock.timeAt(desiredTime))) {
+            throw new IntentionOutsideBusinessHoursException(desiredTime);
+        }
+
+        // Invariante (definicao Andre 2026-07-13): o horario pretendido nao pode ser ANTERIOR ao
+        // termino previsto dos atendimentos ja na fila viva. O horario EXATO do fim previsto e
+        // permitido (>=). Garante um slot futuro alcancavel — a intencao nunca "nasce atrasada".
+        OffsetDateTime projectedEnd = projectedQueueEnd(professional);
+        if (desiredTime.isBefore(projectedEnd)) {
+            throw new IntentionBeforeQueueEndException(desiredTime, projectedEnd);
+        }
+
+        int duration = serviceItems.stream()
+                .filter(java.util.Objects::nonNull)
+                .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
+                .sum();
+
+        // Estimativa (Modelo A): encaixa cronologicamente entre as OUTRAS intencoes ja registradas do
+        // profissional (excluindo a propria no edit) — quem pede horarios proximos recebe estimativas
+        // SEQUENCIAIS (17:00 e 17:30) — SEM reservar posicao na fila viva (walk-ins seguem livres).
+        List<Attendance> otherIntentions = attendanceRepository.findIntentionsByProfessional(professional.getId());
+        List<QueueUtils.AgendaSlot> reserved = otherIntentions.stream()
+                .filter(a -> excludeIntentionId == null || !a.getId().equals(excludeIntentionId))
+                .map(a -> new QueueUtils.AgendaSlot(
+                        a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
+                        a.getEstimatedTotalMinutes()))
+                .collect(Collectors.toList());
+        OffsetDateTime estimatedStart = QueueUtils.assignAgendaSlot(desiredTime, duration, reserved);
+
+        // CHEIO/FULL: o fim projetado do encaixe ultrapassa o fechamento do dia pretendido? (definicao Andre)
+        if (!fitsBeforeClosing(establishment, estimatedStart, duration)) {
+            throw new ProfessionalAgendaFullException(desiredTime);
+        }
+        return estimatedStart;
+    }
+
+    /**
+     * Fim projetado da fila VIVA do profissional = agora + tempo restante do atendimento atual +
+     * tempo estimado da fila de espera (meal-aware, mesma base do {@code getQueueOverview}). NAO conta
+     * INTENTIONs (que vivem fora da fila). Base da invariante da intencao.
+     */
+    private OffsetDateTime projectedQueueEnd(Professional professional) {
+        OffsetDateTime now = OffsetDateTime.now();
+        int currentRemaining = professional.getCurrentAttendance()
+                .map(Attendance::getRemainingMinutes)
+                .orElse(0);
+        List<Attendance> queue = professional.getScheduledAttendances();
+        List<ProfessionalInterval> intervals = professional.getIntervals();
+        int waitMinutes = QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, queue.size());
+        return now.plusMinutes((long) currentRemaining + waitMinutes);
+    }
+
+    /**
+     * O encaixe {@code [start, start+duration)} cabe antes do fechamento do dia de {@code start}?
+     * Trata janela normal (fecha no mesmo dia) e janela que vira a meia-noite (fecha no dia seguinte).
+     * Sem janela (opening/closing nulos) ou 24h ({@code open == close}) sempre cabe.
+     */
+    private boolean fitsBeforeClosing(Establishment establishment, OffsetDateTime start, int durationMinutes) {
+        java.time.LocalTime open = establishment.getOpeningTime();
+        java.time.LocalTime close = establishment.getClosingTime();
+        if (open == null || close == null) {
+            return true;
+        }
+        if (open.equals(close)) {
+            return true; // 24h
+        }
+        // BUG2b: opening/closing sao relogio de parede — o fechamento do dia de `start` e o
+        // instante daquele dia (no fuso da loja) as `close` horas.
+        OffsetDateTime end = start.plusMinutes(durationMinutes);
+        java.time.LocalDate startDay = BusinessClock.dateAt(start);
+        OffsetDateTime closingDateTime = BusinessClock.at(startDay, close);
+        if (close.isBefore(open)) {
+            // janela que atravessa a meia-noite: o fechamento e no dia seguinte
+            closingDateTime = BusinessClock.at(startDay.plusDays(1), close);
+        }
+        return !end.isAfter(closingDateTime);
+    }
+
     @Override
     public AttendanceInQueueResponse createAttendance(AttendanceRequest request) {
         log.info("[Attendance] createAttendance(request) — professionalId={} clientId={}",
@@ -248,6 +540,27 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("[Attendance] createAttendance — establishmentId={} does not belong to professional={}",
                     request.establishmentId(), request.professionalId());
             throw new EstablishmentNotFoundException(request.establishmentId());
+        }
+
+        // BUG5 parte C1 — gate de entrada: walk-in imediato (sem targetTime) so entra se a loja
+        // estiver "aberta agora" (open_status OPEN E dentro do horario). Fora disso o cliente nao
+        // entra sozinho na fila viva. A INTENCAO de fila (#40, com targetTime) NAO passa por aqui —
+        // mira um horario futuro dentro do expediente. Guest (adicionado pela loja) tampouco.
+        if (request.targetTime() == null && !establishment.isOpenNow()) {
+            log.warn("[Attendance] createAttendance — establishment={} nao esta aberto agora (walk-in bloqueado)",
+                    establishment.getId());
+            throw new EstablishmentNotOpenException(establishment.getId());
+        }
+
+        // S1 fatia 3 — "fechar fila": com accepting_new=false o profissional esta drenando a fila
+        // e nao aceita CLIENTE NOVO na FILA VIVA — nem walk-in imediato nem intent de fila (#40,
+        // com targetTime: tambem nasce SCHEDULED na fila e prenderia a drenagem/auto-OFF).
+        // "Agendar data futura" que segue livre = INTENTION (#4, POST /attendances/intentions,
+        // fora da fila). Guest e aceite de corte (acoes do proprio profissional) NAO passam aqui.
+        if (Boolean.FALSE.equals(professional.getAcceptingNew())) {
+            log.warn("[Attendance] createAttendance — professional={} fechou a fila (entrada na fila viva bloqueada)",
+                    professional.getId());
+            throw new ProfessionalNotAcceptingNewException(professional.getId());
         }
 
         Client client = clientRepository.findById(request.clientId())
@@ -695,6 +1008,97 @@ public class AttendanceServiceImpl implements AttendanceService {
         Attendance saved = attendanceRepository.save(attendance);
 
         log.info("[Attendance] moveToEndOfQueue — attendance={} foi para o fim (scheduledTime={})",
+                attendanceId, saved.getScheduledTime());
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
+    public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromCutRequest(
+            Professional professional, Establishment establishment, Client client, List<ServiceItem> serviceItems) {
+        log.info("[Attendance] createScheduledFromCutRequest — professional={} client={}",
+                professional.getId(), client.getId());
+
+        // Corte aceito entra na CAUDA da fila viva (mesma posicao de um walk-in).
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved = createScheduledAt(
+                professional, establishment, client, serviceItems, java.time.OffsetDateTime.now());
+        log.info("[Attendance] createScheduledFromCutRequest — created id={}", saved.getId());
+        return saved;
+    }
+
+    @Override
+    public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromSwapOffer(
+            Professional professional, Establishment establishment, Client client,
+            List<ServiceItem> serviceItems, java.time.OffsetDateTime slot) {
+        log.info("[Attendance] createScheduledFromSwapOffer — professional={} client={} slot={}",
+                professional.getId(), client.getId(), slot);
+
+        // Troca aberta aceita: o solicitante assume o SLOT cedido por quem aceitou (que ja foi movido
+        // pro fim), e nao a cauda — por isso o scheduledTime vem de fora.
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved =
+                createScheduledAt(professional, establishment, client, serviceItems, slot);
+        log.info("[Attendance] createScheduledFromSwapOffer — created id={}", saved.getId());
+        return saved;
+    }
+
+    /**
+     * Nucleo comum do ingresso SEM gate C1 (corte aceito / troca aberta aceita): o consentimento de
+     * quem ja estava dentro e a autorizacao. O {@code scheduledTime} define a posicao na fila e por
+     * isso e gravado ANTES do meal-lock (#37), que conta as refeicoes a frente pela posicao.
+     */
+    private com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledAt(
+            Professional professional, Establishment establishment, Client client,
+            List<ServiceItem> serviceItems, java.time.OffsetDateTime scheduledTime) {
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
+                new com.ospaulos.vupth.domain.attendance.model.Attendance();
+        attendance.setProfessional(professional);
+        attendance.setEstablishment(establishment);
+        attendance.setClient(client);
+        // COPIA a lista: serviceItems vem da colecao gerenciada do CutRequest/SwapOffer; compartilhar
+        // a mesma instancia entre duas entidades dispara "Found shared references to a collection".
+        attendance.setServiceItems(new java.util.ArrayList<>(serviceItems));
+        attendance.setStatus(AttendanceStatus.SCHEDULED);
+        attendance.setScheduledTime(scheduledTime);
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        lockMealsAtIngress(saved, professional, establishment);
+        return saved;
+    }
+
+    @Override
+    public AttendanceInQueueResponse promoteToFrontOfQueue(UUID attendanceId, UUID professionalId) {
+        log.info("[Attendance] promoteToFrontOfQueue — attendanceId={} professionalId={}",
+                attendanceId, professionalId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (!attendance.getProfessional().getId().equals(professionalId)) {
+            throw new EstablishmentAccessDeniedException(
+                    "You can only promote attendances in your own queue.");
+        }
+
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        // Fila de espera (SCHEDULED+LATE) ordenada por scheduledTime ASC — inclui o proprio atendimento.
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                attendance.getProfessional().getId(), attendance.getEstablishment().getId());
+
+        Attendance first = waiting.isEmpty() ? null : waiting.get(0);
+        if (first == null || first.getId().equals(attendance.getId())) {
+            // Ja e o 1o (ou fila vazia por corrida) — nada a fazer.
+            log.info("[Attendance] promoteToFrontOfQueue — attendance={} ja era o 1o (no-op)", attendanceId);
+            return buildAttendanceInQueueResponse(attendance);
+        }
+
+        // Sobe para antes da cabeca: scheduledTime = cabeca - 1min (ordenacao por scheduledTime ASC).
+        attendance.setScheduledTime(first.getScheduledTime().minusMinutes(1));
+        Attendance saved = attendanceRepository.save(attendance);
+
+        log.info("[Attendance] promoteToFrontOfQueue — attendance={} foi para o 1o lugar (scheduledTime={})",
                 attendanceId, saved.getScheduledTime());
         return buildAttendanceInQueueResponse(saved);
     }

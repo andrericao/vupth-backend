@@ -12,12 +12,19 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundExceptio
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
+import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
 import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
+import com.ospaulos.vupth.domain.queue.offer.exception.SwapOfferNotAllowedException;
+import com.ospaulos.vupth.domain.queue.offer.exception.SwapOfferNotFoundException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
@@ -28,6 +35,8 @@ import com.ospaulos.vupth.domain.owner.exception.OwnerNotFoundException;
 import com.ospaulos.vupth.domain.professional.exception.NotAProfessionalException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasNoServiceException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAcceptingNewException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
@@ -39,6 +48,9 @@ import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlready
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
+import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
+import com.ospaulos.vupth.api.user.exception.InvalidResetCodeException;
+import com.ospaulos.vupth.api.user.exception.ResetCodeExpiredException;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
@@ -138,6 +150,55 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
     }
 
+    @ExceptionHandler(IntentionOutsideBusinessHoursException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionOutsideBusinessHours(
+            IntentionOutsideBusinessHoursException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionOutsideBusinessHours | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_OUTSIDE_BUSINESS_HOURS");
+    }
+
+    @ExceptionHandler(IntentionHorizonExceededException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionHorizonExceeded(
+            IntentionHorizonExceededException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionHorizonExceeded | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_HORIZON_EXCEEDED");
+    }
+
+    @ExceptionHandler(IntentionBeforeQueueEndException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionBeforeQueueEnd(
+            IntentionBeforeQueueEndException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionBeforeQueueEnd | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_BEFORE_QUEUE_END");
+    }
+
+    @ExceptionHandler(ProfessionalAgendaFullException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalAgendaFull(
+            ProfessionalAgendaFullException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalAgendaFull | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_AGENDA_FULL");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.CutRequestNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleCutRequestNotAllowed(
+            com.ospaulos.vupth.domain.attendance.exception.CutRequestNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[409] CutRequestNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_NOT_ALLOWED");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.CutRequestNotPendingException.class)
+    public ResponseEntity<ErrorResponse> handleCutRequestNotPending(
+            com.ospaulos.vupth.domain.attendance.exception.CutRequestNotPendingException ex, HttpServletRequest req) {
+        log.warn("[409] CutRequestNotPending | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_NOT_PENDING");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.CutRequestExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleCutRequestExpired(
+            com.ospaulos.vupth.domain.attendance.exception.CutRequestExpiredException ex, HttpServletRequest req) {
+        log.warn("[409] CutRequestExpired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CUT_REQUEST_EXPIRED");
+    }
+
     @ExceptionHandler(ServiceItemNotOfProfessionalException.class)
     public ResponseEntity<ErrorResponse> handleServiceItemNotOfProfessional(
             ServiceItemNotOfProfessionalException ex, HttpServletRequest req) {
@@ -157,6 +218,20 @@ public class GlobalExceptionHandler {
             SwapRequestNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] SwapRequestNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_NOT_FOUND");
+    }
+
+    @ExceptionHandler(SwapOfferNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleSwapOfferNotAllowed(
+            SwapOfferNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[422] SwapOfferNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_SWAP_OFFER_NOT_ALLOWED");
+    }
+
+    @ExceptionHandler(SwapOfferNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleSwapOfferNotFound(
+            SwapOfferNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] SwapOfferNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_OFFER_NOT_FOUND");
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)
@@ -300,6 +375,27 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
     }
 
+    @ExceptionHandler(InvalidCurrentPasswordException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCurrentPassword(
+            InvalidCurrentPasswordException ex, HttpServletRequest req) {
+        log.warn("[401] InvalidCurrentPassword | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNAUTHORIZED, "Current password does not match", "CURRENT_PASSWORD_INVALID");
+    }
+
+    @ExceptionHandler(InvalidResetCodeException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidResetCode(
+            InvalidResetCodeException ex, HttpServletRequest req) {
+        log.warn("[400] InvalidResetCode | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.BAD_REQUEST, "Invalid password reset code", "RESET_CODE_INVALID");
+    }
+
+    @ExceptionHandler(ResetCodeExpiredException.class)
+    public ResponseEntity<ErrorResponse> handleResetCodeExpired(
+            ResetCodeExpiredException ex, HttpServletRequest req) {
+        log.warn("[400] ResetCodeExpired | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.BAD_REQUEST, "Password reset code expired", "RESET_CODE_EXPIRED");
+    }
+
     @ExceptionHandler(RefreshTokenInvalidException.class)
     public ResponseEntity<ErrorResponse> handleRefreshTokenInvalid(
             RefreshTokenInvalidException ex, HttpServletRequest req) {
@@ -434,6 +530,21 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_HAS_ACTIVE_ATTENDANCES");
     }
 
+    // S1 fatia 3 — fila fechada (accepting_new=false): cliente novo nao entra na fila viva.
+    @ExceptionHandler(ProfessionalNotAcceptingNewException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalNotAcceptingNew(
+            ProfessionalNotAcceptingNewException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalNotAcceptingNew | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_NOT_ACCEPTING_NEW");
+    }
+
+    @ExceptionHandler(ProfessionalHasNoServiceException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalHasNoService(
+            ProfessionalHasNoServiceException ex, HttpServletRequest req) {
+        log.warn("[422] ProfessionalHasNoService | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "PROFESSIONAL_HAS_NO_SERVICE");
+    }
+
     @ExceptionHandler(IntervalConflictException.class)
     public ResponseEntity<ErrorResponse> handleIntervalConflict(
             IntervalConflictException ex, HttpServletRequest req) {
@@ -446,6 +557,13 @@ public class GlobalExceptionHandler {
             EstablishmentHasActiveAttendancesException ex, HttpServletRequest req) {
         log.warn("[409] EstablishmentHasActiveAttendances | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES");
+    }
+
+    @ExceptionHandler(EstablishmentNotOpenException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentNotOpen(
+            EstablishmentNotOpenException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentNotOpen | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_NOT_OPEN");
     }
 
     // ─────────────────────────────────────────────

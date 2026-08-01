@@ -8,6 +8,7 @@ import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.professional.service.ProfessionalService;
+import com.ospaulos.vupth.domain.queue.offer.service.SwapOfferService;
 import com.ospaulos.vupth.domain.queue.swap.service.QueueSwapService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
@@ -34,6 +35,7 @@ public class AttendanceController {
     private final ProfessionalService professionalService;
     private final QueueWebSocketPublisher queuePublisher;
     private final QueueSwapService queueSwapService;
+    private final SwapOfferService swapOfferService;
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
 
     @GetMapping
@@ -135,6 +137,7 @@ public class AttendanceController {
 
         // #42: saiu da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: saiu da fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
 
@@ -159,6 +162,7 @@ public class AttendanceController {
 
         // #42: saiu da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: saiu da fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
 
@@ -187,6 +191,7 @@ public class AttendanceController {
 
         // #42: a posicao mudou → propostas de troca pendentes deixam de valer
         queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: a fila mudou → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
 
@@ -211,6 +216,33 @@ public class AttendanceController {
 
         // #42: a posicao mudou → propostas de troca pendentes deixam de valer
         queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/promote
+     *
+     * Partner S7 — o profissional dono da fila promove um atendimento em espera para o 1o lugar
+     * (indice 0), empurrando os demais, sem inicia-lo. So o profissional dono (JWT), so em SCHEDULED
+     * (400 caso contrario). No-op se ja for o 1o. Requer PROFESSIONAL role.
+     */
+    @PatchMapping("/{attendanceId}/promote")
+    public ResponseEntity<AttendanceInQueueResponse> promoteToFront(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER PROMOTE {} by professional={}", attendanceId, principal.getUserId());
+
+        AttendanceInQueueResponse response = attendanceService.promoteToFrontOfQueue(
+                attendanceId, principal.getUserId());
+
+        // #42: a posicao mudou → propostas de troca pendentes deixam de valer
+        queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: a fila mudou → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
 
@@ -259,6 +291,7 @@ public class AttendanceController {
 
         // #42: foi atendido → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
 
         // WS: fila ao vivo + avisa o cliente que chegou a vez dele
         AttendanceInQueueResponse att = attendanceService.getById(attendanceId);

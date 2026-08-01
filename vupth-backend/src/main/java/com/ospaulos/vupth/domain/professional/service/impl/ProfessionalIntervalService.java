@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.professional.service.impl;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
@@ -20,9 +21,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -107,7 +107,7 @@ public class ProfessionalIntervalService {
      * so olha ativos — fica para o item (g)).
      */
     public ProfessionalInterval updateInterval(UUID professionalId, UUID intervalId,
-                                               Integer durationMinutes, OffsetTime fixedStartTime,
+                                               Integer durationMinutes, LocalTime fixedStartTime,
                                                String description) {
 
         ProfessionalInterval interval = intervalRepository.findById(intervalId)
@@ -154,7 +154,7 @@ public class ProfessionalIntervalService {
             throw new IntervalNotFoundException(intervalId);
         }
 
-        LocalDate today = OffsetDateTime.now(ZoneOffset.UTC).toLocalDate();
+        LocalDate today = BusinessClock.today(); // BUG2b: dia da LOJA
         if (interval.isStartedOn(today) || interval.isDoneOn(today)) {
             throw new IntervalConflictException("This interval was already started/taken today.");
         }
@@ -303,8 +303,11 @@ public class ProfessionalIntervalService {
 
         log.info("SERVICE PROFESSIONALINTERVAL - GETACTIVEINTERVALS()");
 
-        OffsetDateTime startOfDay = date.atStartOfDay().atOffset(ZoneOffset.UTC);
-        OffsetDateTime startOfNextDay = date.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC);
+        // BUG2b: o "dia" e o da LOJA — quem chama passa BusinessClock.today(), entao a fatia tem
+        // de ir da meia-noite LOCAL a meia-noite LOCAL seguinte (com corte em UTC, uma refeicao
+        // iniciada as 22:00 caia no dia seguinte no fuso -03:00).
+        OffsetDateTime startOfDay = BusinessClock.at(date, LocalTime.MIDNIGHT);
+        OffsetDateTime startOfNextDay = BusinessClock.at(date.plusDays(1), LocalTime.MIDNIGHT);
         return intervalRepository.findActiveIntervalsForProfessionalAndDate(professionalId, startOfDay, startOfNextDay);
     }
 
@@ -319,18 +322,18 @@ public class ProfessionalIntervalService {
      * (ex.: janta de 60min nao inicia <60min antes de fechar). So valida quando o estabelecimento
      * tem horario definido — sem horario (null), nao restringe (assume-se dia inteiro).
      */
-    private void validateWithinBusinessHours(Professional professional, OffsetTime start, Integer durationMinutes) {
+    private void validateWithinBusinessHours(Professional professional, LocalTime start, Integer durationMinutes) {
         if (professional == null || professional.getEstablishment() == null
                 || start == null || durationMinutes == null) {
             return;
         }
-        OffsetTime opening = professional.getEstablishment().getOpeningTime();
-        OffsetTime closing = professional.getEstablishment().getClosingTime();
+        LocalTime opening = professional.getEstablishment().getOpeningTime();
+        LocalTime closing = professional.getEstablishment().getClosingTime();
         if (opening == null || closing == null) {
             return; // sem horario de funcionamento definido — nao valida
         }
 
-        OffsetTime end = start.plusMinutes(durationMinutes);
+        LocalTime end = start.plusMinutes(durationMinutes);
         if (start.isBefore(opening) || end.isAfter(closing)) {
             throw new InvalidIntervalTimeException(
                     "Interval must fit within business hours (" + opening + " to " + closing
@@ -341,18 +344,18 @@ public class ProfessionalIntervalService {
     private void validateRecurringIntervalCreation(Professional professional, CreateRecurringIntervalCommand command) {
         // Overlap calculado em Java (a antiga query nativa estava escrita em JPQL — invalida).
         // Mantem a semantica original: so colide com recorrentes ATIVOS do profissional.
-        OffsetTime newStart = command.fixedStartTime();
-        OffsetTime newEnd = newStart.plusMinutes(command.durationMinutes());
+        LocalTime newStart = command.fixedStartTime();
+        LocalTime newEnd = newStart.plusMinutes(command.durationMinutes());
 
         boolean hasConflict = intervalRepository
                 .findActiveByProfessionalAndType(professional.getId(), IntervalType.RECURRENT)
                 .stream()
                 .anyMatch(existing -> {
-                    OffsetTime exStart = existing.getFixedStartTime();
+                    LocalTime exStart = existing.getFixedStartTime();
                     if (exStart == null) {
                         return false;
                     }
-                    OffsetTime exEnd = exStart.plusMinutes(existing.getDurationMinutes());
+                    LocalTime exEnd = exStart.plusMinutes(existing.getDurationMinutes());
                     return newStart.isBefore(exEnd) && exStart.isBefore(newEnd);
                 });
 

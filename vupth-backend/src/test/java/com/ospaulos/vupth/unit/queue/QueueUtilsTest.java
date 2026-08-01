@@ -6,8 +6,11 @@ import com.ospaulos.vupth.domain.queue.service.QueueUtils;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,7 +27,18 @@ import static org.mockito.Mockito.when;
  */
 class QueueUtilsTest {
 
-    private static final OffsetDateTime NOW = OffsetDateTime.parse("2026-06-16T11:00:00Z");
+    private static final LocalDate TODAY = LocalDate.parse("2026-06-16");
+
+    /**
+     * Instantes deste teste sao escritos como RELOGIO DA LOJA (BUG2b): o {@code fixedStartTime} da
+     * refeicao e hora de parede no fuso de negocio, entao "agora" tem de estar no mesmo relogio para
+     * as relacoes do cenario (11:00 antes do almoco de 12:00) valerem.
+     */
+    private static OffsetDateTime at(String isoDate, String wallTime) {
+        return BusinessClock.at(LocalDate.parse(isoDate), LocalTime.parse(wallTime));
+    }
+
+    private static final OffsetDateTime NOW = at("2026-06-16", "11:00");
 
     // ── helpers ──────────────────────────────────────────────────
 
@@ -36,11 +50,11 @@ class QueueUtilsTest {
 
     /** Recorrente previsto (nao iniciado): startTime null, usa fixedStartTime. */
     private ProfessionalInterval recurring(String time, int dur) {
-        return ProfessionalInterval.createRecurring(null, dur, OffsetTime.parse(time), "WEEKDAYS", "meal");
+        return ProfessionalInterval.createRecurring(null, dur, LocalTime.parse(time), "WEEKDAYS", "meal");
     }
 
     private ProfessionalInterval startedAt(OffsetDateTime actualStart, int dur) {
-        ProfessionalInterval iv = recurring("12:00:00Z", dur);
+        ProfessionalInterval iv = recurring("12:00", dur);
         iv.setActualStartTime(actualStart);
         iv.setIsActive(true);
         iv.setPlannedEndTime(actualStart.plusMinutes(dur));
@@ -53,7 +67,7 @@ class QueueUtilsTest {
 
     /** Refeicao recorrente iniciada e ENCERRADA hoje (ja consumida). */
     private ProfessionalInterval doneToday(OffsetDateTime start, OffsetDateTime end) {
-        ProfessionalInterval iv = recurring("12:00:00Z", 60);
+        ProfessionalInterval iv = recurring("12:00", 60);
         iv.setActualStartTime(start);
         iv.setActualEndTime(end);
         iv.setIsActive(false);
@@ -80,7 +94,7 @@ class QueueUtilsTest {
     @DisplayName("recorrente null-safe: nao lanca NPE (usa fixedStartTime, nao startTime)")
     void recurring_nullStartTime_doesNotThrow() {
         var queue = List.of(att(30), att(30), att(30));
-        var intervals = List.of(recurring("12:00:00Z", 60));
+        var intervals = List.of(recurring("12:00", 60));
         assertThatCode(() -> QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 3))
                 .doesNotThrowAnyException();
     }
@@ -89,7 +103,7 @@ class QueueUtilsTest {
     @DisplayName("previsto dentro da janela: soma a duracao da refeicao (cliente atendido apos 12:00)")
     void previsto_withinWindow_counts() {
         var queue = List.of(att(30), att(30), att(30)); // 11:00→11:30→12:00→12:30
-        var intervals = List.of(recurring("12:00:00Z", 60));
+        var intervals = List.of(recurring("12:00", 60));
         // pos 3: atendimentos cruzam 12:00 → almoco (60) entra
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 3)).isEqualTo(150);
     }
@@ -98,8 +112,8 @@ class QueueUtilsTest {
     @DisplayName("refeicao pulada hoje (Nao almocar — item #41) nao conta no ETA")
     void skippedToday_notCounted() {
         var queue = List.of(att(30), att(30), att(30)); // mesmo cenario do previsto_withinWindow (150)
-        var meal = recurring("12:00:00Z", 60);
-        meal.skipOn(java.time.LocalDate.parse("2026-06-16")); // dia do NOW
+        var meal = recurring("12:00", 60);
+        meal.skipOn(TODAY); // dia do NOW
         // sem o almoco (pulado), so as 3 duracoes contam
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(meal), NOW, 3)).isEqualTo(90);
     }
@@ -108,8 +122,8 @@ class QueueUtilsTest {
     @DisplayName("skip de OUTRO dia nao afeta o ETA de hoje (skip e day-scoped)")
     void skippedAnotherDay_stillCounts() {
         var queue = List.of(att(30), att(30), att(30));
-        var meal = recurring("12:00:00Z", 60);
-        meal.skipOn(java.time.LocalDate.parse("2026-06-15")); // ontem
+        var meal = recurring("12:00", 60);
+        meal.skipOn(TODAY.minusDays(1)); // ontem
         // pulou ontem, hoje a refeicao volta a contar → 150
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(meal), NOW, 3)).isEqualTo(150);
     }
@@ -118,16 +132,16 @@ class QueueUtilsTest {
     @DisplayName("previsto nao alcancado: cliente atendido antes do horario → refeicao nao conta")
     void previsto_servedBeforeMeal_notCounted() {
         var queue = List.of(att(30)); // servido 11:30, antes do almoco 12:00
-        var intervals = List.of(recurring("12:00:00Z", 60));
+        var intervals = List.of(recurring("12:00", 60));
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, NOW, 1)).isEqualTo(30);
     }
 
     @Test
     @DisplayName("some na proxima: agora 18:30, almoco (12:00) ja passou da janta (18:00) → some; so a janta conta")
     void previsto_disappearsAtNextMeal() {
-        OffsetDateTime now = OffsetDateTime.parse("2026-06-16T18:30:00Z");
+        OffsetDateTime now = at("2026-06-16", "18:30");
         var queue = List.of(att(30));
-        var intervals = List.of(recurring("12:00:00Z", 60), recurring("18:00:00Z", 60));
+        var intervals = List.of(recurring("12:00", 60), recurring("18:00", 60));
         // almoco some (projetado 18:30 >= janta 18:00); janta (60) conta
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, 1)).isEqualTo(90);
     }
@@ -135,9 +149,9 @@ class QueueUtilsTest {
     @Test
     @DisplayName("iniciado hoje (em pausa agora): conta so o tempo restante da refeicao")
     void startedToday_countsRemaining() {
-        OffsetDateTime now = OffsetDateTime.parse("2026-06-16T12:30:00Z");
+        OffsetDateTime now = at("2026-06-16", "12:30");
         // iniciou 12:00, 60min → termina 13:00 → restam 30
-        var intervals = List.of(startedAt(OffsetDateTime.parse("2026-06-16T12:00:00Z"), 60));
+        var intervals = List.of(startedAt(at("2026-06-16", "12:00"), 60));
         var queue = List.of(att(30));
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, intervals, now, 1)).isEqualTo(60);
     }
@@ -146,7 +160,7 @@ class QueueUtilsTest {
     @DisplayName("day-scoped: intervalo iniciado ONTEM nao carrega (tratado como previsto hoje)")
     void startedYesterday_noCarryover() {
         // actualStartTime ontem, isActive=true, fixedStartTime 12:00 → hoje vira previsto
-        var stale = startedAt(OffsetDateTime.parse("2026-06-15T12:00:00Z"), 60);
+        var stale = startedAt(at("2026-06-15", "12:00"), 60);
         var queue = List.of(att(30)); // servido 11:30 < 12:00 → previsto nao conta
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(stale), NOW, 1)).isEqualTo(30);
     }
@@ -154,10 +168,10 @@ class QueueUtilsTest {
     @Test
     @DisplayName("refeicao ja feita hoje (encerrada) nao reaparece como previsto")
     void doneToday_notRecounted() {
-        OffsetDateTime now = OffsetDateTime.parse("2026-06-16T13:00:00Z");
+        OffsetDateTime now = at("2026-06-16", "13:00");
         // almoco iniciado 12:00 e encerrado 12:45 hoje
-        var done = doneToday(OffsetDateTime.parse("2026-06-16T12:00:00Z"),
-                OffsetDateTime.parse("2026-06-16T12:45:00Z"));
+        var done = doneToday(at("2026-06-16", "12:00"),
+                at("2026-06-16", "12:45"));
         var queue = List.of(att(30));
         assertThat(QueueUtils.calculateWaitingTimeForPosition(queue, List.of(done), now, 1)).isEqualTo(30);
     }
@@ -166,7 +180,7 @@ class QueueUtilsTest {
     @DisplayName("unexpected agendado durante o atendimento: empurrado para depois e somado")
     void unexpected_pushedAndCounted() {
         // pausa avulsa 11:15/20min, atendimento 30min comeca 11:00
-        var intervals = List.of(unexpected(OffsetDateTime.parse("2026-06-16T11:15:00Z"), 20));
+        var intervals = List.of(unexpected(at("2026-06-16", "11:15"), 20));
         var queue = List.of(att(30), att(30));
         // i=0: att 11:00→11:30 (pausa 11:15 empurrada p/ 11:30); i=1 drena pausa(20)+att(30)
         // total = 30 + 20 + 30 = 80
@@ -187,7 +201,7 @@ class QueueUtilsTest {
     void mealsCounted_withinWindow_returnsId() {
         var id = java.util.UUID.randomUUID();
         var queue = List.of(att(30), att(30), att(30)); // cruzam 12:00
-        var intervals = List.of(recurringWithId("12:00:00Z", 60, id));
+        var intervals = List.of(recurringWithId("12:00", 60, id));
         assertThat(QueueUtils.mealsCountedForPosition(queue, intervals, NOW, 3)).containsExactly(id);
     }
 
@@ -196,14 +210,14 @@ class QueueUtilsTest {
     void mealsCounted_notReached_empty() {
         var id = java.util.UUID.randomUUID();
         var queue = List.of(att(30)); // servido 11:30 < almoco 12:00
-        var intervals = List.of(recurringWithId("12:00:00Z", 60, id));
+        var intervals = List.of(recurringWithId("12:00", 60, id));
         assertThat(QueueUtils.mealsCountedForPosition(queue, intervals, NOW, 1)).isEmpty();
     }
 
     @Test
     @DisplayName("mealsCountedForPosition: posicao 0 nao trava nada")
     void mealsCounted_positionZero_empty() {
-        var intervals = List.of(recurringWithId("12:00:00Z", 60, java.util.UUID.randomUUID()));
+        var intervals = List.of(recurringWithId("12:00", 60, java.util.UUID.randomUUID()));
         assertThat(QueueUtils.mealsCountedForPosition(List.of(att(30)), intervals, NOW, 0)).isEmpty();
     }
 
@@ -211,9 +225,9 @@ class QueueUtilsTest {
     @DisplayName("lockedClientWait: restante do atual + atendimentos a frente + duracao cheia da refeicao travada")
     void lockedWait_prevista_fullDuration() {
         var ahead = List.of(att(30), att(30));
-        var locked = List.of(recurring("12:00:00Z", 60)); // prevista hoje
+        var locked = List.of(recurring("12:00", 60)); // prevista hoje
         // 10 (atual) + 60 (a frente) + 60 (refeicao travada) = 130
-        assertThat(QueueUtils.lockedClientWait(ahead, 10, locked, java.time.LocalDate.parse("2026-06-16")))
+        assertThat(QueueUtils.lockedClientWait(ahead, 10, locked, TODAY))
                 .isEqualTo(130);
     }
 
@@ -221,10 +235,10 @@ class QueueUtilsTest {
     @DisplayName("lockedClientWait: refeicao travada porem pulada no dia (#41) contribui 0")
     void lockedWait_skipped_contributesZero() {
         var ahead = List.of(att(30), att(30));
-        var meal = recurring("12:00:00Z", 60);
-        meal.skipOn(java.time.LocalDate.parse("2026-06-16"));
+        var meal = recurring("12:00", 60);
+        meal.skipOn(TODAY);
         // 0 + 60 + 0 (refeicao pulada cai mesmo travada) = 60
-        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(meal), java.time.LocalDate.parse("2026-06-16")))
+        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(meal), TODAY))
                 .isEqualTo(60);
     }
 
@@ -232,19 +246,19 @@ class QueueUtilsTest {
     @DisplayName("lockedClientWait: refeicao travada porem ja encerrada hoje contribui 0")
     void lockedWait_doneToday_contributesZero() {
         var ahead = List.of(att(30));
-        var done = doneToday(OffsetDateTime.parse("2026-06-16T12:00:00Z"),
-                OffsetDateTime.parse("2026-06-16T12:45:00Z"));
+        var done = doneToday(at("2026-06-16", "12:00"),
+                at("2026-06-16", "12:45"));
         // 0 + 30 + 0 (ja consumida) = 30
-        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(done), java.time.LocalDate.parse("2026-06-16")))
+        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(done), TODAY))
                 .isEqualTo(30);
     }
 
     @Test
     @DisplayName("lockedClientWait: null-safe (sem refeicoes travadas e sem atendimentos a frente)")
     void lockedWait_nullSafe() {
-        assertThat(QueueUtils.lockedClientWait(null, 15, null, java.time.LocalDate.parse("2026-06-16")))
+        assertThat(QueueUtils.lockedClientWait(null, 15, null, TODAY))
                 .isEqualTo(15);
-        assertThat(QueueUtils.lockedClientWait(List.of(), -5, List.of(), java.time.LocalDate.parse("2026-06-16")))
+        assertThat(QueueUtils.lockedClientWait(List.of(), -5, List.of(), TODAY))
                 .isZero(); // currentRemaining negativo e tratado como 0
     }
 
@@ -314,13 +328,13 @@ class QueueUtilsTest {
         // o encaixe esta no index 1 -> 4 cotas maduras de fatia 8 -> contribui 32
         var ahead = List.of(att(30), fitAtt(40, 5));
         // 0 (atual) + 30 (normal) + 32 (encaixe rampado) = 62
-        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(), java.time.LocalDate.parse("2026-06-16")))
+        assertThat(QueueUtils.lockedClientWait(ahead, 0, List.of(), TODAY))
                 .isEqualTo(62);
     }
 
     // ── Item 40 — intencao de fila com horario-alvo (funcoes puras) ─────────────────
 
-    private static final OffsetDateTime TARGET = OffsetDateTime.parse("2026-06-16T17:00:00Z");
+    private static final OffsetDateTime TARGET = at("2026-06-16", "17:00");
 
     @Test
     @DisplayName("isTargetFeasible: ETA atual mais cedo que o alvo -> viavel")
@@ -381,7 +395,7 @@ class QueueUtilsTest {
         var reserved = List.of(new QueueUtils.AgendaSlot(TARGET, 30)); // 17:00-17:30 ocupado
         // 2o pedido para 17:00, 30min -> 17:30
         assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved))
-                .isEqualTo(OffsetDateTime.parse("2026-06-16T17:30:00Z"));
+                .isEqualTo(at("2026-06-16", "17:30"));
     }
 
     @Test
@@ -389,17 +403,17 @@ class QueueUtilsTest {
     void assignSlot_chainOfCollisions() {
         var reserved = List.of(
                 new QueueUtils.AgendaSlot(TARGET, 30),                                       // 17:00-17:30
-                new QueueUtils.AgendaSlot(OffsetDateTime.parse("2026-06-16T17:30:00Z"), 30)  // 17:30-18:00
+                new QueueUtils.AgendaSlot(at("2026-06-16", "17:30"), 30)  // 17:30-18:00
         );
         assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved))
-                .isEqualTo(OffsetDateTime.parse("2026-06-16T18:00:00Z"));
+                .isEqualTo(at("2026-06-16", "18:00"));
     }
 
     @Test
     @DisplayName("assignAgendaSlot: alvo nao colide -> mantem o alvo mesmo com reservas adiante")
     void assignSlot_noOverlap_keepsTarget() {
         var reserved = List.of(
-                new QueueUtils.AgendaSlot(OffsetDateTime.parse("2026-06-16T18:00:00Z"), 30) // 18:00-18:30
+                new QueueUtils.AgendaSlot(at("2026-06-16", "18:00"), 30) // 18:00-18:30
         );
         // alvo 17:00 + 30 = 17:30, nao toca 18:00 -> mantem 17:00
         assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved)).isEqualTo(TARGET);

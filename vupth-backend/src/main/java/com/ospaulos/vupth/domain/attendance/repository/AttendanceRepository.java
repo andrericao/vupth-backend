@@ -118,6 +118,67 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
+     * Intencoes de atendimento (backlog #4 / status INTENTION) de um profissional, ordenadas pelo
+     * horario pretendido. NAO fazem parte da fila viva — servem para o encaixe cronologico da
+     * estimativa de uma nova intencao (sem reservar posicao) e para a visao de agenda (fatia 2).
+     * JOIN FETCH evita LazyInitialization ao serializar client/serviceItems.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.professional.id = :professionalId
+          AND a.status = 'INTENTION'
+        ORDER BY a.desiredTime ASC
+    """)
+    List<Attendance> findIntentionsByProfessional(@Param("professionalId") UUID professionalId);
+
+    /**
+     * Intencoes de atendimento (status INTENTION) de um CLIENTE, em qualquer loja, ordenadas pelo
+     * horario pretendido. Base da visao de agenda do cliente ("meus agendamentos", fatia 2) — os
+     * agendamentos futuros que ainda nao entraram na fila viva. JOIN FETCH evita LazyInitialization
+     * ao serializar professional/establishment/serviceItems.
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.client.id = :clientId
+          AND a.status = 'INTENTION'
+        ORDER BY a.desiredTime ASC
+    """)
+    List<Attendance> findIntentionsByClient(@Param("clientId") UUID clientId);
+
+    /**
+     * Intencoes de atendimento (status INTENTION) de TODOS os profissionais, ordenadas pelo horario
+     * pretendido (menor primeiro). Base do gatilho de promocao event-driven (backlog #4, fatia 3):
+     * a "cabeca" da agenda global e o primeiro elemento. Sem JOIN FETCH de colecoes — o scheduler so
+     * le {@code id}/{@code desiredTime} (campos basicos), e a promocao re-carrega via {@code findByIdEager}.
+     * Usar com {@code Pageable} (LIMIT 1) via {@link #findEarliestIntention()}.
+     */
+    @Query("""
+        SELECT a FROM Attendance a
+        WHERE a.status = 'INTENTION'
+        ORDER BY a.desiredTime ASC
+    """)
+    List<Attendance> findIntentionsOrderedByDesiredTime(org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * A intencao de MENOR {@code desiredTime} em todo o sistema (a "cabeca" da agenda) ou vazio se
+     * nao houver nenhuma. Fonte da verdade do gatilho de promocao — o timer e apenas um palpite; a
+     * cada disparo re-consulta aqui. {@code ORDER BY desiredTime LIMIT 1} = O(log n) e sempre fresco.
+     */
+    default Optional<Attendance> findEarliestIntention() {
+        List<Attendance> earliest = findIntentionsOrderedByDesiredTime(
+                org.springframework.data.domain.PageRequest.of(0, 1));
+        return earliest.isEmpty() ? Optional.empty() : Optional.of(earliest.get(0));
+    }
+
+    /**
      * Fila de espera de TODOS os profissionais de um establishment (SCHEDULED + LATE),
      * ordenada por profissional e horario — usada para detectar o "proximo" de cada fila
      * (push do item de notificacoes). JOIN FETCH evita LazyInitialization ao ler client/professional.
@@ -208,6 +269,11 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     boolean existsByProfessional_IdAndStatusIn(UUID professionalId, List<AttendanceStatus> statuses);
+
+    // S1 fatia 3 — fila propria do profissional (ex.: SCHEDULED/LATE) para o anuncio de "fila
+    // fechada" aos clientes que ja estao dentro (drenagem: eles seguem sendo atendidos).
+    List<Attendance> findByProfessional_IdAndStatusInOrderByScheduledTimeAsc(
+            UUID professionalId, List<AttendanceStatus> statuses);
 
     /**
      * Counts how many attendances are waiting in the queue (SCHEDULED + LATE, item #19).

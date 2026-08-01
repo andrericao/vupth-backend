@@ -1,11 +1,14 @@
 package com.ospaulos.vupth.domain.professional.repository;
 
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,6 +53,27 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
 
     @Query("SELECT p FROM Professional p JOIN FETCH p.baseUser LEFT JOIN FETCH p.establishment WHERE p.id = :id")
     Optional<Professional> findByIdWithBaseUserAndEstablishment(@Param("id") UUID id);
+
+    // S1 fatia 2 — ∃ prof afiliado "presente" (WORKING/ON_BREAK)? Query direta (nao a colecao lazy
+    // inversa, que fica stale quando a afiliacao muda na mesma transacao); flush AUTO garante o dado.
+    boolean existsByEstablishment_IdAndWorkStatusIn(
+            UUID establishmentId,
+            Collection<ProfessionalStatus> statuses);
+
+    // --- S1 fatia 5 (auto-fechamento por horario / BUG1) -----------------------------------------
+
+    // Profissionais em um dado conjunto de work_status — usado pelo auto-fechamento para varrer quem
+    // esta em expediente (WORKING/ON_BREAK) no disparo do timer (fonte da verdade = a query, nao o
+    // palpite do timer; mesmo principio do IntentionPromotionScheduler).
+    List<Professional> findByWorkStatusIn(Collection<ProfessionalStatus> statuses);
+
+    // Carencias ja vencidas (closing_grace_until <= agora) — o disparo aplica o desfecho de cada uma
+    // (auto-OFF / drenagem / auto-correcao). Ignora quem esta com carencia NULL (sem carencia armada).
+    List<Professional> findByClosingGraceUntilLessThanEqual(OffsetDateTime instant);
+
+    // "Cabeca" das carencias pendentes (menor closing_grace_until) — alimenta o proximo disparo do
+    // timer de auto-fechamento (analogo a findEarliestIntention / findFirstByStatusOrderByExpiresAtAsc).
+    Optional<Professional> findFirstByClosingGraceUntilIsNotNullOrderByClosingGraceUntilAsc();
 
     // Busca de profissionais por nome e/ou especialidade. Os parametros ja vem como
     // padroes LIKE prontos ("%" = sem filtro) — nunca null, para evitar problemas de

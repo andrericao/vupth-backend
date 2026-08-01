@@ -232,3 +232,38 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/008-add-next_notified.yaml
       relativeToChangeLogFile: true
+
+  # Intencao de atendimento (backlog #4 / status INTENTION): coluna desired_time (horario pretendido)
+  - include:
+      file: changesets/80-attendance/009-add-desired_time-to-attendance.yaml
+      relativeToChangeLogFile: true
+
+  # Pedido de corte (BUG5 C2 / "solicitar corte"): tabela cut_request + join cut_request_service_item
+  - include:
+      file: changesets/80-attendance/010-create-cut-request.yaml
+      relativeToChangeLogFile: true
+
+  # Oferta ABERTA de troca de posicao (Client C13 / Partner S11): tabela swap_offer + join swap_offer_service_item
+  - include:
+      file: changesets/80-attendance/011-create-swap-offer.yaml
+      relativeToChangeLogFile: true
+
+  # Esqueci minha senha (backlog #1): tabela password_reset_code (código de 6 dígitos, hash bcrypt)
+  - include:
+      file: changesets/20-auth/022-create-password_reset_code.yaml
+      relativeToChangeLogFile: true
+
+  # S1 (fatia 1): status de trabalho do profissional (WORKING/ON_BREAK/OFF), base do open_status derivado
+  - include:
+      file: changesets/60-professional/009-add-work_status-to-professional.yaml
+      relativeToChangeLogFile: true
+
+  # S1 (fatia 3): "fechar fila" — flag accepting_new (drenagem: fila fechada segue sendo atendida)
+  - include:
+      file: changesets/60-professional/010-add-accepting_new-to-professional.yaml
+      relativeToChangeLogFile: true
+
+  # S1 (fatia 5): auto-fechamento por horario — carencia de 15min apos o closing_time (BUG1)
+  - include:
+      file: changesets/60-professional/011-add-closing_grace_until-to-professional.yaml
+      relativeToChangeLogFile: true

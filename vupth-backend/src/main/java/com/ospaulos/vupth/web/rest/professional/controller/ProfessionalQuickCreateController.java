@@ -3,14 +3,18 @@ package com.ospaulos.vupth.web.rest.professional.controller;
 import com.ospaulos.vupth.api.professional.dto.request.AffiliateToEstablishmentRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRequest;
 import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterRequest;
+import com.ospaulos.vupth.api.professional.dto.request.UpdateAcceptingNewRequest;
 import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalRequest;
+import com.ospaulos.vupth.api.professional.dto.request.UpdateProfessionalStatusRequest;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalSearchResponse;
 import com.ospaulos.vupth.api.professional.usecase.AffiliateToEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.LeaveEstablishmentUseCase;
 import com.ospaulos.vupth.api.professional.usecase.QuickCreateProfessionalUseCase;
 import com.ospaulos.vupth.api.professional.usecase.RegisterProfessionalUseCase;
+import com.ospaulos.vupth.api.professional.usecase.UpdateAcceptingNewUseCase;
 import com.ospaulos.vupth.api.professional.usecase.UpdateMyProfileUseCase;
+import com.ospaulos.vupth.api.professional.usecase.UpdateProfessionalStatusUseCase;
 import com.ospaulos.vupth.api.report.dto.response.ProfessionalReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
@@ -18,7 +22,10 @@ import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.report.service.ReportService;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
+import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
+import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
+import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,9 +79,14 @@ public class ProfessionalQuickCreateController {
     private final AffiliateToEstablishmentUseCase affiliateUseCase;
     private final LeaveEstablishmentUseCase       leaveUseCase;
     private final UpdateMyProfileUseCase          updateMyProfileUseCase;
+    private final UpdateProfessionalStatusUseCase updateStatusUseCase;
+    private final UpdateAcceptingNewUseCase       acceptingNewUseCase;
     private final ProfessionalRepository         professionalRepository;
     private final ServiceItemRepository          serviceItemRepository;
     private final ReportService                  reportService;
+    private final QueueWebSocketPublisher        queuePublisher;
+    private final PushNotificationPublisher      pushPublisher;
+    private final com.ospaulos.vupth.domain.establishment.service.EstablishmentAutoCloseScheduler autoCloseScheduler;
 
     /**
      * GET /professional?name=&specialty=
@@ -123,9 +135,12 @@ public class ProfessionalQuickCreateController {
                 professional.getId(),
                 professional.getBaseUser().getFirstName(),
                 professional.getSpecialty(),
+                professional.getBaseUser().getNickname(),
                 professional.getEstablishment() != null ? professional.getEstablishment().getId() : null,
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 null
         ));
     }
@@ -145,6 +160,79 @@ public class ProfessionalQuickCreateController {
 
         ProfessionalQuickCreateResponse response =
                 updateMyProfileUseCase.execute(principal.getUserId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /professional/me/status
+     *
+     * S1 (fatia 1): o profissional muda o proprio status de trabalho
+     * ({@code WORKING}/{@code ON_BREAK}/{@code OFF}). Gates: entrar em expediente exige ≥1 servico
+     * ({@code 422 PROFESSIONAL_HAS_NO_SERVICE}); ficar indisponivel com fila/atendimento ativo e
+     * barrado ({@code 409 PROFESSIONAL_HAS_ACTIVE_ATTENDANCES}).
+     * Fatia 2: o open_status do estabelecimento e recalculado na mesma transacao e o snapshot da
+     * fila (que agora carrega o work_status) e broadcastado pos-commit.
+     * Auth: ROLE_PROFESSIONAL
+     */
+    @PatchMapping("/me/status")
+    public ResponseEntity<ProfessionalQuickCreateResponse> updateMyStatus(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid UpdateProfessionalStatusRequest request) {
+
+        log.info("PATCH /professional/me/status — user={} status={}", principal.getUserId(), request.status());
+
+        ProfessionalQuickCreateResponse response =
+                updateStatusUseCase.execute(principal.getUserId(), request);
+
+        // S1 fatia 2 — evento pos-commit: snapshot novo (work_status + open_status derivado).
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        // S1 fatia 5 — entrar/sair de expediente muda o proximo closing_time relevante; re-arma o timer.
+        autoCloseScheduler.reschedule();
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /professional/me/accepting-new
+     *
+     * S1 (fatia 3) — "fechar fila". {@code {"value": false}} fecha a fila para CLIENTES NOVOS
+     * (walk-in imediato -> {@code 409 PROFESSIONAL_NOT_ACCEPTING_NEW}); quem ja esta segue sendo
+     * atendido (drenagem) e recebe o anuncio ({@code QUEUE_CLOSING}, WS pessoal + push). Sem nada
+     * ativo, o profissional ja vira {@code OFF} na hora; com fila, o auto-OFF acontece no finish do
+     * ultimo atendimento. {@code {"value": true}} reabre (tambem reabre sozinha ao voltar de OFF
+     * para expediente). Idempotente. Auth: ROLE_PROFESSIONAL
+     */
+    @PatchMapping("/me/accepting-new")
+    public ResponseEntity<ProfessionalQuickCreateResponse> updateMyAcceptingNew(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid UpdateAcceptingNewRequest request) {
+
+        log.info("PATCH /professional/me/accepting-new — user={} value={}", principal.getUserId(), request.value());
+
+        UpdateAcceptingNewUseCase.Result result =
+                acceptingNewUseCase.execute(principal.getUserId(), request.value());
+        ProfessionalQuickCreateResponse response = result.response();
+
+        // Pos-commit: snapshot novo (accepting_new; e open_status se houve auto-OFF).
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        // Anuncio aos clientes que JA estao na fila (eles seguem sendo atendidos — drenagem).
+        for (UpdateAcceptingNewUseCase.WaitingClient waiting : result.waitingClients()) {
+            queuePublisher.notifyClient(waiting.clientId(), QueueNotification.of(
+                    "QUEUE_CLOSING", waiting.attendanceId(), response.establishmentId(),
+                    "A fila foi encerrada para novas entradas — você ainda será atendido."));
+            pushPublisher.notifyUser(waiting.clientId(), "Fila encerrada para novas entradas",
+                    "Você continua na fila e ainda será atendido.",
+                    java.util.Map.of("type", "QUEUE_CLOSING",
+                            "attendanceId", waiting.attendanceId().toString(),
+                            "establishmentId", String.valueOf(response.establishmentId())));
+        }
+
+        // S1 fatia 5 — auto-OFF ao fechar a fila sem nada ativo tira o profissional do expediente;
+        // re-arma o timer para nao guardar um closing_time que ja nao se aplica.
+        autoCloseScheduler.reschedule();
+
         return ResponseEntity.ok(response);
     }
 
@@ -233,6 +321,10 @@ public class ProfessionalQuickCreateController {
 
         ProfessionalQuickCreateResponse response =
                 affiliateUseCase.execute(principal.getUserId(), request.establishmentId());
+
+        // S1 fatia 2 — a afiliacao muda o snapshot (e pode abrir a loja): broadcast pos-commit.
+        queuePublisher.broadcastQueue(response.establishmentId());
+
         return ResponseEntity.ok(response);
     }
 
@@ -249,7 +341,11 @@ public class ProfessionalQuickCreateController {
 
         log.info("DELETE /professional/me/establishment — user={}", principal.getUserId());
 
-        leaveUseCase.execute(principal.getUserId());
+        UUID leftEstablishmentId = leaveUseCase.execute(principal.getUserId());
+
+        // S1 fatia 2 — a saida muda o snapshot (e pode fechar a loja): broadcast pos-commit.
+        queuePublisher.broadcastQueue(leftEstablishmentId);
+
         return ResponseEntity.noContent().build();
     }
 

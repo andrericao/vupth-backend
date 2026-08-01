@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -26,10 +26,10 @@ public record EstablishmentGeneralInfosResponse(
         String instagram,
 
         @JsonProperty("opening_time")
-        OffsetTime openingTime,
+        LocalTime openingTime,
 
         @JsonProperty("closing_time")
-        OffsetTime closingTime,
+        LocalTime closingTime,
 
         @JsonProperty("open_status")
         String openStatus,

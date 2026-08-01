@@ -6,6 +6,7 @@ import com.ospaulos.vupth.api.user.dto.response.auth.RefreshTokenResponse;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosAndToken;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosResponse;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
+import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.mapper.UserMapper;
 import com.ospaulos.vupth.api.user.usecase.profile.UpdateEmailUseCase;
@@ -149,13 +150,14 @@ class UpdateProfileUseCasesTest {
         @DisplayName("executeUpdatePassword — sucesso: senha encodada, tokens rotacionados")
         void updatePassword_success() {
             when(repository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches(eq("senhaAtual"), anyString())).thenReturn(true);
             when(passwordEncoder.encode("novaSenha123")).thenReturn("$2a$novo_hash");
             when(repository.save(any())).thenReturn(user);
             when(utilsTokens.rotateTokens(any())).thenReturn(fakeTokens);
             when(mapper.toGeneralInfosUserResponse(any())).thenReturn(generalInfos);
 
-            UserProfileGeneralInfosAndToken result =
-                    updatePasswordUseCase.executeUpdatePassword(USER_ID, new PasswordRequest("novaSenha123"));
+            UserProfileGeneralInfosAndToken result = updatePasswordUseCase.executeUpdatePassword(
+                    USER_ID, new PasswordRequest("senhaAtual", "novaSenha123"));
 
             assertThat(result).isNotNull();
             assertThat(user.getPassword()).isEqualTo("$2a$novo_hash");
@@ -169,8 +171,27 @@ class UpdateProfileUseCasesTest {
             when(repository.findById(USER_ID)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() ->
-                    updatePasswordUseCase.executeUpdatePassword(USER_ID, new PasswordRequest("qualquer")))
+                    updatePasswordUseCase.executeUpdatePassword(
+                            USER_ID, new PasswordRequest("senhaAtual", "qualquer")))
                     .isInstanceOf(UserNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("executeUpdatePassword — senha atual errada: lanca InvalidCurrentPasswordException e nao troca nada")
+        void updatePassword_wrongCurrentPassword_throws() {
+            String oldHash = user.getPassword();
+            when(repository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches(eq("errada"), anyString())).thenReturn(false);
+
+            assertThatThrownBy(() ->
+                    updatePasswordUseCase.executeUpdatePassword(
+                            USER_ID, new PasswordRequest("errada", "novaSenha123")))
+                    .isInstanceOf(InvalidCurrentPasswordException.class);
+
+            assertThat(user.getPassword()).isEqualTo(oldHash);
+            verify(passwordEncoder, never()).encode(anyString());
+            verify(repository, never()).save(any());
+            verify(utilsTokens, never()).rotateTokens(any());
         }
 
         @Test
@@ -178,12 +199,14 @@ class UpdateProfileUseCasesTest {
         void updatePassword_oldPasswordNotPersisted() {
             String oldHash = user.getPassword();
             when(repository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
             when(passwordEncoder.encode(anyString())).thenReturn("$2a$novo_hash");
             when(repository.save(any())).thenReturn(user);
             when(utilsTokens.rotateTokens(any())).thenReturn(fakeTokens);
             when(mapper.toGeneralInfosUserResponse(any())).thenReturn(generalInfos);
 
-            updatePasswordUseCase.executeUpdatePassword(USER_ID, new PasswordRequest("outraSenha"));
+            updatePasswordUseCase.executeUpdatePassword(
+                    USER_ID, new PasswordRequest("senhaAtual", "outraSenha"));
 
             assertThat(user.getPassword()).isNotEqualTo(oldHash);
         }

@@ -4,7 +4,7 @@ import com.ospaulos.vupth.domain.interval.valueObject.IntervalStatus;
 import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
 
 import java.time.OffsetDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.util.UUID;
 
 public record IntervalResponse(
@@ -15,6 +15,6 @@ public record IntervalResponse(
         OffsetDateTime startTime,
         OffsetDateTime endTime,
         String description,
-        OffsetTime fixedStartTime,
+        LocalTime fixedStartTime,
         String recurrencePattern)
 {}

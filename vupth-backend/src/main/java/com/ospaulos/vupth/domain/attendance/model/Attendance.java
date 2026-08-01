@@ -123,6 +123,16 @@ public class Attendance implements Serializable {
     private OffsetDateTime targetTime;
 
     /**
+     * Intencao de atendimento (backlog #4 / status {@link AttendanceStatus#INTENTION}): horario
+     * PRETENDIDO pelo cliente (ex.: 17:00 de amanha). Preenchido apenas quando o atendimento nasce
+     * como INTENTION (fora da fila). Diferente do {@code targetTime} do #40 (que vive DENTRO da fila
+     * como flag {@code is_intent} sobre um SCHEDULED): a INTENTION so entra na fila ao ser promovida.
+     * Null nos atendimentos normais.
+     */
+    @Column(name = "desired_time")
+    private OffsetDateTime desiredTime;
+
+    /**
      * Notificacoes push (backlog #1): true depois que este atendimento ja recebeu o push
      * "voce e o proximo" ao alcancar a frente da fila. Evita reenviar a cada nova mutacao
      * enquanto continua na frente. Ver {@code QueuePushService.notifyNextInLine}.

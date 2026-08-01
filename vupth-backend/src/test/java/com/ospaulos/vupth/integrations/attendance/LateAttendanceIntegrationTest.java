@@ -78,6 +78,8 @@ class LateAttendanceIntegrationTest {
 
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerProfToken);
         this.establishmentId = estab.id();
+        // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
+        TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Owner Professional");
 
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, ownerProfToken,

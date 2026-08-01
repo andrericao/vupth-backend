@@ -6,6 +6,7 @@ import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
@@ -66,6 +67,7 @@ class ClientQueueIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
+    @Autowired EstablishmentRepository establishmentRepository;
     @Autowired UserRepository userRepository;
 
     private final Faker faker = new Faker();
@@ -91,6 +93,9 @@ class ClientQueueIntegrationTest {
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, ownerProfToken,
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(25));
         this.serviceItemIds = List.of(UUID.fromString(s1.id()));
+
+        // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
+        TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
 
         // Client registers and joins the queue
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);

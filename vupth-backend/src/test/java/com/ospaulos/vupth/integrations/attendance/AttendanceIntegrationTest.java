@@ -123,6 +123,8 @@ class AttendanceIntegrationTest {
 
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerProfToken);
         this.establishmentId = estab.id();
+        // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
+        TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
 
         // Link the same user as PROFESSIONAL in their own establishment
         // After: CLIENT + OWNER + PROFESSIONAL
@@ -1155,15 +1157,20 @@ class AttendanceIntegrationTest {
 
     @Test
     @Order(93)
-    @DisplayName("GET /attendances/client/me?dateFrom=hoje&dateTo=hoje — 200 filtra por periodo")
+    @DisplayName("GET /attendances/client/me?dateFrom=hoje&dateTo=amanha — 200 filtra por periodo")
     void listClientAttendances_byDateRange() throws Exception {
         log.info("[Attendance] listClientAttendances_byDateRange");
 
+        // Periodo [hoje, amanha]: o filtro corta por scheduledTime, e a CAUDA da fila (+30min por
+        // atendimento) pode cruzar a meia-noite quando a suite roda tarde (CI 23:43 UTC ja flakou
+        // com [hoje, hoje] devolvendo 0). Um dia de folga mantem o filtro exercitado e o teste
+        // deterministico em qualquer horario.
         String today = java.time.LocalDate.now().toString();
+        String tomorrow = java.time.LocalDate.now().plusDays(1).toString();
 
         MvcResult result = mvc.perform(get("/attendances/client/me")
                         .param("dateFrom", today)
-                        .param("dateTo", today)
+                        .param("dateTo", tomorrow)
                         .header("Authorization", clientToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())

@@ -65,6 +65,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/forgot-password").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/reset-password").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
@@ -81,7 +83,19 @@ public class SecurityConfig {
                         // ── ROLE_CLIENT (qualquer autenticado) ────────────────────────────
                         .requestMatchers(HttpMethod.GET, "/attendances").hasAnyRole("OWNER", "PROFESSIONAL", "CLIENT")
                         .requestMatchers(HttpMethod.GET, "/attendances/client/me").hasRole("CLIENT")
+                        // Pedidos de corte pendentes do profissional (BUG5 C2 — antes do generico /attendances/*)
+                        .requestMatchers(HttpMethod.GET, "/attendances/cut-requests").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
+                        // Visao de agenda (#4, fatia 2): agenda do profissional e a do cliente (intencoes futuras)
+                        .requestMatchers(HttpMethod.GET, "/attendances/intentions/professional/me").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.GET, "/attendances/intentions/client/me").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/attendances/intentions").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/attendances/cut-requests").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/cut-requests/*/accept").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/cut-requests/*/refuse").hasRole("PROFESSIONAL")
+                        // Intencao de atendimento (#4, fatia 3): dono edita/cancela a propria intencao
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/intentions/*").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.DELETE, "/attendances/intentions/*").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PUT, "/attendances/*/cancel").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.DELETE, "/attendances/*/leave-queue").hasRole("CLIENT")
@@ -95,6 +109,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/swap-requests").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/swap-requests/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/swap-requests/*").hasRole("CLIENT")
+
+                        // Oferta ABERTA de troca de posicao (Client C13 / Partner S11) — cliente publica, elegivel aceita
+                        .requestMatchers(HttpMethod.POST, "/swap-offers").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/swap-offers").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/swap-offers/me").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/swap-offers/*/accept").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.DELETE, "/swap-offers/*").hasRole("CLIENT")
 
                         .requestMatchers(HttpMethod.POST, "/establishment/quick-create").hasRole("CLIENT")
 
@@ -115,6 +136,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/no-show").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/promote").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/fit-in").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-fit").hasRole("PROFESSIONAL")
 
@@ -124,6 +146,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/professional-queue/**").hasRole("PROFESSIONAL")
 
                         // Profissional se afilia/desafilia de um establishment
+                        .requestMatchers(HttpMethod.PATCH, "/professional/me/status").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/professional/me/accepting-new").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/professional/affiliate").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/establishment").hasRole("PROFESSIONAL")

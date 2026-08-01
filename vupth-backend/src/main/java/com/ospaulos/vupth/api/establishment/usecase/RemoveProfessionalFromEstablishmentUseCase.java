@@ -6,6 +6,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeni
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -26,6 +27,7 @@ public class RemoveProfessionalFromEstablishmentUseCase {
     private final EstablishmentRepository establishmentRepository;
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
+    private final EstablishmentOpenStatusService openStatusService;
 
     @Transactional
     public void execute(UUID ownerId, UUID establishmentId, UUID professionalId) {
@@ -59,6 +61,12 @@ public class RemoveProfessionalFromEstablishmentUseCase {
 
         professional.setEstablishment(null);
         professionalRepository.save(professional);
+
+        // S1 fatia 2 — se saiu o ultimo WORKING/ON_BREAK, a loja fecha (recalculo atomico).
+        // Saida OFF nao muda a presenca -> nao recalcula (preserva override manual do hibrido).
+        if (professional.getWorkStatus() != null && professional.getWorkStatus().countsAsOpen()) {
+            openStatusService.deriveFromProfessionals(establishmentId);
+        }
 
         log.info("[RemoveProfessional] professional={} removed from establishment={}",
                 professionalId, establishmentId);

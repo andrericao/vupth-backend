@@ -7,6 +7,7 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
+import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
@@ -59,6 +60,7 @@ class ClientEtaMealAwareIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired UserRepository userRepository;
+    @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalIntervalRepository intervalRepository;
 
     private final Faker faker = new Faker();
@@ -80,6 +82,9 @@ class ClientEtaMealAwareIntegrationTest {
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, estab.id(), owner.token(),
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
         this.serviceItemIds = List.of(UUID.fromString(s1.id()));
+
+        // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
+        TestUserUtils.openEstablishment(establishmentRepository, estab.id());
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientUuid = UUID.fromString(client.id());

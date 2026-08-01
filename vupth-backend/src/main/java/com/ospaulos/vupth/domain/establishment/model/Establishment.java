@@ -18,9 +18,11 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
+
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -63,11 +65,16 @@ public class Establishment implements Serializable {
     // Horario de funcionamento (opcional, editavel). Nullable: estabelecimentos
     // antigos / recem-criados podem nao ter ainda. Usado no gate de abertura e na
     // validacao de que as refeicoes cabem na janela de funcionamento (#11g2).
+    //
+    // BUG2b: LocalTime (relogio de parede no fuso da loja), NAO OffsetTime — a coluna e TIME
+    // (sem timezone) e nao tem onde guardar offset; com OffsetTime o Hibernate normalizava para
+    // UTC (08:00-03:00 gravava 11:00 e devolvia "11:00Z"). Comparacoes com "agora" usam
+    // BusinessClock (fuso vupth.timezone).
     @Column(name = "opening_time")
-    private OffsetTime openingTime;
+    private LocalTime openingTime;
 
     @Column(name = "closing_time")
-    private OffsetTime closingTime;
+    private LocalTime closingTime;
 
     @CreationTimestamp
     @JsonProperty("created_at")
@@ -174,24 +181,40 @@ public class Establishment implements Serializable {
      * {@code openStatus} manda — nao ha como recortar por horario.
      */
     public boolean isOpenNow() {
-        return isOpenAt(OffsetTime.now(java.time.ZoneOffset.UTC));
+        return isOpenAt(BusinessClock.nowTime());
     }
 
     /**
-     * Nucleo puro do {@link #isOpenNow()}, parametrizado pelo instante — deterministico
+     * Nucleo puro do {@link #isOpenNow()}, parametrizado pela hora de parede — deterministico
      * para teste. Trata janela normal {@code [open, close)}, 24h ({@code open == close})
      * e janela que vira a meia-noite ({@code close < open}).
      */
-    public boolean isOpenAt(OffsetTime now) {
+    public boolean isOpenAt(LocalTime now) {
         if (openStatus != OpenStatus.OPEN) {
             return false;
         }
+        return isWithinBusinessHours(now);
+    }
+
+    /**
+     * A hora {@code t} cai dentro da janela de expediente {@code [openingTime, closingTime)}?
+     * <p>
+     * Diferente de {@link #isOpenAt(LocalTime)}, <b>ignora o {@code openStatus}</b> — olha somente
+     * o horario de funcionamento. Serve para validar uma intencao de atendimento (backlog #4) para
+     * um horario futuro <b>mesmo com a loja fechada agora</b> (ela abre depois). Trata janela normal
+     * {@code [open, close)}, 24h ({@code open == close}) e janela que vira a meia-noite ({@code close < open}).
+     * Sem janela definida (opening/closing nulos) qualquer hora e valida.
+     * <p>
+     * BUG2b: {@code t} e hora de PAREDE no fuso da loja — quem tem um instante converte com
+     * {@code BusinessClock.timeAt(instante)}, nao com {@code toOffsetTime()}.
+     */
+    public boolean isWithinBusinessHours(LocalTime t) {
         if (openingTime == null || closingTime == null) {
-            return true; // sem janela: so o open_status manda
+            return true; // sem janela definida
         }
-        java.time.LocalTime n = now.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
-        java.time.LocalTime open = openingTime.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
-        java.time.LocalTime close = closingTime.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalTime();
+        LocalTime n = t;
+        LocalTime open = openingTime;
+        LocalTime close = closingTime;
         if (open.equals(close)) {
             return true; // janela degenerada = 24h
         }

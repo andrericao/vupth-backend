@@ -31,7 +31,10 @@ jobs:
   # =========================
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Cushion. Com reuseForks=true (cache de contexto do Spring) a suite roda em poucos
+    # minutos; o teto largo protege a 1a validacao e o crescimento futuro sem mascarar hang
+    # real (se algo travar de verdade, ainda falha aqui em vez de silenciosamente).
+    timeout-minutes: 30
 
     services:
       postgres:

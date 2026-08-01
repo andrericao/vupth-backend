@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.queue.service.impl;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.client.dto.response.ClientInQueueResponse;
@@ -126,7 +127,7 @@ public class QueueServiceImpl implements QueueService {
         List<Attendance> queueEntities = attendanceRepository
                 .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
         OffsetDateTime now = OffsetDateTime.now();
-        LocalDate today = now.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
+        LocalDate today = BusinessClock.dateAt(now); // BUG2b: dia da LOJA (vira a meia-noite local)
 
         int currentRemaining = fullQueue.inAttendance() != null
                 ? fullQueue.inAttendance().remainingMinutes() : 0;

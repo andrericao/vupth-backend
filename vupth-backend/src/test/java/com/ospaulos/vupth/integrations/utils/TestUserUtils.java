@@ -7,6 +7,8 @@ import com.ospaulos.vupth.api.professional.dto.request.ProfessionalQuickCreateRe
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserRegisterRequest;
+import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
@@ -188,6 +190,19 @@ public class TestUserUtils {
     public static void becomeProfessional(MockMvc mvc, ObjectMapper mapper, Faker faker,
                                           String token, String establishmentId) throws Exception {
         becomeProfessional(mvc, mapper, faker, token, establishmentId, null);
+    }
+
+    /**
+     * Marca o establishment como OPEN direto no banco (sem passar pelo gate de abertura, que
+     * exige horario). Usado no setup de testes que precisam de um cliente ENTRANDO na fila:
+     * apos o gate de entrada (BUG5 parte C1), so loja "aberta agora" recebe walk-in. Sem horario
+     * definido, {@code isOpenNow()} = OPEN, entao basta o status. Idempotente.
+     */
+    public static void openEstablishment(EstablishmentRepository repository, String establishmentId) {
+        Establishment e = repository.findById(UUID.fromString(establishmentId)).orElseThrow();
+        e.setOpenStatus(OpenStatus.OPEN);
+        repository.save(e);
+        log.debug("[TestUtils] openEstablishment estab={} -> OPEN", establishmentId);
     }
 
     // ─────────────────────────────────────────────

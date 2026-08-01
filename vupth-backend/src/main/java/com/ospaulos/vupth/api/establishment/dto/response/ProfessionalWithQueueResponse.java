@@ -5,6 +5,8 @@ import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalAvailability;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.queue.service.QueueUtils;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
@@ -27,6 +29,20 @@ public record ProfessionalWithQueueResponse(
 
         @JsonProperty("is_available")
         Boolean isAvailable,
+
+        // S1 fatia 2 — status de trabalho do profissional (WORKING/ON_BREAK/OFF); base do
+        // open_status derivado da loja. Pedido explicito do Partner (handoff S1).
+        @JsonProperty("work_status")
+        ProfessionalStatus workStatus,
+
+        // S1 fatia 3 — "fechar fila": false = fila fechada p/ novos clientes (drenando os atuais)
+        @JsonProperty("accepting_new")
+        Boolean acceptingNew,
+
+        // S1 fatia 4 — rotulo do CLIENTE, derivado de work_status + accepting_new (read-only,
+        // nunca persistido): DISPONIVEL / ENCERRANDO / INDISPONIVEL.
+        @JsonProperty("availability")
+        ProfessionalAvailability availability,
 
         @JsonProperty("current_attendance")
         AttendanceInQueueResponse currentAttendance,
@@ -119,6 +135,10 @@ public record ProfessionalWithQueueResponse(
                 professional.getSpecialty(),
                 professional.getBaseUser() != null ? professional.getBaseUser().getNickname() : null,
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
+                professional.getAcceptingNew(),
+                ProfessionalAvailability.derive(
+                        professional.getWorkStatus(), professional.getAcceptingNew()),
                 currentDto,
                 waitingDtos,
                 waitingList.size(),

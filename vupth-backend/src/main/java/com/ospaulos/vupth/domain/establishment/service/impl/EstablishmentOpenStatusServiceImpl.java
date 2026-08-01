@@ -5,6 +5,8 @@ import com.ospaulos.vupth.domain.establishment.model.EstablishmentAddress;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,6 +25,7 @@ import java.util.UUID;
 public class EstablishmentOpenStatusServiceImpl implements EstablishmentOpenStatusService {
 
     private final EstablishmentRepository establishmentRepository;
+    private final ProfessionalRepository professionalRepository;
 
     /**
      * Atualiza o status de funcionamento do establishment
@@ -115,6 +118,37 @@ public class EstablishmentOpenStatusServiceImpl implements EstablishmentOpenStat
                         establishment.getId(), e.getMessage());
             }
         }
+    }
+
+    /**
+     * S1 (fatia 2) — {@code aberto ⇔ ∃ prof afiliado em {WORKING, ON_BREAK}}. Ver contrato completo
+     * (regras do modelo hibrido) na interface. Mesma transacao do chamador — recalculo atomico.
+     */
+    @Override
+    public boolean deriveFromProfessionals(UUID establishmentId) {
+        Establishment establishment = establishmentRepository.findById(establishmentId)
+                .orElseThrow();
+
+        // Query direta (nao a colecao lazy inversa — stale quando a afiliacao muda na mesma tx).
+        boolean anyoneIn = professionalRepository.existsByEstablishment_IdAndWorkStatusIn(
+                establishmentId,
+                List.of(ProfessionalStatus.WORKING, ProfessionalStatus.ON_BREAK));
+        OpenStatus derived = anyoneIn ? OpenStatus.OPEN : OpenStatus.CLOSED;
+
+        OpenStatus current = establishment.getOpenStatus();
+        if (derived == current) {
+            return false;
+        }
+        // CLOSED derivado nao rebaixa um TEMPORARILY_CLOSED manual (ja esta fechado).
+        if (derived == OpenStatus.CLOSED && current == OpenStatus.TEMPORARILY_CLOSED) {
+            return false;
+        }
+
+        establishment.setOpenStatus(derived);
+        establishment.setLastStatusChange(ZonedDateTime.now());
+        establishmentRepository.save(establishment);
+        log.info("[OpenStatus] derivado — establishment={} {} -> {}", establishmentId, current, derived);
+        return true;
     }
 
     /*

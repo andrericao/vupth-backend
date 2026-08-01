@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-closing_grace_until-to-professional
+      author: vupth
+      comment: >-
+        S1 fatia 5 (auto-fechamento por horario / BUG1): instante-limite da carencia de 15min
+        apos o closing_time. Setado pelo EstablishmentAutoCloseScheduler quando o profissional
+        segue em expediente fora do horario (junto com o prompt "quer fechar?"); NULL = sem
+        carencia pendente. Ao vencer sem sinalizacao, o profissional vira OFF sozinho.
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: closing_grace_until
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: true

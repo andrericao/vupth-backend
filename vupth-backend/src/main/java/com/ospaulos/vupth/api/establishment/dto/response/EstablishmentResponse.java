@@ -6,7 +6,7 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import jakarta.validation.constraints.NotNull;
 
-import java.time.OffsetTime;
+import java.time.LocalTime;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,16 +22,24 @@ public record EstablishmentResponse(
         String instagram,
 
         @JsonProperty("opening_time")
-        OffsetTime openingTime,
+        LocalTime openingTime,
 
         @JsonProperty("closing_time")
-        OffsetTime closingTime,
+        LocalTime closingTime,
 
         // Menor tempo de espera (min) entre os profissionais da loja, em minutos.
         // null quando a loja nao tem profissional com servico (sem disponibilidade).
         // Preenchido apenas na busca/listagem publica (GET /establishment).
         @JsonProperty("estimated_wait_minutes")
         Integer estimatedWaitMinutes,
+
+        // Quantidade de profissionais afiliados COM ao menos um servico (mesmo
+        // conjunto que alimenta estimated_wait_minutes). null fora da listagem publica.
+        // O front-client usa pra decidir se mostra uma loja FECHADA na Home: so exibe
+        // as fechadas com available_professionals > 0 (ha profissional pra agendar a
+        // reabertura). Independe de open_status e de o profissional estar ocupado agora.
+        @JsonProperty("available_professionals")
+        Integer availableProfessionals,
 
         @JsonProperty("open_status")
         String openStatus,
@@ -51,10 +59,12 @@ public record EstablishmentResponse(
         AddressResponse address
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
-        return fromEntity(establishment, null);
+        return fromEntity(establishment, null, null);
     }
 
-    public static EstablishmentResponse fromEntity(Establishment establishment, Integer estimatedWaitMinutes) {
+    public static EstablishmentResponse fromEntity(Establishment establishment,
+                                                   Integer estimatedWaitMinutes,
+                                                   Integer availableProfessionals) {
         return new EstablishmentResponse(
                 establishment.getId(),
                 establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
@@ -67,6 +77,7 @@ public record EstablishmentResponse(
                 establishment.getOpeningTime(),
                 establishment.getClosingTime(),
                 estimatedWaitMinutes,
+                availableProfessionals,
                 establishment.getOpenStatus() != null ? establishment.getOpenStatus().name() : null,
                 establishment.isOpenNow(),
                 establishment.getStatus() != null ? establishment.getStatus().name() : null,

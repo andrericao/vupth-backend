@@ -1,0 +1,138 @@
+databaseChangeLog:
+  # Oferta ABERTA de troca de posicao (Client C13 / Partner S11 — modelo fechado 2026-07-15).
+  # Distinta do queue_swap_request (#42, DIRIGIDO): aqui a oferta e publicada e qualquer cliente
+  # elegivel (por posicao/direcao na mesma fila) pode aceitar. O solicitante pode estar NA fila
+  # (requester_attendance_id preenchido) ou FORA dela (null; usa swap_offer_service_item p/ recriar
+  # os ETAs no aceite -> nasce um Attendance em resulting_attendance_id). Nunca gera multa.
+  - changeSet:
+      id: 011-create-swap_offer
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: swap_offer
+      changes:
+        - createTable:
+            tableName: swap_offer
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_swap_offer
+                    nullable: false
+              - column:
+                  name: requester_client_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: requester_attendance_id
+                  type: UUID
+              - column:
+                  name: direction
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: resulting_attendance_id
+                  type: UUID
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: responded_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer
+            baseColumnNames: requester_client_id
+            constraintName: fk_swap_offer_client
+            referencedTableName: client
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer
+            baseColumnNames: professional_id
+            constraintName: fk_swap_offer_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer
+            baseColumnNames: establishment_id
+            constraintName: fk_swap_offer_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer
+            baseColumnNames: requester_attendance_id
+            constraintName: fk_swap_offer_requester_attendance
+            referencedTableName: attendance
+            referencedColumnNames: id
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer
+            baseColumnNames: resulting_attendance_id
+            constraintName: fk_swap_offer_resulting_attendance
+            referencedTableName: attendance
+            referencedColumnNames: id
+        - createIndex:
+            tableName: swap_offer
+            indexName: idx_swap_offer_professional_status
+            columns:
+              - column:
+                  name: professional_id
+              - column:
+                  name: status
+
+  - changeSet:
+      id: 011-create-swap_offer_service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: swap_offer_service_item
+      changes:
+        - createTable:
+            tableName: swap_offer_service_item
+            columns:
+              - column:
+                  name: swap_offer_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: service_item_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer_service_item
+            baseColumnNames: swap_offer_id
+            constraintName: fk_swap_offer_si_swap_offer
+            referencedTableName: swap_offer
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: swap_offer_service_item
+            baseColumnNames: service_item_id
+            constraintName: fk_swap_offer_si_service_item
+            referencedTableName: service_item
+            referencedColumnNames: id

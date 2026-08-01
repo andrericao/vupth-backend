@@ -947,14 +947,16 @@ class EstablishmentIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HOURS_REQUIRED"))
                 .andDo(print());
 
-        // define o horario de funcionamento (tela de configuracoes)
+        // define o horario de funcionamento (tela de configuracoes). BUG2b: a entrada aceita o
+        // sufixo de offset legado ("09:00:00Z") mas ele e IGNORADO — os digitos sao a hora de
+        // parede — e a saida e canonica "HH:MM", sem offset.
         mvc.perform(patch("/establishment/{id}/general-infos", ownerProfEstablishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken)
                         .content("{\"opening_time\":\"09:00:00Z\",\"closing_time\":\"18:00:00Z\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.opening_time").value("09:00Z"))
-                .andExpect(jsonPath("$.closing_time").value("18:00Z"))
+                .andExpect(jsonPath("$.opening_time").value("09:00"))
+                .andExpect(jsonPath("$.closing_time").value("18:00"))
                 .andDo(print());
 
         // agora pode abrir

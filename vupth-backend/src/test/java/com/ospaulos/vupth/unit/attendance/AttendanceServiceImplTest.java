@@ -13,7 +13,9 @@ import com.ospaulos.vupth.domain.client.exception.ClientNotFoundException;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -107,6 +109,9 @@ class AttendanceServiceImplTest {
         establishment = new Establishment();
         establishment.setId(establishmentId);
         establishment.setName("Barbershop Teste");
+        // Aberta agora (sem janela de horario => so o openStatus manda). Necessario pro gate de
+        // entrada do walk-in (BUG5 parte C1): so loja "aberta agora" recebe entrada sem targetTime.
+        establishment.setOpenStatus(OpenStatus.OPEN);
 
         profUser = new BaseUser();
         profUser.setId(professionalId);
@@ -235,6 +240,21 @@ class AttendanceServiceImplTest {
 
             assertThatThrownBy(() -> attendanceService.createAttendance(request))
                     .isInstanceOf(ServiceItemNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("throws EstablishmentNotOpenException: walk-in (sem targetTime) e loja fechada — gate BUG5 C1")
+        void createAttendance_walkIn_establishmentClosed() {
+            // request do setUp usa o construtor de 8 args => targetTime == null (walk-in imediato).
+            // Com a loja CLOSED, isOpenNow() == false, entao o gate de entrada barra antes de tocar
+            // client/serviceItems.
+            establishment.setOpenStatus(OpenStatus.CLOSED);
+            when(professionalRepository.findById(professionalId)).thenReturn(Optional.of(professional));
+
+            assertThatThrownBy(() -> attendanceService.createAttendance(request))
+                    .isInstanceOf(EstablishmentNotOpenException.class);
+            verify(attendanceRepository, never()).save(any());
+            verify(clientRepository, never()).findById(any());
         }
     }
 

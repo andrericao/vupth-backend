@@ -55,6 +55,10 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 		<dependency>
@@ -154,16 +158,25 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 
-			<!-- Test isolation: each test class gets its own JVM fork.
-			     Prevents Spring context state and Liquibase drop-first
-			     from leaking across integration test classes. -->
+			<!-- reuseForks=true: uma unica JVM roda todas as classes, deixando o CACHE DE
+			     CONTEXTO do Spring reusar o mesmo ApplicationContext entre elas. As ~53 classes
+			     de integracao compartilham a mesma assinatura de contexto (@SpringBootTest
+			     RANDOM_PORT + @AutoConfigureMockMvc + @ActiveProfiles("test")), entao o contexto
+			     (e o drop-first do Liquibase, que re-roda as 71 migrations) sobe ~2-3x em vez de
+			     53x — corta a suite de ~20min para poucos minutos.
+			     PRE-REQUISITO ja garantido: (a) o timer de promocao de intencao nao vaza entre
+			     classes (auto-arm=false nos testes + thread daemon, ver IntentionPromotionScheduler);
+			     (b) como o DB NAO e mais dropado entre classes que compartilham contexto, cada
+			     classe precisa limpar seus proprios dados (deleteAll no setup/teardown) — padrao ja
+			     seguido pela maioria. Uma classe que assuma "tabela vazia" sem limpar deve ganhar o
+			     deleteAll. -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<version>3.2.5</version>
 				<configuration>
 					<forkCount>1</forkCount>
-					<reuseForks>false</reuseForks>
+					<reuseForks>true</reuseForks>
 					<!-- Mockito 5 (inline mock maker) + ByteBuddy retransformacao + CDS ("sharing")
 					     causa flakiness "Could not modify all classes / NoClassDefFoundError" no suite
 					     completo (nao reproduz em isolamento). -Xshare:off desliga o CDS no fork.

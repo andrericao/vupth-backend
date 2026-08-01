@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # Intencao de atendimento (backlog #4 / status INTENTION): um atendimento pode nascer com o
+  # status INTENTION e um horario PRETENDIDO (desired_time). Enquanto INTENTION ele fica FORA da
+  # fila (nao aparece em professionals-with-queue) e e promovido a SCHEDULED quando o horario se
+  # aproxima (~15min antes, fatia 3). desired_time e o horario que o cliente pretende ser atendido.
+  # O status e VARCHAR(50) sem CHECK, entao o novo valor INTENTION do enum nao exige migration.
+  - changeSet:
+      id: 009-add-desired_time-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: desired_time
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: desired_time
+                  type: TIMESTAMP WITH TIME ZONE

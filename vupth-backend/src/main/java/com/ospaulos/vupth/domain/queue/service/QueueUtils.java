@@ -1,13 +1,14 @@
 package com.ospaulos.vupth.domain.queue.service;
 
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -332,8 +333,10 @@ public class QueueUtils {
 
     /** Constroi os blocos efetivos de hoje a partir dos intervalos do profissional. */
     private static List<Block> buildBlocks(List<ProfessionalInterval> intervals, OffsetDateTime now) {
-        LocalDate today = now.withOffsetSameInstant(ZoneOffset.UTC).toLocalDate();
-        OffsetDateTime endOfDay = today.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC);
+        // BUG2b: o dia e o horario das refeicoes sao do fuso da LOJA (fixedStartTime e relogio
+        // de parede) — nao do UTC.
+        LocalDate today = BusinessClock.dateAt(now);
+        OffsetDateTime endOfDay = BusinessClock.at(today.plusDays(1), LocalTime.MIDNIGHT);
 
         // Recorrentes previstos (nao iniciados hoje), ordenados pelo horario projetado —
         // para calcular os deadlines de "some na proxima".
@@ -347,7 +350,7 @@ public class QueueUtils {
                 previstos.add(iv);
             }
         }
-        previstos.sort(Comparator.comparing(iv -> iv.getFixedStartTime().atDate(today)));
+        previstos.sort(Comparator.comparing(ProfessionalInterval::getFixedStartTime));
 
         List<Block> blocks = new ArrayList<>();
 
@@ -363,7 +366,7 @@ public class QueueUtils {
                 }
             } else if (iv.getIntervalType() == IntervalType.UNEXPECTED
                     && iv.getStartTime() != null
-                    && iv.getStartTime().toLocalDate().equals(today)) { // day-scoped: so unexpected de hoje
+                    && BusinessClock.dateAt(iv.getStartTime()).equals(today)) { // day-scoped: so unexpected de hoje
                 OffsetDateTime start = iv.getStartTime();
                 OffsetDateTime end = start.plusMinutes(iv.getDurationMinutes());
                 if (end.isAfter(now)) {
@@ -382,10 +385,10 @@ public class QueueUtils {
         // Recorrentes previstos: projetados em hoje, deslocados pra frente, com deadline "some na proxima".
         for (int i = 0; i < previstos.size(); i++) {
             ProfessionalInterval iv = previstos.get(i);
-            OffsetDateTime projected = iv.getFixedStartTime().atDate(today);
+            OffsetDateTime projected = BusinessClock.at(today, iv.getFixedStartTime());
             OffsetDateTime start = projected.isBefore(now) ? now : projected; // nunca no passado
             OffsetDateTime disappearAt = (i + 1 < previstos.size())
-                    ? previstos.get(i + 1).getFixedStartTime().atDate(today)
+                    ? BusinessClock.at(today, previstos.get(i + 1).getFixedStartTime())
                     : endOfDay;
 
             // ja alcancou a proxima refeicao (ou o fim do dia) → some

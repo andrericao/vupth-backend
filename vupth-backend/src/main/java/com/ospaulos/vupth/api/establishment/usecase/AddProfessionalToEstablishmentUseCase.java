@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeni
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalAlreadyAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
@@ -43,6 +44,7 @@ public class AddProfessionalToEstablishmentUseCase {
 
     private final EstablishmentRepository establishmentRepository;
     private final ProfessionalRepository  professionalRepository;
+    private final EstablishmentOpenStatusService openStatusService;
 
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID ownerId, UUID establishmentId, UUID professionalId) {
@@ -80,6 +82,12 @@ public class AddProfessionalToEstablishmentUseCase {
         professional.setEstablishment(establishment);
         professionalRepository.save(professional);
 
+        // S1 fatia 2 — quem chega WORKING/ON_BREAK pode abrir a loja (recalculo atomico).
+        // Chegada OFF nao muda a presenca -> nao recalcula (preserva override manual do hibrido).
+        if (professional.getWorkStatus() != null && professional.getWorkStatus().countsAsOpen()) {
+            openStatusService.deriveFromProfessionals(establishmentId);
+        }
+
         String profName = professional.getBaseUser() != null
                 ? professional.getBaseUser().getFirstName()
                 : professionalId.toString();
@@ -91,9 +99,12 @@ public class AddProfessionalToEstablishmentUseCase {
                 professional.getId(),
                 profName,
                 professional.getSpecialty(),
+                professional.getBaseUser() != null ? professional.getBaseUser().getNickname() : null,
                 establishment.getId(),
                 establishment.getName(),
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 "Professional successfully added to establishment."
         );
     }

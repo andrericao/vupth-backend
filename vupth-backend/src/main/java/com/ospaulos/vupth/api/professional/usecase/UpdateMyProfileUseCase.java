@@ -59,9 +59,12 @@ public class UpdateMyProfileUseCase {
                 professional.getId(),
                 professional.getBaseUser().getFirstName(),
                 professional.getSpecialty(),
+                professional.getBaseUser().getNickname(),
                 professional.getEstablishment() != null ? professional.getEstablishment().getId() : null,
                 professional.getEstablishment() != null ? professional.getEstablishment().getName() : null,
                 professional.getIsAvailable(),
+                professional.getWorkStatus(),
+                professional.getAcceptingNew(),
                 null
         );
     }
