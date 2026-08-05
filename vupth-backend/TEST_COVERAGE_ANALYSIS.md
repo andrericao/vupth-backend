@@ -152,12 +152,13 @@ Testes (unit): `RegisterProfessionalUseCaseTest`/`QuickCreateProfessionalUseCase
 | GET /intervals?date= | ✅ | ⚠️ |
 
 ### 2.8 WebSocket
-Testes: `integrations/websocket/WebSocketIntegrationTest` (2).
+Testes: `integrations/websocket/WebSocketIntegrationTest` (3).
 
 | Fluxo | Feliz | Erros |
 |---|---|---|
 | STOMP connect + broadcast fila | ✅ | ❌ (falta auth inválida / canal negado) |
 | Notificação pessoal | ⚠️ | ❌ |
+| Heartbeat negociado no CONNECTED (10s/10s) | ✅ | ❌ (falta cliente que pede `0,0`) |
 
 ### 2.9 Notificações push (backlog #1)
 Testes: `integrations/notification/PushNotificationIntegrationTest` (5) — `PushSender` mockado (`vupth.push.provider=none`). Inclui **BUG9** (Order 22): profissional remove da fila → push `ATTENDANCE_CANCELLED` ao cliente + status `CANCELLED`.
