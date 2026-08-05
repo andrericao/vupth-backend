@@ -2828,9 +2828,17 @@ O servidor anuncia `heart-beat:10000,10000` no frame **CONNECTED**: escreve um f
 
 **Por que existe** (Partner S17, backlog #31): ate 01/08 o broker respondia `heart-beat:0,0` (o `enableSimpleBroker` estava **sem `TaskScheduler`** — sem ele o Spring desliga o heartbeat), medido em producao pelo Andre com o `ws-test.html`. Sem heartbeat, quando o Render corta o socket ocioso (ou a instancia hiberna) a conexao vira **zumbi**: o app continua se achando conectado, o `reconnectDelay` do `@stomp/stompjs` **nunca dispara** (nao houve erro visivel) e a fila simplesmente para de atualizar. Isso explica o "as vezes nao chega" **dentro da 1a hora** — que o item de token invalido (backlog #31 atual) nao explicava. Com o heartbeat, a queda vira erro de escrita/leitura → desconexao → reconexao automatica; e o trafego periodico ainda evita o proprio corte por ociosidade.
 
-**O que os fronts precisam fazer:** nada de novo — os dois apps **ja pedem** `heartbeatIncoming: 10000` / `heartbeatOutgoing: 10000`. So agora o servidor aceita. Duas observacoes:
-- O heartbeat e **negociado**: quem pedir `0` de um lado desliga aquele sentido. Cliente que **nao** manda heartbeat continua funcionando (o servidor nao o desconecta), mas fica sem a deteccao do socket zumbi.
-- Em React Native, o timer do heartbeat nao roda com o app em background — a reconexao ao voltar ao foreground continua sendo responsabilidade do app.
+**📣 HANDOFF PARA OS FRONTS (Client e Partner) — heartbeat:**
+
+**Para funcionar, nada a fazer:** os dois apps **ja pedem** `heartbeatIncoming: 10000` / `heartbeatOutgoing: 10000` no `@stomp/stompjs`; so agora o servidor aceita. O heartbeat e **negociado por sentido** — quem mandar `0` desliga aquele lado. Cliente sem heartbeat continua conectando normalmente (o servidor **nao** o desconecta), mas fica sem a deteccao do socket zumbi, que e justamente o problema que este item resolve.
+
+**⬜ PENDENCIA DOS FRONTS (aberta, os dois apps) — reconectar ao voltar do background.** O heartbeat **nao cobre o app em background**: em React Native os timers de JS sao suspensos quando o app sai do foreground (iOS suspende o processo; Android com Doze/background restrictions idem), entao **nem o servidor recebe o heartbeat do app, nem o app processa o do servidor**. O que acontece na pratica:
+- O servidor deixa de receber o heartbeat e **encerra a sessao** (comportamento correto — libera o recurso; o `push` cobre o usuario nesse periodo, ver secao "Notificacoes push").
+- Ao voltar ao foreground, o app pode acordar sobre um socket **ja morto** e continuar exibindo a fila congelada, exatamente o sintoma que o heartbeat elimina no foreground. Como o SO congelou o timer, **nao da para confiar no `reconnectDelay` sozinho**.
+
+**O que fazer (lado do app):** assinar `AppState` e, na transicao `background → active`, **forcar a reavaliacao da conexao** — se o cliente STOMP nao estiver `CONNECTED`, `deactivate()` + `activate()` (reconecta com token fresco no `beforeConnect`) — e, ao reconectar, **refazer o estado por REST** (`GET .../professionals-with-queue` e afins), porque os eventos publicados enquanto o app dormia **nao sao reenviados**: o broker e em memoria e sem fila por sessao (nao ha replay). O mesmo re-sync ja vale para qualquer reconexao, nao so a do foreground.
+
+**Por que fica com o front:** e limite de ciclo de vida do SO, nao do protocolo — nenhum ajuste no servidor faz o timer do app rodar suspenso. Aumentar o intervalo do heartbeat so atrasaria a deteccao no foreground sem resolver o background. Quando um front implementar, avisar — o backend revisa o alinhamento.
 
 Implementacao: `WebSocketConfig.configureMessageBroker` → `.setHeartbeatValue(new long[]{10000, 10000}).setTaskScheduler(...)`, com `ThreadPoolTaskScheduler` **proprio e daemon** (`ws-heartbeat-`, pool 1 — o broker agenda uma unica tarefa), mesmo padrao dos schedulers de dominio: o projeto nao usa `@EnableScheduling` e nenhuma thread pode segurar o encerramento da JVM.
 
@@ -3430,7 +3438,7 @@ Convidados (sem conta) nao recebem push. O payload leva `data.type` (o mesmo typ
 
 **Provedor:** Expo Push API (`POST https://exp.host/--/api/v2/push/send`, lotes de 100). Abstraido por `PushSender` (`ExpoPushSender` em prod; `NoOpPushSender` quando `vupth.push.provider=none`, usado nos testes/staging para nao chamar rede). Config: `vupth.push.provider` (env `PUSH_PROVIDER`, default `expo`), `vupth.push.expo.url`, `vupth.push.expo.access-token` (opcional). **Best-effort:** falha de rede/provedor e logada e nunca quebra a resposta HTTP.
 
-**HANDOFF FRONTS (Client e Partner):** ao abrir o app (apos o portao de readiness), pedir permissao de push, obter o Expo Push Token e chamar `POST /devices {token, platform}`; no logout, `DELETE /devices/${encodeURIComponent(token)}` (url-encodar por causa dos colchetes do token Expo — ver ⚠️ acima). Tratar as notificacoes por `data.type` (`QUEUE_NEXT_IN_LINE`, `ATTENDANCE_STARTED`, `ATTENDANCE_FINISHED`, `SWAP_*`). O WS continua para o app em foreground; o push cobre background/fechado.
+**HANDOFF FRONTS (Client e Partner):** ao abrir o app (apos o portao de readiness), pedir permissao de push, obter o Expo Push Token e chamar `POST /devices {token, platform}`; no logout, `DELETE /devices/${encodeURIComponent(token)}` (url-encodar por causa dos colchetes do token Expo — ver ⚠️ acima). Tratar as notificacoes por `data.type` (`QUEUE_NEXT_IN_LINE`, `ATTENDANCE_STARTED`, `ATTENDANCE_FINISHED`, `SWAP_*`). O WS continua para o app em foreground; o push cobre background/fechado. ⚠️ Ao **voltar do background**, o socket provavelmente ja morreu (o heartbeat nao roda com o app suspenso) — ver a pendencia "reconectar ao voltar do background" na secao 18b.
 
 **Cobertura:** integracao `PushNotificationIntegrationTest` (registro upsert + delete + 401/422; "proximo" ao entrar; dedup do 2o + avanco ao iniciar; started/finished) + Postman folder `13 - device tokens / push (notificacoes)` (homolog+prod).
 
