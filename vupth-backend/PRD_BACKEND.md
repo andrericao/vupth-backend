@@ -2899,18 +2899,27 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 
 ⚠️ **O heartbeat virou o DISCRIMINADOR.** Antes, "nao chega mensagem" nao dizia de quem era a culpa. Agora diz: **se o CONNECTED voltar `heart-beat:10000,10000` e ainda assim nao chegar nada, o defeito esta no cliente**, porque o servidor comprovadamente entrega naquele mesmo caminho.
 
-**Estado dos dois apps em 2026-08-06 (conferido no codigo) — e um A/B pronto:**
+**Estado dos dois apps em 2026-08-07 (conferido no codigo dos dois repos) — e um A/B pronto.** ⚠️ **Sao TRES variaveis, nao duas** — correcao do Partner em 06/08, procedente e conferida aqui:
 
-| | flags `forceBinaryWSFrames`/`appendMissingNULLonIncoming` | reconnect no `AppState` |
-|---|---|---|
-| **Client** | ✅ **removidas** (`useQueueSocket.ts`, comentario de 01/08) | ❌ **nao tem** — e o C18 |
-| **Partner** | ❌ **ainda tem as duas** (`useQueueSocket.ts:67-68`) | ✅ tem (v18.5) |
+| | flags `forceBinary…`/`appendMissingNULL…` | reconnect no `AppState` | token na reconexao |
+|---|---|---|---|
+| **Client** | ✅ **removidas** | ❌ **nao tem** — e o C18 | ⚠️ **RE-LE, mas NAO RENOVA** — `beforeConnect` faz `SecureStore.getItemAsync` e usa o que estiver la (e o C16) |
+| **Partner** | ❌ **tem as duas** (`useQueueSocket.ts:67-68`) | ✅ tem (v18.5) | ✅ **RE-LE E RENOVA** — `beforeConnect` chama `useAuthStore.refreshToken()` se vencido (fix `59a3b9b`, 01/08) |
 
-Os dois apps diferem **exatamente** nas duas variaveis em disputa, contra o mesmo servidor. Da para decidir por observacao, sem ninguem mexer em codigo antes.
+A terceira coluna e a que **muda a leitura do Teste 1** — ver abaixo. O A/B continua valendo para as flags (coluna 1), que seguem sendo a unica variavel isolada entre os dois apps.
 
-**Teste 0 (pre-requisito dos dois apps) — logar os headers do CONNECTED.** No `onConnect`, imprimir `frame.headers`. Esperado: `heart-beat:10000,10000` e `user-name:<userId>`. E uma linha de log e destrava a interpretacao de todos os outros. Sem ela, qualquer falha vira discussao.
+**Teste 0 (pre-requisito de interpretacao de TODOS os outros) — expor `heart-beat` e `user-name` do CONNECTED.** ⚠️ **`console.log` NAO serve** (achado do Partner, procedente): os logs de WS dos dois apps sao gated por `__DEV__`, e o QA roda **bundle de OTA = producao**, onde `__DEV__` e falso e nada aparece. Tem de sair **por UI ou por log nao-gated**.
+- **Client: JA FEITO** — `src/stores/wsDiagnosticsStore.ts` com `markConnecting`/`markConnected(headers)`/`markMessage`/`markError`/`markClosed`, instrumentando **os dois canais** (`"public"` em `useQueueSocket.ts`, `"personal"` em `useQueueNotifications.ts`), exibido em Configuracoes.
+- **Partner: FALTA** — e a oferta que eles fizeram em 06/08 (linha de diagnostico em Configuracoes, junto do id do OTA). **Recomendacao: espelhar os MESMOS campos e nomes do `wsDiagnosticsStore` do client.** Sem isso os dois apps reportam coisas diferentes e o Teste 2 (A/B) vira comparacao de laranja com banana.
 
-**Teste 1 — TOKEN EXPIRADO. O mais valioso: ninguem nunca fez.** O access token dura **1h** (`jwt.access-token-expiration=PT1H`). Deixar o app aberto e logado por **mais de 1 hora**, forcar uma reconexao (modo aviao 10s e voltar) e verificar se a **notificacao pessoal** ainda chega (o profissional remove o cliente da fila → o app-cliente tem de reagir). **Por que importa:** o backlog **#31 esta aberto**, entao token invalido **conecta ANONIMO em vez de ser recusado**. O sintoma e traicoeiro — o **topico publico continua funcionando** (a fila atualiza normalmente) e **so o canal pessoal morre calado**. E exatamente a assinatura do "as vezes nao chega" que nunca foi explicada. Se falhar, o #31 sobe de prioridade na hora e vira caso reproduzivel.
+**Teste 1 — TOKEN EXPIRADO. O mais valioso, e ninguem nunca fez.** O access token dura **1h** (`jwt.access-token-expiration=PT1H`). Deixar o app aberto e logado por **mais de 1 hora**, forcar uma reconexao (modo aviao 10s e voltar) e verificar se a **notificacao pessoal** ainda chega (o profissional remove o cliente da fila → o app-cliente tem de reagir).
+
+⚠️ **LEITURA CORRIGIDA (Partner, 06/08 — a correcao mais importante desta secao).** **O Teste 1 nao mede a mesma coisa nos dois apps**, por causa da terceira variavel:
+- **Partner passar NAO absolve o #31.** Ele renova o token no `beforeConnect`, entao **nunca chega a mandar um token vencido** — passar prova que o `refreshToken()` deles funciona, nada sobre o servidor. Concluir *"o partner passou, logo o token nao e problema"* seria o erro de leitura natural olhando so a tabela, e e falso.
+- **Quem expoe o #31 e o CLIENT**, que re-le mas nao renova: e o unico dos dois capaz de apresentar um token vencido ao servidor. **O #31 so pode ser exercitado pelo client.**
+- ⚠️ **Para o teste ser deterministico no client, NAO TOCAR no app durante a hora.** Ele le o token do `SecureStore`, entao qualquer chamada de API que dispare o refresh no interceptor **troca o token guardado** e a reconexao leva um token valido — o teste passa por acidente e produz um falso "esta tudo bem". App aberto, parado, sem navegar.
+
+**Por que importa:** com o #31 aberto, token invalido **conecta ANONIMO em vez de ser recusado**. O sintoma e traicoeiro — o **topico publico continua funcionando** (a fila atualiza normalmente) e **so o canal pessoal morre calado**. E exatamente a assinatura do "as vezes nao chega" que nunca foi explicada. Falhou = o #31 sobe de prioridade e vira caso reproduzivel.
 
 **Teste 2 — A/B das flags, os dois apps abertos lado a lado.** Mesma loja, mesmo profissional, mesmo evento. Leitura do resultado: **client recebe e partner nao** = as flags sao o defeito, com prova em device (resolve a objecao legitima do Partner — *"nao removemos sem medir"* — sem eles alterarem nada antes); **os dois recebem** = as flags sao inofensivas contra o Spring; **nenhum dos dois recebe COM `heart-beat:10000,10000` no log** = volta pro backend, com onde investigar.
 
@@ -2920,7 +2929,11 @@ Os dois apps diferem **exatamente** nas duas variaveis em disputa, contra o mesm
 
 **Teste 5 — troca de rede.** Wi-Fi → 4G com o app aberto; deve reconectar sozinho pelo `reconnectDelay`.
 
-**Prioridade:** os testes **1 e 2 mudam decisao** (o 1 pode reabrir o #31 como urgente; o 2 encerra uma discussao aberta desde 01/08). Os testes 3, 4 e 5 sao confirmacao.
+**Prioridade:** os testes **1 e 2 mudam decisao** (o 1 pode reabrir o #31 como urgente; o 2 encerra uma discussao aberta desde 01/08). Os testes 3, 4 e 5 sao confirmacao. **Ordem:** o Teste 0 sai primeiro e sozinho — sem ele os outros cinco viram discussao sobre de quem e a culpa.
+
+**✅ RESPOSTA AO PARTNER (06/08): o heartbeat ESTA NO AR no Render, nao so no codigo.** Eles pediram confirmacao de que o S17 vale no ambiente do APK. Verificado em 2026-08-06 com o `scripts/ws-probe.js` contra `https://vupth-backend-ia.onrender.com` (duas rodadas, 6/6 nas duas): CONNECTED devolve `heart-beat:10000,10000`, e a conexao ociosa sobrevive 40s **atravessando o proxy do Render** com PONGs do servidor — que e justamente o caminho de rede do APK. **Podem tratar o S17 como fechado nos dois lados.**
+
+⚠️ **Achado do Partner que vale registrar: o heartbeat deles e IMPLICITO.** Eles nao setam `heartbeatIncoming`/`heartbeatOutgoing` — funciona porque o default do `@stomp/stompjs` ja e 10s/10s, que casa com o servidor **por coincidencia de default, nao por escolha**. Se alguem mexer na config do client STOMP, o heartbeat muda **calado** e o socket zumbi volta sem ninguem relacionar a causa. **Recomendacao aos DOIS apps: setar os dois valores explicitamente**, com um comentario amarrando ao `HEARTBEAT_MS` do `WebSocketConfig`. Custa duas linhas e transforma um acoplamento invisivel em contrato declarado.
 
 ---
 
