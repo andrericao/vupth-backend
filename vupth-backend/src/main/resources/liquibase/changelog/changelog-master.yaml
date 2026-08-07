@@ -24,6 +24,11 @@ databaseChangeLog:
       file: changesets/10-stubs/012-seed-data.yaml
       relativeToChangeLogFile: true
 
+  # Conserta o hash da senha das contas @seed.dev em banco que já rodou o 012 com o hash errado
+  - include:
+      file: changesets/10-stubs/013-fix-seed-password-hash.yaml
+      relativeToChangeLogFile: true
+
   # Attendance FKs
   - changeSet:
       id: master-fk-attendance-client
