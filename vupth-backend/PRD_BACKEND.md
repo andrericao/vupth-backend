@@ -2891,6 +2891,37 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 
 **Testes:** Integracao (`WebSocketIntegrationTest`) — broadcast a subscriber anonimo + notificacao pessoal a subscriber autenticado + **heartbeat negociado no CONNECTED** (`connect_negotiatesHeartbeat`, regressao do `0,0`).
 
+**Ferramenta de campo — `scripts/ws-probe.js`** (2026-08-06). Cliente STOMP headless em Node (mesmo `@stomp/stompjs` dos apps), autossuficiente: registra os proprios usuarios via API, abre a loja, entra na fila e confere as entregas. `node scripts/ws-probe.js https://vupth-backend-ia.onrender.com`. Cobre o que as outras suites **nao alcancam**: o newman **nao fala STOMP** e o `WebSocketIntegrationTest` roda em `localhost` no CI — prova que o servidor **anuncia** o heartbeat, nao que a batida **atravessa a rede**. O probe roda contra o ambiente real e mede a conexao ociosa atravessando o proxy do Render (o cenario do socket zumbi, impossivel de reproduzir em `localhost`).
+
+#### ✅ TESTES DE WEBSOCKET QUE CADA FRONT PRECISA RODAR EM DEVICE (2026-08-06)
+
+**O lado do servidor esta FECHADO e provado em producao** (`ws-probe.js` contra o Render, 6/6): heartbeat `10000,10000`, entrega no topico publico, entrega no canal pessoal roteada por userId, conexao ociosa de 40s sobrevivendo ao proxy, e anonimo sem acesso ao canal pessoal. **O que sobra so o DEVICE prova** — flags do stompjs em React Native, timers de JS em background e renovacao de token. Nada disso e backend, e nada disso eu consigo medir daqui.
+
+⚠️ **O heartbeat virou o DISCRIMINADOR.** Antes, "nao chega mensagem" nao dizia de quem era a culpa. Agora diz: **se o CONNECTED voltar `heart-beat:10000,10000` e ainda assim nao chegar nada, o defeito esta no cliente**, porque o servidor comprovadamente entrega naquele mesmo caminho.
+
+**Estado dos dois apps em 2026-08-06 (conferido no codigo) — e um A/B pronto:**
+
+| | flags `forceBinaryWSFrames`/`appendMissingNULLonIncoming` | reconnect no `AppState` |
+|---|---|---|
+| **Client** | ✅ **removidas** (`useQueueSocket.ts`, comentario de 01/08) | ❌ **nao tem** — e o C18 |
+| **Partner** | ❌ **ainda tem as duas** (`useQueueSocket.ts:67-68`) | ✅ tem (v18.5) |
+
+Os dois apps diferem **exatamente** nas duas variaveis em disputa, contra o mesmo servidor. Da para decidir por observacao, sem ninguem mexer em codigo antes.
+
+**Teste 0 (pre-requisito dos dois apps) — logar os headers do CONNECTED.** No `onConnect`, imprimir `frame.headers`. Esperado: `heart-beat:10000,10000` e `user-name:<userId>`. E uma linha de log e destrava a interpretacao de todos os outros. Sem ela, qualquer falha vira discussao.
+
+**Teste 1 — TOKEN EXPIRADO. O mais valioso: ninguem nunca fez.** O access token dura **1h** (`jwt.access-token-expiration=PT1H`). Deixar o app aberto e logado por **mais de 1 hora**, forcar uma reconexao (modo aviao 10s e voltar) e verificar se a **notificacao pessoal** ainda chega (o profissional remove o cliente da fila → o app-cliente tem de reagir). **Por que importa:** o backlog **#31 esta aberto**, entao token invalido **conecta ANONIMO em vez de ser recusado**. O sintoma e traicoeiro — o **topico publico continua funcionando** (a fila atualiza normalmente) e **so o canal pessoal morre calado**. E exatamente a assinatura do "as vezes nao chega" que nunca foi explicada. Se falhar, o #31 sobe de prioridade na hora e vira caso reproduzivel.
+
+**Teste 2 — A/B das flags, os dois apps abertos lado a lado.** Mesma loja, mesmo profissional, mesmo evento. Leitura do resultado: **client recebe e partner nao** = as flags sao o defeito, com prova em device (resolve a objecao legitima do Partner — *"nao removemos sem medir"* — sem eles alterarem nada antes); **os dois recebem** = as flags sao inofensivas contra o Spring; **nenhum dos dois recebe COM `heart-beat:10000,10000` no log** = volta pro backend, com onde investigar.
+
+**Teste 3 — background e volta.** App com fila ativa → background 2min → voltar. ⚠️ O heartbeat **piorou este cenario de proposito**: o servidor agora derruba a sessao suspensa em ~10s em vez de deixa-la pendurada, entao o app volta desconectado com **muito mais frequencia** do que antes. Partner deve se recuperar (tem `AppState`); client deve falhar — o que transforma o **C18 em prioridade real, nao teorica**.
+
+**Teste 4 — ocioso longo.** App aberto na tela da fila, **20-30min sem interacao**, entao alguem mexe na fila. Era aqui que o socket zumbi mordia. Passou = confirmacao ponta-a-ponta do que o probe provou no servidor.
+
+**Teste 5 — troca de rede.** Wi-Fi → 4G com o app aberto; deve reconectar sozinho pelo `reconnectDelay`.
+
+**Prioridade:** os testes **1 e 2 mudam decisao** (o 1 pode reabrir o #31 como urgente; o 2 encerra uma discussao aberta desde 01/08). Os testes 3, 4 e 5 sao confirmacao.
+
 ---
 
 ## 18c. Readiness / cold start (Render Free) — HANDOFF PARA OS FRONTS
