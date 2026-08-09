@@ -671,6 +671,16 @@ aos clientes e aos profissionais. Entao ela e **desligada**, em etapas que reusa
 > campo — da para reaproveitar), mandar no corpo do DELETE, tratar **204** como sucesso (era 200),
 > **401** como "senha incorreta", e **409** exibindo a `message` do backend, que ja diz o que fazer.
 >
+> **Estado de cada front na entrega (conferido nos PRDs deles em 09/08 — os dois estao desatualizados
+> em sentidos OPOSTOS, e por isso este handoff vale para os dois):**
+> - **Client — urgente.** O PRD deles lista `DELETE /profile/delete/me` como **"Implementado"** desde
+>   2026-06-03 (item ~~13~~, tela Settings): o botao esta **no ar e chamando a rota sem corpo**, entao a
+>   partir deste deploy ele **quebra com 400** ate mandarem o `current_password`. E o unico front com
+>   regressao visivel.
+> - **Partner — destravado.** O item 3 do feedback de device (S19) ainda diz *"⛔ Bloqueado — nao
+>   existe endpoint"*. **Existe agora**: podem construir "Apagar minha conta" em Dados cadastrais, com
+>   dupla confirmacao + senha, como eles mesmos ja tinham desenhado.
+>
 > **Ainda falta, e nao e backend:** as lojas exigem tambem um **caminho web** de solicitacao de
 > exclusao, fora do app. Isso e uma pagina, nao um endpoint — mas bloqueia a publicacao do mesmo jeito.
 
