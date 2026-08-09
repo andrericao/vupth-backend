@@ -272,3 +272,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/011-add-closing_grace_until-to-professional.yaml
       relativeToChangeLogFile: true
+
+  # Apagar a conta (Partner S19): marca de anonimizacao no base_user
+  - include:
+      file: changesets/20-auth/023-add-deleted_at-to-base_user.yaml
+      relativeToChangeLogFile: true

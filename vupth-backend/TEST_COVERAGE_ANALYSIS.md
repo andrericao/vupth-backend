@@ -60,12 +60,12 @@ Testes: `unit/user/LoginUseCaseTest`, `RegisterUseCaseTest`, `RefreshTokenUseCas
 | POST /auth/reset-password | ✅ | ✅ | ciclo feliz (código capturado via `@MockBean EmailSender`, login novo OK, reuso bloqueado); 400 `RESET_CODE_INVALID`/`RESET_CODE_EXPIRED`, trava de 5 tentativas (unit), 422 campos em branco |
 
 ### 2.2 User / Profile / Address
-Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegrationTest` (26), `ProfileNicknameIntegrationTest` (8), `useraddress/UserAddressIntegrationTest` (8), `client/ClientIntegrationTest` (7).
+Testes: `unit/user/UpdateProfileUseCasesTest`; `integrations/user/ProfileIntegrationTest` (27), `AccountDeletionIntegrationTest` (16), `ProfileNicknameIntegrationTest` (8), `useraddress/UserAddressIntegrationTest` (8), `client/ClientIntegrationTest` (7).
 
 | Endpoint | Feliz | Erros |
 |---|---|---|
 | GET /profile/me · PATCH update-password/email | ✅ | ✅ (update-password: 401 `CURRENT_PASSWORD_INVALID` senha atual errada, 422 nos dois campos em branco, 401 sem token — Client #13) |
-| DELETE /profile/delete/me | ✅ | ✅ |
+| DELETE /profile/delete/me | ✅ | ✅ (`AccountDeletionIntegrationTest`: 3 portões 409 `ACCOUNT_DELETE_NOT_ALLOWED` (cliente na fila / profissional com atendimento ativo / dono com fila viva **de OUTRO profissional** — os três devolvem o mesmo `code`, então cada teste assere a **mensagem**), 401 senha errada — conta intacta, **400 `INVALID_REQUEST_BODY` sem corpo** (o que os apps mandam hoje), 422 `current_password` em branco, 401 sem token; anonimização do `base_user` + `deleted_at`, **o atendimento sobrevive** com `clientName` anonimizado, e-mail liberado p/ novo cadastro, login e access token vivo recusados, loja do dono `CLOSED`+`INACTIVE`/sem dono/profissionais desafiliados, **vitrine pública anônima não quebra com loja órfã** (regressão do 500 em `getOwner().getId()`) e a loja órfã sai da listagem) |
 | POST/PATCH/DELETE /users/me/addresses, /{id}/main | ✅ | ✅ |
 | GET /users/email/{email} | ✅ | ⚠️ |
 

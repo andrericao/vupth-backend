@@ -5,6 +5,7 @@ import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.EmailRequest;
+import com.ospaulos.vupth.api.user.dto.request.profile.DeleteAccountRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.PasswordRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserProfileGeneralInfosRequest;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
@@ -65,7 +66,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - 401 no token
  *
  * DELETE /profile/delete/me:
- * - 200 success
+ * - 401 senha atual errada (CURRENT_PASSWORD_INVALID) — a conta NAO e apagada
+ * - 204 success (anonimizacao)
  * - 401/403/404 token invalid after deletion
  * - 401 no token
  *
@@ -487,16 +489,38 @@ class ProfileIntegrationTest {
     // ─────────────────────────────────────────────────────────────
 
     @Test
+    @Order(49)
+    @DisplayName("DELETE /profile/delete/me — 401 senha atual errada, a conta NAO e apagada")
+    void deleteAccount_wrongPassword() throws Exception {
+        Assumptions.assumeTrue(token != null);
+        log.info("[Profile] deleteAccount_wrongPassword — userId={}", id);
+
+        mvc.perform(delete("/profile/delete/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(mapper.writeValueAsString(
+                                new DeleteAccountRequest(this.password + "-errada"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("CURRENT_PASSWORD_INVALID"))
+                .andDo(print());
+
+        // A conta continua viva — o Order(50) logo abaixo apaga de verdade e passa.
+        mvc.perform(get("/profile/me").header("Authorization", token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @Order(50)
-    @DisplayName("DELETE /profile/delete/me — 200 account deleted successfully")
+    @DisplayName("DELETE /profile/delete/me — 204 conta apagada (anonimizada)")
     void deleteAccount_success() throws Exception {
         Assumptions.assumeTrue(token != null);
         log.info("[Profile] deleteAccount_success — userId={}", id);
 
         mvc.perform(delete("/profile/delete/me")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("Authorization", token))
-                .andExpect(status().isOk())
+                        .header("Authorization", token)
+                        .content(mapper.writeValueAsString(new DeleteAccountRequest(this.password))))
+                .andExpect(status().isNoContent())
                 .andDo(print());
 
         log.info("[Profile] deleteAccount_success — account deleted");
@@ -511,7 +535,8 @@ class ProfileIntegrationTest {
 
         mvc.perform(delete("/profile/delete/me")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("Authorization", token))
+                        .header("Authorization", token)
+                        .content(mapper.writeValueAsString(new DeleteAccountRequest(this.password))))
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isIn(401, 403, 404))
                 .andDo(print());
@@ -522,7 +547,8 @@ class ProfileIntegrationTest {
     @DisplayName("DELETE /profile/delete/me — 401 no token")
     void deleteAccount_noToken() throws Exception {
         mvc.perform(delete("/profile/delete/me")
-                        .contentType(MediaType.APPLICATION_JSON))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(new DeleteAccountRequest("qualquer"))))
                 .andExpect(status().isUnauthorized())
                 .andDo(print());
     }

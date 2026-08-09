@@ -18741,7 +18741,7 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]));"
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
         ],
         "type": "text/javascript"
        }
@@ -18751,6 +18751,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{ad_owner_token}}",
         "type": "text"
@@ -18759,6 +18763,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ad_owner_pass}}\"}"
       }
      },
      "response": []
@@ -18770,7 +18778,7 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]));"
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
         ],
         "type": "text/javascript"
        }
@@ -18780,6 +18788,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{ad_owner2_token}}",
         "type": "text"
@@ -18788,6 +18800,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ad_owner2_pass}}\"}"
       }
      },
      "response": []
@@ -19285,7 +19301,7 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]));"
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
         ],
         "type": "text/javascript"
        }
@@ -19295,12 +19311,966 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{geo_owner_token}}",
         "type": "text"
        }
       ],
       "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
+   "name": "19 - apagar a conta (S19)",
+   "description": "Apagar a conta (Partner S19 / LGPD / exigencia de publicacao nas lojas de app).\n\nSELF-CONTAINED de proposito: cria dono, loja, profissional, servico e cliente proprios (prefixo da_), porque esta folder APAGA as contas que usa. Se ela tocasse o owner/client compartilhados da collection, todas as folders seguintes quebrariam.\n\nA invariante que estas requests protegem: apaga-se o TITULAR, nao as relacoes dele — o atendimento sobrevive, atribuido a \"Usuario removido\", porque pertence tambem ao profissional e ao estabelecimento.",
+   "item": [
+    {
+     "name": "setup: register dono (S19)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"da_owner_email\",\"daowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"da_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_owner_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_owner_email}}\",\"password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"da_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_owner_email}}\",\"password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja S19 {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: dono vira profissional (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_prof_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Prof S19\",\"establishmentId\":\"{{da_estab_id}}\",\"specialty\":\"Barber\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: cria service item (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_service_item_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{da_estab_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte S19\",\"price\":35.00,\"estimatedMinutes\":30}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: prof WORKING (abre a loja p/ walk-in)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: register cliente (S19)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"da_client_email\",\"daclient_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"da_client_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_client_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login cliente (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"da_client_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: cliente entra na fila -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_att_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{da_prof_id}}\",\"establishmentId\":\"{{da_estab_id}}\",\"serviceItemIds\":[\"{{da_service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta sem token -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta SEM CORPO -> 400 (o que o app de hoje manda)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+         "// Sem corpo nenhum nao chega ao @Valid (422): morre no Jackson, antes.",
+         "// E exatamente o que o botao \"Deletar conta\" dos apps faz hoje.",
+         "pm.test(\"code INVALID_REQUEST_BODY\", () => pm.expect(pm.response.json().code).to.eql(\"INVALID_REQUEST_BODY\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta sem current_password -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta com senha errada -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"code CURRENT_PASSWORD_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"CURRENT_PASSWORD_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}-errada\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "senha errada NAO apagou: o cliente segue autenticando -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"o e-mail continua o original\", () => pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get(\"da_client_email\")));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] 409 cliente na fila (senha certa, mas ha compromisso)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code ACCOUNT_DELETE_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.eql(\"ACCOUNT_DELETE_NOT_ALLOWED\"));",
+         "// Bloqueio TEMPORARIO: a mensagem tem de dizer o que fazer para destravar.",
+         "pm.test(\"a mensagem orienta o usuario\", () => pm.expect(pm.response.json().message).to.match(/queue/i));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] 409 profissional com atendimento ativo (o dono tambem atende)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code ACCOUNT_DELETE_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.eql(\"ACCOUNT_DELETE_NOT_ALLOWED\"));",
+         "// Os tres portoes devolvem o MESMO code — so a mensagem diz qual disparou. Aqui o dono e",
+         "// tambem o profissional que atende, entao quem barra e o portao do PROFISSIONAL: o do",
+         "// estabelecimento so seria alcancado com a fila em OUTRO profissional (coberto pelo",
+         "// AccountDeletionIntegrationTest, que monta um funcionario a mais).",
+         "pm.test(\"a mensagem e a do profissional, nao a do dono\", () => pm.expect(pm.response.json().message).to.match(/active attendances/i));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cliente sai da fila -> destrava a exclusao",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{da_att_id}}/leave-queue",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cliente apaga a conta -> 204",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o ATENDIMENTO sobrevive e o cliente virou \"Usuario removido\"",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// A invariante central: o atendimento pertence tambem ao profissional e a loja.",
+         "pm.test(\"o atendimento continua existindo\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"da_att_id\")));",
+         "pm.test(\"o nome do cliente foi anonimizado\", () => pm.expect(pm.response.json().clientName).to.eql(\"Usuario\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{da_att_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o e-mail original volta a ficar LIVRE para um cadastro novo -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"OutraSenha@123\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o access token do cliente morre no request seguinte",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"401 ou 403\", () => pm.expect([401,403]).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] login com a senha antiga -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "dono apaga a conta -> 204 (loja sem fila viva)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "a vitrine publica ANONIMA nao quebra com loja sem dono",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// Regressao: o mapper fazia getOwner().getId() cru — UMA loja orfa derrubava a",
+         "// listagem inteira com 500, para todo mundo, inclusive quem nem tem conta.",
+         "pm.test(\"a loja orfa saiu da listagem\", () => {",
+         "  const ids = pm.response.json().map(e => e.id);",
+         "  pm.expect(ids).to.not.include(pm.collectionVariables.get(\"da_estab_id\"));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "a loja orfa continua legivel por id, com owner_id ausente",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// Continua legivel porque o historico do cliente aponta para ela.",
+         "pm.test(\"openStatus CLOSED\", () => pm.expect(pm.response.json()['open_status']).to.eql(\"CLOSED\"));",
+         "pm.test(\"sem dono\", () => pm.expect(pm.response.json().ownerId == null).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{da_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o access token do dono tambem morreu",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"401 ou 403\", () => pm.expect([401,403]).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
       "auth": {
        "type": "noauth"
       }
@@ -19422,7 +20392,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -19433,6 +20403,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{owner_token}}",
         "type": "text"
@@ -19441,6 +20415,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{owner_password}}\"}"
       }
      },
      "response": [],
@@ -19463,7 +20441,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup prof OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -19474,6 +20452,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{prof_token}}",
         "type": "text"
@@ -19482,6 +20464,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{prof_password}}\"}"
       }
      },
      "response": [],
@@ -19497,7 +20483,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup partner OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -19508,6 +20494,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{partner_token}}",
         "type": "text"
@@ -19516,6 +20506,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{partner_password}}\"}"
       }
      },
      "response": [],
@@ -19531,7 +20525,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup client OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -19542,6 +20536,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{client_token}}",
         "type": "text"
@@ -19550,6 +20548,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{client_password}}\"}"
       }
      },
      "response": [],
@@ -19814,6 +20816,54 @@
   },
   {
    "key": "geo_estab_id",
+   "value": ""
+  },
+  {
+   "key": "da_owner_email",
+   "value": ""
+  },
+  {
+   "key": "da_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "da_owner_token",
+   "value": ""
+  },
+  {
+   "key": "da_owner_id",
+   "value": ""
+  },
+  {
+   "key": "da_estab_id",
+   "value": ""
+  },
+  {
+   "key": "da_prof_id",
+   "value": ""
+  },
+  {
+   "key": "da_service_item_id",
+   "value": ""
+  },
+  {
+   "key": "da_client_email",
+   "value": ""
+  },
+  {
+   "key": "da_client_pass",
+   "value": ""
+  },
+  {
+   "key": "da_client_token",
+   "value": ""
+  },
+  {
+   "key": "da_client_id",
+   "value": ""
+  },
+  {
+   "key": "da_att_id",
    "value": ""
   }
  ],

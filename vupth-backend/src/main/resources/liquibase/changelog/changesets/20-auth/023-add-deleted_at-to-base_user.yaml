@@ -1,0 +1,21 @@
+databaseChangeLog:
+  - changeSet:
+      id: 023-add-deleted_at-to-base_user
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: base_user
+                columnName: deleted_at
+      changes:
+        # Apagar a conta (LGPD + exigencia das lojas de app): o registro NAO some — ele e
+        # ANONIMIZADO, porque o atendimento pertence tambem ao profissional e ao estabelecimento.
+        # deleted_at e a marca de "esta conta foi apagada em X" (prova de atendimento ao titular);
+        # o par de leitura e is_active = false, que barra o login.
+        - addColumn:
+            tableName: base_user
+            columns:
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP WITH TIME ZONE

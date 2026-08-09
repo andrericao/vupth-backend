@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.ospaulos.vupth.api.address.dto.request.UpdateAddressRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserProfileGeneralInfosRequest;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
-import com.ospaulos.vupth.api.user.exception.UserNotDeletedException;
 import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.client.model.Client;
@@ -96,6 +95,14 @@ public class BaseUser implements Serializable {
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    /**
+     * Instante em que o titular pediu para apagar a conta (Partner S19 / LGPD).
+     * {@code null} = conta viva. Preenchido pelo {@link #anonymize(String)}, junto com
+     * {@code isActive = false} — os dois sempre andam juntos.
+     */
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 
     @OneToMany(mappedBy = "baseUser", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserRole> roles = new HashSet<>();
@@ -445,4 +452,46 @@ public class BaseUser implements Serializable {
 
     public void activate() { this.isActive = true; }
     public void deactivate() { this.isActive = false; }
+
+    /** Nome exibido no lugar do titular apagado — o outro lado do atendimento ve isto. */
+    public static final String ANONYMIZED_FIRST_NAME = "Usuario";
+    public static final String ANONYMIZED_LAST_NAME = "removido";
+
+    /** Dominio reservado pela RFC 2606: nunca existe, entao nao colide com e-mail de ninguem. */
+    private static final String ANONYMIZED_EMAIL_DOMAIN = "@deleted.invalid";
+
+    /**
+     * Apaga o que e PESSOAL do titular, preservando a linha — porque um atendimento pertence
+     * tambem ao profissional e ao estabelecimento, e cada envolvido continua com direito ao
+     * proprio historico. E o que a LGPD (art. 16) e o GDPR (art. 17.3) chamam de anonimizacao:
+     * sem o dado identificante, o registro deixa de ser dado pessoal e pode ficar.
+     *
+     * <p>O que sai daqui: nome, apelido, e-mail, telefone, nascimento, genero, foto e senha.
+     * O que sai FORA daqui (o orquestrador cuida): enderecos, device tokens, refresh tokens,
+     * codigos de reset e os papeis. O que FICA: as linhas {@code client}/{@code professional}/
+     * {@code owner}, que sao a chave estrangeira do historico dos outros.</p>
+     *
+     * <p>O e-mail vira {@code deleted-<id>@deleted.invalid}: libera o endereco real para um
+     * cadastro novo (o titular pode voltar) sem violar a unicidade da coluna.</p>
+     *
+     * @param scrambledPassword hash de uma senha aleatoria — a antiga nao pode sobreviver
+     */
+    public void anonymize(String scrambledPassword) {
+        this.firstName = ANONYMIZED_FIRST_NAME;
+        this.lastName = ANONYMIZED_LAST_NAME;
+        this.nickname = null;
+        this.email = "deleted-" + this.id + ANONYMIZED_EMAIL_DOMAIN;
+        this.phone = null;
+        this.birthDate = null;
+        this.gender = null;
+        this.profileImageUrl = null;
+        this.password = scrambledPassword;
+        this.isActive = false;
+        this.deletedAt = OffsetDateTime.now();
+    }
+
+    /** {@code true} quando a conta ja foi apagada pelo titular. */
+    public boolean isDeleted() {
+        return this.deletedAt != null;
+    }
 }

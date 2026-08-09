@@ -16,7 +16,11 @@ public record EstablishmentResponse(
         @NotNull String name,
         ServiceType serviceType,
         String urlImage,
-        @NotNull UUID ownerId,
+        // Nullable desde "apagar a conta" (S19): quando o dono apaga a conta, a loja sobrevive
+        // SEM dono (os atendimentos dela pertencem tambem aos clientes e aos profissionais).
+        // Era @NotNull, e o mapper fazia getOwner().getId() cru — bastava uma loja sem dono para
+        // a listagem publica inteira responder 500.
+        UUID ownerId,
 
         String phone,
         String instagram,
@@ -79,7 +83,7 @@ public record EstablishmentResponse(
                 establishment.getName(),
                 establishment.getServiceType(),
                 establishment.getUrlImage(),
-                establishment.getOwner().getId(),
+                establishment.getOwner() != null ? establishment.getOwner().getId() : null,
                 establishment.getPhone(),
                 establishment.getInstagram(),
                 establishment.getOpeningTime(),
