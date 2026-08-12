@@ -1,0 +1,64 @@
+databaseChangeLog:
+  # Entrar com Google e Apple. O vinculo fica em tabela propria, e nao em colunas
+  # do base_user, porque a mesma pessoa pode entrar pelos dois provedores.
+  #
+  # A chave e o provider_user_id (o `sub` do id-token), nao o e-mail: o e-mail da
+  # Apple pode ser um relay que o usuario desativa depois, e ai o vinculo por
+  # e-mail se perderia. O UNIQUE e o que impede duas contas nossas apontando
+  # para a mesma identidade social.
+  - changeSet:
+      id: 024-create-user_social_identity
+      author: front-client
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: user_social_identity
+      changes:
+        - createTable:
+            tableName: user_social_identity
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: base_user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_user_social_identity_base_user
+                    references: base_user(id)
+              - column:
+                  name: provider
+                  type: VARCHAR(16)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: provider_user_id
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: user_social_identity
+            columnNames: provider, provider_user_id
+            constraintName: uk_user_social_identity_provider_user
+
+  # Conta que entra so por social nao tem senha para guardar. Gravar um hash
+  # inutilizavel resolveria o NOT NULL, mas faria o esqueci-senha oferecer
+  # redefinicao para quem nunca podera usar senha.
+  - changeSet:
+      id: 024b-base_user-password-nullable
+      author: front-client
+      changes:
+        - dropNotNullConstraint:
+            tableName: base_user
+            columnName: password
+            columnDataType: VARCHAR(72)

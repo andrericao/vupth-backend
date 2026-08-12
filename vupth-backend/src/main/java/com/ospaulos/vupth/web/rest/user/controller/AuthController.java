@@ -6,6 +6,7 @@ import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LogoutRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.RefreshTokenRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.ResetPasswordRequest;
+import com.ospaulos.vupth.api.user.dto.request.auth.SocialLoginRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserRegisterRequest;
 import com.ospaulos.vupth.api.user.dto.response.auth.RefreshTokenResponse;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosAndToken;
@@ -15,6 +16,7 @@ import com.ospaulos.vupth.api.user.usecase.auth.LoginUsecase;
 import com.ospaulos.vupth.api.user.usecase.auth.LogoutUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.RefreshTokenUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.ResetPasswordUseCase;
+import com.ospaulos.vupth.api.user.usecase.auth.SocialLoginUseCase;
 import com.ospaulos.vupth.api.user.usecase.profile.RegisterUseCase;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +40,7 @@ public class AuthController {
     private final RefreshTokenUseCase refreshTokenUseCase;
     private final ForgotPasswordUseCase forgotPasswordUseCase;
     private final ResetPasswordUseCase resetPasswordUseCase;
+    private final SocialLoginUseCase socialLoginUseCase;
 
     @PostMapping("/register")
     public ResponseEntity<UserRegisterResponse> register(@RequestBody @Valid UserRegisterRequest request) throws JsonProcessingException {
@@ -57,6 +60,21 @@ public class AuthController {
         UserProfileGeneralInfosAndToken response = loginUseCase.executeLogin(request);
 
         //log.info("Test: " + response.tokens().accessToken());
+
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    /**
+     * Entrar com Google ou Apple. Devolve o MESMO corpo do /login, para o app
+     * seguir o mesmo caminho depois de autenticar.
+     */
+    @PostMapping("/social")
+    public ResponseEntity<UserProfileGeneralInfosAndToken> social(
+            @RequestBody @Valid SocialLoginRequest request) {
+
+        log.info("CONTROLLER AUTH - SOCIAL() BEGIN - provider={}", request.provider());
+
+        UserProfileGeneralInfosAndToken response = socialLoginUseCase.execute(request);
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }

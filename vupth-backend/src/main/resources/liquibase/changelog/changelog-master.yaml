@@ -277,3 +277,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/023-add-deleted_at-to-base_user.yaml
       relativeToChangeLogFile: true
+
+  # Entrar com Google e Apple: vinculo de identidade social + senha opcional
+  - include:
+      file: changesets/20-auth/024-create-user_social_identity.yaml
+      relativeToChangeLogFile: true

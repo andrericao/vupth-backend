@@ -50,6 +50,8 @@ import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlready
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.AccountDeleteNotAllowedException;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
+import com.ospaulos.vupth.api.user.exception.SocialEmailNotVerifiedException;
+import com.ospaulos.vupth.infrastructure.security.social.SocialTokenInvalidException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
 import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
 import com.ospaulos.vupth.api.user.exception.InvalidResetCodeException;
@@ -462,6 +464,22 @@ public class GlobalExceptionHandler {
     // ─────────────────────────────────────────────
     // 409 CONFLICT
     // ─────────────────────────────────────────────
+
+    @ExceptionHandler(SocialTokenInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleSocialTokenInvalid(
+            SocialTokenInvalidException ex, HttpServletRequest req) {
+        // O motivo fica so no log: dizer QUAL validacao falhou ajudaria quem
+        // esta tentando forjar id-token.
+        log.warn("[401] SocialTokenInvalid | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, "Invalid social login token", "INVALID_SOCIAL_TOKEN");
+    }
+
+    @ExceptionHandler(SocialEmailNotVerifiedException.class)
+    public ResponseEntity<ErrorResponse> handleSocialEmailNotVerified(
+            SocialEmailNotVerifiedException ex, HttpServletRequest req) {
+        log.warn("[422] SocialEmailNotVerified | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "SOCIAL_EMAIL_NOT_VERIFIED");
+    }
 
     @ExceptionHandler(EmailNotAvailableException.class)
     public ResponseEntity<ErrorResponse> handleEmailNotAvailable(
