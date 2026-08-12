@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.CancelAttendanceRequest;
@@ -972,7 +973,7 @@ class AttendanceIntegrationTest {
     void listAttendances_byDateRange() throws Exception {
         log.info("[Attendance] listAttendances_byDateRange");
 
-        String today = java.time.LocalDate.now().toString();
+        String today = BusinessClock.today().toString();
 
         mvc.perform(get("/attendances")
                         .param("establishmentId", establishmentId)
@@ -1165,8 +1166,8 @@ class AttendanceIntegrationTest {
         // atendimento) pode cruzar a meia-noite quando a suite roda tarde (CI 23:43 UTC ja flakou
         // com [hoje, hoje] devolvendo 0). Um dia de folga mantem o filtro exercitado e o teste
         // deterministico em qualquer horario.
-        String today = java.time.LocalDate.now().toString();
-        String tomorrow = java.time.LocalDate.now().plusDays(1).toString();
+        String today = BusinessClock.today().toString();
+        String tomorrow = BusinessClock.today().plusDays(1).toString();
 
         MvcResult result = mvc.perform(get("/attendances/client/me")
                         .param("dateFrom", today)
