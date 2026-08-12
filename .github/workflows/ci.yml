@@ -8,7 +8,10 @@ on:
       - '**/*.md'
       - '**/docs/**'
   pull_request:
-    branches: [ main ]
+    # `dev` tambem: e nela que tudo entra primeiro, e sem isto nenhum PR para a
+    # `dev` e compilado ou testado antes do merge — o gate rodava so DEPOIS, no
+    # push. Foi por essa brecha que testes quebrados chegaram a `main` em julho.
+    branches: [ main, dev ]
     paths-ignore:
       - '**/*.md'
       - '**/docs/**'
