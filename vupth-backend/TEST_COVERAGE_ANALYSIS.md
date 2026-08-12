@@ -160,14 +160,20 @@ Testes: `integrations/websocket/WebSocketIntegrationTest` (3).
 | Notificação pessoal | ⚠️ | ❌ |
 | Heartbeat negociado no CONNECTED (10s/10s) | ✅ | ❌ (falta cliente que pede `0,0`) |
 
-### 2.9 Notificações push (backlog #1)
+### 2.9 Notificações push (backlog #1 + tickets da Expo, #28)
 Testes: `integrations/notification/PushNotificationIntegrationTest` (5) — `PushSender` mockado (`vupth.push.provider=none`). Inclui **BUG9** (Order 22): profissional remove da fila → push `ATTENDANCE_CANCELLED` ao cliente + status `CANCELLED`.
+Unit (#28): `unit/push/ExpoPushSenderTest` (9) + `unit/push/PushNotificationPublisherTest` (8). A Expo é simulada por um `HttpServer` do **próprio JDK** (sem dependência nova — restrição de custo zero): o teste sobe um servidor em porta efêmera e aponta o `ExpoPushSender` para ele.
 
 | Endpoint / Regra | Feliz | Erros |
 |---|---|---|
 | POST /devices (registrar/upsert) · DELETE /devices/{token} | ✅ | ✅ (401 sem auth, 422 token em branco) |
 | Push "você é o próximo" (front da fila, dedup + avanço) | ✅ | — |
 | Push ATTENDANCE_STARTED / ATTENDANCE_FINISHED | ✅ | — |
+| Leitura dos tickets — 1 `PushTicket` por token, pareado **por posição** | ✅ | ✅ (`DeviceNotRegistered` no 2º token, onde troca de índice apareceria; lote 100% recusado com HTTP 200 — o caso que o log antigo reportava como sucesso) |
+| Sender **não** culpa token quando não pode | — | ✅ (`errors` no lugar de `data` → 0 tickets; nº de tickets ≠ nº de mensagens → pareamento abandonado; provedor fora do ar → não lança, 0 tickets; token nulo/em branco não vira mensagem) |
+| Publisher apaga **só** o token morto | ✅ (`deleteByToken` do token com `DeviceNotRegistered`) | ✅ (`MessageTooBig` não apaga; ticket ok não apaga; sender devolvendo `null` ou lista vazia não quebra nem apaga; falha do `delete` não propaga — push nunca derruba a operação principal; sem device não chama provedor; `userId` nulo é no-op) |
+
+⚠️ **Postman não cobre os tickets e não tem como:** o newman teria de falar com a Expo real e provocar um `DeviceNotRegistered` de verdade. A prova dessa parte são os dois testes unitários; a folder `13` cobre o contrato de `/devices`, que ficou **inalterado**.
 
 ---
 
