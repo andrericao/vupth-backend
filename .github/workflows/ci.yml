@@ -225,12 +225,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Marca o instante ANTES de disparar: e o corte que o test-prod usa para
+      # separar a instancia nova da que ainda esta respondendo.
+      - name: Marca o inicio do deploy
+        id: deploy_start
+        run: echo "at=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Railway (PROD)
         run: |
           npm install -g @railway/cli
           railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+    outputs:
+      deploy_started_at: ${{ steps.deploy_start.outputs.at }}
 
 
   # =========================
@@ -248,20 +257,43 @@ jobs:
         run: npm install -g newman
 
       # 🔥 ALTERADO: antes era sleep 15
-      - name: Wait for Railway (readiness check)
+      # Health UP nao prova nada durante um rollout: a instancia ANTERIOR
+      # continua respondendo UP enquanto a nova sobe, e o newman acaba testando
+      # o codigo velho. Foi o que reprovou o deploy de 12/08 e disparou o
+      # rollback de um deploy que estava correto.
+      #
+      # O corte e o startedAt do /actuator/info: so serve a instancia que subiu
+      # DEPOIS de o deploy ter sido disparado. Nao usamos o commit porque o
+      # railway up nao carrega contexto de git — la o commit fica "unknown".
+      - name: Wait for Railway (instancia NOVA, nao so healthy)
         run: |
-          for i in {1..20}; do
-            echo "Tentativa $i..."
-            RESPONSE=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
-            echo "Resposta: $RESPONSE"
-            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
-              echo "App PRONTA!"
-              exit 0
+          DEPLOY_AT=${{ needs.deploy-prod.outputs.deploy_started_at }}
+          echo "Deploy disparado em $(date -u -d @"$DEPLOY_AT" 2>/dev/null || echo "$DEPLOY_AT")"
+
+          for i in {1..40}; do
+            INFO=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/info" || true)
+            STARTED=$(echo "$INFO" | grep -o '"startedAt":"[^"]*"' | cut -d'"' -f4 || true)
+
+            if [ -n "$STARTED" ]; then
+              STARTED_TS=$(date -u -d "$STARTED" +%s 2>/dev/null || echo 0)
+              if [ "$STARTED_TS" -gt "$DEPLOY_AT" ]; then
+                HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
+                if echo "$HEALTH" | grep -q '"status":"UP"'; then
+                  echo "Instancia NOVA no ar (subiu em $STARTED) e saudavel."
+                  exit 0
+                fi
+              fi
+              echo "Tentativa $i/40 — respondendo a instancia que subiu em $STARTED (anterior ao deploy)."
+            else
+              # Build antiga, sem o campo: nao da para distinguir. Falhar aqui e
+              # melhor que testar as cegas e reverter um deploy bom.
+              echo "Tentativa $i/40 — /actuator/info sem startedAt."
             fi
-            echo "Ainda não está pronta..."
             sleep 15
           done
-          echo "Timeout aguardando app"
+
+          echo "Timeout: nenhuma instancia iniciada apos o deploy respondeu em 10 min."
+          echo "Se o /actuator/info nao trouxe startedAt, a build no ar e anterior a este ajuste."
           exit 1
 
       - name: Debug API
