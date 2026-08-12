@@ -229,7 +229,7 @@ jobs:
       # separar a instancia nova da que ainda esta respondendo.
       - name: Marca o inicio do deploy
         id: deploy_start
-        run: echo "at=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+        run: echo "at=$(date -u +%s)000" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Railway (PROD)
         run: |
@@ -265,35 +265,46 @@ jobs:
       # O corte e o startedAt do /actuator/info: so serve a instancia que subiu
       # DEPOIS de o deploy ter sido disparado. Nao usamos o commit porque o
       # railway up nao carrega contexto de git — la o commit fica "unknown".
+      # Health UP nao prova nada durante um rollout: a instancia ANTERIOR
+      # continua respondendo UP enquanto a nova sobe, e o newman acaba testando
+      # o codigo velho. Foi o que reprovou o deploy de 12/08 e disparou o
+      # rollback de um deploy que estava correto.
+      #
+      # O corte e o startedAtEpochMs do /actuator/info: so serve a instancia que
+      # subiu DEPOIS de o deploy ser disparado. Comparamos numero com numero de
+      # proposito — interpretar data em shell falharia para o lado errado (o
+      # loop estouraria o tempo e o rollback reverteria um deploy bom).
+      #
+      # Nao usamos o commit porque o railway up nao carrega contexto de git: la
+      # o valor fica "unknown". No Render, onde ele existe, o test-homolog ja o usa.
       - name: Wait for Railway (instancia NOVA, nao so healthy)
         run: |
           DEPLOY_AT=${{ needs.deploy-prod.outputs.deploy_started_at }}
-          echo "Deploy disparado em $(date -u -d @"$DEPLOY_AT" 2>/dev/null || echo "$DEPLOY_AT")"
+          echo "Corte: instancias iniciadas antes de $DEPLOY_AT (epoch ms) nao servem."
 
-          for i in {1..40}; do
+          for i in $(seq 1 40); do
             INFO=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/info" || true)
-            STARTED=$(echo "$INFO" | grep -o '"startedAt":"[^"]*"' | cut -d'"' -f4 || true)
+            STARTED_MS=$(echo "$INFO" | grep -o '"startedAtEpochMs":[0-9]*' | cut -d: -f2 || true)
 
-            if [ -n "$STARTED" ]; then
-              STARTED_TS=$(date -u -d "$STARTED" +%s 2>/dev/null || echo 0)
-              if [ "$STARTED_TS" -gt "$DEPLOY_AT" ]; then
-                HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
-                if echo "$HEALTH" | grep -q '"status":"UP"'; then
-                  echo "Instancia NOVA no ar (subiu em $STARTED) e saudavel."
-                  exit 0
-                fi
+            if [ -z "$STARTED_MS" ]; then
+              # Build anterior a este ajuste: sem o campo nao da para distinguir
+              # a instancia nova da velha. Falhar e melhor que testar as cegas.
+              echo "Tentativa $i/40 — /actuator/info ainda sem startedAtEpochMs."
+            elif [ "$STARTED_MS" -gt "$DEPLOY_AT" ]; then
+              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
+              if echo "$HEALTH" | grep -q '"status":"UP"'; then
+                echo "Instancia NOVA no ar (startedAtEpochMs=$STARTED_MS) e saudavel."
+                exit 0
               fi
-              echo "Tentativa $i/40 — respondendo a instancia que subiu em $STARTED (anterior ao deploy)."
+              echo "Tentativa $i/40 — instancia nova subindo, ainda nao saudavel."
             else
-              # Build antiga, sem o campo: nao da para distinguir. Falhar aqui e
-              # melhor que testar as cegas e reverter um deploy bom.
-              echo "Tentativa $i/40 — /actuator/info sem startedAt."
+              echo "Tentativa $i/40 — respondendo a instancia anterior ($STARTED_MS)."
             fi
             sleep 15
           done
 
           echo "Timeout: nenhuma instancia iniciada apos o deploy respondeu em 10 min."
-          echo "Se o /actuator/info nao trouxe startedAt, a build no ar e anterior a este ajuste."
+          echo "Sem startedAtEpochMs no /actuator/info, a build no ar e anterior a este ajuste."
           exit 1
 
       - name: Debug API
