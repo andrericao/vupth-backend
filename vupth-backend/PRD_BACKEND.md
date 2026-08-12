@@ -152,6 +152,7 @@ Todos os erros seguem um dos dois formatos:
 | 404 | `AFFILIATION_NOT_FOUND` | Affiliation request nao encontrada |
 | 404 | `CLIENT_NOT_IN_QUEUE` | Cliente nao esta na fila |
 | 404 | `REFRESH_TOKEN_NOT_FOUND` | Refresh token nao existe |
+| 404 | `GEOCODING_ADDRESS_NOT_FOUND` | Reverso nao achou endereco para a coordenada (ou o servico nao respondeu) |
 | 409 | `EMAIL_NOT_AVAILABLE` | Email ja cadastrado |
 | 409 | `USER_ALREADY_PROFESSIONAL` | Usuario ja tem perfil profissional |
 | 409 | `AFFILIATION_ALREADY_PENDING` | Ja existe afiliacao pendente |
@@ -162,8 +163,10 @@ Todos os erros seguem um dos dois formatos:
 | 409 | `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS` | Sinonimo ja existe para o tipo de servico (base ou adicionado) |
 | 409 | `PROFESSIONAL_HAS_ACTIVE_ATTENDANCES` | Profissional tem atendimentos ativos (impede sair do establishment) |
 | 409 | `INTERVAL_CONFLICT` | Conflito de horario de intervalo |
+| 409 | `ACCOUNT_DELETE_NOT_ALLOWED` | Apagar a conta com fila/atendimento/intencao vivo (bloqueio temporario) |
 | 405 | `METHOD_NOT_ALLOWED` | Metodo HTTP errado para a rota (ex.: PATCH numa rota DELETE) |
 | 422 | `VALIDATION_ERROR` | Campos obrigatorios faltando ou formato invalido |
+| 422 | `ADDRESS_INVALID_COORDINATES` | lat/lng sem par, fora do globo ou `(0,0)` (a "ilha nula") |
 | 500 | `INTERNAL_ERROR` | Erro inesperado |
 
 ---
@@ -550,13 +553,151 @@ esta rota precisa ser exceção, tratando `code == "CURRENT_PASSWORD_INVALID"` c
 ---
 
 ### DELETE /profile/delete/me
-Deleta o usuario autenticado.
+Apaga a conta do usuario autenticado (Partner S19 / LGPD / exigencia de publicacao nas lojas de app).
 
-**Acesso:** CLIENT
+⚠️ **MUDOU EM 2026-08-07 — CONTRATO NOVO, o endpoint antigo era destrutivo.** Ver o handoff logo abaixo.
 
-**Response:** 200 OK (body vazio)
+**Acesso:** qualquer usuario **autenticado**. *(Antes era `hasRole("CLIENT")`; com papeis acumulativos o dono
+tambem precisa poder apagar a propria conta — as lojas exigem que o caminho exista para todo usuario.)*
 
-**Testes:** Integracao
+**Request:**
+```json
+{ "current_password": "senha-atual-do-usuario" }
+```
+Obrigatorio. Mesmo motivo do `PATCH /profile/update-password/me`: o app fica logado por muito tempo e
+apagar a conta e irreversivel — o token de acesso sozinho nao prova que quem pediu e o titular.
+
+**Response:** `204 No Content`
+
+| Codigo | HTTP | Quando |
+|---|---|---|
+| `INVALID_REQUEST_BODY` | 400 | **corpo ausente** (`DELETE` sem body nenhum) — ⚠️ **e o que os apps mandam hoje** |
+| `VALIDATION_ERROR` | 422 | corpo presente mas `current_password` ausente ou em branco |
+| `CURRENT_PASSWORD_INVALID` | 401 | a senha nao confere — **nada e alterado** |
+| `ACCOUNT_DELETE_NOT_ALLOWED` | 409 | ha compromisso vivo com terceiros (ver abaixo) |
+
+#### O modelo: apaga-se o TITULAR, nao as relacoes dele
+
+Decisao do Andre (2026-08-07), conferida contra a pratica de mercado: um atendimento tem **tres
+envolvidos** — cliente, profissional e estabelecimento — e **cada um continua com direito ao proprio
+historico**. Se apagar a conta do cliente levasse o atendimento junto, o profissional perderia
+faturamento que ele tambem produziu. Entao o que se apaga e o **dado pessoal do titular**; a linha
+sobrevive **anonimizada** e o outro lado continua vendo o atendimento, agora atribuido a
+**"Usuario removido"**. E o padrao para registro transacional, e o que a **LGPD art. 16** e o
+**GDPR art. 17.3** chamam de anonimizacao: sem o dado identificante, o registro deixa de ser dado
+pessoal e pode ficar.
+
+*(O schema ja apontava para este desenho antes de existir a feature: `attendance.client_id` e
+`ON DELETE SET NULL` — o historico do atendimento sempre foi pensado para sobreviver a saida do
+cliente. O que faltava era nao destruir o resto no caminho.)*
+
+| | O que acontece |
+|---|---|
+| **Apagado de verdade** (so do titular) | enderecos (`user_address`), device tokens (para o aparelho parar de receber push), refresh tokens, codigos de reset de senha, papeis (`user_roles`) |
+| **Anonimizado** (`base_user`) | nome → "Usuario removido" · e-mail → `deleted-<id>@deleted.invalid` · apelido/telefone/nascimento/genero/foto → `null` · senha → hash aleatorio · `is_active` → `false` · `deleted_at` → agora |
+| **Preservado** | os atendimentos, as avaliacoes, os servicos e as linhas `client`/`professional`/`owner` — sao a chave estrangeira do historico **dos outros** |
+
+**O e-mail original volta a ficar LIVRE** para um cadastro novo (o titular pode voltar): o dominio
+`@deleted.invalid` e reservado pela RFC 2606, entao nunca colide com o e-mail de ninguem.
+
+**A conta apagada para de autenticar na hora.** O `JwtAuthenticationConverter` carrega o usuario do
+banco a cada request e agora recusa `is_active = false` — o access token que ja estava na mao do app
+morre no **request seguinte**, sem a janela de ate 1h esperando ele expirar. O `isEnabled()` do
+`UserDetailsImpl`, que era `true` fixo (a coluna `is_active` **nao tinha efeito nenhum**), passou a
+devolver o valor real, entao o login tambem recusa com `401 ACCOUNT_DISABLED`.
+
+#### 409 `ACCOUNT_DELETE_NOT_ALLOWED` — bloqueio TEMPORARIO, nunca definitivo
+
+Sao tres portoes, todos conferidos **antes da primeira escrita** (recusa nunca deixa a conta meio
+desmontada). Ativo = `SCHEDULED`, `IN_PROGRESS`, `PAUSED`, `LATE` **ou `INTENTION`** — a intencao entra
+porque seria promovida a `SCHEDULED` pelo timer do #4, e uma conta anonimizada com intencao pendente
+viraria **fantasma na fila** de alguem.
+
+| Papel | Bloqueia quando | Como o usuario destrava |
+|---|---|---|
+| Cliente | esta na fila de alguem | sai da fila (`DELETE /attendances/{id}/leave-queue`) ou espera ser atendido |
+| Profissional | tem atendimento ativo | encerra ou cancela |
+| Dono | a loja dele tem fila viva | espera a loja esvaziar |
+
+⚠️ **Nunca um "esta conta nao pode ser apagada".** Bloqueio permanente reprovaria a publicacao — a
+mensagem diz **o que fazer** para destravar, e o front deve exibi-la.
+
+#### O que acontece com a LOJA quando o DONO apaga a conta
+
+A loja **nao e dado pessoal do dono** e nao pode ser apagada: os atendimentos dela pertencem tambem
+aos clientes e aos profissionais. Entao ela e **desligada**, em etapas que reusam o que ja existia:
+1. cada profissional afiliado e desvinculado pelo **`LeaveEstablishmentUseCase`** (o mesmo do
+   "sair da loja"), que revalida atendimento ativo e recalcula o `open_status`;
+2. a loja vai a **`open_status = CLOSED`** (deixa de estar "aberta agora") **e a `status = INACTIVE`**,
+   que e o que de fato a **tira da vitrine**;
+3. o vinculo com o dono e desfeito (`owner = null`).
+
+> ⚠️ **Armadilha achada ao testar isto, e vale para qualquer feature que "esconda" uma loja:**
+> `CLOSED` **NAO** tira a loja da vitrine. As queries publicas (`findAllActive` e as irmas) filtram
+> **`status <> INACTIVE`** — outro campo. `open_status` e so "esta aberta AGORA", e loja fechada
+> continua listada de proposito (o cliente ve que existe e o horario dela). **Sao dois campos com
+> nomes parecidos e efeitos diferentes.**
+>
+> Isso escondia um **500 na vitrine publica ANONIMA**: com a loja orfa ainda listada, o
+> `EstablishmentResponse.fromEntity` fazia `getOwner().getId()` cru — **uma** loja sem dono derrubava
+> a listagem inteira, **para todo mundo**, inclusive quem nem tem conta. Corrigido nos dois lados:
+> `ownerId` virou **nullable** (era `@NotNull`) e null-safe em `EstablishmentResponse` e
+> `EstablishmentWithProfessionalsResponse`, e a loja passa a `INACTIVE` de verdade.
+>
+> **Handoff aos fronts:** `owner_id` **pode vir `null`** numa loja cujo dono apagou a conta. Nao e
+> erro — quem exibe/roteia por `owner_id` tem de tolerar ausente. Loja orfa nao aparece mais na
+> listagem, mas continua legivel por id (o historico do cliente aponta para ela).
+
+> **Handoff aos fronts — ⚠️ MUDANCA DE CONTRATO, o botao de hoje vai quebrar.** O Front-Client apontou
+> (07/08, e esta certo) que a rota **ja existia** e que o app **ja a chama** em `profileService.ts:60`,
+> no botao "Deletar conta". A chamada de hoje **nao manda corpo** e passa a receber
+> **400 `INVALID_REQUEST_BODY`** ate o app mandar `{ "current_password": ... }`.
+>
+> ⚠️ **Correcao (medida no newman, 07/08): e 400, nao 422** — esta linha dizia 422 e estava errada.
+> Corpo **ausente** morre no Jackson (`HttpMessageNotReadableException`) **antes** de chegar ao
+> `@Valid`, entao sai `400 INVALID_REQUEST_BODY`. O **422 `VALIDATION_ERROR`** e o outro caso: corpo
+> presente com `current_password` em branco. **Para os fronts o que importa e o 400**, porque e o que
+> o botao de hoje recebe. Achado por 7 cleanups das collections que chamavam a rota sem corpo.
+>
+> **Isso foi decidido de olhos abertos, e o motivo importa:** o endpoint anterior era
+> `repository.deleteById(id)` cru, e o `BaseUser` tem `cascade = ALL` para `owner`/`professional`/
+> `client` — apagar a conta de um **dono** apagava **a loja inteira**, com os atendimentos de todos os
+> clientes, os servicos e o vinculo dos profissionais; apagar a de um **profissional** apagava **todos
+> os atendimentos dele**, destruindo o historico e os relatorios da loja onde ele trabalha. **Um 400
+> visivel e melhor do que um botao que funciona destruindo dado de terceiro.** O ganho e imediato:
+> enquanto o app nao atualiza, o botao falha alto em vez de detonar a loja.
+>
+> **O que cada front precisa fazer:** pedir a senha na confirmacao (a tela do "trocar senha" ja tem o
+> campo — da para reaproveitar), mandar no corpo do DELETE, tratar **204** como sucesso (era 200),
+> **401** como "senha incorreta", e **409** exibindo a `message` do backend, que ja diz o que fazer.
+>
+> **Estado de cada front na entrega (conferido nos PRDs deles em 09/08 — os dois estao desatualizados
+> em sentidos OPOSTOS, e por isso este handoff vale para os dois):**
+> - **Client — urgente.** O PRD deles lista `DELETE /profile/delete/me` como **"Implementado"** desde
+>   2026-06-03 (item ~~13~~, tela Settings): o botao esta **no ar e chamando a rota sem corpo**, entao a
+>   partir deste deploy ele **quebra com 400** ate mandarem o `current_password`. E o unico front com
+>   regressao visivel.
+> - **Partner — destravado.** O item 3 do feedback de device (S19) ainda diz *"⛔ Bloqueado — nao
+>   existe endpoint"*. **Existe agora**: podem construir "Apagar minha conta" em Dados cadastrais, com
+>   dupla confirmacao + senha, como eles mesmos ja tinham desenhado.
+>
+> **Ainda falta, e nao e backend:** as lojas exigem tambem um **caminho web** de solicitacao de
+> exclusao, fora do app. Isso e uma pagina, nao um endpoint — mas bloqueia a publicacao do mesmo jeito.
+
+**Testes:** Integracao (`AccountDeletionIntegrationTest` — 16 casos: os tres portoes 409, senha
+errada / corpo ausente (400) / campo em branco (422) / sem token, anonimizacao do `base_user`, **o atendimento sobrevive**, e-mail liberado,
+login e access token vivo recusados, loja `CLOSED`+`INACTIVE`/sem dono/profissionais desafiliados,
+**a vitrine publica anonima nao quebra com loja orfa** e a loja orfa sai da listagem) +
+`ProfileIntegrationTest` (401 senha errada / 204 sucesso / token morto depois / 401 sem token) +
+**Postman folder 19** (26 requests, homolog+prod, self-contained)
+
+> ⚠️ **Os tres portoes devolvem o MESMO `code`** — so a `message` diz qual disparou, entao **asserir
+> so o `code` nao prova nada**. E facil um portao responder no lugar do outro: quando o dono tambem
+> ATENDE (o caso comum das lojas de uma pessoa so), o portao do **profissional** dispara antes e o do
+> **dono** nunca e alcancado. Por isso cada teste de 409 assere a mensagem, e o do dono monta um
+> **segundo profissional** na loja para que a fila viva nao seja a do proprio dono. A Postman cobre
+> dois portoes (cliente e profissional); o do dono e isolado so no teste de integracao, onde da para
+> montar o funcionario extra.
 
 ---
 
@@ -682,6 +823,8 @@ Lista establishments ativos com filtros opcionais.
 | neighborhood | String | Busca parcial por bairro do endereco, case-insensitive (`LIKE`). So retorna establishments que tem endereco no bairro |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
 | includeAll | Boolean | Default `false`. Se `false`, a listagem devolve **apenas lojas `open_status == OPEN`**. `true` devolve todas as ativas (inclui `CLOSED`/`TEMPORARILY_CLOSED`), p/ o Front-Partner/gestao |
+| lat, lng | Double | **Novo 2026-08-01 (GPS fatia B).** Coordenada do aparelho do cliente. Presentes, a lista passa a ser **ordenada por distancia** e cada item ganha `distance_km`. Tem de vir **o par** |
+| radiusKm | Double | **Opcional e explicito** — filtra ate X km. **NAO ha raio default** |
 
 > **Filtro de open-status (BUG5):** por padrao (`includeAll` ausente ou `false`) a listagem publica so mostra lojas **abertas** (`open_status == OPEN`) — o cliente nao ve loja fechada. `?includeAll=true` inclui as fechadas. **NAO muda o open-status persistido nem mexe na fila** — e so filtro de leitura, aplicado a **todas** as variantes do `GET /establishment` (com ou sem `name`/`neighborhood`/`serviceType`). O front nao precisa mais filtrar localmente.
 
@@ -692,9 +835,51 @@ Lista establishments ativos com filtros opcionais.
 > - Sem filtro, lista todos os ativos.
 > - `includeAll` e ortogonal aos demais: o filtro de open-status roda **por cima** do resultado de qualquer combinacao acima.
 >
-> **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja.
+> **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja. **Com `lat`/`lng`, essa ordenacao e SUBSTITUIDA pela distancia** (ver abaixo).
+
+#### Busca por proximidade — `?lat=&lng=[&radiusKm=]` (GPS fatia B, 2026-08-01)
+
+**Decisao de produto (Andre 2026-07-27, opcao A): NAO existe raio default.** Com `lat`/`lng` e sem
+`radiusKm`, a busca devolve **tudo** reordenado por distancia; o raio e filtro **opcional e
+explicito**. Um raio default deixaria a tela vazia para quem esta numa regiao sem loja — e o usuario
+**nao distingue "nao ha nada perto" de "o app quebrou"**.
+
+| Situacao | Comportamento |
+|---|---|
+| Sem `lat`/`lng` | Ordena por tempo de espera (o de sempre). `distance_km` vem `null` |
+| `lat`+`lng`, sem `radiusKm` | Ordena por distancia. **Ninguem some**: a loja sem coordenada vai para o **FIM** com `distance_km: null` |
+| `lat`+`lng`+`radiusKm` | Alem de ordenar, **filtra** ate X km — e a loja **sem coordenada sai** (nao da para afirmar que ela cabe no raio) |
+| `radiusKm` **sem** `lat`/`lng` | **Ignorado, sem erro.** O app pode mandar um raio guardado de antes com a permissao de localizacao NEGADA agora; a lista nunca pode vir vazia (nem quebrar) por isso |
+| Coordenada pela metade, fora do globo ou `(0,0)` | `422 ADDRESS_INVALID_COORDINATES` — mesmo portao de entrada do cadastro de endereco |
+| `radiusKm <= 0` | `422 ADDRESS_INVALID_COORDINATES`. Aqui o chamador disse o que queria e disse algo impossivel: raio nao-positivo devolveria lista vazia sempre, e o front leria isso como "nao ha lojas" |
+
+**Ordem ESTAVEL:** distancia e, no empate, `id`. Sem o desempate, duas lojas equidistantes trocariam
+de lugar entre requests e a paginacao (backlog) repetiria ou pularia item.
+
+> ⚠️ **Armadilha para quem for fazer a paginacao:** o desempate compara o id **como texto**, nao como
+> `java.util.UUID`. O `UUID.compareTo` do Java compara as duas metades como `long` **com sinal**, entao
+> um id que comeca em `8`-`f` (bit alto ligado = long negativo) ordena **antes** de um que comeca em
+> `0`-`7` — o oposto do que se le no hexadecimal. O Postgres compara `uuid` byte a byte, **sem sinal**.
+> Comparar como texto e o que faz esta ordenacao bater com a do `ORDER BY distancia, id` quando ela
+> migrar para SQL; com `UUID.compareTo`, a lista mudaria de ordem no dia da migracao. Descoberto pelo
+> teste de empate em 2026-08-01.
+
+**`distance_km`** e arredondado em **2 casas** — e o numero que o card mostra ("2,3 km"). **O front
+NAO recalcula**: se cada app fizesse a propria conta, a distancia mostrada divergiria entre client e
+partner. `null` significa duas coisas distintas: (a) a busca nao mandou coordenada, ou (b) mandou,
+mas **aquela** loja ainda nao tem coordenada resolvida.
+
+> **Custo zero:** Haversine em Java puro (`domain/address/valueObject/Haversine`), **sem PostGIS** e
+> sem servico externo — a distancia usa a coordenada **ja persistida** pelo geocoding (fatia A) ou
+> pelo GPS do dono (fatia A2). Nenhuma chamada externa acontece por request de busca.
 >
-> **Proximidade por GPS (lat/lng/raio) nao implementada** — ver backlog. No MVP nao ha ordenacao por distancia.
+> **Por que em Java e nao em SQL** (a nota antiga dizia "Haversine em SQL puro"): a listagem ja
+> calcula o tempo de espera com **uma query por establishment** (o N+1 documentado no `@apiNote` do
+> service). Filtrar o raio no banco pouparia uma fracao irrelevante perto disso, e exigiria duplicar
+> a formula em cada uma das 5 combinacoes de filtro que ja existiam. Em Java, a distancia vale para
+> **qualquer** combinacao de graca. **Quando mover para SQL:** junto com a **paginacao** (backlog) —
+> ai a ordenacao precisa acontecer no banco de qualquer jeito, e e o momento de somar o bounding box
+> com indice.
 
 **Response (200):**
 ```json
@@ -713,6 +898,7 @@ Lista establishments ativos com filtros opcionais.
     "open_status": "OPEN",
     "is_open": true,
     "status": "ACTIVE",
+    "distance_km": 2.31,
     "address": {
       "street": "Rua das Flores",
       "number": "123",
@@ -737,7 +923,17 @@ Lista establishments ativos com filtros opcionais.
 
 > **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
-**Testes:** Integracao
+> **Handoff Front-Client (o B7 deles — PRONTO PARA LIGAR).** O lado de voces ja esta feito desde
+> 29/07 (`expo-location`, permissao na primeira abertura, coordenadas em `locationStore.coords`).
+> Agora basta **mandar `lat`/`lng` no `GET /establishment`** e **exibir `distance_km`** no card, sem
+> recalcular nada. Tres avisos que mudam a UI: (1) **nao mande `radiusKm`** a menos que exista um
+> controle de raio na tela — sem ele a lista vem completa, so reordenada, que e o comportamento
+> desejado na Home; (2) uma loja pode vir com `distance_km: null` **mesmo com o GPS ligado** (ela
+> ainda nao tem coordenada) — o card precisa aguentar isso sem mostrar "null km"; (3) com a permissao
+> **negada**, simplesmente nao mande as coordenadas: a lista volta ordenada por tempo de espera e
+> **nunca vem vazia** por causa disso.
+
+**Testes:** `EstablishmentGeoSearchIntegrationTest`, `HaversineTest` · Postman folder **18**
 
 ---
 
@@ -859,7 +1055,7 @@ Atualiza informacoes gerais do establishment. Envia apenas os campos que deseja 
 |-------|------|-------|
 | name | String | null/em branco ignorado |
 | url_image | String | null/em branco ignorado |
-| service_type | Enum | — |
+| service_type | Enum | **editavel aqui** — o tipo de loja NAO e imutavel (refuta o Partner S20 de 2026-08-05: o campo entra no quick-create *e* neste PATCH). Nao mexe no catalogo: `ServiceItemType` nao deriva do `serviceType` da loja |
 | services | Set<Enum> | substitui o conjunto atual |
 | phone | String | opcional (max 20). String em branco **limpa** o campo (vira null) |
 | instagram | String | opcional (max 100). String em branco **limpa** o campo (vira null) |
@@ -1065,6 +1261,38 @@ atendimentos volta — o backend ja entrega os totais, evitando agregacao client
 **inclusivos** (`dateTo` cobre o dia inteiro). Sem periodo = desde sempre.
 Convencao consistente com `GET /attendances`.
 
+⚠️ **"Dia" e o dia da LOJA** (fuso `vupth.timezone`, default `America/Sao_Paulo`), nao o dia UTC —
+corrigido em 2026-08-11, residuo final do BUG2b. A janela vai da **meia-noite local** de `dateFrom`
+ate a **meia-noite local** do dia seguinte a `dateTo` (teto exclusivo). Antes disso o dia comecava
+as **21h da vespera** e o atendimento das 22h aparecia no relatorio do **dia seguinte**. Se havia
+numero de relatorio anotado de antes desta data, o corte tardio pode ter mudado de dia — o numero
+novo e o certo.
+
+> 📣 **HANDOFF 2026-08-11 (Partner, principalmente) — o numero do relatorio MUDA, e nao ha nada a
+> implementar. Leiam antes de abrir bug.**
+>
+> **Nada muda no contrato:** mesmos params, mesmo shape de resposta, nenhum campo novo. **Nenhum
+> front precisa de release por causa disto.** O que muda e o **valor** de `totalAttendances`,
+> `totalRevenue`, `avgDurationMinutes` e do breakdown por profissional em alguns dias.
+>
+> **O que estava errado:** a janela era montada em **UTC**. Em `America/Sao_Paulo` isso fazia o dia
+> comecar as **21h da vespera** — entao o atendimento das 22h **nao entrava** no relatorio do dia em
+> que aconteceu; caia no do dia seguinte. Quanto mais tarde a loja fecha, mais o numero do dia
+> mentia. Uma loja que fecha as 20h nunca percebeu; uma que atende ate 23h tinha as tres ultimas
+> horas de **todo dia** contabilizadas no dia errado.
+>
+> **Efeito visivel:** o relatorio de **hoje** passa a incluir o corte das 22h de hoje (antes so
+> apareceria amanha) e deixa de incluir o corte das 22h de **ontem** (que antes aparecia hoje,
+> indevidamente). Em dias sem atendimento apos as 21h, **nada muda**.
+>
+> ⚠️ **Se voces tinham numero anotado de QA antigo, ele vai divergir — e o numero NOVO e o certo.**
+> Divergencia em atendimento **apos** as 21h e o comportamento esperado desta correcao, nao um bug
+> novo. Divergencia em atendimento **antes** das 21h ai sim e bug, e queremos saber.
+>
+> Vale identico para `GET /professional/me/reports`, `GET /attendances?dateFrom=&dateTo=` e
+> `GET /attendances/client/me?dateFrom=&dateTo=` — **todos** os filtros de periodo do sistema
+> passaram a usar o mesmo recorte, entao os tres nunca discordam sobre o que e "hoje".
+
 **Response (200):**
 ```json
 {
@@ -1086,7 +1314,7 @@ Convencao consistente com `GET /attendances`.
 > atendimentos retorna `totalAttendances: 0`, `topService`/`topProfessional` nulos e
 > `professionals` vazio.
 
-**Testes:** Integracao (`ReportIntegrationTest`)
+**Testes:** Integracao (`ReportIntegrationTest`) + unit `BusinessDayRangeTest` (recorte do periodo no fuso da loja — a regressao **deterministica** do #33; o teste de integracao so pega o bug em host atras do UTC entre 21h e meia-noite)
 
 ---
 
@@ -1279,6 +1507,13 @@ no periodo) — para as telas de relatorio dia/semana/mes do app parceiro.
 **Query params (opcionais):** `dateFrom` e `dateTo` em ISO `yyyy-MM-dd`, ambos
 **inclusivos**. Sem periodo = desde sempre.
 
+⚠️ **"Dia" e o dia da LOJA** (fuso `vupth.timezone`, default `America/Sao_Paulo`), nao o dia UTC —
+corrigido em 2026-08-11, residuo final do BUG2b. A janela vai da **meia-noite local** de `dateFrom`
+ate a **meia-noite local** do dia seguinte a `dateTo` (teto exclusivo). Antes disso o dia comecava
+as **21h da vespera** e o atendimento das 22h aparecia no relatorio do **dia seguinte**. Se havia
+numero de relatorio anotado de antes desta data, o corte tardio pode ter mudado de dia — o numero
+novo e o certo.
+
 **Response (200):**
 ```json
 {
@@ -1295,7 +1530,7 @@ no periodo) — para as telas de relatorio dia/semana/mes do app parceiro.
 **Erros:**
 - 404 `PROFESSIONAL_NOT_FOUND` — usuario nao tem perfil profissional
 
-**Testes:** Integracao (`ReportIntegrationTest`)
+**Testes:** Integracao (`ReportIntegrationTest`) + unit `BusinessDayRangeTest` (recorte do periodo no fuso da loja — a regressao **deterministica** do #33; o teste de integracao so pega o bug em host atras do UTC entre 21h e meia-noite)
 
 ---
 
@@ -1533,8 +1768,8 @@ Lista atendimentos filtrados por establishment, profissional, periodo e status. 
 | establishmentId | UUID | Filtrar por establishment (owner/profissional) |
 | professionalId | UUID | Filtrar por profissional (owner/profissional) |
 | clientId | UUID | **Lista os atendimentos do proprio cliente** (Partner BUG8). Deve ser igual ao `sub` do JWT — senao `403`. Delega ao mesmo caminho de `GET /attendances/client/me` |
-| dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
-| dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
+| dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo — **meia-noite no fuso da LOJA**, nao UTC (ver nota do BUG2b) |
+| dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) — teto exclusivo na meia-noite local do dia seguinte |
 | status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED, LATE |
 
 **Regras de autorizacao:**
@@ -1585,8 +1820,8 @@ Lista atendimentos do cliente logado, com filtros opcionais de status e periodo.
 | Param | Tipo | Descricao |
 |-------|------|-----------|
 | status | AttendanceStatus | SCHEDULED, IN_PROGRESS, FINISHED, CANCELLED, PAUSED, LATE |
-| dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo |
-| dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) |
+| dateFrom | LocalDate (YYYY-MM-DD) | Inicio do periodo — **meia-noite no fuso da LOJA**, nao UTC (ver nota do BUG2b) |
+| dateTo | LocalDate (YYYY-MM-DD) | Fim do periodo (inclusive) — teto exclusivo na meia-noite local do dia seguinte |
 
 **Response (200):**
 ```json
@@ -2456,6 +2691,7 @@ Cria endereco para um establishment.
 ```json
 {
   "establishmentId": "uuid",
+  "addressId": "uuid",
   "establishmentName": "Barbearia do Ze",
   "street": "Rua das Flores",
   "number": "123",
@@ -2469,7 +2705,99 @@ Cria endereco para um establishment.
 }
 ```
 
+> **`addressId` (novo 2026-07-31).** E o id que o `PATCH` abaixo recebe. Antes do PATCH nao havia
+> por que expor o id — sem correcao possivel, o front so lia os campos.
+
+**`latitude`/`longitude` no request (fatia A2 do GPS).** Sao **opcionais** e o caminho preferencial
+quando o dono esta na loja: manda a coordenada do aparelho dele e o backend **nao geocodifica** o
+endereco (nao sobrescreve o dado mais preciso). Sem elas, a coordenada e resolvida depois do commit,
+em thread de fundo. **Validacao (2026-07-31):** o par tem de ser um ponto real —
+`422 ADDRESS_INVALID_COORDINATES` quando vem **so uma das duas**, fora do globo, ou `(0,0)` (a "ilha
+nula", que no front costuma ser um objeto de localizacao nao preenchido, nao um erro de digitacao).
+Ambas ausentes e valido: e o cadastro por texto.
+
 **Testes:** Integracao
+
+---
+
+### PATCH /establishments/{establishmentId}/addresses/{addressId}
+Corrige um endereco ja cadastrado. **Novo em 2026-07-31 (backlog "PATCH do endereco").**
+
+**Acesso:** Autenticado; a **posse da loja e conferida no service** (`findByIdAndOwnerId`), nao por
+role — role sozinha nao diz de quem e a loja. Dono de outra loja recebe `404`.
+
+**Por que existe:** so havia o `POST`. Endereco (ou coordenada) errado **nao tinha conserto pela
+API** — e quem descobre o erro e justamente o dono, quando a loja nao aparece na busca por
+proximidade.
+
+**Request:** `UpdateEstablishmentAddressRequest` — **todo campo e opcional**, `null` = nao mexe:
+```json
+{ "street": null, "number": "250", "complement": null, "neighborhood": null,
+  "city": null, "state": null, "zipCode": null, "reference": null,
+  "latitude": null, "longitude": null }
+```
+
+**Regras:**
+| Situacao | Efeito |
+|---|---|
+| Campo omitido / `null` | nao mexe |
+| `complement` ou `reference` = `""` | **LIMPA** o campo (sao os opcionais que o dono digita errado e quer apagar) |
+| Campo obrigatorio = `""` | ignorado (a coluna e `NOT NULL`) |
+| Editar **texto** (rua/numero/CEP…) | **NAO move a coordenada** — texto e coordenada vem de fontes diferentes e ambos ficam |
+| `latitude`+`longitude` no corpo | **substituem** a coordenada atual (mesma validacao `422` do POST) |
+| Endereco **sem** coordenada apos o update | **retentativa** do geocoding pos-commit — e o conserto de quem cadastrou com CEP errado (ou com o servico fora do ar) e ficou invisivel na busca por raio |
+| Endereco **com** coordenada | nunca regeocodificado (o worker ja ignora endereco resolvido) |
+
+**Response (200):** mesmo corpo do `POST`.
+
+**Erros:** `404` (loja nao e do chamador, ou `addressId` nao e daquela loja) · `422 VALIDATION_ERROR`
+(CEP com mascara) · `422 ADDRESS_INVALID_COORDINATES`.
+
+**Testes:** `AddressCorrectionIntegrationTest` · Postman folder **17 - endereco (reverso + PATCH)**
+
+---
+
+### GET /geocoding/reverse?lat=&lng=
+Coordenada -> endereco por extenso, para o dono **conferir**. **Novo em 2026-07-31 (GPS fatia A2).**
+
+**Acesso:** Autenticado, **sem exigir role** — quem cadastra a primeira loja ainda pode nao ter
+`ROLE_OWNER`. O login e o que segura o consumo do Nominatim (gratuito, mas com policy de 1 req/s).
+
+**Por que existe:** o dono esta **dentro da loja** quando a cadastra, entao o GPS do aparelho dele e
+a fonte mais precisa que existe — o CEP resolve a faixa do logradouro, nao a porta. Mas coordenada
+nua nao da para conferir. O reverso devolve o endereco escrito para ele **ler, reconhecer e polir**
+(numero, complemento) antes de salvar. **Isso substitui a ideia anterior** de comparar com o CEP e
+"desconfiar em silencio": o dono ve o endereco escrito e percebe o erro sozinho.
+
+**Response (200):** espelha o `AddressRequest` de proposito — o Partner joga direto no formulario.
+```json
+{
+  "street": "Avenida Bras de Pina", "number": "100", "neighborhood": "Penha",
+  "city": "Rio de Janeiro", "state": "RJ", "zipCode": "21012000",
+  "displayName": "Avenida Bras de Pina, 100 - Penha, Rio de Janeiro - RJ, 21012-000, Brasil",
+  "latitude": -22.8422, "longitude": -43.2764
+}
+```
+
+> ⚠️ **Qualquer campo pode vir `null`** e o front tem de aguentar — o reverso quase nunca sabe o
+> numero da casa e as vezes nem o CEP. O `displayName` e o unico praticamente sempre presente, e e
+> justamente ele que o dono le para reconhecer o lugar. `state` vem como **UF de 2 letras**, `zipCode`
+> em **8 digitos puros**.
+>
+> A `latitude`/`longitude` voltam **exatamente como entraram**, nao a do endereco encontrado: a
+> coordenada e o dado preciso aqui (o dono esta em pe no lugar), o texto e que e aproximado.
+
+**Erros:** `404 GEOCODING_ADDRESS_NOT_FOUND` — cobre "nao ha endereco mapeado ali" **e** "servico
+fora do ar", que o front trata igual: deixa o dono digitar na mao. **A coordenada continua valida** e
+vai no cadastro do mesmo jeito; o reverso e conferencia, nao pre-requisito. `422
+ADDRESS_INVALID_COORDINATES` para `(0,0)` / fora do globo.
+
+**Testes:** `AddressCorrectionIntegrationTest`, `GeocodingContractTest`, `AddressCoordinatesTest` · Postman folder **17**
+
+> **Nota para quem roda o newman:** no Postman o caso feliz do reverso aceita **200 OU 404**. E a unica
+> request da collection que sai para a internet (Nominatim), e o contrato ja manda o front tratar os dois
+> do mesmo jeito — travar em 200 seria asseverar a disponibilidade de um servico de terceiro. O **shape** e
+> conferido quando vem 200; `401`/`422` sao deterministicos porque nem saem da maquina.
 
 ---
 
@@ -2672,6 +3000,26 @@ Canal de tempo real para a **fila ao vivo** e **notificacoes pessoais**. Protoco
 
 A autenticacao acontece no `StompAuthChannelInterceptor` (reusa o `JwtDecoder` RSA), nao no HTTP. O endpoint `/ws/**` e `permitAll` na cadeia HTTP.
 
+### Heartbeat (10s / 10s) — LIGADO desde 2026-08-05
+
+O servidor anuncia `heart-beat:10000,10000` no frame **CONNECTED**: escreve um frame a cada 10s quando nao ha outro trafego e **espera** receber algo do cliente na mesma cadencia. Vale para o endpoint nativo e para o SockJS.
+
+**Por que existe** (Partner S17, backlog #31): ate 01/08 o broker respondia `heart-beat:0,0` (o `enableSimpleBroker` estava **sem `TaskScheduler`** — sem ele o Spring desliga o heartbeat), medido em producao pelo Andre com o `ws-test.html`. Sem heartbeat, quando o Render corta o socket ocioso (ou a instancia hiberna) a conexao vira **zumbi**: o app continua se achando conectado, o `reconnectDelay` do `@stomp/stompjs` **nunca dispara** (nao houve erro visivel) e a fila simplesmente para de atualizar. Isso explica o "as vezes nao chega" **dentro da 1a hora** — que o item de token invalido (backlog #31 atual) nao explicava. Com o heartbeat, a queda vira erro de escrita/leitura → desconexao → reconexao automatica; e o trafego periodico ainda evita o proprio corte por ociosidade.
+
+**📣 HANDOFF PARA OS FRONTS (Client e Partner) — heartbeat:**
+
+**Para funcionar, nada a fazer:** os dois apps **ja pedem** `heartbeatIncoming: 10000` / `heartbeatOutgoing: 10000` no `@stomp/stompjs`; so agora o servidor aceita. O heartbeat e **negociado por sentido** — quem mandar `0` desliga aquele lado. Cliente sem heartbeat continua conectando normalmente (o servidor **nao** o desconecta), mas fica sem a deteccao do socket zumbi, que e justamente o problema que este item resolve.
+
+**⬜ PENDENCIA — reconectar ao voltar do background. Estado por app (conferido em 2026-08-05):** **Partner ✅ JA FEITO** (v18.5, 01/08 — `AppState` no `useQueueSocket.ts`: ao voltar para `active` invalida as queries de fila e reativa o socket se nao estiver conectado). **Client ⬜ ABERTO** — e o **C18** do handoff deles ("nenhum app reconecta ao voltar do background, sem `AppState`"), hoje na **prioridade 9** da lista do client. Com o heartbeat ligado, esta pendencia **muda de natureza para o client**: antes o socket morto era indistinguivel de "sem evento"; agora o servidor derruba a sessao rapido, entao o app **vai** acordar desconectado com frequencia — sem o `AppState` ele so descobre no proximo evento que nunca chega. O heartbeat **nao cobre o app em background**: em React Native os timers de JS sao suspensos quando o app sai do foreground (iOS suspende o processo; Android com Doze/background restrictions idem), entao **nem o servidor recebe o heartbeat do app, nem o app processa o do servidor**. O que acontece na pratica:
+- O servidor deixa de receber o heartbeat e **encerra a sessao** (comportamento correto — libera o recurso; o `push` cobre o usuario nesse periodo, ver secao "Notificacoes push").
+- Ao voltar ao foreground, o app pode acordar sobre um socket **ja morto** e continuar exibindo a fila congelada, exatamente o sintoma que o heartbeat elimina no foreground. Como o SO congelou o timer, **nao da para confiar no `reconnectDelay` sozinho**.
+
+**O que fazer (lado do app):** assinar `AppState` e, na transicao `background → active`, **forcar a reavaliacao da conexao** — se o cliente STOMP nao estiver `CONNECTED`, `deactivate()` + `activate()` (reconecta com token fresco no `beforeConnect`) — e, ao reconectar, **refazer o estado por REST** (`GET .../professionals-with-queue` e afins), porque os eventos publicados enquanto o app dormia **nao sao reenviados**: o broker e em memoria e sem fila por sessao (nao ha replay). O mesmo re-sync ja vale para qualquer reconexao, nao so a do foreground.
+
+**Por que fica com o front:** e limite de ciclo de vida do SO, nao do protocolo — nenhum ajuste no servidor faz o timer do app rodar suspenso. Aumentar o intervalo do heartbeat so atrasaria a deteccao no foreground sem resolver o background. Quando um front implementar, avisar — o backend revisa o alinhamento.
+
+Implementacao: `WebSocketConfig.configureMessageBroker` → `.setHeartbeatValue(new long[]{10000, 10000}).setTaskScheduler(...)`, com `ThreadPoolTaskScheduler` **proprio e daemon** (`ws-heartbeat-`, pool 1 — o broker agenda uma unica tarefa), mesmo padrao dos schedulers de dominio: o projeto nao usa `@EnableScheduling` e nenhuma thread pode segurar o encerramento da JVM.
+
 ### Destinos (subscriptions)
 
 | Destino | Acesso | Conteudo |
@@ -2719,7 +3067,51 @@ O broadcast e disparado pela camada web **apos a transacao commitada**, entao o 
 
 > **MVP / escala:** broker simples em memoria (1 instancia). Para multi-instancia (staging/prod escalado) trocar por broker externo (RabbitMQ/Redis STOMP) — ver backlog. O broadcast e sincrono no fluxo HTTP; tornar assincrono e otimizacao futura.
 
-**Testes:** Integracao (`WebSocketIntegrationTest`) — broadcast a subscriber anonimo + notificacao pessoal a subscriber autenticado.
+**Testes:** Integracao (`WebSocketIntegrationTest`) — broadcast a subscriber anonimo + notificacao pessoal a subscriber autenticado + **heartbeat negociado no CONNECTED** (`connect_negotiatesHeartbeat`, regressao do `0,0`).
+
+**Ferramenta de campo — `scripts/ws-probe.js`** (2026-08-06). Cliente STOMP headless em Node (mesmo `@stomp/stompjs` dos apps), autossuficiente: registra os proprios usuarios via API, abre a loja, entra na fila e confere as entregas. `node scripts/ws-probe.js https://vupth-backend-ia.onrender.com`. Cobre o que as outras suites **nao alcancam**: o newman **nao fala STOMP** e o `WebSocketIntegrationTest` roda em `localhost` no CI — prova que o servidor **anuncia** o heartbeat, nao que a batida **atravessa a rede**. O probe roda contra o ambiente real e mede a conexao ociosa atravessando o proxy do Render (o cenario do socket zumbi, impossivel de reproduzir em `localhost`).
+
+#### ✅ TESTES DE WEBSOCKET QUE CADA FRONT PRECISA RODAR EM DEVICE (2026-08-06)
+
+**O lado do servidor esta FECHADO e provado em producao** (`ws-probe.js` contra o Render, 6/6): heartbeat `10000,10000`, entrega no topico publico, entrega no canal pessoal roteada por userId, conexao ociosa de 40s sobrevivendo ao proxy, e anonimo sem acesso ao canal pessoal. **O que sobra so o DEVICE prova** — flags do stompjs em React Native, timers de JS em background e renovacao de token. Nada disso e backend, e nada disso eu consigo medir daqui.
+
+⚠️ **O heartbeat virou o DISCRIMINADOR.** Antes, "nao chega mensagem" nao dizia de quem era a culpa. Agora diz: **se o CONNECTED voltar `heart-beat:10000,10000` e ainda assim nao chegar nada, o defeito esta no cliente**, porque o servidor comprovadamente entrega naquele mesmo caminho.
+
+**Estado dos dois apps em 2026-08-07 (conferido no codigo dos dois repos) — e um A/B pronto.** ⚠️ **Sao TRES variaveis, nao duas** — correcao do Partner em 06/08, procedente e conferida aqui:
+
+| | flags `forceBinary…`/`appendMissingNULL…` | reconnect no `AppState` | token na reconexao |
+|---|---|---|---|
+| **Client** | ✅ **removidas** | ✅ **FEITO em 07/08** — o C18 saiu (informado por eles; a tabela dizia "nao tem, prioridade 9") | ⚠️ **RE-LE, mas NAO RENOVA** — `beforeConnect` faz `SecureStore.getItemAsync` e usa o que estiver la (e o C16) |
+| **Partner** | ❌ **tem as duas** (`useQueueSocket.ts:67-68`) | ✅ tem (v18.5) | ✅ **RE-LE E RENOVA** — `beforeConnect` chama `useAuthStore.refreshToken()` se vencido (fix `59a3b9b`, 01/08) |
+
+A terceira coluna e a que **muda a leitura do Teste 1** — ver abaixo. O A/B continua valendo para as flags (coluna 1), que seguem sendo a unica variavel isolada entre os dois apps.
+
+**Teste 0 (pre-requisito de interpretacao de TODOS os outros) — expor `heart-beat` e `user-name` do CONNECTED.** ⚠️ **`console.log` NAO serve** (achado do Partner, procedente): os logs de WS dos dois apps sao gated por `__DEV__`, e o QA roda **bundle de OTA = producao**, onde `__DEV__` e falso e nada aparece. Tem de sair **por UI ou por log nao-gated**.
+- **Client: JA FEITO** — `src/stores/wsDiagnosticsStore.ts` com `markConnecting`/`markConnected(headers)`/`markMessage`/`markError`/`markClosed`, instrumentando **os dois canais** (`"public"` em `useQueueSocket.ts`, `"personal"` em `useQueueNotifications.ts`), exibido em Configuracoes.
+- **Partner: FALTA** — e a oferta que eles fizeram em 06/08 (linha de diagnostico em Configuracoes, junto do id do OTA). **Recomendacao: espelhar os MESMOS campos e nomes do `wsDiagnosticsStore` do client.** Sem isso os dois apps reportam coisas diferentes e o Teste 2 (A/B) vira comparacao de laranja com banana.
+
+**Teste 1 — TOKEN EXPIRADO. O mais valioso, e ninguem nunca fez.** O access token dura **1h** (`jwt.access-token-expiration=PT1H`). Deixar o app aberto e logado por **mais de 1 hora**, forcar uma reconexao (modo aviao 10s e voltar) e verificar se a **notificacao pessoal** ainda chega (o profissional remove o cliente da fila → o app-cliente tem de reagir).
+
+⚠️ **LEITURA CORRIGIDA (Partner, 06/08 — a correcao mais importante desta secao).** **O Teste 1 nao mede a mesma coisa nos dois apps**, por causa da terceira variavel:
+- **Partner passar NAO absolve o #31.** Ele renova o token no `beforeConnect`, entao **nunca chega a mandar um token vencido** — passar prova que o `refreshToken()` deles funciona, nada sobre o servidor. Concluir *"o partner passou, logo o token nao e problema"* seria o erro de leitura natural olhando so a tabela, e e falso.
+- **Quem expoe o #31 e o CLIENT**, que re-le mas nao renova: e o unico dos dois capaz de apresentar um token vencido ao servidor. **O #31 so pode ser exercitado pelo client.**
+- ⚠️ **Para o teste ser deterministico no client, NAO TOCAR no app durante a hora.** Ele le o token do `SecureStore`, entao qualquer chamada de API que dispare o refresh no interceptor **troca o token guardado** e a reconexao leva um token valido — o teste passa por acidente e produz um falso "esta tudo bem". App aberto, parado, sem navegar.
+
+**Por que importa:** com o #31 aberto, token invalido **conecta ANONIMO em vez de ser recusado**. O sintoma e traicoeiro — o **topico publico continua funcionando** (a fila atualiza normalmente) e **so o canal pessoal morre calado**. E exatamente a assinatura do "as vezes nao chega" que nunca foi explicada. Falhou = o #31 sobe de prioridade e vira caso reproduzivel.
+
+**Teste 2 — A/B das flags, os dois apps abertos lado a lado.** Mesma loja, mesmo profissional, mesmo evento. Leitura do resultado: **client recebe e partner nao** = as flags sao o defeito, com prova em device (resolve a objecao legitima do Partner — *"nao removemos sem medir"* — sem eles alterarem nada antes); **os dois recebem** = as flags sao inofensivas contra o Spring; **nenhum dos dois recebe COM `heart-beat:10000,10000` no log** = volta pro backend, com onde investigar.
+
+**Teste 3 — background e volta.** App com fila ativa → background 2min → voltar. ⚠️ O heartbeat **piorou este cenario de proposito**: o servidor agora derruba a sessao suspensa em ~10s em vez de deixa-la pendurada, entao o app volta desconectado com **muito mais frequencia** do que antes. Partner deve se recuperar (tem `AppState`). ⚠️ **Atualizado em 07/08: o client TAMBEM deve se recuperar agora** — eles entregaram o **C18** neste dia. Isso muda a leitura do teste: os dois lados tem `AppState`, entao **falha aqui deixou de ser "e o C18"** e passa a apontar para a implementacao concreta de um dos apps (ou, se os dois falharem com `heart-beat:10000,10000` no log, para o backend).
+
+**Teste 4 — ocioso longo.** App aberto na tela da fila, **20-30min sem interacao**, entao alguem mexe na fila. Era aqui que o socket zumbi mordia. Passou = confirmacao ponta-a-ponta do que o probe provou no servidor.
+
+**Teste 5 — troca de rede.** Wi-Fi → 4G com o app aberto; deve reconectar sozinho pelo `reconnectDelay`.
+
+**Prioridade:** os testes **1 e 2 mudam decisao** (o 1 pode reabrir o #31 como urgente; o 2 encerra uma discussao aberta desde 01/08). Os testes 3, 4 e 5 sao confirmacao. **Ordem:** o Teste 0 sai primeiro e sozinho — sem ele os outros cinco viram discussao sobre de quem e a culpa.
+
+**✅ RESPOSTA AO PARTNER (06/08): o heartbeat ESTA NO AR no Render, nao so no codigo.** Eles pediram confirmacao de que o S17 vale no ambiente do APK. Verificado em 2026-08-06 com o `scripts/ws-probe.js` contra `https://vupth-backend-ia.onrender.com` (duas rodadas, 6/6 nas duas): CONNECTED devolve `heart-beat:10000,10000`, e a conexao ociosa sobrevive 40s **atravessando o proxy do Render** com PONGs do servidor — que e justamente o caminho de rede do APK. **Podem tratar o S17 como fechado nos dois lados.**
+
+⚠️ **Achado do Partner que vale registrar: o heartbeat deles e IMPLICITO.** Eles nao setam `heartbeatIncoming`/`heartbeatOutgoing` — funciona porque o default do `@stomp/stompjs` ja e 10s/10s, que casa com o servidor **por coincidencia de default, nao por escolha**. Se alguem mexer na config do client STOMP, o heartbeat muda **calado** e o socket zumbi volta sem ninguem relacionar a causa. **Recomendacao aos DOIS apps: setar os dois valores explicitamente**, com um comentario amarrando ao `HEARTBEAT_MS` do `WebSocketConfig`. Custa duas linhas e transforma um acoplamento invisivel em contrato declarado.
 
 ---
 
@@ -2911,7 +3303,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 | PATCH /profile/general-infos | ✅ |
 | PATCH /profile/update-email/me | 🟡 Integracao |
 | PATCH /profile/update-password/me | ✅ |
-| DELETE /profile/delete/me | 🟡 Integracao |
+| DELETE /profile/delete/me | ✅ Integracao (`AccountDeletionIntegrationTest` 16 + `ProfileIntegrationTest` 4) + Postman 19 |
 | GET /users/** | 🟡 Integracao |
 | POST /establishment/quick-create | ✅ |
 | POST /establishment/create | 🟡 Integracao |
@@ -2984,7 +3376,7 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 | Item | Prioridade | Descricao | Onde |
 |------|-----------|-----------|------|
-| Trocar lugar na fila | Media | Endpoint para cliente trocar posicao na fila | `ClientServiceImpl:138` — **Front-Client** |
+| ~~Trocar lugar na fila~~ | ~~Media~~ | ✅ **ENCERRADO 2026-08-07** (apontado pelo Front-Client) — entregue como **oferta aberta `/swap-offers`** (fatias 1 e 2) e **consumido pelo client em 01/08**, quando a F8 fechou. O `ClientServiceImpl:138` era o stub anterior ao modelo de oferta. | — |
 | Visualizacao de fila para qualquer cliente | Media | Tela de fila visivel para qualquer cliente | `ProfessionalController:86` — **Front-Client** |
 | Visualizacao completa da fila | Media | Tela de fila completa (profissional/owner) | `ProfessionalController:87` — **Front-Partner** |
 | Visualizacao do atendimento atual do cliente | Media | Cliente ve detalhes do atendimento em andamento | `ProfessionalController:88` — **Front-Client** |
@@ -3060,41 +3452,201 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 > ETA com buffer −10min), entao citar numero aqui aponta para a coisa errada. **Todas as referencias cruzadas deste PRD
 > passaram a citar o NOME do item** (regra ja combinada dos dois lados; commits idem).
 
+> **Reconciliacao 2026-08-01 (lidos o `HANDOFF_BACKEND.md` do Partner de 01/08 07:24 e o do Client de 01/08 09:47).** Rodada com uma novidade boa e uma correcao de rumo:
+>
+> **1. O "WebSocket nao funciona" NUNCA foi do backend — e agora ha prova.** O front-client montou uma pagina de teste (`vupth/src/docs/ws-test.html`) que conecta no MESMO servidor STOMP e mostra etapa por etapa. Rodada contra o Render: handshake livre, JWT do frame CONNECT aceito (o `CONNECTED` volta com `user-name: <userId>`, ou seja **`Principal` setado**), transporte cru `/ws/websocket` funcionando e o **broadcast publicando no ato** em `/topic/establishment/{id}/queue` com payload completo ao entrar na fila. **As tres suspeitas que apontavam para ca foram REFUTADAS.** A causa real eram duas opcoes do `@stomp/stompjs` nos apps — `forceBinaryWSFrames` + `appendMissingNULLonIncoming` — que existem para contornar servidores FORA do padrao e, contra o Spring correto, atrapalham o parse: o socket conecta e a mensagem nunca aparece.
+>
+> **2. Consequencia: o Partner S14 fica REBAIXADO e NAO entra na lista.** O S14 (aberto pelo Partner em 01/08 07:24) apontava o `StompAuthChannelInterceptor`, que ao receber token invalido **loga `warn` e segue anonimo** em vez de recusar o CONNECT (`preSend`, o `catch`) — com `jwt.access-token-expiration=PT1H`, uma reconexao com token velho subiria anonima e o `/user/queue/notifications` morreria em silencio. **O comportamento existe mesmo** (conferido no codigo em 01/08; o proprio javadoc da classe o descreve como intencional para visitante em topico publico), **mas a hipotese de ser a causa-raiz do C9/C14 CAIU**: o teste do client cobriu "sem token" (anonimo, que e o caminho pretendido) e "token valido" — nunca "token expirado" — e os sintomas ja tem explicacao melhor e comprovada nas flags. Fica como **item pequeno de robustez** (lancar no `catch` quando ha header `Authorization` mas o token e invalido, mantendo o anonimo so quando NAO ha header; +avaliar `setHeartbeatValue` no `enableSimpleBroker`, hoje sem heartbeat), **nao como bug de producao**. Nao renumerei a lista por causa dele.
+>
+> **3. Devolvido aos fronts (achado nosso ao conferir o codigo deles em 01/08):** o fix das flags esta **meio aplicado no client** — `useQueueNotifications.ts` esta limpo, mas **`vupth/src/hooks/useQueueSocket.ts` ainda tem as duas flags** (com o comentario antigo chamando-as de "workaround obrigatorio") e esse hook **continua montado** em `EstablishmentDetail.tsx`. E o **front-partner tem as duas flags** em `vupth-partner/src/hooks/useQueueSocket.ts` — confirma a suspeita que o proprio client levantou para eles. **Vale conferir antes do `eas build`.**
+>
+> **4. Itens NOVOS incorporados** (posicoes provisorias no fim da lista, **Andre reordena**): **#28** = Partner **S15** (resposta da Expo descartada no push) · **#29** = Partner **S13** (apelido nao pesquisavel) · **#30** = Client **B6** (filtro `?uf=&city=`). O Partner **S16** (broker em memoria = 1 instancia) **ja e o nosso #21** — nada novo, so a sugestao do heartbeat, anotada no item 2 acima.
+>
+> **5. Confirmacoes uteis:** o **B7 (GPS) e a PRIORIDADE 1 do client** e eles marcam **"front pronto / backend e o gargalo"** — `expo-location`, permissao pedida na primeira abertura, reverse geocode no device e **coordenadas ja guardadas** (`locationStore.coords`) esperando o endpoint; e a nossa **fatia B** do #2. O Partner fechou **BUG2b** (compativel sem mexer em codigo — o contrato tolerante fez o efeito pretendido) e **S11/swap-offers** (o client consumiu a fatia 2 em 29/07, F8 encerrada), com um aviso de QA que vale repetir: **a partir da fatia 2 e NORMAL** um cliente aparecer no meio da fila e outro cair pro fim sem ninguem ter sido atendido.
+>
+> ⚠️ **CORRECAO (2026-08-01, mesma tarde — lidos os handoffs que os dois fronts atualizaram DEPOIS desta nota).** Os pontos 1 e 2 acima estavam **fortes demais**, e os dois fronts apontaram o mesmo furo. Fica registrado:
+>
+> **(a) A prova era pela METADE.** O `ws-test.html` provocou evento **so no topico PUBLICO** (`/topic/establishment/{id}/queue`). No canal pessoal (`/user/queue/notifications`) foi verificada **apenas a subscricao** — nunca a **ENTREGA**, porque nenhum evento pessoal foi disparado durante o teste. Alem disso o teste rodou **no NAVEGADOR**, onde as flags do stompjs em React Native (`forceBinaryWSFrames`/`appendMissingNULLonIncoming`) nem entram em jogo, e cobriu **"sem token"** e **"token valido"** — **nunca "token expirado"**, que e o caso real depois de 1h de app aberto. Portanto: dizer "nada a fazer no backend" so vale para o **topico publico**. O canal pessoal **segue sem prova nas duas direcoes**.
+>
+> **(b) O rebaixamento do S14 continua de pe, mas pelo motivo certo.** O Partner **aceitou** o rebaixamento (registrara a hipotese como "forte, nao fato"), com uma ressalva justa que assino: **trocamos uma hipotese por outra, as duas por validar.** As flags explicam o canal publico; nao ha evidencia de que expliquem o pessoal. **Nao fechar o S14 antes do QA de device.** O comportamento em si (token invalido conecta anonimo em vez de recusar) esta confirmado no codigo de qualquer jeito.
+>
+> **(c) 🔴 S17 — heartbeat DESLIGADO. Isto e FATO MEDIDO, nao suspeita, e entrou como #31.** O proprio Andre coletou a evidencia em 2026-08-01 com o `ws-test.html` contra `wss://vupth-backend-ia.onrender.com/ws/websocket` usando token de PROFISSIONAL: o cliente pediu `heart-beat:10000,10000` no CONNECT e **o servidor respondeu `heart-beat:0,0`** no CONNECTED. Confirma que o `enableSimpleBroker("/topic","/queue")` do `WebSocketConfig` esta **sem `TaskScheduler`** — sem ele o Spring desabilita o heartbeat. **Recomendo como o PRIMEIRO dos itens de WS** (acima do S14): e um fato observado em producao, a correcao e praticamente uma linha, e explica o padrao **"as vezes nao chega" mesmo dentro da 1a hora** — que o S14 (que so age depois de o token vencer) **nao** explica. Os dois fronts ja pedem 10s/10s; falta o servidor aceitar. **→ ENTREGUE em 2026-08-05** (secao 18b, "Heartbeat"): o servidor agora anuncia `heart-beat:10000,10000`. *(O mesmo teste confirmou, agora com token de profissional, que a AUTENTICACAO esta certa: o `CONNECTED` voltou com `user-name:03d4583f-...` = `Principal` setado a partir do JWT.)*
+>
+> **(d) Handoff para o Front-Client — parem de calcular a distancia no app.** Voces implementaram Haversine no proprio front (`src/domain/establishment/proximity.ts`, usado pelo `Home.tsx`) enquanto o endpoint nao existia. Ele existe agora: **usem o `distance_km` da resposta** e removam a conta local. Motivo e o mesmo da regra do ETA −10min: se cada app fizer a propria conta, client e partner exibem numeros diferentes para a mesma loja. A conta local pode continuar so como fallback enquanto o app velho nao atualiza.
+
+> **6. Pedido do Partner (29/07) — encerrar do nosso lado** itens da secao 21 que la ja estao resolvidos ou obsoletos: *"adicao de servico por funcionario da mesma loja"* (o profissional cadastra em **"Meus Servicos"** via `POST /professional-queue/{profId}/add-service-items`, coerente com "servico e do PROFISSIONAL") · *"visualizacao completa da fila (profissional/owner)"* (item antigo; eles pedem que **descrevamos o que falta ou encerremos**) · **BUG 2 e BUG 3 de 2026-06-09**, que seguem listados como ALTA/abertos aqui e la ja sairam. Ver a "Verificacao pendente" logo abaixo da tabela.
+
+> **Reconciliacao 2026-08-05 (lido o `HANDOFF_BACKEND.md` do Partner de 05/08 20:52 + PRD_FRONT-PARTNER v18.6).** Rodada do **feedback de device do Andre com o `eas build 1.0.1` ja instalado** — 5 itens do Partner, dos quais **1 e do proprio front** e 4 batem aqui. Conferi cada um **no codigo** antes de aceitar:
+>
+> **(a) ✅ ENTREGUE HOJE: o S17 (heartbeat) esta fechado.** O broker agora anuncia `heart-beat:10000,10000` no CONNECTED (secao 18b). O pedido do Partner de 01/08 — *"pedir que leiam o S17"* — foi atendido: era fato medido, virou o antigo #31 e saiu do backlog. **A pendencia que sobra e do CLIENT, nao do Partner:** reconectar ao voltar do background (`AppState`) ja esta feito no partner desde a v18.5, e no client segue aberto como **C18, prioridade 9** — ver a subsecao "Heartbeat" da 18b, que explica por que o heartbeat **aumenta** a importancia desse item pro client (o servidor passa a derrubar a sessao suspensa rapido, entao o app acorda desconectado com frequencia).
+>
+> **(b) 🐛 SOLICITACAO DE CORTE QUE "NAO APARECEU" — o backend tem uma 4a explicacao, e ela e a mais provavel.** O Partner listou 3 hipoteses (nunca criado / expirou / o app quase nao avisa) e pediu que confirmassemos se o `CutRequest` existe na base. **Nao tenho acesso ao banco de producao, mas o codigo aponta o caminho:** `CutRequestServiceImpl.createCutRequest` tem o **gate C2** — `if (establishment.isOpenNow()) throw CutRequestNotAllowedException` = **`409 CUT_REQUEST_NOT_ALLOWED`**. "Solicitar corte" so existe **com a loja FECHADA agora** (`open_status != OPEN` **ou** fora de `[opening_time, closing_time)`); com a loja aberta o caminho e entrar na fila normalmente. **Se o teste foi feito com a loja aberta, nada foi criado, nenhum WS foi publicado, e o cliente tomou 409** — o que casa exatamente com o sintoma "(b) o cliente nao recebeu nem confirmacao". Como separar, sem adivinhar: **(1)** `GET /attendances/cut-requests` autenticado como o profissional (se vier vazio, nunca existiu); **(2)** o log do Render — o caminho feliz imprime `[CutRequest] create — id=... PENDING expiresAt=...`, e a ausencia dessa linha prova que a criacao nao passou; **(3)** repetir o teste com a loja comprovadamente fechada. ⚠️ **Achado de UX que devolvo ao Client:** se o app-cliente engole o `409` sem mensagem, o usuario fica sem saber que o pedido nao existe — o codigo `CUT_REQUEST_NOT_ALLOWED` precisa virar texto na tela ("a loja esta aberta, entre na fila").
+>
+> **(c) ❌ S20 (tipo de loja imutavel) — IMPROCEDENTE, o endpoint JA aceita.** O handoff afirma que o `PATCH /establishment/{id}/general-infos` nao aceita `service_type`. **Aceita:** o campo esta no `EstablishmentGeneralInfosRequest` e o `UpdateEstablishmentGeneralInfosUseCase` aplica (`if (request.serviceType() != null) establishment.setServiceType(...)`), com o `services` (Set) tambem editavel — e **ja documentado** neste PRD na tabela de campos desse endpoint. Nada a fazer no backend: **o Partner pode ligar o campo "Tipo de Loja" em Dados Cadastrais hoje**. (Nao ha efeito colateral no catalogo: `ServiceItemType` nao e derivado do `serviceType` da loja.)
+>
+> **(d) ✅ S18, S19 e S21 aceitos — entram como #32, #33 e #34** (posicoes provisorias, Andre reordena). **S18** (receita liquida) confirmado no codigo: o `ServiceItem` persiste `price`, `client_price` e `uses_platform_pricing` — **o valor acordado com o profissional e a absorcao nao existem em lugar nenhum**, entao os relatorios so podem mostrar o bruto e o front nao tem como derivar o liquido; e mudanca de **persistencia + migration**, nao de exibicao. **S19** (apagar a conta) confirmado: nao existe rota de exclusao (grep vazio) — e exigencia de Google Play/App Store e da LGPD, entao **e bloqueio de publicacao**, nao so pedido de usuario. **S21** (esqueci a senha): decisao de produto do Andre, mantida — o `POST /auth/forgot-password` responde **200 sempre** hoje (anti-enumeracao, deliberado e testado); passar a devolver `404 EMAIL_NOT_FOUND` **entrega a lista de quem tem conta** a quem sondar o endpoint, entao a mudanca so deve subir **junto com rate limit** por IP/e-mail.
+>
+> **(e) Sobre as flags do stompjs, posicao do Partner registrada:** eles nao removem `forceBinaryWSFrames`/`appendMissingNULLonIncoming` sem medir em device, porque o teste que as condenou rodou no navegador. **Concordo com o criterio** — e com o heartbeat ligado o device agora tem um sinal objetivo pra essa medicao: se o CONNECTED voltar `10000,10000` e o app continuar sem receber, o defeito esta no parser do cliente, nao no servidor.
+
+> **Sessao 2026-08-06 — a prova do WS deixou de ser pela metade, e o banco de staging foi recriado.**
+>
+> **(a) ✅ HEARTBEAT CONFIRMADO EM PRODUCAO.** O `>>> PROXIMO PASSO <<<` de 05/08 pedia conferir o `be5bdaa` no Render depois do deploy. Feito, contra `https://vupth-backend-ia.onrender.com`: o CONNECTED volta **`heart-beat:10000,10000`**. O item esta fechado dos dois lados (codigo + producao).
+>
+> **(b) ✅ OS 3 BURACOS DA PROVA DE 01/08 (nota (a) acima) ESTAO FECHADOS.** Aquela prova rodou **so no navegador**, **so no topico publico** e **so com token valido**. Cobertos agora contra o servidor real: **entrega no canal PESSOAL** (`/user/queue/notifications` — o profissional remove o cliente da fila e o `ATTENDANCE_CANCELLED` chega roteado por userId; era o "canal pessoal segue sem prova nas duas direcoes"), **conexao OCIOSA por 40s** atravessando Cloudflare + proxy do Render, com 3 PONGs do servidor (**este e o cenario do socket zumbi**, e nao da para reproduzir em `localhost`, que nao tem proxy cortando ocioso), e **CONNECT com token invalido** (segue conectando anonimo = **#31 confirmado como ainda aberto**, e o anonimo **nao recebe nada** no canal pessoal — o isolamento esta correto).
+>
+> **(c) Como isso foi provado, e por que virou ferramenta.** `vupth-backend/scripts/ws-probe.js` — cliente STOMP headless em Node (mesmo `@stomp/stompjs` dos apps), autossuficiente: registra os proprios usuarios via API, abre a loja, entra na fila e confere as entregas. Roda contra qualquer ambiente: `node scripts/ws-probe.js https://vupth-backend-ia.onrender.com`. **Cobre o que nenhuma outra suite alcanca:** o **newman nao fala STOMP** (os 792 assertions dele sao todos HTTP) e o `WebSocketIntegrationTest` roda em `localhost` no CI, entao prova que o servidor **anuncia** o heartbeat, nao que a batida **atravessa a rede**. As tres se complementam sem sobreposicao.
+>
+> **(d) ⚠️ Banco do Render recriado do zero.** O anterior morreu; o novo subiu com as migrations inteiras. Validado com **newman completo contra o Render: 469 requests / 792 assertions / 0 falhas**. **Armadilha de configuracao que custou a tarde:** o `application-staging.properties` monta a conexao com `${PGHOST}/${PGPORT}/${PGDATABASE}/${PGUSER}/${PGPASSWORD}` (nomes do **Railway**), mas o **Render nao injeta `PG*`** — da uma connection string. Preenchidas na mao com o **hostname interno** (forma curta `dpg-...-a`), a app quebrava com `UnknownHostException`, porque o nome curto so resolve com banco e servico **na mesma regiao**. Resolvido com o **hostname externo** (`dpg-...-a.<regiao>-postgres.render.com`, que ja exige o `sslmode=require` que la esta). **Sintoma a reconhecer:** requests penduram sem devolver status (nem 502) — nao e cold start, que responde em ~50s; e crash loop, porque o Liquibase pede conexao no boot e derruba o `entityManagerFactory`.
+
+
+> **Sessao 2026-08-11 — tickets da Expo (#28) + o ultimo residuo do BUG2b (#33). Duas entregas, ZERO
+> mudanca de contrato: nenhum front precisa de release por causa desta sessao.** Mas uma delas **muda
+> numero de relatorio ja exibido**, entao vale ler os dois handoffs (secao de push e secao de
+> relatorios) antes de abrir bug.
+>
+> **(a) #28 — a resposta da Expo era jogada fora, e o log dizia "enviou" em qualquer cenario.** O
+> envio terminava em `.retrieve().toBodilessEntity()`. A Expo devolve **um ticket por mensagem** (um
+> recibo, na mesma ordem do lote — e o ticket **nao repete o token**, entao a correspondencia e
+> **posicional**), e o corpo inteiro ia para o lixo. Dois estragos: token com `DeviceNotRegistered`
+> (app desinstalado / token rotacionado) **nunca saia da base**, porque o unico caminho de saida era
+> o logout explicito; e o `log.info("Expo enviou N mensagem(ns)")` rodava **mesmo com todos os
+> tickets em erro**. ⚠️ **O HTTP 200 da Expo e do ENVELOPE, nao das mensagens** — um lote inteiramente
+> recusado ainda chega como 200. Agora o corpo e lido, so `DeviceNotRegistered` apaga token
+> (`MessageTooBig`, credencial invalida, rede fora e contagem divergente **nao culpam token nenhum**:
+> apagar o device errado e pior que manter um morto), e o log traz aceitos/recusados vindos do corpo.
+> **Handoff completo na secao de push** — resumo: nada a implementar, mas **registrar o token a cada
+> abertura do app virou load-bearing**.
+>
+> **(b) #33 — "hoje" no relatorio comecava as 21h de ONTEM.** O BUG2b (2026-07-26) migrou horario de
+> funcionamento e refeicao para relogio de parede, mas **nao** os filtros `dateFrom`/`dateTo`, que
+> seguiam montando a janela em UTC. Em `America/Sao_Paulo` o dia comecava as **21h da vespera**: o
+> corte das 22h nao entrava no relatorio do dia em que aconteceu. **Handoff completo na secao de
+> relatorios** — resumo: o **valor** dos totais muda em dias com atendimento apos as 21h, o numero
+> novo e o certo, e nao ha nada a implementar.
+>
+> **(c) ⚠️ A licao desta sessao e sobre TESTE, nao sobre fuso — e vale para os tres times.** O
+> `ReportIntegrationTest` **ja cobria** exatamente esse caminho e mesmo assim o bug passou pelo CI
+> vermelho de 05/08 sem ser notado. Motivo: ele monta o dia com `LocalDate.now()`, entao **so falha
+> em host atras do UTC entre 21h e meia-noite** — e o runner do GitHub Actions e **UTC**, onde ele
+> passa verde **com o bug presente**. Quem o pegou foi a maquina do Andre as 21:10. **Um teste cujo
+> resultado depende do fuso de quem roda nao e regressao: e um alarme que toca so quando ninguem
+> esta ouvindo.** A regressao de verdade virou `BusinessDayRangeTest`, com datas fixas. Se voces
+> tiverem teste de data no front, vale a mesma pergunta: ele passaria numa maquina em UTC?
+>
+> **(d) ⚠️ RECONCILIACAO 2026-08-11 (lido o `HANDOFF_BACKEND.md` do Partner de 11/08 20:49 e o do
+> Client de 11/08 22:48) — TRES itens novos, e dois deles ja tinham resposta no nosso codigo.**
+> Conferi **cada um no codigo antes de aceitar** — e a terceira vez seguida que isso importa (05/08 e
+> 07/08 foram as outras duas), e desta vez pagou duas vezes:
+> - 🔴 **#1 (SMTP) DEIXOU DE SER "falta testar" E VIROU DEFEITO ABERTO.** Evidencia de device do
+>   Andre em 11/08: *"email nao chegou e passou mesmo sem ter cadastro"*. **Nenhum** e-mail saiu —
+>   pior que o "reenvio nao chega" de 23/07, onde o primeiro saia. **O unico caminho de recuperacao
+>   de conta esta inutilizavel em producao.** Hipoteses e ordem de investigacao no proprio item.
+> - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
+>   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
+>   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
+>   certos no proprio eixo — a decisao esta no item.
+> - 🆕 **#35 (S27) — horario e UM SO para a semana inteira. Relato do Partner CONFIRMADO no codigo:**
+>   `Establishment` tem uma unica `opening_time`/`closing_time` aplicada a todos os dias. Nao da para
+>   dizer "domingo fechado". **Nao e cosmetico** — o horario alimenta o gate de fila, o
+>   auto-fechamento e a grade de refeicoes.
+> - 🆕 **#36 (S23) — profissional abrir a propria loja. ⚠️ Aqui o enunciado do Partner esta ERRADO no
+>   ponto que eles tratam como bloqueio.** Eles perguntam se o `quick-create` aceita quem ja e
+>   PROFESSIONAL; **aceita hoje, sem codigo novo** (o use case nao tem barreira, e o matcher
+>   `hasRole("CLIENT")` nao barra ninguem porque todo usuario cadastrado recebe `ROLE_CLIENT`). O que
+>   sobra sao **3 regras de produto**, nao implementacao. **Este e o mesmo padrao de 07/08** (o S19
+>   "nao existe rota" que existia desde sempre): o front descreve como bloqueio de backend o que ja
+>   esta liberado. **Vale para as duas pontas — nos tambem so descobrimos indo ao codigo.**
+>
+> O backlog foi **renumerado 1..34** com a saida dos dois itens entregues e **voltou a 36** com os
+> dois novos (posicoes 35-36 **provisorias — Andre reordena**).
+
+> **Sessao 2026-08-07 — "apagar a conta" entregue, e o Front-Client corrigiu o enunciado do item no meio do caminho.**
+>
+> **(a) ⚠️ O S19 estava errado NOS DOIS PRDs, e o client viu primeiro.** O item dizia *"nao existe rota de exclusao (grep vazio)"*. Existe: `DELETE /profile/delete/me`, documentada na secao 6 deste PRD **desde sempre**, na tabela de permissoes do CLIENT e na de testes — e o app deles **ja a chamava** em `profileService.ts:60`, no botao "Deletar conta". **Licao, e e a mesma de 05/08 com a pendencia do RN:** antes de escrever "nao existe X" no backlog a partir do relato de um front, **conferir no proprio codigo**. Duas vezes seguidas o enunciado veio do front e nao batia.
+>
+> **(b) Mas o item continuava valido — pelo motivo oposto, e pior.** A rota existia e era `repository.deleteById(id)` cru. Como o `BaseUser` tem `cascade = ALL` para `owner`/`professional`/`client`, e o `Owner` tem `cascade = ALL` para `establishments`, **apagar a conta de um dono apagava a LOJA INTEIRA** — atendimentos de todos os clientes, servicos e vinculo dos profissionais afiliados. Apagar a de um profissional **apagava todos os atendimentos dele**, destruindo o historico e os relatorios da loja onde ele trabalha. Sem senha, sem checagem de fila, e com matcher `hasRole("CLIENT")` que um dono provavelmente tem. **Nao era "falta implementar": era um botao armado, ja exposto no app.**
+>
+> **(c) O desenho entregue (decisao do Andre): apaga-se o TITULAR, nao as relacoes dele.** Contrato completo na secao 6. O ponto de principio: um atendimento tem tres envolvidos e cada um continua com direito ao proprio historico. O schema ja apontava para isso antes da feature existir — `attendance.client_id` e `ON DELETE SET NULL`.
+>
+> **(d) ⚠️ Isso QUEBRA o botao dos apps ate eles atualizarem** (`current_password` virou obrigatorio → **400 `INVALID_REQUEST_BODY`**, nao 422 — corpo ausente morre no Jackson antes do `@Valid`; medido no newman, ver (g)). Decidido de olhos abertos: um 400 visivel e melhor que um botao que funciona destruindo dado de terceiro. O que cada front precisa fazer esta no handoff da secao 6.
+>
+> **(e) Outras correcoes do Front-Client (07/08), aceitas:** **C18 ENTREGUE** — a tabela do A/B de WS (secao 18b) dizia "client nao tem reconnect no `AppState`, prioridade 9"; eles fizeram hoje, e isso **muda a leitura do Teste 3** (ja corrigido la). · **"Trocar lugar na fila" esta obsoleto** na secao 21 — a F8 foi entregue e consumida em 01/08. · **Item NOVO: busca por nome/apelido do PROFISSIONAL (`?professional=`)** — entrou como **#35**, com a observacao de que e o **mesmo motor do #29** (apelido nao pesquisavel) e as duas devem sair juntas. · "Visualizacao da fila para qualquer cliente" e "visualizacao do atendimento atual" batem com o que ja esta no §12 deles — nada novo.
+>
+> **(f) ⚠️ ACHADO ao cobrir a feature com Postman: a propria entrega do S19 tinha um 500 na vitrine
+> publica ANONIMA.** Ao apagar a conta do dono, a loja sobrevive **sem dono** — e o
+> `EstablishmentResponse.fromEntity` fazia **`getOwner().getId()` cru** (o campo era `@NotNull`).
+> **UMA** loja orfa derrubava `GET /establishment` inteiro, para **todo** usuario do app, inclusive
+> quem nem tem conta. Duas causas encadeadas, as duas corrigidas: (1) o mapper nao era null-safe
+> (`EstablishmentResponse` e `EstablishmentWithProfessionalsResponse`; `ownerId` virou nullable);
+> (2) **`open_status = CLOSED` NAO tira a loja da vitrine** — as queries publicas filtram
+> **`status <> INACTIVE`**, outro campo, entao a loja orfa continuava listada. O use case passou a
+> marcar `status = INACTIVE` tambem. **Licao: `status` e `open_status` tem nomes parecidos e efeitos
+> diferentes — "esconder uma loja" e `status`, nao `open_status`.** ⚠️ **Handoff aos fronts:
+> `owner_id` pode vir `null`.** Regressao coberta em `AccountDeletionIntegrationTest` (Order 32/33) e
+> na Postman folder 19. **Licao de processo: escrever a collection achou um bug que 13 testes de
+> integracao verdes nao acharam** — porque os testes olhavam o estado no banco, e nao a leitura
+> publica que o app faz depois.
+>
+> **(g) O newman rodou 494 requests / 828 assertions com 8 falhas, e as 8 eram informacao boa.**
+> **Sete** eram cleanups pre-existentes (folders 17, 18 e 99) que chamavam `DELETE /profile/delete/me`
+> **sem corpo** e tomaram **400**, nao os 422 que este PRD prometia. Ou seja: **a mudanca de contrato
+> quebrou primeiro a NOSSA propria suite**, exatamente como vai quebrar o botao dos apps — e revelou
+> que o codigo real e `400 INVALID_REQUEST_BODY` (corpo ausente nao chega ao `@Valid`; morre no
+> Jackson). Os cleanups passaram a mandar a senha pela **variavel da propria conta** (nunca o
+> literal — a folder 11 troca a senha do partner para `NovaSenha@456` no meio da run) e aceitam
+> **409** tambem: cleanup nao e o teste do endpoint, e loja com fila viva recusar a exclusao e
+> comportamento **correto**, nao falha de limpeza. **A oitava** era assert meu com o nome errado do
+> campo: `openStatus` no Java sai como **`open_status`** no JSON (`@JsonProperty`), enquanto
+> **`ownerId` nao tem `@JsonProperty` e continua camelCase** — os dois convivem no mesmo DTO. Sem
+> politica `NON_NULL` configurada, `ownerId` vem **presente e nulo**, nao ausente.
+>
+> ⚠️ **Licao de contrato:** ao tornar um corpo obrigatorio numa rota que ja existia, o primeiro erro
+> que os clientes antigos veem e **400**, nao 422 — e vale procurar quem no proprio repo chama a rota
+> do jeito antigo antes de prometer um codigo aos fronts.
+
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔧 configurado — **falta testar + investigar reenvio** | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). |
-| 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatia A (geocoding) ENTREGUE 2026-07-27; restam B (filtro por raio) e C (fallback sem GPS)** | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine em SQL puro** (formula com `acos`/`radians` numa query nativa), **sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
-| 3 | **`PATCH` do endereco do estabelecimento — hoje nao ha como corrigir (GPS #2)** | ⬜ aberto (pequeno) | Existe so `POST /establishments/{id}/addresses`. Endereco cadastrado errado (ou com coordenada errada, ver fatia A2 do GPS) **nao tem conserto pela API** — e o dono e justamente quem descobre o erro, quando a loja nao aparece na busca por proximidade. Falta `PATCH /establishments/{id}/addresses/{addressId}` (OWNER): edita os campos de texto e/ou reenvia `latitude`/`longitude` do aparelho. Regra: **editar texto NAO regeocodifica** — a coordenada so muda se vier explicitamente no corpo. `UpdateAddressRequest` ja existe (usado no endereco de usuario) e ja traz lat/lng. |
-| 4 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
-| 5 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
-| 6 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
-| 7 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner "Refeicoes Modelo B (janela flexivel)"** — refeicao por janela + auto-supressao no ETA. Nota: o **stub ⏱ do front foi REMOVIDO em 2026-07-20** (saiu junto com a secao de refeicoes da fila); ao entregar, a acao adiantar/adiar sera recriada em `meals.tsx`, nao na fila. |
-| 8 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner "Cliente adiciona servico a um attendance ja na fila" / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
-| 9 | **Toggle manual do profissional: SO ABRIR, nunca fechar (decisao Andre 2026-07-23)** | ⬜ aberto (pequeno) | No hibrido da fatia 2, `PATCH /establishment/{id}/open-status` aceita OWNER ou profissional afiliado nas DUAS direcoes. Decisao nova (handoff Partner, S1): **o profissional NAO pode mais FECHAR a loja na mao** — fechar mataria a fila dos colegas (o proprio argumento do derivado); pode **so ABRIR** quando fechada (ponte; o toggle do profissional morre de vez com o auto-fechamento/fatia 5). O OWNER mantem o override de fechar (feriado/emergencia — presenca abre, owner/horario fecham; owner nunca forca aberto sem presenca). Ajustar o gate por DIRECAO no `updateOpenStatus`. |
-| 10 | **Status `REMOVED` (profissional retira) distinto de `CANCELLED` (cliente desiste) — Partner S9** | ⬜ aberto (pedido 2026-07-14) | Hoje `DELETE /professional-queue/{id}/remove` marca `CANCELLED` — nao diferencia QUEM agiu. Criar **`REMOVED`** (rotulo PT REMOVIDO) p/ remocao pelo profissional; `CANCELLED` fica so p/ o cliente. Refletir nos read-models (client+partner) e no WS `/user/queue/notifications`. **Sem escalonamento (Andre 2026-07-14):** LATE ilimitado e Remover a qualquer momento — NAO gatear o remove por LATE (strike/no-show interno pode continuar, sem gatear). **Decisao pendente do Andre:** rotulo do auto-nega do gate fora do horario (`REFUSED`/RECUSADO proprio vs reusar REMOVED). Client (C9) mostra mensagens distintas: "voce cancelou" vs "o estabelecimento removeu voce" vs "pedido recusado". |
-| 11 | **ETA com buffer de −10min (regra GLOBAL) — Partner S10** | ⬜ aberto (pedido 2026-07-14) | O tempo de espera EXIBIDO = ETA calculado **−10min (piso 0)**, p/ o cliente chegar antes. Decisao Andre: regra GLOBAL — **o backend calcula** e client+partner so exibem o MESMO numero (nada de cada front subtrair por conta). Definir: buffer embutido no valor exposto do read-model vs campo separado (`display_wait` vs `raw_eta`). |
-| 12 | **Listar TODOS os profissionais do estabelecimento (incl. sem servico) — Partner S8** | ⬜ aberto (pedido 2026-07-09) | `professionals-with-queue` ESCONDE profissional sem servico (#31). Falta `GET /establishment/{id}/professionals` (ou count) com **todos os vinculados** + flag/contagem de servicos. Desbloqueia: owner ver o profissional recem-vinculado que ainda nao cadastrou servico; checklist de prontidao separar "1+ vinculado" de "1+ com servico". |
-| 13 | **Melhorias de rating (Client §3 — nao bloqueiam o front)** | ⬜ aberto | (a) **`rated: boolean`** no `GET /attendances/client/me` — fonte da verdade p/ esconder o "Avaliar"; hoje o front usa `ratedStore` local (SecureStore) que nao sincroniza entre aparelhos nem sobrevive a reinstalar; (b) **rollup por ESTABELECIMENTO** em `GET /establishment` — media ponderada = Σ`ratingSum` ÷ Σ`ratingCount` dos profissionais, p/ os cards da Home; (c) **`rating_best`** (maior nota entre os profissionais) no card + considerar rating como desempate na ordenacao (#11); (d) **`establishmentName`** no `client/me` (hoje so `establishmentId`). |
-| 14 | **`client_name` no `CutRequestResponse` (Partner nice-to-have)** | ⬜ aberto (pequeno) | O `GET /attendances/cut-requests` traz so `client_id` — o partner monta o card com fallback "Cliente". O front JA consome o campo opcional: adicionar `client_name` (e avaliar `service_names`) faz o nome aparecer **sem nenhuma mudanca no front**. |
-| 15 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
-| 16 | **Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`) — Partner S12** | ⬜ aberto (nice-to-have, pedido 2026-07-22) | Aceitar `dateFrom`/`dateTo` como o `/professional/me/reports` ja faz. Motivo: a tela "Meu dia" do partner unificou resumo+historico — o resumo filtra por periodo e o historico nao consegue acompanhar (hoje so filtros de STATUS). |
-| 17 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
-| 18 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
-| 19 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
-| 20 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
-| 21 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
-| 22 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
-| 23 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
-| 24 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
-| 25 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
-| 26 | Cupons e promocoes | ⬜ aberto | fidelidade |
-| 27 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
-| 28 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔴 **QUEBRADO EM PRODUCAO — provado em device 2026-08-11** (era "falta testar") | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario.
+| 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatias A (geocoding), A2 (GPS do dono + reverso + validacao) e B (ordenacao + raio + `distance_km`) ENTREGUES; resta so a C (fallback sem GPS)** — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
+| 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
+| 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
+| 5 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
+| 6 | Refeicoes Modelo B (placement + auto-supressao) | ⬜ aberto | **Partner "Refeicoes Modelo B (janela flexivel)"** — refeicao por janela + auto-supressao no ETA. Nota: o **stub ⏱ do front foi REMOVIDO em 2026-07-20** (saiu junto com a secao de refeicoes da fila); ao entregar, a acao adiantar/adiar sera recriada em `meals.tsx`, nao na fila. |
+| 7 | Adicionar servico a attendance ja na fila | ⬜ aberto | **Partner "Cliente adiciona servico a um attendance ja na fila" / Client C8** — `PATCH /attendances/{id}/service-items` (add) num attendance existente; **recalcula** duracao estimada + total e reflete na fila do profissional |
+| 8 | **Toggle manual do profissional: SO ABRIR, nunca fechar (decisao Andre 2026-07-23)** | ⬜ aberto (pequeno) | No hibrido da fatia 2, `PATCH /establishment/{id}/open-status` aceita OWNER ou profissional afiliado nas DUAS direcoes. Decisao nova (handoff Partner, S1): **o profissional NAO pode mais FECHAR a loja na mao** — fechar mataria a fila dos colegas (o proprio argumento do derivado); pode **so ABRIR** quando fechada (ponte; o toggle do profissional morre de vez com o auto-fechamento/fatia 5). O OWNER mantem o override de fechar (feriado/emergencia — presenca abre, owner/horario fecham; owner nunca forca aberto sem presenca). Ajustar o gate por DIRECAO no `updateOpenStatus`. |
+| 9 | **Status `REMOVED` (profissional retira) distinto de `CANCELLED` (cliente desiste) — Partner S9** | ⬜ aberto (pedido 2026-07-14) | Hoje `DELETE /professional-queue/{id}/remove` marca `CANCELLED` — nao diferencia QUEM agiu. Criar **`REMOVED`** (rotulo PT REMOVIDO) p/ remocao pelo profissional; `CANCELLED` fica so p/ o cliente. Refletir nos read-models (client+partner) e no WS `/user/queue/notifications`. **Sem escalonamento (Andre 2026-07-14):** LATE ilimitado e Remover a qualquer momento — NAO gatear o remove por LATE (strike/no-show interno pode continuar, sem gatear). **Decisao pendente do Andre:** rotulo do auto-nega do gate fora do horario (`REFUSED`/RECUSADO proprio vs reusar REMOVED). Client (C9) mostra mensagens distintas: "voce cancelou" vs "o estabelecimento removeu voce" vs "pedido recusado". |
+| 10 | **ETA com buffer de −10min (regra GLOBAL) — Partner S10** | ⬜ aberto (pedido 2026-07-14) | O tempo de espera EXIBIDO = ETA calculado **−10min (piso 0)**, p/ o cliente chegar antes. Decisao Andre: regra GLOBAL — **o backend calcula** e client+partner so exibem o MESMO numero (nada de cada front subtrair por conta). Definir: buffer embutido no valor exposto do read-model vs campo separado (`display_wait` vs `raw_eta`). |
+| 11 | **Listar TODOS os profissionais do estabelecimento (incl. sem servico) — Partner S8** | ⬜ aberto (pedido 2026-07-09) | `professionals-with-queue` ESCONDE profissional sem servico (#31). Falta `GET /establishment/{id}/professionals` (ou count) com **todos os vinculados** + flag/contagem de servicos. Desbloqueia: owner ver o profissional recem-vinculado que ainda nao cadastrou servico; checklist de prontidao separar "1+ vinculado" de "1+ com servico". |
+| 12 | **Melhorias de rating (Client §3 — nao bloqueiam o front)** | ⬜ aberto | (a) **`rated: boolean`** no `GET /attendances/client/me` — fonte da verdade p/ esconder o "Avaliar"; hoje o front usa `ratedStore` local (SecureStore) que nao sincroniza entre aparelhos nem sobrevive a reinstalar; (b) **rollup por ESTABELECIMENTO** em `GET /establishment` — media ponderada = Σ`ratingSum` ÷ Σ`ratingCount` dos profissionais, p/ os cards da Home; (c) **`rating_best`** (maior nota entre os profissionais) no card + considerar rating como desempate na ordenacao (#11); (d) **`establishmentName`** no `client/me` (hoje so `establishmentId`). |
+| 13 | **`client_name` no `CutRequestResponse` (Partner nice-to-have)** | ⬜ aberto (pequeno) | O `GET /attendances/cut-requests` traz so `client_id` — o partner monta o card com fallback "Cliente". O front JA consome o campo opcional: adicionar `client_name` (e avaliar `service_names`) faz o nome aparecer **sem nenhuma mudanca no front**. |
+| 14 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
+| 15 | **Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`) — Partner S12** | ⬜ aberto (nice-to-have, pedido 2026-07-22) | Aceitar `dateFrom`/`dateTo` como o `/professional/me/reports` ja faz. Motivo: a tela "Meu dia" do partner unificou resumo+historico — o resumo filtra por periodo e o historico nao consegue acompanhar (hoje so filtros de STATUS). |
+| 16 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
+| 17 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
+| 18 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
+| 19 | Foto de perfil do profissional (storage externo) | ⬜ aberto | Cloudinary/S3 |
+| 20 | Blacklist / bloquear cliente | ⬜ aberto | `establishment_blocked_users` — gatilho de restricao por `strikeCount` (#39) mora aqui |
+| 21 | WebSocket broker externo (escala multi-instancia) | ⬜ aberto | secao "Item 35" |
+| 22 | Precificacao calculada no backend | ⬜ aberto (dep. broker WS externo) | secao "Item 36" |
+| 23 | Multiplos estabelecimentos por owner | ⬜ aberto | franquias |
+| 24 | Pagamento integrado (gateway) | ⬜ aberto | PIX/cartao — **inclui a Fase 2 do #39** (cobranca monetaria de cancelamento tardio / no-show, hoje so strike) |
+| 25 | Cupons e promocoes | ⬜ aberto | fidelidade |
+| 26 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
+| 27 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
+| 28 | **Apelido (`nickname`) nao e pesquisavel** (Partner S13) | ⬜ aberto (**posicao provisoria**) | O apelido persiste e ja sai nos DTOs (BUG10), mas **nenhuma query de busca casa por ele**: `EstablishmentRepository` filtra so `LOWER(e.name)` (+ bairro) e **nao faz join com os profissionais**; `ProfessionalRepository.searchByNameAndSpecialty` casa so `firstName`. Resultado: o cliente que conhece o profissional pelo apelido **nao acha nada em lugar nenhum**. Rota recomendada (ja esbocada na tabela MEDIA): param `?professional=<termo>` no `GET /establishment`, join + `LIKE` case-insensitive em `firstName`/`nickname`, devolvendo a LOJA. Decidir a UX com o client (o apelido leva a que — a loja ou o card do profissional?). |
+| 29 | **Filtro de localidade por `uf`/`city` na listagem publica** (Client B6 / C1 "Fase 2") | ⬜ aberto (**posicao provisoria**) | Hoje `GET /establishment` aceita `name`, `neighborhood`, `serviceType` e `includeAll` — **falta `uf` e `city`**. O client ja tem a localidade do usuario no `locationStore` para mandar nos params (a Fase 1, ordenar no device, ja roda). Item pequeno e independente do GPS (#2): serve a quem negou a permissao de localizacao — que e exatamente a **fatia C** do #2. Avaliar entregar os dois juntos. |
+| 30 | **WS: recusar o CONNECT com token invalido em vez de conectar anonimo** (Partner S14, rebaixado) | ⬜ aberto (**posicao provisoria**) | `StompAuthChannelInterceptor.preSend`: token que falha no `decode` cai no `catch`, loga `warn` e segue **sem principal**. Com `jwt.access-token-expiration=PT1H`, uma reconexao com token velho sobe anonima e o `/user/queue/notifications` para de entregar **em silencio**. Fazer: **lancar quando ha header `Authorization` mas o token e invalido** (o cliente recebe o frame `ERROR` e sabe que precisa renovar); manter o anonimo **so quando NAO ha header** (visitante em topico publico). Os dois fronts ja corrigiram a metade deles (token fresco no `beforeConnect`), o que encurta a janela — mas sem a recusa o app nao tem como **saber** que esta mudo. ⚠️ **Nao fechar antes do QA de device:** a hipotese de ser a causa-raiz de C9/C14 foi rebaixada, mas a explicacao alternativa (as flags do stompjs) tambem nao foi validada no canal PESSOAL. |
+| 31 | **Receita LIQUIDA do profissional — o valor acordado e a absorcao nunca sao persistidos** (Partner S18, feedback de device 2026-08-05) | ⬜ aberto (**posicao provisoria**) | **Confirmado no codigo:** o `ServiceItem` guarda `price`, `client_price` e `uses_platform_pricing` — **nao guarda o que o profissional acordou receber nem a absorcao escolhida**. O partner calcula `{clientPrice, proReceives, platformFee}` na criacao do servico (`pricing.ts`) mas **envia so o `price`**, entao `totalRevenue`/`professionals[].revenue` dos relatorios sao **o bruto pago pelo cliente** e o front **nao tem como reconstruir** o liquido. Fazer: **(a)** persistir no `ServiceItem` o valor acordado (ex.: `professional_amount`) e a `absorption_percent` — **migration**; **(b)** expor nos relatorios duas linhas distintas, `total_revenue` (bruto) e **`professional_revenue`** (soma do acordado), por profissional e no consolidado do owner; **(c)** definir o retroativo dos itens ja criados (proposta do front: `professional_amount = price * (1 − 0.06)`, a formula com absorcao 0%). ⚠️ A taxa de **6%** (4% intermediador + 2% plataforma) esta **hardcoded no front** — se e regra de negocio, o valor tem de vir do backend (ver #22, precificacao calculada no backend). |
+| 32 | **Diferenciar "e-mail nao cadastrado" de "senha errada" em `/auth/login` E `/auth/forgot-password` — entregue JUNTO com rate limit** (Partner S21 + decisao do Andre 2026-08-05 e 2026-08-06) | ⬜ aberto (**posicao provisoria — o rate limit e PRE-REQUISITO, nao acompanhamento**) | **Os dois endpoints hoje sao deliberadamente opacos e cada um tem teste que assere isso.** `forgot-password` responde **200 sempre**, exista o e-mail ou nao (`ForgotPasswordIntegrationTest` linha ~70 + `PasswordResetUseCasesTest` linha ~76), e por isso os apps mostram *"se este e-mail estiver cadastrado…"*. `login` responde **`401 BAD_CREDENTIALS` generico** nos dois casos. **Andre decidiu (05/08 p/ forgot-password, 06/08 p/ login) que quer a diferenciacao nos dois** — decisao mantida, trade-off registrado: resposta distinta para e-mail existente vs inexistente **transforma o endpoint num verificador de cadastro aberto** — qualquer um roda uma lista de e-mails e descobre quem tem conta no VUPTH, sem senha e sem login. No login o risco e maior que no forgot-password, porque e o alvo obvio de varredura, e a base exposta e dado pessoal sob LGPD. **Por isso o rate limit vem PRIMEIRO, no mesmo PR** (ex.: 5 tentativas/15min por IP **e** por e-mail) — ele e o grosso do trabalho e nao existe hoje (ver #27 e o item 28 da tabela historica, que cobrem o mesmo rate limit; fechar os tres juntos). **Fazer:** rate limit → `404 EMAIL_NOT_FOUND` no forgot-password e codigo distinto no login quando o e-mail nao existe → ajustar os **2 testes** que asserem a opacidade → **2 collections** do Postman → handoff aos fronts, que hoje tratam 401 generico. ⚠️ **Consequencia pratica ja sentida (06/08):** como o 401 do login nao distingue os casos, o hash quebrado do seed (ver Concluidos) foi diagnosticado errado de inicio — o mesmo 401 significava "senha errada" e "usuario inexistente". Quem provou foi `bcrypt.checkpw` contra o literal do YAML, nao a API. | 🔴 **REFORCADO POR DEVICE (2026-08-11, Partner S21):** no teste manual do Andre a tela **seguiu para o passo do codigo com um e-mail SEM CADASTRO** — comportamento correto do contrato atual (200 sempre), mas que deixa o usuario esperando um codigo que nunca vai existir. ⚠️ **TENSAO A DECIDIR (Andre):** o Partner argumenta que **"consertar o S21 sozinho ja melhora muito"**, mesmo antes do SMTP voltar — o app passaria a dizer "e-mail nao cadastrado" na hora. Este item, porem, registra o **rate limit como PRE-REQUISITO** (subir sozinho transforma o endpoint num verificador de contas aberto). **Os dois estao certos no proprio eixo** — e uma escolha entre UX imediata e exposicao da base, e e do Andre. Nota factual para a decisao: enquanto o **#1 (SMTP) estiver quebrado**, o forgot-password nao recupera conta nenhuma de qualquer jeito, entao o ganho de UX do S21 sozinho e **avisar mais cedo que nao vai funcionar** — nao e o fluxo voltando a servir.
+| 33 | **Busca por nome/apelido do PROFISSIONAL na listagem publica (`?professional=`)** (Front-Client, feedback de 2026-08-07) | ⬜ aberto (**posicao provisoria — irmao do #28**) | Hoje `GET /establishment` casa `LOWER(e.name)` e bairro; nao ha como achar a loja pelo **profissional** que trabalha nela ("quero cortar com o Ricardo", que e como o cliente de bairro pensa). **E o mesmo motor do #28** (apelido nao pesquisavel): as duas mudam a mesma query e o mesmo indice, entao **entregar juntas** — separadas, a segunda refaz o trabalho da primeira. Escopo: casar `professional.baseUser.firstName/lastName/`**`nickname`** alem do nome da loja, e decidir se o match volta no payload ("Ricardo trabalha aqui"), como ja se faz com o sinonimo de servico (#34 da tabela historica). |
+| 34 | **Geocodificacao silenciosa — o dono nao sabe que a loja nao entrou na busca por proximidade** (Partner S25, 2026-08-07) | ⬜ aberto (**posicao provisoria**) — ⚠️ **mas o (a), que eles dizem ser o bloqueio, JA ESTA PRONTO**: ver a resposta ponto a ponto na secao do GPS | O partner esta certo no diagnostico: **eles nunca enviam `latitude`/`longitude`** (mandam rua/numero/bairro/cidade/UF/CEP) e a coordenada e resolvida por nos; se a resolucao falha, a loja **nao aparece na busca por raio e ninguem e avisado**. O que sobra de trabalho REAL para o backend, depois de descontado o que ja existe: **(1)** rodar o **backfill** dos enderecos cadastrados antes do GPS — o metodo existe (`backfillMissingCoordinates`) mas esta atras de `vupth.geocoding.backfill-on-boot`, **default `false`**, entao **nunca rodou**; **(2)** decidir se vale persistir o **motivo** da falha (hoje o contrato do `Geocoder` e "nunca lanca" e o motivo so vive no log) — custa **coluna + migration**, e o (1) provavelmente resolve a maior parte dos casos reais. |
+| 35 | **Horario de funcionamento e UM SO para a semana inteira — nao existe horario POR DIA nem "dia fechado"** (Partner S27, feedback de teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria — Andre reordena**) | ✅ **CONFERIDO NO CODIGO antes de aceitar** (a licao de 05/08 e 07/08): `Establishment` tem **uma unica** `opening_time` e **uma unica** `closing_time` (`LocalTime`, linhas 73-77), aplicadas a **todos os dias**; nao ha nenhuma nocao de dia da semana em lugar nenhum do modelo. O relato do Partner esta **correto**. **Por que nao e cosmetico:** o horario alimenta o **gate de entrada na fila** (BUG5 C1), o **auto-fechamento** (S1 fatia 5, via `ClosingTimeMath`) e a **grade de refeicoes** — com um horario unico a loja "abre" no domingo e o auto-close mira o horario errado. Nao da para representar o basico do ramo: **domingo fechado**, **sabado ate as 18h**, **segunda so a tarde**. **Modelagem proposta:** lista de `{ dayOfWeek (0..6), openingTime, closingTime, closed }`, com endpoint proprio ou embutida no `general-infos`; expor a **semana inteira** no `EstablishmentResponse` (o Client tambem precisa, p/ dizer "abre amanha as 9h"). **A decidir:** (a) **migration** do par unico atual → replicar para os 7 dias (dado existente nao pode virar loja fechada a semana toda); (b) `isOpenAt`/`isWithinBusinessHours`/`ClosingTimeMath` passam a resolver **pelo dia corrente no `BusinessClock`** — e a virada de meia-noite (janela que cruza o dia) fica mais delicada, porque o dia seguinte pode ter outro horario; (c) feriado/excecao pontual entra agora ou depois? (sugestao: **depois** — fechar a semana primeiro); (d) **mais de uma janela no mesmo dia** (fecha p/ almoco) e o modelo de **refeicoes** ja cobre isso? Responder explicitamente, porque o Partner esta perguntando. ⛔ **Bloqueia a tela `establishment-hours.tsx` do Partner**, que hoje so tem dois campos. |
+| 36 | **Profissional abrir o PROPRIO estabelecimento — o onboarding nao tem essa porta** (Partner S23, reforcado no teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria**) — ⚠️ **mas a pergunta que eles dizem ser o bloqueio JA TEM RESPOSTA: SIM, aceita** | ✅ **CONFERIDO NO CODIGO** (a licao de 05/08 e 07/08, agora aplicada ANTES de aceitar o enunciado): o Partner pergunta *"o `POST /establishment/quick-create` aceita um usuario que ja e PROFESSIONAL?"* e trata isso como o bloqueio. **Aceita hoje, sem uma linha de codigo nova:** o `QuickCreateEstablishmentUseCase` **nao tem barreira nenhuma** contra perfil profissional (so checa `hasRole(OWNER)` e **adiciona** o papel se faltar, linhas ~53), e o matcher `hasRole("CLIENT")` do `SecurityConfig` (linha 120) **nao barra ninguem**, porque o `RegisterUseCase` chama `addClientProfile()` para **todo** usuario que se cadastra — entao todo profissional carrega `ROLE_CLIENT` junto. Papeis sao **acumulativos**, como o PRD ja dizia. **E a reputacao acompanha a pessoa:** `rating_average`/`rating_count` vivem no `Professional`, nao no vinculo — a leitura do Partner esta certa e **nao ha migracao de dado a fazer**. **O que sobra de trabalho REAL, e e decisao de produto (Andre), nao codigo:** (1) ele pode abrir a propria loja **enquanto afiliado a outra**, ou tem de se desafiliar antes? (leitura do Partner: desafiliar antes, senao fica na fila de duas casas — e o `PROFESSIONAL_ALREADY_AFFILIATED` ja existe para o caso inverso); (2) o historico na casa antiga continua no `/professional/me/reports` dele apos a troca? (hoje **continua**, porque o atendimento aponta para o `Professional`); (3) ao abrir a loja, ele se **auto-afilia** como profissional dela? 🆕 **Caso novo e mais urgente (11/08) — o ONBOARDING:** quem escolhe "sou profissional" cria o perfil no 1o passo e cai **direto em "Buscar Estabelecimento"**; nao existe a pergunta *"vai abrir a sua propria loja ou se afiliar a uma?"*. O dono de barbearia que se identifica como profissional fica **preso no fluxo de afiliacao**. ⚠️ **Isso e UI do Partner e ja esta destravado pelo backend** — responder (1)(2)(3) fecha o item |
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
-**Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging.
+**Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging. ⚠️ **O Partner pediu o encerramento destes dois em 2026-07-29** (reportados por eles em 2026-06-09): do lado deles o `/attendances` consta resolvido desde 2026-07-09 e a adicao de servico ja funciona pelo caminho do profissional ("Meus Servicos"). **Confirmar em staging e encerrar** — nao ha codigo a escrever, so a confirmacao.
 
-**✅ Concluidos no backend (historico, fora da contagem):** WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)** · **Endereco no read-back do establishment (Partner BUG4 — `EstablishmentResponse.address` embutido; endereco principal `isMain`, `null` sem endereco)** · **Gate ao fechar loja com fila/atendimento ativo (Partner BUG6 — `PATCH /open-status` da `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` ao sair de OPEN com atendimento SCHEDULED/LATE/IN_PROGRESS/PAUSED)** · **Profissional afiliado abre/fecha a loja (`PATCH /open-status` = OWNER **ou** profissional afiliado; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`)** · **Filtro de open-status na listagem publica (BUG5 parte A — `GET /establishment` por padrao so devolve `OPEN`; `?includeAll=true` inclui `CLOSED`/`TEMPORARILY_CLOSED`; filtro de leitura, nao muda status nem fila)** · **Atendimento pausado continua visivel e retomavel (Partner BUG7 — o "atual" do profissional cai para o `PAUSED` na ausencia de `IN_PROGRESS`; permanece em `current_attendance` do `professionals-with-queue` e no overview da fila ate `resume`/`finish`, e nao se inicia um novo enquanto ha um pausado)** · **Listagem dos proprios atendimentos pelo cliente (Partner BUG8 sintoma b — `GET /attendances?clientId=<self>` devolve os atendimentos do proprio cliente; antes o endpoint era owner/profissional-only e o cliente tomava `403`. So o proprio JWT; `clientId` de outro -> `403`. Delega ao mesmo caminho de `/attendances/client/me`; caminho feliz ja projetava nos 3 read-models)** · **Invariante servico↔profissional no create de atendimento (Partner BUG8 sintoma c — todo `serviceItem` do atendimento tem de pertencer ao profissional escolhido; item de outro prof -> `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`; como efeito, profissional sem servico nao pode ser marcado)** · **"Aberto agora" efetivo (BUG5 parte B — campo de leitura `is_open` no `EstablishmentResponse`/`EstablishmentWithProfessionalsResponse`/`EstablishmentGeneralInfosResponse` = `open_status == OPEN` E horario atual dentro de `[opening_time, closing_time)`; nao muda o `open_status` persistido (o auto-fechamento e item proprio do backlog, com prompt + carencia de 15min). Trata janela normal/24h/virada-de-meia-noite/offsets. Cobertura: `EstablishmentIsOpenNowTest` unit + `IsOpenEffectiveIntegrationTest`)** · **Remover da fila reflete pro cliente no ato (Partner BUG9 / Client C9 — `DELETE /professional-queue/{id}/remove` ja marcava `CANCELLED`; agora tambem faz `broadcastQueue` + notifica o cliente com `ATTENDANCE_CANCELLED` no WS `/user/queue/notifications` + push, p/ o app-cliente sair de "em fila" sem reload. Guest = no-op nos dois publishers. Cobertura: `PushNotificationIntegrationTest` Order 22)** · **Gate de entrada na fila / "aberto agora" (BUG5 parte C1 — `POST /attendances` de walk-in imediato (sem `targetTime`) exige a loja "aberta agora" (`open_status == OPEN` E dentro de `[opening_time, closing_time)`); loja fechada ou fora do horario → `409 ESTABLISHMENT_NOT_OPEN`. A intencao de fila (#40, com `targetTime`) e o guest (`add-quest-attendance`) NAO passam pelo gate. Fila ja existente segue sendo atendida. Cobertura: `AttendanceServiceImplTest` (unit) + `WalkInOpenGateIntegrationTest` (integracao). Resta a parte C2 — fluxo "solicitar corte")** · **Promocao event-driven da intencao (#4 fatia 3 — a `INTENTION` vira `SCHEDULED` sozinha ~15min antes do `desiredTime`). Gatilho por TIMER server-side (`IntentionPromotionScheduler`, `ThreadPoolTaskScheduler` proprio — NAO usa `@Scheduled`/`@EnableScheduling`, que seguem ausentes/dormentes de proposito), agendado para `cabeca.desiredTime − 15min` (cabeca = menor `desiredTime` do sistema, via `findEarliestIntention`). No disparo NAO promove cego: re-consulta a cabeca, re-checa a janela e roda um LOOP DE DRENAGEM (promove todas as vencidas em cadeia — cobre rajadas apos ociosidade) e reagenda pro proximo. `promoteIntention` faz o flip ATOMICO guardado por `status==INTENTION` (corrida com cancelar/editar = no-op auto-limpante); ao promover, `scheduledTime = agora` (a intencao entra na CAUDA da fila viva = posicao do ETA no instante, Modelo A, sem reservar slot) + trava refeicoes a frente + notifica o cliente (`ATTENDANCE_PROMOTED` no WS `/user/queue/notifications` + push) + rebroadcast da fila. Todo create/edit/cancel de intencao chama `reschedule()` pos-commit (a cabeca/timer se corrigem na hora, inclusive "mudou pra mais cedo"); no boot o timer se reconstroi do banco (`ApplicationReadyEvent`). Sem novo endpoint REST (100% interno). Cobertura: `IntentionPromotionIntegrationTest` (flip + fila viva + no-op de corrida + `findEarliestIntention`) + `IntentionPromotionSchedulerTest` (drenagem, due-check, convidado sem push, corrida))** · **Contagem de profissionais na listagem publica (Client Home — `available_professionals` no `EstablishmentResponse` da listagem `GET /establishment` = nº de profissionais afiliados COM servico; deriva do mesmo snapshot `professionals-with-queue` que ja alimenta `estimated_wait_minutes` (#31 filtra prof sem servico), calculado numa unica passada por loja; `null` fora da listagem. Front-client exibe lojas FECHADAS so com `available_professionals > 0`. Cobertura: `AvailableProfessionalsListingIntegrationTest` — prof com servico → 1, prof sem servico → 0)** · **Promover atendimento ao 1o lugar (Partner "Promover cliente ao 1o lugar" — `PATCH /attendances/{id}/promote`, PROFESSIONAL dono; move o atendimento em espera para o indice 0 (`scheduledTime = cabeca − 1min`, inverso do `move-to-end`), empurrando os demais, sem inicia-lo; so `SCHEDULED`, no-op se ja for o 1o; expira propostas de troca #42 + broadcast WS. Erros: 400 status invalido, 403 nao-dono/CLIENT, 404 inexistente, 401 sem token. Cobertura: `PromoteToFrontIntegrationTest`)** · **Fechamento com "solicitar corte" (BUG5 C2 — completo). Com a loja fechada p/ novos (gate C1), o cliente registrado registra um `CutRequest` PENDING (entidade propria, fora de qualquer read-model de fila; validade 5min) via `POST /attendances/cut-requests` (409 `CUT_REQUEST_NOT_ALLOWED` se aberta agora, 422 servico de outro prof; notifica o prof com `CUT_REQUESTED`). O profissional dono decide: `PATCH .../{id}/accept` (nasce um Attendance SCHEDULED na cauda, bypassa o gate C1, reusa meal-lock; vira ACCEPTED + `resulting_attendance_id`; notifica o cliente `CUT_ACCEPTED`) ou `PATCH .../{id}/refuse` (REFUSED; `CUT_REFUSED`); guard dono + so PENDING + accept fora da janela auto-nega defensivo. **Auto-nega por TIMER server-side** (`CutRequestExpiryScheduler`, `ThreadPoolTaskScheduler` proprio/daemon, event-driven — um timer p/ o `expiresAt` da cabeca `findFirstByStatusOrderByExpiresAtAsc`; no disparo `expireDueCutRequests` marca EXPIRED todos os PENDING vencidos e notifica `CUT_EXPIRED`, depois reagenda; create/accept/refuse chamam `reschedule()` pos-commit; timer reconstruido no boot). Sem endpoint REST na fatia 3. Migration `80-attendance/010` (`cut_request` + join `cut_request_service_item`). Cobertura: `CutRequestCreateIntegrationTest` + `CutRequestAcceptRefuseIntegrationTest` + `CutRequestExpiryIntegrationTest`; Postman folder 08l)** · **Desbloqueio da UI do Partner no C2 (`GET /attendances/cut-requests` lista os pedidos PENDING do profissional logado, `createdAt ASC` — caminho de recuperacao quando o WS foi perdido + fonte da lista de pendentes; 403 p/ nao-PROFESSIONAL. Alem disso, o `cutRequestId` passou a viajar num CAMPO PROPRIO do `QueueNotification` (antes vinha escondido no `attendanceId`, semanticamente errado): CUT_REQUESTED/ACCEPTED/REFUSED/EXPIRED preenchem `cutRequestId`; CUT_ACCEPTED traz ambos (attendance gerado + pedido fechado). Sem migration. Cobertura: `CutRequestListPendingIntegrationTest` — 2 pendentes ordenados / outro prof ve vazio / some apos aceitar / cliente 403; Postman folder 08l)** · **Visao de agenda das intencoes (#4 fatia 2 — fecha o #4). `GET /attendances/intentions/professional/me` (PROFESSIONAL) e `GET /attendances/intentions/client/me` (CLIENT) devolvem `IntentionAgendaResponse` = `{ frames[], intentions[] }`: as INTENTIONs futuras (fora da fila viva) congeladas no estimado da criacao (`estimatedStartTime` = `scheduledTime` persistido, nada recalculado na leitura), ordenadas por `desiredTime` (o front agrupa por dia), + o "quadro" da barra de encaixe por profissional (`projectedQueueEnd` = fim projetado da fila viva + `openingTime`/`closingTime`). professional/me = 1 frame; client/me = um frame por profissional distinto. Read-only, sem migration. Query `findIntentionsByClient` nova (a `findIntentionsByProfessional` ja existia). Follow-up nao-bloqueante: endpoint publico `professional/{id}` com blocos anonimos p/ o cliente ver a barra de OUTRO profissional ao agendar. Cobertura: `IntentionAgendaIntegrationTest` (professional/me 3+1frame / client/me 2+1frame / vazio / 403 cliente puro em professional/me); Postman folder 08m)** · **Verificar senha atual na troca de senha (Client #13 — `PATCH /profile/update-password/me` passou a exigir `current_password` no corpo (`@NotBlank`), conferido com `PasswordEncoder.matches` contra o hash do usuario do JWT. Nao confere -> `401 CURRENT_PASSWORD_INVALID` e NADA e alterado (senha intacta, tokens nao rotacionados); campo ausente/em branco -> `422 VALIDATION_ERROR` com `fieldErrors.currentPassword`. Portar o token de acesso deixa de bastar para trocar a senha. Sem migration. Handoff de front: campo "senha atual" na tela + excecao no interceptor global de 401 (tratar `CURRENT_PASSWORD_INVALID` como erro de campo, nao como sessao expirada). Cobertura: `ProfileIntegrationTest` (401 senha errada antes do sucesso / 200 / 422 nos dois campos / 401 sem token) + `UpdateProfileUseCasesTest` (unit: senha errada nao encoda, nao salva, nao rotaciona) ; Postman folder 11)** · **Esqueci minha senha — fatia 1 (backlog #1, codigo de 6 digitos). `POST /auth/forgot-password {email}` (publico) gera um codigo de 6 digitos, guarda so o **hash bcrypt** (`password_reset_code`, migration `20-auth/022`), validade 15min / uso unico / max 5 tentativas, e dispara por e-mail via `EmailSender` plugavel (`NoOpEmailSender` default so loga; `SmtpEmailSender` via `JavaMailSender` quando `MAIL_PROVIDER=smtp`). **Sempre 200, exista o e-mail ou nao** (anti-enumeracao). `POST /auth/reset-password {email, code, new_password}` (publico) confere o codigo e troca a senha (uso unico: queima o codigo); erros `400 RESET_CODE_INVALID` (inexistente/errado/usado/esgotado/e-mail desconhecido) e `400 RESET_CODE_EXPIRED` (vencido), `422` de validacao. **Envio real por SMTP = fatia 2** (so config env, sem codigo). Cobertura: `ForgotPasswordIntegrationTest` (ciclo feliz capturando o codigo via `@MockBean EmailSender` + login com senha nova + reuso bloqueado + anti-enumeracao) + `PasswordResetUseCasesTest` (unit: expiracao, trava de 5 tentativas, codigo consumido, e-mail desconhecido) ; Postman folder 01)** · **Apelido no read-back do proprio profissional (Partner BUG10 — `GET /professional/me` e `PATCH /professional/me` passaram a projetar o `nickname` no `ProfessionalQuickCreateResponse`. O apelido SEMPRE persistiu (`BaseUser`, escrito por `PATCH /profile/general-infos`) e ja aparecia em `professionals-with-queue` e na busca do owner — faltava so o campo no DTO do proprio profissional, que e o read-back da tela de perfil do Partner. Leitura pura: o ponto unico de escrita continua sendo `/profile/general-infos`, `PATCH /professional/me` nao altera o apelido (so devolve o valor atual, p/ o front nao perder o campo ao salvar a especialidade). `null` quando nao definido. Sem migration. O campo tambem passou a sair nos demais retornos do mesmo DTO (register/quick-create/affiliate/owner-adds-prof). Front-Partner pode remover a mitigacao local. Cobertura: `ProfessionalNicknameProjectionIntegrationTest` (+2 casos: `/me` expoe o apelido; editar a especialidade nao derruba o apelido do read-back) ; Postman folder 03)** · **Auto-fechamento por horario — prompt + carencia de 15min (S1 fatia 5 / BUG1; fecha o S1 inteiro). "A loja nao pode dormir aberta": quem segue em expediente (`WORKING`/`ON_BREAK`) logo apos o `closing_time` tem a fila fechada (`accepting_new=false`) e ganha uma carencia de 15min (`closing_grace_until`, migration `60-professional/011`), recebendo o prompt "quer fechar?" (WS `CLOSING_PROMPT` no `/user/queue/notifications` + push, com o novo campo `graceUntil` do `QueueNotification` p/ o countdown server-authoritative); os clientes na fila recebem `QUEUE_CLOSING` (seguem sendo atendidos). Vencida sem sinalizacao: sem nada ativo vira `OFF` sozinho (sendo o ultimo, a loja fecha via derivacao da fatia 2); drenando, a carencia e limpa e o auto-OFF fica com o fim da drenagem (fatia 3); expediente ESTENDIDO (o dono mudou o `closing_time` e "agora" voltou a cair dentro), carencia limpa sem fechar nada (auto-correcao — NAO reabre `accepting_new` sozinho, o profissional reabre na mao p/ nao pisar num fechamento manual). **Timer server-side EVENT-DRIVEN** (`EstablishmentAutoCloseScheduler`, `ThreadPoolTaskScheduler` proprio/daemon — mesmo padrao de `IntentionPromotionScheduler`/`CutRequestExpiryScheduler`, NAO usa `@Scheduled`): um unico timer p/ o proximo evento (`AutoCloseService.nextEventAt` = menor carencia pendente OU proximo `closing_time` de loja com presenca); no disparo roda as duas fases (`promptDueClosings`/`applyDueGraces`) e reagenda; `reschedule()` pos-commit engatado em `PATCH /me/status` e `/me/accepting-new`; timer reconstruido no boot (`ApplicationReadyEvent`). Guarda `isPromptDue` gateada em `accepting_new` ainda aberto p/ nao re-promar (nem entrar em busy-loop no `nextEventAt`) quem ja teve a fila fechada. Matematica da janela recorrente (relogio de PAREDE no fuso da loja via `BusinessClock`, mesma disciplina do `is_open`; ver BUG2b) em `ClosingTimeMath`, com horizonte "logo apos o fechamento" (default 6h) que poupa quem chega CEDO. Sem endpoint REST novo — 100% interno. Cobertura: `ClosingTimeMathTest` (matematica pura: janela normal/24h/nula/virada-de-meia-noite/horizonte) + `EstablishmentAutoCloseSchedulerTest` (orquestracao/notificacoes: prompt com e sem fila, auto-OFF rebroadcast, drenagem silenciosa, ocioso). `auto-arm=false` no profile de teste)** · **Auditoria de fuso horario (Partner BUG2 — SEM alteracao de codigo). Varredura de todos os pontos que comparam horario de funcionamento/refeicao (`Establishment.isOpenAt`/`isWithinBusinessHours`, `AttendanceServiceImpl.fitsBeforeClosing`, `ProfessionalIntervalService.validateWithinBusinessHours`, `QueueUtils.buildBlocks`, `ClosingTimeMath`): TODOS ja normalizam offset (`withOffsetSameInstant(UTC)` ou comparacao por instante de `OffsetTime`/`OffsetDateTime`). O deslocamento −3h reportado no QA vinha do DADO (front enviava hora local rotulada "Z"), nao da logica — front ja corrigido (`toApiTime` com offset real). Sem migration: dado ja salvo com "Z" sera re-salvo por Andre pos-OTA (decisao 2026-07-24). Unico `LocalTime.now()` sem offset esta em metodo comentado + `@Scheduled` dormente = codigo morto. ⚠️ **Incompleta — ver BUG2b logo abaixo**)** · **Horario de parede — persistencia do fuso (Partner BUG2b, 2026-07-26; residuo do BUG2 que a auditoria nao pegou). `opening_time`, `closing_time` e `fixedStartTime` eram `OffsetTime` sobre coluna `TIME` (sem timezone): a coluna nao tem onde guardar o offset, entao o Hibernate o descartava normalizando para UTC — o front mandava `"08:00-03:00"`, gravava `11:00` e devolvia `"11:00Z"` (+3h na tela) MESMO com o front ja corrigido. A auditoria de 2026-07-24 olhou a LOGICA de comparacao (correta) e nao a PERSISTENCIA. Agora os tres campos sao `LocalTime` = **relogio de parede no fuso da loja**, e toda comparacao com "agora" (e todo recorte de "hoje") passa pelo novo `BusinessClock` (`domain/shared`, fuso `vupth.timezone`, default `America/Sao_Paulo`, injetado no boot por `BusinessClockConfig`) — `Establishment.isOpenAt`/`isWithinBusinessHours`, `AttendanceServiceImpl.fitsBeforeClosing`, `ProfessionalIntervalService` (validacao da janela + "hoje" do start/skip), `QueueUtils.buildBlocks` (projecao da refeicao no dia da LOJA, nao no dia UTC) e `ClosingTimeMath` (auto-fechamento). **Contrato JSON:** entrada TOLERANTE (o sufixo `Z`/`±HH:MM` e aceito e IGNORADO — os digitos ja sao a hora que o usuario escolheu, valendo tanto pro front antigo quanto pro corrigido, entao o backend virou sem release em lockstep) e saida CANONICA `"HH:MM"` sem offset (`WallClockLocalTimeDeserializer`/`Serializer` no `JacksonConfig`). **Sem migration** — as colunas ja eram `TIME`; muda so o que o Hibernate escreve nelas. Dado legado deslocado se corrige re-salvando pela tela. Cobertura: `WallClockTimeJsonTest` (unit, contrato JSON dos dois lados) + `EstablishmentIsOpenNowTest`/`ClosingTimeMathTest`/`QueueUtilsTest` (unit, migrados p/ parede) + `EstablishmentIntegrationTest` (read-back `"09:00"`) + `IsOpenEffectiveIntegrationTest`; Postman: asserts de read-back sem `Z` nas duas collections)**.
+**✅ Concluidos no backend (historico, fora da contagem):** **Filtros de periodo no fuso da LOJA** (2026-08-11, residuo final do BUG2b — o BUG2b migrou horario de funcionamento e refeicao para relogio de parede, mas **nao** os filtros `dateFrom`/`dateTo`, que seguiam montando a janela com `dateFrom.atStartOfDay().atOffset(UTC)` no `ReportServiceImpl` e no `AttendanceServiceImpl` (`listAttendances`/`listClientAttendances`). Em `America/Sao_Paulo` isso fazia o dia **comecar as 21h da vespera**: o corte das 22h nao entrava no relatorio do dia em que aconteceu, e sim no do dia seguinte — quanto mais tarde a loja fecha, mais o numero do dia mentia. Agora as tres chamadas passam por `BusinessClock.startOfDay`/`endOfDayExclusive`, **metodos novos** criados para que "dia" signifique a mesma coisa em todo filtro de periodo (a formula estava triplicada, que e exatamente como o BUG2b sobreviveu num lugar depois de corrigido nos outros). Teto **exclusivo** (meia-noite do dia seguinte) em vez de `23:59:59`: sem buraco de um segundo e sem depender da precisao da coluna. Os sentinelas de "sem filtro" (2000/2100) seguem em UTC de proposito — sao passado/futuro remotos e nao representam dia nenhum. ⚠️ **Muda numero de relatorio ja exibido** (decisao do Andre em 2026-08-11, com o trade-off na mesa): atendimento entre 21h e meia-noite migra do dia seguinte para o dia correto. **Como apareceu:** `ReportIntegrationTest.establishmentReport_periodToday` quebrou numa rodada as 21:10 em Sao Paulo. ⚠️ **Esse teste NAO era prova suficiente** — ele so pega o bug em host atras do UTC entre 21h e meia-noite, e o runner do CI e UTC, entao passava verde com o bug presente (por isso o item sobreviveu ao CI vermelho de 05/08). A regressao de verdade e o `BusinessDayRangeTest` (5), com datas fixas: independe de quando e de onde a suite roda, e dois dos asserts provam explicitamente que a formula antiga errava. Os 3 testes que montavam o dia com `LocalDate.now()` passaram a usar `BusinessClock.today()`. **Sem migration; Postman inalterado** — as janelas das collections sao largas (ano inteiro / mes / 2099) e um deslocamento de 3h nao vira resultado nenhum. 📌 **Adjacentes NAO tocados** (fora do escopo do item, ambos inalcancaveis hoje): `AttendanceServiceImpl.calculateWeeklyAverageDuration` e `ServiceItemServiceImpl.avarageCalculateLastWeek` ainda recortam semana com `LocalDateTime` sem fuso — o primeiro esta atras de um `@Scheduled` dormente (`@EnableScheduling` ausente) e o segundo nao e chamado por nenhum endpoint) · **Resposta da Expo lida no push — token morto sai da base e o log para de mentir** (2026-08-11, Partner S15 — o envio terminava em `.retrieve().toBodilessEntity()`: o corpo com os **tickets** (um recibo por mensagem) ia fora e o `log.info` dizia `"Expo enviou N mensagem(ns)"` **incondicionalmente**. Dois estragos: (a) token com `DeviceNotRegistered` — app desinstalado ou token rotacionado — **nunca saia da base**, porque o unico caminho de saida era o logout explicito, entao todo push seguinte era gasto no vazio; (b) o log **afirmava sucesso mesmo com todos os tickets em erro**, o que tornava impossivel distinguir "o backend nao mandou" de "a Expo recusou" num QA de push no aparelho. ⚠️ **O HTTP 200 da Expo e do ENVELOPE, nao das mensagens** — e o ticket **nao repete o token**, entao o pareamento e **posicional**. Agora: `PushSender` devolve `List<PushTicket>` em vez de `void`, o `ExpoPushSender` traduz o corpo (e segue transporte puro, sem tocar em persistencia) e a politica de ciclo de vida do token fica no `PushNotificationPublisher`, que ja resolve os devices do usuario. **So `DeviceNotRegistered` apaga** — `MessageTooBig`/credencial invalida/rede fora/contagem de tickets divergente **nao culpam token nenhum**, porque apagar o device errado e pior que manter um morto. Apagar e seguro: `POST /devices` e upsert por token, entao reinstalar o app recria a linha. Token **mascarado** no log (so a cauda). **Sem migration, sem dependencia nova, contrato de API inalterado** — nada a fazer nos fronts. ⏳ Os **receipts** (2a etapa da Expo, a unica prova de entrega real) ficam como fatia 2: custam tabela + scheduler, e o ticket ja pega a maior parte dos tokens mortos. Cobertura: `ExpoPushSenderTest` (9, Expo simulada por `HttpServer` do JDK) + `PushNotificationPublisherTest` (8); Postman nao cobre nem tem como — ver a secao de push) · **Apagar a conta** (2026-08-07, Partner S19 — e o enunciado do item estava ERRADO dos dois lados: a rota `DELETE /profile/delete/me` **ja existia**, como o Front-Client apontou no mesmo dia, e era **destrutiva** — `deleteById` cru sobre um `BaseUser` com `cascade = ALL`, entao apagar a conta de um dono **apagava a loja inteira** e a de um profissional **apagava todos os atendimentos dele**. Reescrita como **anonimizacao**: apaga-se o dado pessoal do titular e preserva-se o atendimento, que pertence tambem ao profissional e ao estabelecimento. Exige a senha atual, tem tres portoes 409 e desliga a loja do dono reusando o `LeaveEstablishmentUseCase`. ⚠️ **Quebra o botao atual dos apps** — ver o handoff na secao 6). · **Hash da senha do seed corrigido** (2026-08-06 — as 12 contas `@seed.dev` **nunca logaram**: o `012-seed-data.yaml` documentava `Senha@123` no cabecalho e gravou o hash de outra senha, entao todo login devolvia `401 BAD_CREDENTIALS` em dev, test e staging, e o QA manual tinha de registrar conta nova toda vez. Prova independente de banco e de API: `bcrypt.checkpw("Senha@123", "$2b$10$BruRO…") = False`; a senha original se perdeu (19 candidatos testados). Corrigido nas duas frentes porque os dois cenarios existem: o **012 reescrito** faz banco NOVO nascer certo, e o **`10-stubs/013-fix-seed-password-hash.yaml`** (`UPDATE … WHERE email LIKE '%@seed.dev'`, `context: "!prod"`) conserta banco EXISTENTE, onde o 012 ja consta no `DATABASECHANGELOG` e editar no lugar nao reexecuta o INSERT. Verificado no banco local — changeset `EXECUTED` e **14 de 14 contas logando 200**. Nada dependia do hash: as collections do Postman usam `Senha@123` em contas que elas proprias registram, e nenhum teste Java referencia `@seed.dev`) · **Heartbeat do WebSocket — CONFIRMADO EM PRODUCAO** (2026-08-06 — o `be5bdaa` foi verificado no Render depois do deploy: CONNECTED devolve `heart-beat:10000,10000`. Na mesma passada fecharam os 3 buracos da prova de 01/08 — entrega no canal PESSOAL, conexao OCIOSA de 40s atravessando o proxy do Render com PONGs do servidor, e CONNECT com token invalido (segue anonimo = #31 ainda aberto, sem vazar nada no canal pessoal). Ferramenta: `scripts/ws-probe.js`) · **Heartbeat do WebSocket ligado** (2026-08-05, Partner S17 — o broker respondia `heart-beat:0,0` por estar sem `TaskScheduler`; agora anuncia 10s/10s no CONNECTED, com `ThreadPoolTaskScheduler` proprio/daemon. Mata o socket zumbi: a queda do socket ocioso no Render passa a virar erro → desconexao → reconexao automatica do app, em vez de silencio. Nenhuma mudanca exigida dos fronts, que ja pediam 10s/10s. Ver secao 18b; cobertura: `WebSocketIntegrationTest.connect_negotiatesHeartbeat`) · **`PATCH` do endereco do estabelecimento** (2026-07-31 — endereco/coordenada errados finalmente tem conserto pela API; texto NAO regeocodifica, endereco sem coordenada e retentado; ver secao 17) · **GPS fatia A2** (2026-07-31 — `GET /geocoding/reverse` + validacao `422 ADDRESS_INVALID_COORDINATES` da lat/lng de entrada) · WebSocket tempo real · Historico do cliente · Refeicoes/intervalos (#11) · Cancelar afiliacao + pendencia unica (#29) · Owner desvincular (#30) · Status ATIVA condicionado (#31) · Buscar profissionais p/ convite (#32) · Keywords/sinonimos (#34) · Lock da estimativa (#37) · Encaixe com equalizacao (#38) · **Intencao de fila com horario-alvo (#40)** · Skip de refeicao (#41) · **Troca de posicao na fila por consentimento mutuo (#42)** · **Cancelamento tardio + strikes/aviso (#39 — Fase 1)** · **Escalada de no-show (#39 — `PATCH /attendances/{id}/no-show`)** · **Remanejar cliente com espera longa (#43 — `PATCH /attendances/{id}/reschedule` + `/move-to-end`)** · **Rating / avaliacao de atendimentos (#6 — `POST /attendances/{id}/rating`)** · **Notificacoes push (device token `POST`/`DELETE /devices` + disparo Expo: "voce e o proximo" / atendimento iniciado / concluido / swap)** · **Editar/deletar ServiceItem pela otica do establishment (`PUT`/`DELETE /establishment/{id}/service-items/{itemId}` — OWNER ou o proprio profissional dono do item)** · **Endereco no read-back do establishment (Partner BUG4 — `EstablishmentResponse.address` embutido; endereco principal `isMain`, `null` sem endereco)** · **Gate ao fechar loja com fila/atendimento ativo (Partner BUG6 — `PATCH /open-status` da `409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES` ao sair de OPEN com atendimento SCHEDULED/LATE/IN_PROGRESS/PAUSED)** · **Profissional afiliado abre/fecha a loja (`PATCH /open-status` = OWNER **ou** profissional afiliado; profissional de outra loja -> `403 ESTABLISHMENT_ACCESS_DENIED`)** · **Filtro de open-status na listagem publica (BUG5 parte A — `GET /establishment` por padrao so devolve `OPEN`; `?includeAll=true` inclui `CLOSED`/`TEMPORARILY_CLOSED`; filtro de leitura, nao muda status nem fila)** · **Atendimento pausado continua visivel e retomavel (Partner BUG7 — o "atual" do profissional cai para o `PAUSED` na ausencia de `IN_PROGRESS`; permanece em `current_attendance` do `professionals-with-queue` e no overview da fila ate `resume`/`finish`, e nao se inicia um novo enquanto ha um pausado)** · **Listagem dos proprios atendimentos pelo cliente (Partner BUG8 sintoma b — `GET /attendances?clientId=<self>` devolve os atendimentos do proprio cliente; antes o endpoint era owner/profissional-only e o cliente tomava `403`. So o proprio JWT; `clientId` de outro -> `403`. Delega ao mesmo caminho de `/attendances/client/me`; caminho feliz ja projetava nos 3 read-models)** · **Invariante servico↔profissional no create de atendimento (Partner BUG8 sintoma c — todo `serviceItem` do atendimento tem de pertencer ao profissional escolhido; item de outro prof -> `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`; como efeito, profissional sem servico nao pode ser marcado)** · **"Aberto agora" efetivo (BUG5 parte B — campo de leitura `is_open` no `EstablishmentResponse`/`EstablishmentWithProfessionalsResponse`/`EstablishmentGeneralInfosResponse` = `open_status == OPEN` E horario atual dentro de `[opening_time, closing_time)`; nao muda o `open_status` persistido (o auto-fechamento e item proprio do backlog, com prompt + carencia de 15min). Trata janela normal/24h/virada-de-meia-noite/offsets. Cobertura: `EstablishmentIsOpenNowTest` unit + `IsOpenEffectiveIntegrationTest`)** · **Remover da fila reflete pro cliente no ato (Partner BUG9 / Client C9 — `DELETE /professional-queue/{id}/remove` ja marcava `CANCELLED`; agora tambem faz `broadcastQueue` + notifica o cliente com `ATTENDANCE_CANCELLED` no WS `/user/queue/notifications` + push, p/ o app-cliente sair de "em fila" sem reload. Guest = no-op nos dois publishers. Cobertura: `PushNotificationIntegrationTest` Order 22)** · **Gate de entrada na fila / "aberto agora" (BUG5 parte C1 — `POST /attendances` de walk-in imediato (sem `targetTime`) exige a loja "aberta agora" (`open_status == OPEN` E dentro de `[opening_time, closing_time)`); loja fechada ou fora do horario → `409 ESTABLISHMENT_NOT_OPEN`. A intencao de fila (#40, com `targetTime`) e o guest (`add-quest-attendance`) NAO passam pelo gate. Fila ja existente segue sendo atendida. Cobertura: `AttendanceServiceImplTest` (unit) + `WalkInOpenGateIntegrationTest` (integracao). Resta a parte C2 — fluxo "solicitar corte")** · **Promocao event-driven da intencao (#4 fatia 3 — a `INTENTION` vira `SCHEDULED` sozinha ~15min antes do `desiredTime`). Gatilho por TIMER server-side (`IntentionPromotionScheduler`, `ThreadPoolTaskScheduler` proprio — NAO usa `@Scheduled`/`@EnableScheduling`, que seguem ausentes/dormentes de proposito), agendado para `cabeca.desiredTime − 15min` (cabeca = menor `desiredTime` do sistema, via `findEarliestIntention`). No disparo NAO promove cego: re-consulta a cabeca, re-checa a janela e roda um LOOP DE DRENAGEM (promove todas as vencidas em cadeia — cobre rajadas apos ociosidade) e reagenda pro proximo. `promoteIntention` faz o flip ATOMICO guardado por `status==INTENTION` (corrida com cancelar/editar = no-op auto-limpante); ao promover, `scheduledTime = agora` (a intencao entra na CAUDA da fila viva = posicao do ETA no instante, Modelo A, sem reservar slot) + trava refeicoes a frente + notifica o cliente (`ATTENDANCE_PROMOTED` no WS `/user/queue/notifications` + push) + rebroadcast da fila. Todo create/edit/cancel de intencao chama `reschedule()` pos-commit (a cabeca/timer se corrigem na hora, inclusive "mudou pra mais cedo"); no boot o timer se reconstroi do banco (`ApplicationReadyEvent`). Sem novo endpoint REST (100% interno). Cobertura: `IntentionPromotionIntegrationTest` (flip + fila viva + no-op de corrida + `findEarliestIntention`) + `IntentionPromotionSchedulerTest` (drenagem, due-check, convidado sem push, corrida))** · **Contagem de profissionais na listagem publica (Client Home — `available_professionals` no `EstablishmentResponse` da listagem `GET /establishment` = nº de profissionais afiliados COM servico; deriva do mesmo snapshot `professionals-with-queue` que ja alimenta `estimated_wait_minutes` (#31 filtra prof sem servico), calculado numa unica passada por loja; `null` fora da listagem. Front-client exibe lojas FECHADAS so com `available_professionals > 0`. Cobertura: `AvailableProfessionalsListingIntegrationTest` — prof com servico → 1, prof sem servico → 0)** · **Promover atendimento ao 1o lugar (Partner "Promover cliente ao 1o lugar" — `PATCH /attendances/{id}/promote`, PROFESSIONAL dono; move o atendimento em espera para o indice 0 (`scheduledTime = cabeca − 1min`, inverso do `move-to-end`), empurrando os demais, sem inicia-lo; so `SCHEDULED`, no-op se ja for o 1o; expira propostas de troca #42 + broadcast WS. Erros: 400 status invalido, 403 nao-dono/CLIENT, 404 inexistente, 401 sem token. Cobertura: `PromoteToFrontIntegrationTest`)** · **Fechamento com "solicitar corte" (BUG5 C2 — completo). Com a loja fechada p/ novos (gate C1), o cliente registrado registra um `CutRequest` PENDING (entidade propria, fora de qualquer read-model de fila; validade 5min) via `POST /attendances/cut-requests` (409 `CUT_REQUEST_NOT_ALLOWED` se aberta agora, 422 servico de outro prof; notifica o prof com `CUT_REQUESTED`). O profissional dono decide: `PATCH .../{id}/accept` (nasce um Attendance SCHEDULED na cauda, bypassa o gate C1, reusa meal-lock; vira ACCEPTED + `resulting_attendance_id`; notifica o cliente `CUT_ACCEPTED`) ou `PATCH .../{id}/refuse` (REFUSED; `CUT_REFUSED`); guard dono + so PENDING + accept fora da janela auto-nega defensivo. **Auto-nega por TIMER server-side** (`CutRequestExpiryScheduler`, `ThreadPoolTaskScheduler` proprio/daemon, event-driven — um timer p/ o `expiresAt` da cabeca `findFirstByStatusOrderByExpiresAtAsc`; no disparo `expireDueCutRequests` marca EXPIRED todos os PENDING vencidos e notifica `CUT_EXPIRED`, depois reagenda; create/accept/refuse chamam `reschedule()` pos-commit; timer reconstruido no boot). Sem endpoint REST na fatia 3. Migration `80-attendance/010` (`cut_request` + join `cut_request_service_item`). Cobertura: `CutRequestCreateIntegrationTest` + `CutRequestAcceptRefuseIntegrationTest` + `CutRequestExpiryIntegrationTest`; Postman folder 08l)** · **Desbloqueio da UI do Partner no C2 (`GET /attendances/cut-requests` lista os pedidos PENDING do profissional logado, `createdAt ASC` — caminho de recuperacao quando o WS foi perdido + fonte da lista de pendentes; 403 p/ nao-PROFESSIONAL. Alem disso, o `cutRequestId` passou a viajar num CAMPO PROPRIO do `QueueNotification` (antes vinha escondido no `attendanceId`, semanticamente errado): CUT_REQUESTED/ACCEPTED/REFUSED/EXPIRED preenchem `cutRequestId`; CUT_ACCEPTED traz ambos (attendance gerado + pedido fechado). Sem migration. Cobertura: `CutRequestListPendingIntegrationTest` — 2 pendentes ordenados / outro prof ve vazio / some apos aceitar / cliente 403; Postman folder 08l)** · **Visao de agenda das intencoes (#4 fatia 2 — fecha o #4). `GET /attendances/intentions/professional/me` (PROFESSIONAL) e `GET /attendances/intentions/client/me` (CLIENT) devolvem `IntentionAgendaResponse` = `{ frames[], intentions[] }`: as INTENTIONs futuras (fora da fila viva) congeladas no estimado da criacao (`estimatedStartTime` = `scheduledTime` persistido, nada recalculado na leitura), ordenadas por `desiredTime` (o front agrupa por dia), + o "quadro" da barra de encaixe por profissional (`projectedQueueEnd` = fim projetado da fila viva + `openingTime`/`closingTime`). professional/me = 1 frame; client/me = um frame por profissional distinto. Read-only, sem migration. Query `findIntentionsByClient` nova (a `findIntentionsByProfessional` ja existia). Follow-up nao-bloqueante: endpoint publico `professional/{id}` com blocos anonimos p/ o cliente ver a barra de OUTRO profissional ao agendar. Cobertura: `IntentionAgendaIntegrationTest` (professional/me 3+1frame / client/me 2+1frame / vazio / 403 cliente puro em professional/me); Postman folder 08m)** · **Verificar senha atual na troca de senha (Client #13 — `PATCH /profile/update-password/me` passou a exigir `current_password` no corpo (`@NotBlank`), conferido com `PasswordEncoder.matches` contra o hash do usuario do JWT. Nao confere -> `401 CURRENT_PASSWORD_INVALID` e NADA e alterado (senha intacta, tokens nao rotacionados); campo ausente/em branco -> `422 VALIDATION_ERROR` com `fieldErrors.currentPassword`. Portar o token de acesso deixa de bastar para trocar a senha. Sem migration. Handoff de front: campo "senha atual" na tela + excecao no interceptor global de 401 (tratar `CURRENT_PASSWORD_INVALID` como erro de campo, nao como sessao expirada). Cobertura: `ProfileIntegrationTest` (401 senha errada antes do sucesso / 200 / 422 nos dois campos / 401 sem token) + `UpdateProfileUseCasesTest` (unit: senha errada nao encoda, nao salva, nao rotaciona) ; Postman folder 11)** · **Esqueci minha senha — fatia 1 (backlog #1, codigo de 6 digitos). `POST /auth/forgot-password {email}` (publico) gera um codigo de 6 digitos, guarda so o **hash bcrypt** (`password_reset_code`, migration `20-auth/022`), validade 15min / uso unico / max 5 tentativas, e dispara por e-mail via `EmailSender` plugavel (`NoOpEmailSender` default so loga; `SmtpEmailSender` via `JavaMailSender` quando `MAIL_PROVIDER=smtp`). **Sempre 200, exista o e-mail ou nao** (anti-enumeracao). `POST /auth/reset-password {email, code, new_password}` (publico) confere o codigo e troca a senha (uso unico: queima o codigo); erros `400 RESET_CODE_INVALID` (inexistente/errado/usado/esgotado/e-mail desconhecido) e `400 RESET_CODE_EXPIRED` (vencido), `422` de validacao. **Envio real por SMTP = fatia 2** (so config env, sem codigo). Cobertura: `ForgotPasswordIntegrationTest` (ciclo feliz capturando o codigo via `@MockBean EmailSender` + login com senha nova + reuso bloqueado + anti-enumeracao) + `PasswordResetUseCasesTest` (unit: expiracao, trava de 5 tentativas, codigo consumido, e-mail desconhecido) ; Postman folder 01)** · **Apelido no read-back do proprio profissional (Partner BUG10 — `GET /professional/me` e `PATCH /professional/me` passaram a projetar o `nickname` no `ProfessionalQuickCreateResponse`. O apelido SEMPRE persistiu (`BaseUser`, escrito por `PATCH /profile/general-infos`) e ja aparecia em `professionals-with-queue` e na busca do owner — faltava so o campo no DTO do proprio profissional, que e o read-back da tela de perfil do Partner. Leitura pura: o ponto unico de escrita continua sendo `/profile/general-infos`, `PATCH /professional/me` nao altera o apelido (so devolve o valor atual, p/ o front nao perder o campo ao salvar a especialidade). `null` quando nao definido. Sem migration. O campo tambem passou a sair nos demais retornos do mesmo DTO (register/quick-create/affiliate/owner-adds-prof). Front-Partner pode remover a mitigacao local. Cobertura: `ProfessionalNicknameProjectionIntegrationTest` (+2 casos: `/me` expoe o apelido; editar a especialidade nao derruba o apelido do read-back) ; Postman folder 03)** · **Auto-fechamento por horario — prompt + carencia de 15min (S1 fatia 5 / BUG1; fecha o S1 inteiro). "A loja nao pode dormir aberta": quem segue em expediente (`WORKING`/`ON_BREAK`) logo apos o `closing_time` tem a fila fechada (`accepting_new=false`) e ganha uma carencia de 15min (`closing_grace_until`, migration `60-professional/011`), recebendo o prompt "quer fechar?" (WS `CLOSING_PROMPT` no `/user/queue/notifications` + push, com o novo campo `graceUntil` do `QueueNotification` p/ o countdown server-authoritative); os clientes na fila recebem `QUEUE_CLOSING` (seguem sendo atendidos). Vencida sem sinalizacao: sem nada ativo vira `OFF` sozinho (sendo o ultimo, a loja fecha via derivacao da fatia 2); drenando, a carencia e limpa e o auto-OFF fica com o fim da drenagem (fatia 3); expediente ESTENDIDO (o dono mudou o `closing_time` e "agora" voltou a cair dentro), carencia limpa sem fechar nada (auto-correcao — NAO reabre `accepting_new` sozinho, o profissional reabre na mao p/ nao pisar num fechamento manual). **Timer server-side EVENT-DRIVEN** (`EstablishmentAutoCloseScheduler`, `ThreadPoolTaskScheduler` proprio/daemon — mesmo padrao de `IntentionPromotionScheduler`/`CutRequestExpiryScheduler`, NAO usa `@Scheduled`): um unico timer p/ o proximo evento (`AutoCloseService.nextEventAt` = menor carencia pendente OU proximo `closing_time` de loja com presenca); no disparo roda as duas fases (`promptDueClosings`/`applyDueGraces`) e reagenda; `reschedule()` pos-commit engatado em `PATCH /me/status` e `/me/accepting-new`; timer reconstruido no boot (`ApplicationReadyEvent`). Guarda `isPromptDue` gateada em `accepting_new` ainda aberto p/ nao re-promar (nem entrar em busy-loop no `nextEventAt`) quem ja teve a fila fechada. Matematica da janela recorrente (relogio de PAREDE no fuso da loja via `BusinessClock`, mesma disciplina do `is_open`; ver BUG2b) em `ClosingTimeMath`, com horizonte "logo apos o fechamento" (default 6h) que poupa quem chega CEDO. Sem endpoint REST novo — 100% interno. Cobertura: `ClosingTimeMathTest` (matematica pura: janela normal/24h/nula/virada-de-meia-noite/horizonte) + `EstablishmentAutoCloseSchedulerTest` (orquestracao/notificacoes: prompt com e sem fila, auto-OFF rebroadcast, drenagem silenciosa, ocioso). `auto-arm=false` no profile de teste)** · **Auditoria de fuso horario (Partner BUG2 — SEM alteracao de codigo). Varredura de todos os pontos que comparam horario de funcionamento/refeicao (`Establishment.isOpenAt`/`isWithinBusinessHours`, `AttendanceServiceImpl.fitsBeforeClosing`, `ProfessionalIntervalService.validateWithinBusinessHours`, `QueueUtils.buildBlocks`, `ClosingTimeMath`): TODOS ja normalizam offset (`withOffsetSameInstant(UTC)` ou comparacao por instante de `OffsetTime`/`OffsetDateTime`). O deslocamento −3h reportado no QA vinha do DADO (front enviava hora local rotulada "Z"), nao da logica — front ja corrigido (`toApiTime` com offset real). Sem migration: dado ja salvo com "Z" sera re-salvo por Andre pos-OTA (decisao 2026-07-24). Unico `LocalTime.now()` sem offset esta em metodo comentado + `@Scheduled` dormente = codigo morto. ⚠️ **Incompleta — ver BUG2b logo abaixo**)** · **Horario de parede — persistencia do fuso (Partner BUG2b, 2026-07-26; residuo do BUG2 que a auditoria nao pegou). `opening_time`, `closing_time` e `fixedStartTime` eram `OffsetTime` sobre coluna `TIME` (sem timezone): a coluna nao tem onde guardar o offset, entao o Hibernate o descartava normalizando para UTC — o front mandava `"08:00-03:00"`, gravava `11:00` e devolvia `"11:00Z"` (+3h na tela) MESMO com o front ja corrigido. A auditoria de 2026-07-24 olhou a LOGICA de comparacao (correta) e nao a PERSISTENCIA. Agora os tres campos sao `LocalTime` = **relogio de parede no fuso da loja**, e toda comparacao com "agora" (e todo recorte de "hoje") passa pelo novo `BusinessClock` (`domain/shared`, fuso `vupth.timezone`, default `America/Sao_Paulo`, injetado no boot por `BusinessClockConfig`) — `Establishment.isOpenAt`/`isWithinBusinessHours`, `AttendanceServiceImpl.fitsBeforeClosing`, `ProfessionalIntervalService` (validacao da janela + "hoje" do start/skip), `QueueUtils.buildBlocks` (projecao da refeicao no dia da LOJA, nao no dia UTC) e `ClosingTimeMath` (auto-fechamento). **Contrato JSON:** entrada TOLERANTE (o sufixo `Z`/`±HH:MM` e aceito e IGNORADO — os digitos ja sao a hora que o usuario escolheu, valendo tanto pro front antigo quanto pro corrigido, entao o backend virou sem release em lockstep) e saida CANONICA `"HH:MM"` sem offset (`WallClockLocalTimeDeserializer`/`Serializer` no `JacksonConfig`). **Sem migration** — as colunas ja eram `TIME`; muda so o que o Hibernate escreve nelas. Dado legado deslocado se corrige re-salvando pela tela. Cobertura: `WallClockTimeJsonTest` (unit, contrato JSON dos dois lados) + `EstablishmentIsOpenNowTest`/`ClosingTimeMathTest`/`QueueUtilsTest` (unit, migrados p/ parede) + `EstablishmentIntegrationTest` (read-back `"09:00"`) + `IsOpenEffectiveIntegrationTest`; Postman: asserts de read-back sem `Z` nas duas collections)**.
 
 > **BUG8 sintoma (c) — ✅ CONCLUIDO (decisao Andre 2026-07-10: vinculo POR PROFISSIONAL).** Invariante imposta no `createAttendance` (e no guest quando ha itens): todo `serviceItem` do atendimento **tem de pertencer ao profissional escolhido** (`serviceItem.professional == professional`), senao `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`. Casa com a decisao de produto "servico = capacidade do PROFISSIONAL" (cada `ServiceItem` tem dono `professional_id`) e com o `GET /professional/{id}/service-items` que o front ja usa. **Efeito colateral desejado:** profissional sem servico nao pode ser marcado (nao ha item valido para ele). A 1a tentativa quebrava porque a collection agendava o `prof` afiliado com o item do **owner**; corrigido dando ao `prof` o seu **proprio** serviceItem (folder 04 "add service item (prof)") antes das filas. Cobertura: `QueueVisibilityBug8IntegrationTest` (Order 60) + Postman folder 09 (`[ERRO] ... 422`).
 **Front/iOS (nao sao backend):** multiplos servicos na UI (#10) · QR dinamico (#12) · modo offline (#14) · i18n (#24) · App iOS (#19).
@@ -3241,9 +3793,50 @@ Convidados (sem conta) nao recebem push. O payload leva `data.type` (o mesmo typ
 
 **Provedor:** Expo Push API (`POST https://exp.host/--/api/v2/push/send`, lotes de 100). Abstraido por `PushSender` (`ExpoPushSender` em prod; `NoOpPushSender` quando `vupth.push.provider=none`, usado nos testes/staging para nao chamar rede). Config: `vupth.push.provider` (env `PUSH_PROVIDER`, default `expo`), `vupth.push.expo.url`, `vupth.push.expo.access-token` (opcional). **Best-effort:** falha de rede/provedor e logada e nunca quebra a resposta HTTP.
 
-**HANDOFF FRONTS (Client e Partner):** ao abrir o app (apos o portao de readiness), pedir permissao de push, obter o Expo Push Token e chamar `POST /devices {token, platform}`; no logout, `DELETE /devices/${encodeURIComponent(token)}` (url-encodar por causa dos colchetes do token Expo — ver ⚠️ acima). Tratar as notificacoes por `data.type` (`QUEUE_NEXT_IN_LINE`, `ATTENDANCE_STARTED`, `ATTENDANCE_FINISHED`, `SWAP_*`). O WS continua para o app em foreground; o push cobre background/fechado.
+**Tickets da Expo — token morto sai da base e o log passa a ser confiavel (backlog #28, 2026-08-11).**
 
-**Cobertura:** integracao `PushNotificationIntegrationTest` (registro upsert + delete + 401/422; "proximo" ao entrar; dedup do 2o + avanco ao iniciar; started/finished) + Postman folder `13 - device tokens / push (notificacoes)` (homolog+prod).
+⚠️ **O HTTP 200 da Expo e do ENVELOPE, nao das mensagens.** A resposta traz `data[]` com **um ticket por mensagem**, na **mesma ordem** do lote enviado — e o ticket **nao repete o token**, entao a correspondencia e **posicional**. Um lote com todas as mensagens recusadas ainda chega como 200.
+
+| Situacao | O que o backend faz |
+|---|---|
+| `data[i].status = "ok"` | nada — a Expo aceitou e vai repassar a APNs/FCM |
+| `details.error = "DeviceNotRegistered"` | **o device token e apagado da base** (app desinstalado ou token rotacionado) |
+| Outro erro (`MessageTooBig`, `InvalidCredentials`, …) | logado por ticket; **o token NAO e apagado** — a culpa e da mensagem/credencial, nao do aparelho |
+| Resposta com `errors` no lugar de `data` (requisicao rejeitada inteira) | logado; **nenhum token e culpado** — podem estar todos vivos |
+| Rede/provedor fora do ar | logado e engolido; **nenhum token e culpado** |
+| Nº de tickets ≠ nº de mensagens | pareamento posicional **abandonado**, nenhum token apagado (apagar o token errado e pior que manter um morto) |
+
+**O que mudou:** o envio terminava em `.retrieve().toBodilessEntity()` — o corpo ia fora e o `log.info` dizia `"[PUSH] Expo enviou N mensagem(ns)"` **incondicionalmente**. Duas consequencias praticas: (a) token morto **nunca saia da base** (so o logout explicito o removia), entao quem desinstalava o app deixava o token para tras para sempre; (b) o log **afirmava sucesso mesmo com todos os tickets em erro**, o que tornava impossivel distinguir "o backend nao mandou" de "a Expo recusou" num QA de push no aparelho. Agora o log de lote e `"[PUSH] Expo title='…' — N aceito(s), M recusado(s) de T enviada(s)"`, com os numeros vindos **do corpo**, e cada recusa sai numa linha `warn` propria.
+
+**Onde mora cada responsabilidade:** o `ExpoPushSender` e transporte puro (fala HTTP, traduz o corpo em `PushTicket`) e **nao toca em persistencia**; a politica de ciclo de vida do token fica no `PushNotificationPublisher`, que ja e quem resolve os devices do usuario. Apagar e seguro porque o registro se refaz sozinho — `POST /devices` e upsert por token, entao reinstalar o app recria a linha no proximo login. **Sem migration** (a linha e removida, nao marcada). O token aparece **mascarado** no log (so a cauda): quem o tem consegue disparar push para aquele aparelho pela Expo sem autenticacao nenhuma.
+
+⏳ **Segunda etapa (receipts) — NAO implementada, decisao registrada.** Ticket `ok` significa "a Expo aceitou", **nao** "o aparelho recebeu". A confirmacao de entrega real exige guardar o `ticket.id` e consultar `POST /push/getReceipts` alguns minutos depois — o que custa **tabela nova + scheduler**. Fica como fatia 2: o `DeviceNotRegistered` tambem aparece no receipt, mas a maior parte dos tokens mortos ja e pega aqui no ticket, entao a fatia 1 sozinha resolve o essencial.
+
+**Handoff fronts:** nada a fazer. A mudanca e interna — o contrato de `POST`/`DELETE /devices` e o payload das notificacoes estao **inalterados**. Efeito colateral desejavel: um aparelho que reinstalou o app e voltou a registrar deixa de concorrer com o registro velho.
+
+**HANDOFF FRONTS (Client e Partner):** ao abrir o app (apos o portao de readiness), pedir permissao de push, obter o Expo Push Token e chamar `POST /devices {token, platform}`; no logout, `DELETE /devices/${encodeURIComponent(token)}` (url-encodar por causa dos colchetes do token Expo — ver ⚠️ acima). Tratar as notificacoes por `data.type` (`QUEUE_NEXT_IN_LINE`, `ATTENDANCE_STARTED`, `ATTENDANCE_FINISHED`, `SWAP_*`). O WS continua para o app em foreground; o push cobre background/fechado. ⚠️ Ao **voltar do background**, o socket provavelmente ja morreu (o heartbeat nao roda com o app suspenso) — ver a pendencia "reconectar ao voltar do background" na secao 18b.
+
+> 📣 **HANDOFF 2026-08-11 (tickets da Expo) — nada a implementar, mas UMA garantia virou obrigatoria.**
+>
+> **Nada muda no contrato:** `POST`/`DELETE /devices` e o payload das notificacoes estao **identicos**.
+> Nenhum front precisa de release por causa desta entrega.
+>
+> ⚠️ **O que mudou de verdade:** o backend agora **apaga** da base o device token que a Expo declarar
+> `DeviceNotRegistered` (app desinstalado, token rotacionado). Antes o token so saia no logout
+> explicito. Consequencia pratica: **registrar o token a cada abertura do app deixou de ser
+> redundancia e virou a rede de seguranca** — se o token de um aparelho for removido (por rotacao,
+> por exemplo) e o app **nao** chamar `POST /devices` de novo, aquele aparelho fica **mudo para push
+> ate o proximo login**. A instrucao acima ("ao abrir o app ... chamar `POST /devices`") ja era a
+> correta; ela agora e **load-bearing**. Confiram que o app faz isso em toda abertura, nao so na
+> primeira instalacao.
+>
+> ✅ **O que melhora para voces:** o log do backend deixou de mentir. Antes ele dizia
+> `"Expo enviou N mensagem(ns)"` mesmo com **todos** os envios recusados — o que tornava impossivel,
+> num QA de push no aparelho, separar "o backend nao mandou" de "a Expo recusou". Agora cada recusa
+> sai numa linha propria com o motivo. **Se um push nao chegar no device, peca o log:** ele agora
+> distingue os casos, e isso encurta o diagnostico de horas para minutos.
+
+**Cobertura:** integracao `PushNotificationIntegrationTest` (registro upsert + delete + 401/422; "proximo" ao entrar; dedup do 2o + avanco ao iniciar; started/finished) + unit `ExpoPushSenderTest` (9 — leitura dos tickets, com a Expo simulada por um `HttpServer` do proprio JDK, sem dependencia nova) + unit `PushNotificationPublisherTest` (8 — a limpeza do token morto) + Postman folder `13 - device tokens / push (notificacoes)` (homolog+prod). ⚠️ **O Postman NAO cobre os tickets** e nao tem como cobrir: o newman teria de falar com a Expo real e provocar um `DeviceNotRegistered` de verdade. A prova dessa parte sao os dois testes unitarios; o que a collection cobre e o contrato de `/devices`, que ficou inalterado.
 
 ### Item 11 — Refeicoes/intervalos do profissional (especificacao detalhada)
 
@@ -3614,7 +4207,63 @@ Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: espec
 
 ### Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro (backlog #2, modelo fechado 2026-07-27)
 
-**Status: ESPECIFICADO, nao implementado.** Esta secao e o handoff para os fronts — Client e Partner podem ler daqui.
+**Status (atualizado 2026-08-07): fatias A, A2 e B ENTREGUES; resta a C** (fallback sem GPS, junto com o #30).
+O Front-Client **encerrou o B7 em 06/08** e removeu o Haversine local. Esta secao e o handoff para os fronts —
+Client e Partner podem ler daqui. *(Antes dizia "ESPECIFICADO, nao implementado" — ficou stale.)*
+
+#### 📍 Resposta ao Partner S25 — "geocodificacao silenciosa" (2026-08-07)
+
+O diagnostico de voces esta **certo e e bem-vindo**: o partner nao envia coordenada, quem resolve somos nos,
+e falha de resolucao hoje = **loja fora da busca por raio, sem aviso a ninguem**. Ponto por ponto:
+
+**(a) "Expor o resultado da geocodificacao" — ✅ JA EXISTE HOJE, voces nao estao bloqueados.**
+`latitude` e `longitude` **ja saem** em dois lugares que o partner ja consome:
+- `EstablishmentResponse.address.latitude/longitude` (o endereco embutido do BUG4);
+- `EstablishmentAddressResponse.latitude/longitude` (retorno do `POST` **e** do `PATCH` do endereco).
+
+**`latitude == null` (ou `longitude == null`) = "esta loja nao aparece na busca por proximidade".** E o sinal
+que o aviso de voces precisa, e da para implementar **sem uma linha de backend novo**. Nao criamos um
+`geocoded`/`geocode_status` porque seria um campo derivado de outro que ja esta no mesmo payload — se depois
+da tela pronta voces acharem que um booleano explicito ajuda na leitura, e barato e a gente poe.
+
+**(b) Quando roda, e re-tenta quando o endereco muda? — roda nos DOIS, e SIM re-tenta.**
+`geocodeAfterCommit(addressId)` e chamado no **`POST /establishments/{id}/addresses`** e no
+**`PATCH /establishments/{id}/addresses/{addressId}`** — sempre **depois do commit**
+(`TransactionSynchronization.afterCommit`), numa **unica thread daemon** que serializa as chamadas para
+respeitar o 1 req/s do Nominatim. Consequencias que interessam a UI de voces:
+- o dono **nunca espera** o geocoder, e geocoder fora do ar **nao derruba o cadastro** (grava sem coordenada);
+- por rodar apos o commit, a coordenada **nao esta pronta na resposta do `POST`** — o `latitude` volta `null`
+  ali e aparece **alguns segundos depois**. ⚠️ **Nao leiam esse `null` imediato como "falhou"**: se o aviso
+  aparecer na hora do cadastro, ele vai ser falso-positivo quase sempre. Releiam o estabelecimento (ou mostrem
+  o aviso so na tela de **Dados do Estabelecimento**, que e onde voces querem de todo jeito);
+- **o `PATCH` e o conserto oficial**: corrigir o texto do endereco da uma **nova chance** ao geocoding. E por
+  isso que ele existe (backlog #3). Sem risco de estragar o que esta certo — o worker **ignora endereco que
+  ja tem coordenada**, entao lat/lng vinda do GPS do dono (fatia A2) fica intacta.
+
+**(c) Houve reprocessamento dos enderecos antigos? — ❌ NAO, e voces acharam um buraco real.**
+O metodo existe (`backfillMissingCoordinates`, que varre os enderecos sem coordenada), mas esta atras de
+`vupth.geocoding.backfill-on-boot`, **default `false`** — ou seja, **nunca rodou em nenhum ambiente**. Toda
+loja cadastrada **antes** da fatia A esta sem coordenada e, com a Home do cliente ordenando por distancia
+pura, **invisivel na pratica**. Virou o **backlog #36** e e a parte que realmente depende de nos.
+
+**(d) Devolver o motivo da falha — nao existe hoje, e custa migration.**
+O contrato do `Geocoder` e **"nunca lanca"** (a chamada externa nao pode derrubar cadastro), entao a falha e
+engolida e vive **so no log** (`[Geocoding] endereco X nao pode ser resolvido — segue sem coordenada`).
+Persistir o motivo = **coluna nova + migration**. Fica no #36 como segunda parte, atras do backfill — a
+aposta e que o (c) resolva a maioria dos casos e o motivo deixe de ser urgente.
+
+**A pergunta final de voces — numero e CEP sao obrigatorios? — o CEP e o que mais importa.**
+A ordem e: **1) BrasilAPI CEP v2** (`hasUsableZipCode()` = **8 digitos puros, sem hifen**) e, se ela nao trouxer
+coordenada, **2) Nominatim** com busca textual, que exige **rua E cidade** (`hasUsableStreetAddress()`) e usa o
+**numero** so para refinar (`"<numero> <rua>"`). Entao:
+- **CEP correto e de 8 digitos e o fator numero um** — CEP com hifen, incompleto ou trocado joga tudo no
+  fallback textual;
+- **rua + cidade sao o minimo** para o fallback funcionar; sem os dois, **nao ha o que tentar**;
+- **numero melhora a precisao, mas nao decide** entre aparecer e nao aparecer;
+- 🎯 **e a fatia A2 continua sendo o melhor caminho:** se o partner mandar a **lat/lng do GPS do aparelho** no
+  cadastro (o dono esta NA loja), o geocoding **nem roda** e o problema todo desaparece na origem. O backend
+  **ja aceita** `latitude`/`longitude` no `AddressRequest` — sem codigo novo do nosso lado. Isso e mais valioso
+  do que qualquer aviso de erro, porque evita a falha em vez de comunica-la.
 
 **Decisao de produto (Andre 2026-07-27).** O cliente baixa o app, **concede o GPS e ja ve os estabelecimentos proximos SEM ter conta**. A lista de perto e a **isca do cadastro**, nao o premio dele: o cadastro so e exigido quando ele for **entrar numa fila**.
 
@@ -3645,7 +4294,7 @@ Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: espec
 - **Config**: `vupth.geocoding.{provider,brasilapi.url,nominatim.url,user-agent,timeout-seconds,backfill-on-boot}`, todas com env var. ⚠️ **`GEOCODING_USER_AGENT` deve identificar a aplicacao e um contato real** — e exigencia da policy do Nominatim, requisicao anonima pode ser bloqueada.
 - **Testes**: `GeocodingContractTest` (unit, 6 — plausibilidade, ilha nula, CEP de 8 digitos, busca livre exige rua+cidade, NoOp) · `AddressGeocodingServiceTest` (unit Mockito, 7 — grava a coordenada, monta a query, **pula o ja geocodificado**, nao grava quando nao resolve, **engole a excecao do geocoder**, endereco inexistente, backfill) · `AddressGeocodingIntegrationTest` (4 — cadastro ganha coordenada pos-commit; **geocoder explodindo mantem o 201 e deixa sem coordenada**; nao encontrado idem; a query leva CEP/rua/cidade do cadastro).
 
-**Fatia A2 — coordenada do APARELHO DO DONO + confirmacao na tela (decisao Andre 2026-07-27).** ⬜ a implementar.
+**Fatia A2 — coordenada do APARELHO DO DONO + confirmacao na tela (decisao Andre 2026-07-27).** ✅ **IMPLEMENTADA 2026-07-31** (junto com o backlog `PATCH` do endereco, que era pre-requisito).
 
 **Ideia.** O dono esta *fisicamente na loja* quando cadastra, entao o GPS do aparelho dele e a **fonte mais precisa que existe** — melhor que qualquer CEP, que no Brasil resolve para faixa de logradouro e nao para a porta. O Partner pede a permissao de localizacao explicando que **e assim que a loja passa a ser encontrada** pelos clientes.
 
@@ -3658,7 +4307,14 @@ Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: espec
 - **Regra central:** o texto do endereco e a coordenada vem de **fontes diferentes e ambos ficam**. Editar numero/complemento **nao move** a coordenada — ela continua sendo a do aparelho, que e a boa. Nao regeocodificar depois da edicao.
 - **Validar sempre** a coordenada recebida com `Coordinates.isPlausible()` (fora do globo ou `(0,0)` -> `422`). Hoje o backend aceita qualquer `latitude`/`longitude` do request **sem checar** — e o unico buraco real deste caminho.
 - **Prioridade da fonte:** GPS do aparelho (confirmado na tela) > BrasilAPI por CEP > Nominatim por endereco textual > sem coordenada.
-- ⚠️ **Depende do backlog #3** (`PATCH` do endereco): hoje so existe `POST`, entao um cadastro com coordenada errada nao tem conserto pela API.
+- ⚠️ ~~**Depende do backlog #3** (`PATCH` do endereco)~~ — **entregue junto** (ver secao 17).
+
+**✅ COMO FICOU (2026-07-31).** Contrato completo dos 2 endpoints na **secao 17**; aqui so o que foi construido:
+- **`Geocoder.reverse(Coordinates)`** — segundo metodo da interface, **mesmo contrato duro** do `geocode`: nunca lanca, nao resolveu devolve `Optional.empty()`. `HttpGeocoder` implementa sobre **Nominatim `/reverse`** (`format=jsonv2&addressdetails=1`), **dividindo o mesmo throttle de 1 req/s** da busca — a policy do Nominatim e por cliente, e nos somos um cliente so. `NoOpGeocoder` devolve vazio (testes nao tocam a rede). Nova prop `vupth.geocoding.nominatim.reverse-url`.
+- **`ReverseGeocodeResult`** — traducao do bloco `address` do OSM para o **vocabulario do `Address`**, que e onde estavam as armadilhas: o OSM nomeia bairro de tres jeitos (`suburb`/`neighbourhood`/`city_district`) e cidade de quatro (`city`/`town`/`village`/`municipality`); escreve o estado **por extenso** ("Rio de Janeiro") enquanto a coluna guarda **2 letras** — a UF sai do `ISO3166-2-lvl4` (`"BR-RJ"`), e sem ele o campo vem `null` em vez de um chute; e escreve o CEP **com hifen**, normalizado para os 8 digitos puros da base.
+- **`GET /geocoding/reverse`** (`web/rest/geocoding`) — autenticado sem exigir role (quem cadastra a primeira loja pode ainda nao ter `ROLE_OWNER`). `404 GEOCODING_ADDRESS_NOT_FOUND` cobre "nao ha endereco ali" **e** "servico fora do ar" — o front trata os dois igual.
+- **`AddressCoordinates.validate`** (`domain/address/valueObject`) — o buraco que a fatia A deixou. Chamado nos **tres** pontos que aceitam lat/lng do request (cadastro de endereco da loja, `PATCH` da loja, endereco de usuario), reusando o `Coordinates.isPlausible()` da fatia A: **mesma regra nas duas pontas**, o que entra pela API e o que sai do geocoder. Rejeita `(0,0)`, fora do globo e **meia coordenada** (so lat ou so lng) com `422 ADDRESS_INVALID_COORDINATES`. Ambas ausentes segue valido — e o cadastro por texto.
+- **Testes:** `AddressCoordinatesTest` (unit, 5 — a matriz da validacao) · `GeocodingContractTest` (+2 — NoOp no reverso; reverso **nem sai da maquina** com coordenada implausivel) · `AddressCorrectionIntegrationTest` (21 — reverso 200/campos nulos/404/422/401, POST com coordenada do aparelho, e o bloco do `PATCH`) · **Postman folder 17** (22 requests, homolog+prod).
 
 **Fatia B — filtro e ordenacao por raio.** `GET /establishment?lat=&lng=&radiusKm=` (**sem token**, como hoje):
 - **Haversine em SQL puro** (`acos`/`radians` em query nativa), **sem PostGIS** — a extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume nao justifica indice espacial.
@@ -3720,3 +4376,10 @@ O seed dos 4 pontos existe justamente para isto: os fronts conseguem rodar os ca
 1. **Cadastro com CEP valido** → apos salvar, o estabelecimento **aparece** na busca por raio (tem coordenada).
 2. **Cadastro com CEP que nao geocodifica** → o cadastro **conclui normalmente** (nao pode quebrar), mas a loja **nao aparece** no resultado com raio — e **continua aparecendo** na listagem sem raio. E o caso que expoe o dado incompleto pro dono.
 3. **Nada na busca por proximidade** — o partner nao consome `lat`/`lng`/`distance_km`.
+
+**Front-Partner — fatia A2 + `PATCH`, ENTREGUES 2026-07-31 (novo):**
+4. **Cadastro pelo GPS do aparelho** — pedir a permissao explicando que **e assim que a loja e encontrada**, chamar `GET /geocoding/reverse?lat=&lng=` (autenticado) e preencher o formulario com a resposta. O dono **confere e poli** numero/complemento; o `POST` vai com a `latitude`/`longitude` **do aparelho**, nao a do endereco escrito.
+5. **Reverso incompleto** — o servico costuma **nao saber o numero da casa** (e as vezes nem o CEP): esses campos vem `null` e a tela tem de deixar o dono digitar, nao travar. Testar com um ponto que so devolve rua/bairro/cidade.
+6. **Reverso indisponivel (`404 GEOCODING_ADDRESS_NOT_FOUND`)** — cai no formulario em branco e **o cadastro segue normalmente**, inclusive mandando a coordenada do aparelho. O reverso e conferencia, **nao pre-requisito** — este e o caso de teste mais importante dos novos.
+7. **Coordenada invalida (`422 ADDRESS_INVALID_COORDINATES`)** — o backend passou a rejeitar `(0,0)` e meia coordenada. `(0,0)` no front normalmente **nao e erro de digitacao**: e um objeto de localizacao que voltou vazio. Se o GPS nao tem fix, **nao mandar lat/lng** (ambas ausentes e valido) em vez de mandar zeros.
+8. **Corrigir endereco errado** — `PATCH /establishments/{id}/addresses/{addressId}` com **so os campos errados** (o `addressId` vem no corpo do `POST` e do `GET`). Cobrir: (a) corrigir o **numero** e verificar que a loja **nao se move no mapa**; (b) reenviar `latitude`/`longitude` e verificar que a coordenada **muda**; (c) corrigir o **CEP de uma loja que ficou sem coordenada** e verificar que ela **passa a aparecer** na busca por raio (o backend retenta o geocoding sozinho); (d) `""` no `complement` **limpa** o campo.

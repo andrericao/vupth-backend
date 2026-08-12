@@ -2,6 +2,7 @@ package com.ospaulos.vupth.integrations.interval;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -183,7 +184,9 @@ class ProfessionalIntervalIntegrationTest {
         log.info("[Interval] getActiveIntervals_containsCreatedInterval");
 
         mvc.perform(get("/api/v1/professionals/{id}/intervals", professionalId)
-                        .param("date", createdIntervalStartTime.toLocalDate().toString())
+                        // BUG2b: o GET fatia o dia da LOJA (BusinessClock), nao o dia UTC — perto da meia-noite
+                        // UTC os dois divergem e o intervalo criado "agora" cai na fatia do dia anterior.
+                        .param("date", BusinessClock.dateAt(createdIntervalStartTime).toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", profToken))
                 .andExpect(status().isOk())

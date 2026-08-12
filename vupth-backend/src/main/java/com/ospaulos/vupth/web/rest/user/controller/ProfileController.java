@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.web.rest.user.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.ospaulos.vupth.api.user.dto.request.profile.DeleteAccountRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.EmailRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.PasswordRequest;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserProfileGeneralInfosRequest;
@@ -25,7 +26,7 @@ import org.springframework.web.bind.annotation.*;
 public class ProfileController {
 
     private final RegisterUseCase registerUseCase;
-    private final DeleteUserUseCase deleteUserUseCase;
+    private final DeleteAccountUseCase deleteAccountUseCase;
     private final UpdateEmailUseCase updateEmailUseCase;
     private final UpdatePasswordUseCase updatePasswordUseCase;
     private final UpdateProfileGeneralInfosUseCase updateProfileGeneralInfosUseCase;
@@ -98,10 +99,26 @@ public class ProfileController {
 
     }
 
+    /**
+     * DELETE /profile/delete/me
+     * Apaga a conta do usuario autenticado (Partner S19 / LGPD / exigencia das lojas de app).
+     *
+     * <p>Exige a senha atual no corpo — o token de acesso sozinho nao basta para uma acao
+     * irreversivel. O que e pessoal e apagado; os atendimentos ficam, anonimizados, porque
+     * pertencem tambem ao profissional e ao estabelecimento.</p>
+     *
+     * <p>Acesso: qualquer usuario autenticado (os papeis sao acumulativos — um dono tambem
+     * precisa poder apagar a propria conta).</p>
+     */
     @DeleteMapping("/delete/me")
-    public ResponseEntity<Void> deleteUser(
-            @AuthenticationPrincipal UserDetailsImpl user){
-        deleteUserUseCase.executeDeleteUser(user.getUserId());
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Void> deleteAccount(
+            @AuthenticationPrincipal UserDetailsImpl user,
+            @RequestBody @Valid DeleteAccountRequest request){
+
+        log.info("CONTROLLER PROFILE DELETE /delete/me — userId={}", user.getUserId());
+
+        deleteAccountUseCase.execute(user.getUserId(), request.currentPassword());
+
+        return ResponseEntity.noContent().build();
     }
 }

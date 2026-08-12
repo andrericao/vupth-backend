@@ -125,7 +125,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/professional/quick-create").hasRole("CLIENT")
 
                         .requestMatchers(HttpMethod.PATCH, "/profile/**").hasRole("CLIENT")
-                        .requestMatchers(HttpMethod.DELETE, "/profile/delete/me").hasRole("CLIENT")
+                        // Apagar a conta e de QUALQUER autenticado: os papeis sao acumulativos e o
+                        // dono tambem tem de conseguir apagar a propria conta (exigencia das lojas).
+                        .requestMatchers(HttpMethod.DELETE, "/profile/delete/me").authenticated()
                         .requestMatchers(HttpMethod.POST, "/auth/logout").hasRole("CLIENT")
 
                         // ── ROLE_PROFESSIONAL ─────────────────────────────────────────────

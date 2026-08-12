@@ -1,5 +1,7 @@
 package com.ospaulos.vupth.web.rest.exception;
 
+import com.ospaulos.vupth.domain.address.exception.InvalidCoordinatesException;
+import com.ospaulos.vupth.domain.address.exception.ReverseGeocodeNotFoundException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAccessDeniedException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAlreadyPendingException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundException;
@@ -46,6 +48,7 @@ import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsE
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlreadyExistsException;
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
+import com.ospaulos.vupth.api.user.exception.AccountDeleteNotAllowedException;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
 import com.ospaulos.vupth.api.user.exception.InvalidCurrentPasswordException;
@@ -127,6 +130,20 @@ public class GlobalExceptionHandler {
             EstablishmentNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] EstablishmentNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "ESTABLISHMENT_NOT_FOUND");
+    }
+
+    @ExceptionHandler(ReverseGeocodeNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleReverseGeocodeNotFound(
+            ReverseGeocodeNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] ReverseGeocodeNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "GEOCODING_ADDRESS_NOT_FOUND");
+    }
+
+    @ExceptionHandler(InvalidCoordinatesException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCoordinates(
+            InvalidCoordinatesException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidCoordinates | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ADDRESS_INVALID_COORDINATES");
     }
 
     @ExceptionHandler(EstablishmentNotReadyException.class)
@@ -521,6 +538,15 @@ public class GlobalExceptionHandler {
             ServiceTypeKeywordAlreadyExistsException ex, HttpServletRequest req) {
         log.warn("[409] ServiceTypeKeywordAlreadyExists | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "SERVICE_TYPE_KEYWORD_ALREADY_EXISTS");
+    }
+
+    // Apagar a conta (Partner S19) — bloqueio TEMPORARIO: ha fila/atendimento vivo com terceiros.
+    // A mensagem diz o que fazer para destravar; nunca e um "esta conta nao pode ser apagada".
+    @ExceptionHandler(AccountDeleteNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountDeleteNotAllowed(
+            AccountDeleteNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[409] AccountDeleteNotAllowed | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ACCOUNT_DELETE_NOT_ALLOWED");
     }
 
     @ExceptionHandler(ProfessionalHasActiveAttendancesException.class)

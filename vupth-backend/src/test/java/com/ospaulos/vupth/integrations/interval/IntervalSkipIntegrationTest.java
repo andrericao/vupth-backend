@@ -2,6 +2,7 @@ package com.ospaulos.vupth.integrations.interval;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
@@ -19,8 +20,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -124,7 +123,9 @@ class IntervalSkipIntegrationTest {
                 .andExpect(jsonPath("$.intervalId").value(lunchAId.toString()))
                 .andDo(print());
 
-        assertThat(intervalRepository.existsSkipForDate(lunchAId, LocalDate.now(ZoneOffset.UTC))).isTrue();
+        // BUG2b: o skip e gravado com BusinessClock.today() (dia da LOJA). Assertar em UTC quebra
+        // entre 21h e 00h de Sao Paulo (= 00h-03h UTC), que e quando o CI costuma rodar.
+        assertThat(intervalRepository.existsSkipForDate(lunchAId, BusinessClock.today())).isTrue();
     }
 
     @Test
@@ -145,7 +146,7 @@ class IntervalSkipIntegrationTest {
                 .andExpect(status().isOk())
                 .andDo(print());
 
-        assertThat(intervalRepository.existsSkipForDate(lunchAId, LocalDate.now(ZoneOffset.UTC))).isFalse();
+        assertThat(intervalRepository.existsSkipForDate(lunchAId, BusinessClock.today())).isFalse();
     }
 
     @Test

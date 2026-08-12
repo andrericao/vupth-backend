@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.report;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -156,7 +157,10 @@ class ReportIntegrationTest {
     @Order(11)
     @DisplayName("GET /establishment/{id}/reports?dateFrom=hoje&dateTo=hoje — 200 periodo inclui o atendimento")
     void establishmentReport_periodToday() throws Exception {
-        String today = LocalDate.now().toString();
+        // Dia da LOJA (backlog #33): com LocalDate.now() + janela em UTC este teste falhava
+        // entre 21h e meia-noite em Sao Paulo — o atendimento recem-criado ja estava no dia
+        // UTC seguinte e caia fora do teto da janela.
+        String today = BusinessClock.today().toString();
         mvc.perform(get("/establishment/{id}/reports", establishmentId)
                         .param("dateFrom", today)
                         .param("dateTo", today)

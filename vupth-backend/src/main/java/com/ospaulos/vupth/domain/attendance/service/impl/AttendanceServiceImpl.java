@@ -1418,8 +1418,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
         final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
 
-        OffsetDateTime from = dateFrom != null ? dateFrom.atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
-        OffsetDateTime to = dateTo != null ? dateTo.plusDays(1).atStartOfDay().atOffset(java.time.ZoneOffset.UTC) : null;
+        // Dia da LOJA, nao dia UTC (backlog #33) — ver BusinessClock.startOfDay/endOfDayExclusive.
+        OffsetDateTime from = dateFrom != null ? BusinessClock.startOfDay(dateFrom) : null;
+        OffsetDateTime to = dateTo != null ? BusinessClock.endOfDayExclusive(dateTo) : null;
 
         String statusStr = status != null ? status.name() : null;
         List<Attendance> attendances = attendanceRepository.findByFilters(
@@ -1445,11 +1446,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new ClientNotFoundException(clientId));
 
+        // Dia da LOJA, nao dia UTC (backlog #33) — ver BusinessClock.startOfDay/endOfDayExclusive.
+        // Os sentinelas de "sem filtro" seguem em UTC de proposito: sao passado/futuro remotos, nao
+        // representam dia nenhum, e move-los de fuso nao muda nada alem de confundir a leitura.
         OffsetDateTime from = dateFrom != null
-                ? dateFrom.atStartOfDay().atOffset(java.time.ZoneOffset.UTC)
+                ? BusinessClock.startOfDay(dateFrom)
                 : OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
         OffsetDateTime to = dateTo != null
-                ? dateTo.plusDays(1).atStartOfDay().atOffset(java.time.ZoneOffset.UTC)
+                ? BusinessClock.endOfDayExclusive(dateTo)
                 : OffsetDateTime.of(2100, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
 
         List<Attendance> attendances = attendanceRepository.findByClientFilters(

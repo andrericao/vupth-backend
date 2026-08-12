@@ -76,8 +76,13 @@ public class UserDetailsImpl implements UserDetails {
         return true;
     }
 
+    /**
+     * Conta apagada (ou desativada) nao loga: {@code is_active = false} vira
+     * {@code 401 ACCOUNT_DISABLED} no {@code DaoAuthenticationProvider}.
+     * Antes isto era {@code true} fixo, e a coluna nao tinha efeito nenhum.
+     */
     @Override
     public boolean isEnabled() {
-        return true;
+        return Boolean.TRUE.equals(user.getIsActive());
     }
 }

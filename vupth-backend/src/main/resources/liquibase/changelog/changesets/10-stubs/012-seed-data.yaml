@@ -11,7 +11,12 @@ databaseChangeLog:
   #   staging → sem filtro ativo             → "!prod" é satisfeito → executa ✅
   #
   # Senha de todos os usuários seed: Senha@123
-  # Hash BCrypt (cost 10): $2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6
+  # Hash BCrypt (cost 10): $2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe
+  #
+  # ⚠️ O hash acima foi CORRIGIDO em 2026-08-06. O anterior
+  # ($2b$10$BruROnjV7GvYtMSNlaeD5...) era de outra senha e NENHUMA conta @seed.dev logava.
+  # Banco novo nasce certo por aqui; banco existente é consertado pelo
+  # 013-fix-seed-password-hash.yaml. Ao mexer neste hash, mexa nos dois.
   # ─────────────────────────────────────────────────────────────
 
   # ── OWNER ─────────────────────────────────────────────────────
@@ -28,7 +33,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Ricardo" }
               - column: { name: last_name,   value:        "Mendes" }
               - column: { name: email,       value:        "ricardo.mendes@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: phone,       value:        "11999990001" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -95,7 +100,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Carlos" }
               - column: { name: last_name,   value:        "Barbosa" }
               - column: { name: email,       value:        "carlos.barbosa@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: phone,       value:        "11999990011" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -129,7 +134,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Fernanda" }
               - column: { name: last_name,   value:        "Lima" }
               - column: { name: email,       value:        "fernanda.lima@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: phone,       value:        "11999990012" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -163,7 +168,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Thiago" }
               - column: { name: last_name,   value:        "Souza" }
               - column: { name: email,       value:        "thiago.souza@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: phone,       value:        "11999990013" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -273,7 +278,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Ana" }
               - column: { name: last_name,   value:        "Costa" }
               - column: { name: email,       value:        "ana.costa@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -296,7 +301,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Bruno" }
               - column: { name: last_name,   value:        "Alves" }
               - column: { name: email,       value:        "bruno.alves@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -319,7 +324,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Camila" }
               - column: { name: last_name,   value:        "Ferreira" }
               - column: { name: email,       value:        "camila.ferreira@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -342,7 +347,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Diego" }
               - column: { name: last_name,   value:        "Rocha" }
               - column: { name: email,       value:        "diego.rocha@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -365,7 +370,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Elisa" }
               - column: { name: last_name,   value:        "Nunes" }
               - column: { name: email,       value:        "elisa.nunes@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -388,7 +393,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Felipe" }
               - column: { name: last_name,   value:        "Torres" }
               - column: { name: email,       value:        "felipe.torres@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -411,7 +416,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Gabriela" }
               - column: { name: last_name,   value:        "Martins" }
               - column: { name: email,       value:        "gabriela.martins@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -434,7 +439,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Henrique" }
               - column: { name: last_name,   value:        "Dias" }
               - column: { name: email,       value:        "henrique.dias@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
               - column: { name: updated_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -559,7 +564,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Juliana" }
               - column: { name: last_name,   value:        "Rocha" }
               - column: { name: email,       value:        "juliana.rocha@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: phone,       value:        "21999990021" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }
@@ -635,7 +640,7 @@ databaseChangeLog:
               - column: { name: first_name,  value:        "Rafael" }
               - column: { name: last_name,   value:        "Moreira" }
               - column: { name: email,       value:        "rafael.moreira@seed.dev" }
-              - column: { name: password,    value:        "$2b$10$BruROnjV7GvYtMSNlaeD5.WGq0dz.PZNoQrR/dMSWiHz.QyHDkIf6" }
+              - column: { name: password,    value:        "$2b$10$9bMjOHT.uFMIdFp0x0fOcuwCZlNDm5yDvYkMK5QZUQAe8cV0mTcHe" }
               - column: { name: phone,       value:        "21999990022" }
               - column: { name: is_active,   valueBoolean: true }
               - column: { name: created_at,  valueComputed: CURRENT_TIMESTAMP }

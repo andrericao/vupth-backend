@@ -16,4 +16,11 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, UUID> 
 
     @Transactional
     void deleteByToken(String token);
+
+    /**
+     * Apagar a conta (Partner S19): sem isto o aparelho continuaria recebendo push de uma conta
+     * que nao existe mais — o token e do APARELHO, nao do atendimento, entao some de verdade.
+     */
+    @Transactional
+    void deleteByUserId(UUID userId);
 }

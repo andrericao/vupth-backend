@@ -59,7 +59,8 @@ public record EstablishmentWithProfessionalsResponse(
                 establishment.getName(),
                 establishment.getUrlImage(),
                 establishment.getServices() != null ? Set.copyOf(establishment.getServices()) : Set.of(),
-                establishment.getOwner().getId(),
+                // Loja sem dono e possivel desde "apagar a conta" (S19) — ver EstablishmentResponse.
+                establishment.getOwner() != null ? establishment.getOwner().getId() : null,
                 establishment.getOpenStatus().name(),
                 establishment.isOpenNow(),
                 totalInQueue,

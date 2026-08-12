@@ -18263,6 +18263,2333 @@
    ]
   },
   {
+   "name": "17 - endereco (reverso + PATCH)",
+   "description": "GPS fatia A2 + backlog do PATCH do endereco. GET /geocoding/reverse (coordenada do aparelho do dono -> endereco por extenso, para ele CONFERIR antes de salvar) e PATCH /establishments/{id}/addresses/{addressId} (conserto do endereco ja cadastrado). Invariante central coberta aqui: texto e coordenada vem de fontes diferentes e AMBOS ficam — corrigir o numero NAO move o ponto no mapa. Self-contained (cria os proprios donos e apaga no fim). O reverso e a unica request que sai para a internet (Nominatim) e por isso aceita 200 OU 404 — e exatamente o que o contrato manda o front tratar igual; o shape e conferido quando vem 200. A retentativa do geocoding para endereco que ficou SEM coordenada nao esta aqui: e assincrona e depende de servico externo — quem cobre e o AddressCorrectionIntegrationTest, com o Geocoder mockado.",
+   "item": [
+    {
+     "name": "setup: register dono (endereco)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ad_owner_email\",\"adowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ad_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner_email}}\",\"password\":\"{{ad_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ad_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner_email}}\",\"password\":\"{{ad_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ad_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja Endereco {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "reverso: coordenada da Penha -> 200 (ou 404 se o Nominatim nao responder)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// O reverso e a UNICA request desta folder que sai para a internet (Nominatim, gratuito,",
+         "// policy de 1 req/s). O proprio contrato manda o front tratar \"nao ha endereco ali\" e",
+         "// \"servico fora do ar\" do mesmo jeito, entao o 404 aqui e resultado legitimo — nao ha o que",
+         "// asseverar sobre a disponibilidade de um servico de terceiro. O SHAPE, sim, e conferido.",
+         "pm.test(\"Status 200 ou 404 GEOCODING_ADDRESS_NOT_FOUND\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+         "  if(pm.response.code===404) pm.expect(pm.response.json().code).to.eql(\"GEOCODING_ADDRESS_NOT_FOUND\");",
+         "});",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"displayName presente — e o que o dono le para reconhecer o lugar\", () => {",
+         "    pm.expect(b.displayName).to.be.a(\"string\").and.not.empty;",
+         "  });",
+         "  pm.test(\"a coordenada volta EXATAMENTE como entrou (nao a do endereco encontrado)\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8422);",
+         "    pm.expect(b.longitude).to.eql(-43.2764);",
+         "  });",
+         "  pm.test(\"campos de texto podem ser nulos e o shape aguenta\", () => {",
+         "    [\"street\",\"number\",\"neighborhood\",\"city\",\"state\",\"zipCode\"].forEach(k => {",
+         "      pm.expect(b).to.have.property(k);",
+         "      if(b[k] !== null) pm.expect(b[k]).to.be.a(\"string\");",
+         "    });",
+         "  });",
+         "  pm.test(\"state em UF de 2 letras e zipCode em 8 digitos puros, quando vierem\", () => {",
+         "    if(b.state) pm.expect(b.state).to.match(/^[A-Z]{2}$/);",
+         "    if(b.zipCode) pm.expect(b.zipCode).to.match(/^\\d{8}$/);",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/geocoding/reverse?lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] reverso sem token -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401 — o login e o que segura o consumo do Nominatim\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/geocoding/reverse?lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] reverso na ilha nula (0,0) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));",
+         "// (0,0) no Golfo da Guine nao vem de erro de digitacao: vem de um objeto de localizacao",
+         "// vazio no front. Barrado ANTES de sair da maquina — nao gasta request do Nominatim."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/geocoding/reverse?lat=0&lng=0",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] reverso fora do globo (lat 91) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/geocoding/reverse?lat=91&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] cadastrar endereco na ilha nula (0,0) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"complement\":\"Loja 2\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":0,\"longitude\":0}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] cadastrar endereco com meia coordenada (so latitude) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));",
+         "// Meia coordenada nao e ponto nenhum. So as DUAS ausentes e valido — ai o cadastro e por",
+         "// texto e o geocoding resolve a coordenada depois do commit."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"complement\":\"Loja 2\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":-22.8422}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cadastrar endereco com a coordenada do aparelho -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201){",
+         "  const b = pm.response.json();",
+         "  pm.collectionVariables.set(\"ad_address_id\", b.addressId);",
+         "  pm.test(\"addressId no corpo — e o que o PATCH recebe\", () => {",
+         "    pm.expect(b.addressId).to.be.a(\"string\").and.not.empty;",
+         "  });",
+         "  pm.test(\"a coordenada do aparelho foi gravada como veio\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8422);",
+         "    pm.expect(b.longitude).to.eql(-43.2764);",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"complement\":\"Loja 2\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":-22.8422,\"longitude\":-43.2764}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "corrigir SO o numero -> 200 e a coordenada NAO se move",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"o numero foi corrigido\", () => pm.expect(b.number).to.eql(\"250\"));",
+         "  pm.test(\"INVARIANTE: editar o texto NAO move a coordenada\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8422);",
+         "    pm.expect(b.longitude).to.eql(-43.2764);",
+         "  });",
+         "  pm.test(\"campo omitido nao e apagado\", () => {",
+         "    pm.expect(b.street).to.eql(\"Rua Bras de Pina\");",
+         "    pm.expect(b.city).to.eql(\"Rio de Janeiro\");",
+         "    pm.expect(b.complement).to.eql(\"Loja 2\");",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"250\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "limpar o complemento com \"\" -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"complement limpo\", () => pm.expect(b.complement || \"\").to.eql(\"\"));",
+         "  pm.test(\"o resto continua de pe\", () => pm.expect(b.number).to.eql(\"250\"));",
+         "}",
+         "// Vazio LIMPA so nos opcionais (complement/reference). Em campo obrigatorio o \"\" e",
+         "// ignorado — a coluna e NOT NULL."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"complement\":\"\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "coordenada explicita no PATCH substitui a antiga -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){",
+         "  const b = pm.response.json();",
+         "  pm.test(\"a coordenada nova entrou\", () => {",
+         "    pm.expect(b.latitude).to.eql(-22.8500);",
+         "    pm.expect(b.longitude).to.eql(-43.2800);",
+         "  });",
+         "}",
+         "// O unico jeito de mover o ponto no mapa e mandar lat+lng de proposito."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"latitude\":-22.85,\"longitude\":-43.28}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH com CEP mascarado -> 422 VALIDATION_ERROR",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));",
+         "// A base guarda 8 digitos puros; a mascara e coisa do front."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"zipCode\":\"21012-000\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH com coordenada na ilha nula -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"latitude\":0,\"longitude\":0}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH sem token -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"999\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH com addressId que nao e daquela loja -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/00000000-0000-0000-0000-000000000000",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"999\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: register dono 2 (endereco)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ad_owner2_email\",\"adowner2_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ad_owner2_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner2_email}}\",\"password\":\"{{ad_owner2_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono 2 (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ad_owner2_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ad_owner2_email}}\",\"password\":\"{{ad_owner2_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] dono de OUTRA loja tentando corrigir -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404 — a posse e conferida no service, nao por role\", () => pm.response.to.have.status(404));",
+         "// 404 e nao 403 de proposito: para quem nao e dono, a loja dos outros nao existe."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner2_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{ad_estab_id}}/addresses/{{ad_address_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"number\":\"999\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ad_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono 2 (endereco)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ad_owner2_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ad_owner2_pass}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
+   "name": "18 - busca por proximidade (GPS, fatia B)",
+   "description": "GET /establishment?lat=&lng=[&radiusKm=] — ordenacao por distancia e campo distance_km. DECISAO DE PRODUTO (Andre 2026-07-27, opcao A): NAO ha raio default — com lat/lng e sem radiusKm a lista devolve TUDO reordenado, e a loja SEM coordenada vai para o FIM com distance_km null em vez de sumir; ela so sai quando o raio e pedido explicitamente. Um raio default deixaria a tela vazia para quem esta numa regiao sem loja, e o usuario nao distingue isso de 'o app quebrou'. Self-contained: cria dono+loja+endereco na Penha (mesma coordenada do seed) e apaga no fim; nenhuma assercao olha a lista inteira do banco, exceto as de ordenacao, que sao relativas. Endpoint publico — o ultimo request confere que a vitrine por proximidade funciona SEM token.",
+   "item": [
+    {
+     "name": "setup: register dono (GPS)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"geo_owner_email\",\"geoowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"geo_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{geo_owner_email}}\",\"password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (GPS)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"geo_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{geo_owner_email}}\",\"password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (GPS)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{geo_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja GPS {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: endereco na Penha, com a coordenada do aparelho",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"coordenada gravada\", () => {",
+         "  pm.expect(pm.response.json().latitude).to.eql(-22.8422);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{geo_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{geo_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Bras de Pina\",\"number\":\"100\",\"neighborhood\":\"Penha\",\"city\":\"Rio de Janeiro\",\"state\":\"RJ\",\"zipCode\":\"21012000\",\"latitude\":-22.8422,\"longitude\":-43.2764}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "listagem SEM lat/lng -> 200 e sem distance_km",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha, \"loja da folder 18\").to.exist);",
+         "pm.test(\"distance_km ausente/nulo quando a busca nao mandou coordenada\", () => {",
+         "  pm.expect(minha.distance_km == null).to.be.true;",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "radiusKm SEM lat/lng e IGNORADO -> 200 (a lista nunca fica vazia por isso)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// O app pode mandar um raio guardado de antes com a permissao de localizacao NEGADA agora.",
+         "// Raio sem origem nao quer dizer nada e e ignorado de proposito, sem erro.",
+         "pm.test(\"a loja continua na lista\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"sem distance_km\", () => pm.expect(minha.distance_km == null).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&radiusKm=1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "busca DA Penha -> distance_km = 0 na propria loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"distancia zero na propria coordenada\", () => pm.expect(minha.distance_km).to.eql(0));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "busca DE NITEROI -> distance_km ~18 km ate a Penha",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"distancia plausivel (16-20 km)\", () => {",
+         "  pm.expect(minha.distance_km).to.be.above(16);",
+         "  pm.expect(minha.distance_km).to.be.below(20);",
+         "});",
+         "pm.test(\"arredondado em 2 casas — e o numero que o card mostra\", () => {",
+         "  pm.expect(String(minha.distance_km).split(\".\")[1] || \"\").to.have.length.of.at.most(2);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ordenado por distancia: quem tem coordenada vem antes de quem nao tem",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const lista = pm.response.json();",
+         "pm.test(\"distancias em ordem nao-decrescente\", () => {",
+         "  const comDist = lista.filter(e => e.distance_km != null).map(e => e.distance_km);",
+         "  for(let i=1;i<comDist.length;i++) pm.expect(comDist[i]).to.be.at.least(comDist[i-1]);",
+         "});",
+         "pm.test(\"as SEM coordenada ficam no FIM (nao somem — nao ha raio default)\", () => {",
+         "  const primeiroSemDist = lista.findIndex(e => e.distance_km == null);",
+         "  if(primeiroSemDist >= 0){",
+         "    lista.slice(primeiroSemDist).forEach(e => pm.expect(e.distance_km == null).to.be.true);",
+         "  }",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "raio de 1km a partir da Penha -> a loja ESTA dentro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja cabe no raio\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"todo mundo que voltou tem distancia <= 1km\", () => {",
+         "  pm.response.json().forEach(e => {",
+         "    pm.expect(e.distance_km, e.name).to.not.be.null;",
+         "    pm.expect(e.distance_km).to.be.at.most(1);",
+         "  });",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764&radiusKm=1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "raio de 1km a partir de NITEROI -> a loja da Penha SAI",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja de 18km fora do raio nao volta\", () => pm.expect(minha).to.not.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036&radiusKm=1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] meia coordenada (so lat) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] ilha nula (0,0) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=0&lng=0",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] fora do globo (lat 91) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=91&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] radiusKm = 0 -> 422 (devolveria lista vazia sempre)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_COORDINATES\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_COORDINATES\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764&radiusKm=0",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "vitrine ANONIMA: busca por proximidade sem token -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 — a lista de perto e a isca do cadastro, nao o premio dele\",",
+         "  () => pm.response.to.have.status(200));",
+         "pm.test(\"distance_km vem mesmo sem login\", () => {",
+         "  const minha = pm.response.json().find(e => e.id === pm.collectionVariables.get(\"geo_estab_id\"));",
+         "  pm.expect(minha.distance_km).to.eql(0);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono (GPS)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{geo_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
+   "name": "19 - apagar a conta (S19)",
+   "description": "Apagar a conta (Partner S19 / LGPD / exigencia de publicacao nas lojas de app).\n\nSELF-CONTAINED de proposito: cria dono, loja, profissional, servico e cliente proprios (prefixo da_), porque esta folder APAGA as contas que usa. Se ela tocasse o owner/client compartilhados da collection, todas as folders seguintes quebrariam.\n\nA invariante que estas requests protegem: apaga-se o TITULAR, nao as relacoes dele — o atendimento sobrevive, atribuido a \"Usuario removido\", porque pertence tambem ao profissional e ao estabelecimento.",
+   "item": [
+    {
+     "name": "setup: register dono (S19)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"da_owner_email\",\"daowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"da_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_owner_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_owner_email}}\",\"password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"da_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_owner_email}}\",\"password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja S19 {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: dono vira profissional (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_prof_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Prof S19\",\"establishmentId\":\"{{da_estab_id}}\",\"specialty\":\"Barber\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: cria service item (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_service_item_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{da_estab_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte S19\",\"price\":35.00,\"estimatedMinutes\":30}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: prof WORKING (abre a loja p/ walk-in)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: register cliente (S19)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"da_client_email\",\"daclient_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"da_client_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_client_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login cliente (S19)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"da_client_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: cliente entra na fila -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"da_att_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{da_prof_id}}\",\"establishmentId\":\"{{da_estab_id}}\",\"serviceItemIds\":[\"{{da_service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta sem token -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta SEM CORPO -> 400 (o que o app de hoje manda)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+         "// Sem corpo nenhum nao chega ao @Valid (422): morre no Jackson, antes.",
+         "// E exatamente o que o botao \"Deletar conta\" dos apps faz hoje.",
+         "pm.test(\"code INVALID_REQUEST_BODY\", () => pm.expect(pm.response.json().code).to.eql(\"INVALID_REQUEST_BODY\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta sem current_password -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] apagar a conta com senha errada -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"code CURRENT_PASSWORD_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"CURRENT_PASSWORD_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}-errada\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "senha errada NAO apagou: o cliente segue autenticando -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"o e-mail continua o original\", () => pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get(\"da_client_email\")));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] 409 cliente na fila (senha certa, mas ha compromisso)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code ACCOUNT_DELETE_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.eql(\"ACCOUNT_DELETE_NOT_ALLOWED\"));",
+         "// Bloqueio TEMPORARIO: a mensagem tem de dizer o que fazer para destravar.",
+         "pm.test(\"a mensagem orienta o usuario\", () => pm.expect(pm.response.json().message).to.match(/queue/i));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] 409 profissional com atendimento ativo (o dono tambem atende)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code ACCOUNT_DELETE_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.eql(\"ACCOUNT_DELETE_NOT_ALLOWED\"));",
+         "// Os tres portoes devolvem o MESMO code — so a mensagem diz qual disparou. Aqui o dono e",
+         "// tambem o profissional que atende, entao quem barra e o portao do PROFISSIONAL: o do",
+         "// estabelecimento so seria alcancado com a fila em OUTRO profissional (coberto pelo",
+         "// AccountDeletionIntegrationTest, que monta um funcionario a mais).",
+         "pm.test(\"a mensagem e a do profissional, nao a do dono\", () => pm.expect(pm.response.json().message).to.match(/active attendances/i));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cliente sai da fila -> destrava a exclusao",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{da_att_id}}/leave-queue",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cliente apaga a conta -> 204",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o ATENDIMENTO sobrevive e o cliente virou \"Usuario removido\"",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// A invariante central: o atendimento pertence tambem ao profissional e a loja.",
+         "pm.test(\"o atendimento continua existindo\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"da_att_id\")));",
+         "pm.test(\"o nome do cliente foi anonimizado\", () => pm.expect(pm.response.json().clientName).to.eql(\"Usuario\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{da_att_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o e-mail original volta a ficar LIVRE para um cadastro novo -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"OutraSenha@123\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o access token do cliente morre no request seguinte",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"401 ou 403\", () => pm.expect([401,403]).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] login com a senha antiga -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_client_email}}\",\"password\":\"{{da_client_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "dono apaga a conta -> 204 (loja sem fila viva)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "a vitrine publica ANONIMA nao quebra com loja sem dono",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// Regressao: o mapper fazia getOwner().getId() cru — UMA loja orfa derrubava a",
+         "// listagem inteira com 500, para todo mundo, inclusive quem nem tem conta.",
+         "pm.test(\"a loja orfa saiu da listagem\", () => {",
+         "  const ids = pm.response.json().map(e => e.id);",
+         "  pm.expect(ids).to.not.include(pm.collectionVariables.get(\"da_estab_id\"));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "a loja orfa continua legivel por id, com owner_id ausente",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// Continua legivel porque o historico do cliente aponta para ela.",
+         "pm.test(\"openStatus CLOSED\", () => pm.expect(pm.response.json()['open_status']).to.eql(\"CLOSED\"));",
+         "pm.test(\"sem dono\", () => pm.expect(pm.response.json().ownerId == null).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{da_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "o access token do dono tambem morreu",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"401 ou 403\", () => pm.expect([401,403]).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -18375,7 +20702,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -18386,6 +20713,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{owner_token}}",
         "type": "text"
@@ -18394,6 +20725,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{owner_password}}\"}"
       }
      },
      "response": [],
@@ -18416,7 +20751,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup prof OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -18427,6 +20762,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{prof_token}}",
         "type": "text"
@@ -18435,6 +20774,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{prof_password}}\"}"
       }
      },
      "response": [],
@@ -18450,7 +20793,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup partner OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -18461,6 +20804,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{partner_token}}",
         "type": "text"
@@ -18469,6 +20816,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{partner_password}}\"}"
       }
      },
      "response": [],
@@ -18484,7 +20835,7 @@
        "script": {
         "exec": [
          "pm.test(\"Cleanup client OK\", () => {",
-         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404]);",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
          "});"
         ],
         "type": "text/javascript"
@@ -18495,6 +20846,10 @@
       "method": "DELETE",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{client_token}}",
         "type": "text"
@@ -18503,6 +20858,10 @@
       "url": "{{base_url}}/profile/delete/me",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{client_password}}\"}"
       }
      },
      "response": [],
@@ -18719,6 +21078,102 @@
   },
   {
    "key": "agenda_desired",
+   "value": ""
+  },
+  {
+   "key": "ad_owner_email",
+   "value": ""
+  },
+  {
+   "key": "ad_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "ad_owner_token",
+   "value": ""
+  },
+  {
+   "key": "ad_estab_id",
+   "value": ""
+  },
+  {
+   "key": "ad_address_id",
+   "value": ""
+  },
+  {
+   "key": "ad_owner2_email",
+   "value": ""
+  },
+  {
+   "key": "ad_owner2_pass",
+   "value": ""
+  },
+  {
+   "key": "ad_owner2_token",
+   "value": ""
+  },
+  {
+   "key": "geo_owner_email",
+   "value": ""
+  },
+  {
+   "key": "geo_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "geo_owner_token",
+   "value": ""
+  },
+  {
+   "key": "geo_estab_id",
+   "value": ""
+  },
+  {
+   "key": "da_owner_email",
+   "value": ""
+  },
+  {
+   "key": "da_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "da_owner_token",
+   "value": ""
+  },
+  {
+   "key": "da_owner_id",
+   "value": ""
+  },
+  {
+   "key": "da_estab_id",
+   "value": ""
+  },
+  {
+   "key": "da_prof_id",
+   "value": ""
+  },
+  {
+   "key": "da_service_item_id",
+   "value": ""
+  },
+  {
+   "key": "da_client_email",
+   "value": ""
+  },
+  {
+   "key": "da_client_pass",
+   "value": ""
+  },
+  {
+   "key": "da_client_token",
+   "value": ""
+  },
+  {
+   "key": "da_client_id",
+   "value": ""
+  },
+  {
+   "key": "da_att_id",
    "value": ""
   }
  ],

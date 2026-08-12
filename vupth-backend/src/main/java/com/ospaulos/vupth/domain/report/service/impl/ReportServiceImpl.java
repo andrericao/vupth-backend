@@ -11,6 +11,7 @@ import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepositor
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.report.service.ReportService;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import lombok.AllArgsConstructor;
@@ -116,13 +117,16 @@ public class ReportServiceImpl implements ReportService {
     // AGGREGATION HELPERS
     // ─────────────────────────────────────────────────────────────
 
+    // O "dia" do relatorio e o dia da LOJA, nao o dia UTC (backlog #33, residuo do BUG2b): com
+    // atStartOfDay().atOffset(UTC) o dia comecava as 21h da vespera em America/Sao_Paulo, e o
+    // atendimento das 22h aparecia no relatorio do dia seguinte.
     private OffsetDateTime from(LocalDate dateFrom) {
-        return dateFrom != null ? dateFrom.atStartOfDay().atOffset(ZoneOffset.UTC) : DEFAULT_FROM;
+        return dateFrom != null ? BusinessClock.startOfDay(dateFrom) : DEFAULT_FROM;
     }
 
     private OffsetDateTime to(LocalDate dateTo) {
         // dateTo inclusivo no dia: vira o inicio do dia seguinte (limite exclusivo).
-        return dateTo != null ? dateTo.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC) : DEFAULT_TO;
+        return dateTo != null ? BusinessClock.endOfDayExclusive(dateTo) : DEFAULT_TO;
     }
 
     private BigDecimal totalRevenue(List<Attendance> attendances) {

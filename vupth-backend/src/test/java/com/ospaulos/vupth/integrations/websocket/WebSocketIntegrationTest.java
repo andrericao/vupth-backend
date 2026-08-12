@@ -17,6 +17,7 @@ import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.socket.WebSocketHttpHeaders;
@@ -39,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *    recebe o snapshot quando broadcastQueue e disparado.
  *  - Notificacao pessoal: subscriber autenticado (token no CONNECT) em
  *    /user/queue/notifications recebe a mensagem direcionada ao seu userId.
+ *  - Heartbeat: o CONNECTED anuncia heart-beat != 0,0 (regressao do socket zumbi).
  */
 @Slf4j
 @SpringBootTest(
@@ -132,5 +134,45 @@ class WebSocketIntegrationTest {
         assertThat(payload.get("message")).isEqualTo("É a sua vez!");
 
         session.disconnect();
+    }
+
+    /**
+     * Regressao do socket zumbi: ate 2026-08-01 o servidor respondia {@code heart-beat:0,0} no CONNECTED
+     * (broker sem TaskScheduler), entao a queda do socket ocioso no Render passava despercebida — o app
+     * seguia "conectado" e nunca reconectava. O cliente so negocia heartbeat se ELE tambem pedir, por isso
+     * o teste liga o scheduler do StompClient antes de conectar.
+     */
+    @Test
+    void connect_negotiatesHeartbeat() throws Exception {
+        ThreadPoolTaskScheduler clientScheduler = new ThreadPoolTaskScheduler();
+        clientScheduler.setThreadNamePrefix("ws-it-client-");
+        clientScheduler.setDaemon(true);
+        clientScheduler.initialize();
+
+        WebSocketStompClient client = newStompClient();
+        client.setTaskScheduler(clientScheduler);
+        client.setDefaultHeartbeat(new long[]{10_000, 10_000});
+
+        CompletableFuture<StompHeaders> connected = new CompletableFuture<>();
+        StompSession session = null;
+        try {
+            session = client.connectAsync("ws://localhost:" + port + "/ws",
+                    new StompSessionHandlerAdapter() {
+                        @Override
+                        public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
+                            connected.complete(connectedHeaders);
+                        }
+                    }).get(5, TimeUnit.SECONDS);
+
+            long[] heartbeat = connected.get(5, TimeUnit.SECONDS).getHeartbeat();
+            log.info("[WS-IT] heartbeat anunciado pelo servidor: {},{}", heartbeat[0], heartbeat[1]);
+            assertThat(heartbeat[0]).as("servidor escreve heartbeat").isEqualTo(10_000);
+            assertThat(heartbeat[1]).as("servidor espera heartbeat do cliente").isEqualTo(10_000);
+        } finally {
+            if (session != null) {
+                session.disconnect();
+            }
+            clientScheduler.shutdown();
+        }
     }
 }

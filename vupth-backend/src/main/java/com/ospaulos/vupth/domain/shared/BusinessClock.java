@@ -68,4 +68,29 @@ public final class BusinessClock {
     public static OffsetDateTime at(LocalDate date, LocalTime time) {
         return date.atTime(time).atZone(zone).toOffsetDateTime();
     }
+
+    /**
+     * Inicio do dia {@code date} no fuso da loja — limite INFERIOR (inclusivo) de um filtro de
+     * periodo ({@code dateFrom}).
+     *
+     * <p>Existe para que "dia" signifique a mesma coisa em todo filtro de periodo do sistema
+     * (backlog #33, residuo do BUG2b). Quem monta a janela com
+     * {@code date.atStartOfDay().atOffset(UTC)} faz o dia da loja comecar as <b>21h da vespera</b>
+     * em {@code America/Sao_Paulo}: o atendimento das 22h cai no relatorio do dia seguinte, e quanto
+     * mais tarde a loja fecha, mais o numero do dia mente.</p>
+     */
+    public static OffsetDateTime startOfDay(LocalDate date) {
+        return at(date, LocalTime.MIDNIGHT);
+    }
+
+    /**
+     * Inicio do dia SEGUINTE a {@code date} no fuso da loja — limite SUPERIOR (exclusivo) de um
+     * filtro de periodo, que trata {@code dateTo} como dia inclusivo.
+     *
+     * <p>Meia-noite do dia seguinte em vez de {@code 23:59:59} de proposito: o limite exclusivo nao
+     * tem buraco de um segundo nem depende da precisao da coluna.</p>
+     */
+    public static OffsetDateTime endOfDayExclusive(LocalDate date) {
+        return at(date.plusDays(1), LocalTime.MIDNIGHT);
+    }
 }

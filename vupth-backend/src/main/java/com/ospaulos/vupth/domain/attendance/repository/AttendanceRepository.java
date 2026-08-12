@@ -270,6 +270,13 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     boolean existsByProfessional_IdAndStatusIn(UUID professionalId, List<AttendanceStatus> statuses);
 
+    // Apagar a conta (Partner S19) — os tres portoes do 409 ACCOUNT_DELETE_NOT_ALLOWED:
+    // o titular como CLIENTE (esta na fila de alguem), e a loja dele como DONO (tem fila viva).
+    // O portao do PROFISSIONAL reusa o existsByProfessional_IdAndStatusIn acima.
+    boolean existsByClient_IdAndStatusIn(UUID clientId, List<AttendanceStatus> statuses);
+
+    boolean existsByEstablishment_IdAndStatusIn(UUID establishmentId, List<AttendanceStatus> statuses);
+
     // S1 fatia 3 — fila propria do profissional (ex.: SCHEDULED/LATE) para o anuncio de "fila
     // fechada" aos clientes que ja estao dentro (drenagem: eles seguem sendo atendidos).
     List<Attendance> findByProfessional_IdAndStatusInOrderByScheduledTimeAsc(
