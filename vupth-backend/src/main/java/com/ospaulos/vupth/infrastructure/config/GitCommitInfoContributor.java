@@ -2,6 +2,7 @@ package com.ospaulos.vupth.infrastructure.config;
 
 import org.springframework.boot.actuate.info.Info;
 import org.springframework.boot.actuate.info.InfoContributor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -42,6 +43,8 @@ public class GitCommitInfoContributor implements InfoContributor {
     /** Inicio da JVM, nao da criacao deste bean. Fixo enquanto o processo viver. */
     private final long startedAtEpochMs;
 
+    /** O construtor do bean. Anotado porque a classe tem dois e o Spring precisa escolher. */
+    @Autowired
     public GitCommitInfoContributor(
             @Value("${RENDER_GIT_COMMIT:}") String renderGitCommit,
             @Value("${RAILWAY_GIT_COMMIT_SHA:}") String railwayGitCommit) {
@@ -51,10 +54,9 @@ public class GitCommitInfoContributor implements InfoContributor {
 
     /**
      * O inicio entra por parametro para o teste conseguir fixar o instante — o
-     * relogio da JVM nao e escolha de quem testa. Visibilidade de pacote de
-     * proposito: quem monta o bean e o construtor de cima.
+     * relogio da JVM nao e escolha de quem testa.
      */
-    GitCommitInfoContributor(String renderGitCommit, String railwayGitCommit, long startedAtEpochMs) {
+    public GitCommitInfoContributor(String renderGitCommit, String railwayGitCommit, long startedAtEpochMs) {
         this.renderGitCommit = renderGitCommit;
         this.railwayGitCommit = railwayGitCommit;
         this.startedAtEpochMs = startedAtEpochMs;
