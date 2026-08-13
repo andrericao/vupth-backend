@@ -190,6 +190,21 @@ A partir do Spring 6.1 um request sem handler cai no servidor de arquivos estát
 
 ⚠️ **Por que isso é teste de cobertura e não cosmética:** enquanto rota inexistente respondia 500, o log de produção não distinguia "build velha no ar" de "servidor quebrado" — foi o que escondeu por semanas que prod rodava um commit de 29/06 (ver PRD, seção 18d).
 
+### 2.11 Identidade da instância — `/actuator/info` (o que o CI usa para verificar um deploy)
+Testes: `unit/shared/GitCommitInfoContributorTest` (10).
+
+O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` desta resposta com o instante em que o deploy foi disparado. **Este teste existe porque o campo é consumido por um `grep` de shell, não por um cliente tipado** — então ele aplica o **mesmo recorte do `ci.yml`** (`"startedAtEpochMs":[0-9]*`) sobre o JSON serializado, em vez de inspecionar o mapa por dentro. Um campo que mude de nome ou vire String quebra aqui, no `mvn test`, e não no deploy.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `startedAtEpochMs` sai como **número puro**, casável pelo grep do CI | ✅ | ✅ (falha imprime o JSON inteiro) |
+| ISO e epoch são o mesmo instante em dois formatos | ✅ | — |
+| Não muda entre chamadas (é o início do processo, não o "agora") | ✅ | — |
+| Precisão variável do `Instant.toString()` — a casa decimal some com ms zero | — | ✅ (é o que quebrou o parse da 1ª versão; o epoch atravessa as duas formas) |
+| `commit`: Render encurtado p/ 7 · Railway como fallback · Render tem precedência | ✅ | ✅ (nenhuma das duas = `railway up` → `unknown`; variável em branco não passa por preenchida; sha < 7 não estoura o `substring`) |
+
+⚠️ **Postman não cobre e não deve:** a collection roda **contra** a instância que este campo identifica — verificar o identificador com o mesmo request que ele autoriza é circular. A prova é o teste unitário; o exercício real da espera só acontece no primeiro deploy de prod após 13/08.
+
 ---
 
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)

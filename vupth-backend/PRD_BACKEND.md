@@ -3170,7 +3170,19 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 **Como isso passou semanas sem ser visto** — e a parte que importa para nao repetir: os apps chamavam rotas que existem no codigo mas nao na build no ar (`/swap-requests/me`, `/geocoding/reverse`, `/attendances/intentions/client/me`, `PATCH /attendances/{id}/reschedule`). Como rota inexistente respondia **500 `INTERNAL_ERROR`** (ver "Formato de Erro Padrao"), o log de producao enchia de `ERROR` com stack trace **na mesma assinatura de um 500 de verdade**. O sintoma ("nao chega nada", "endpoint nao existe") foi lido pelos fronts como defeito de feature. **O 404 corrigido em 12/08 e o que torna esse estado visivel:** a partir de agora, "build velha no ar" aparece como uma chuva de **404**, que ninguem confunde com defeito de servidor.
 
-**Licao operacional:** um auto-rollback sem teto e um laco. Vale (nao implementado ainda, decidir): falhar o pipeline com erro explicito quando `prod-last-good` estiver a mais de N commits de `main`, em vez de reverter em silencio.
+**Licao operacional:** um auto-rollback sem teto e um laco.
+
+#### 13/08 — como o laco foi cortado (3 mudancas)
+
+**1. O `test-prod` voltou a validar a instancia NOVA.** A espera aceitava qualquer `"status":"UP"`, e durante um rollout a instancia **anterior** responde UP — o Newman testava a build velha, reprovava, e o rollback republicava junho. Agora a espera exige uma instancia iniciada **depois** do disparo do deploy, comparando o `startedAtEpochMs` do `/actuator/info` com o instante marcado no job `deploy-prod`.
+
+> Este ajuste ja tinha entrado no PR #46 e foi **revertido pelo #50**, porque entrou em `main` sem o codigo novo ter sido testado. Voltou com `GitCommitInfoContributorTest` (10 testes), que aplica o **mesmo recorte do `ci.yml`** (`"startedAtEpochMs":[0-9]*`) sobre o JSON serializado — se o campo mudar de nome ou virar String, quebra no `mvn test`, nao no deploy.
+
+**2. O teto da espera subiu de 10 para 15 min** (teto do job, 25). O `railway up --detach` retorna no fim do **upload**: a espera ainda paga o build do Railway antes do boot da JVM. Estourar ali aciona o rollback de um deploy que estava vindo bem — *fail-closed no lugar errado*.
+
+**3. O `rollback-prod` ganhou TETO DE DISTANCIA** (`MAX_ROLLBACK_DISTANCE: 20`). Quando `prod-last-good` esta a mais de 20 commits de `HEAD`, o job **recusa reverter**, falha com `::error::` explicando, e **deixa a build nova no ar**. Um rollback existe para desfazer **um** deploy ruim; quando a tag esta muito atras ela nao e mais ponto de retorno, e sim tag congelada — e reinstala-la joga fora trabalho que nunca foi provado ruim. Entre uma assercao de Newman falhando e 90 commits fora do ar, a assercao e o problema menor.
+
+**⚠️ O que ainda NAO esta provado:** a espera nova so pode ser exercitada **em prod** — homolog verifica por commit (o Render injeta `RENDER_GIT_COMMIT`; o Railway nao, num `railway up`). O primeiro merge apos este ajuste e o teste real dela, e o item 3 e justamente a rede para esse caso.
 
 ---
 

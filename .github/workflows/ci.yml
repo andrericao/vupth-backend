@@ -336,6 +336,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Distancia maxima que o rollback aceita percorrer para tras. Acima disso ele
+    # RECUSA (ver o passo "Confere a distancia"). Um rollback existe para desfazer
+    # UM deploy ruim; quando a tag esta muito atras, ela nao e mais um ponto de
+    # retorno, e sim uma tag congelada — e reinstala-la joga fora trabalho que
+    # nunca foi provado ruim.
+    env:
+      MAX_ROLLBACK_DISTANCE: 20
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -353,6 +361,35 @@ jobs:
           echo "Ultimo commit bom de PROD: $SHA"
           echo "have=true" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      # O laco de 12/08: a tag so avanca quando o Newman passa, entao um Newman que
+      # falha a congela; e cada tentativa de deploy seguinte reinstalava a build
+      # congelada. Quanto mais se tentava deployar, mais firme prod ficava no
+      # passado — prod-last-good parou em 29/06 enquanto main andou 90 commits.
+      #
+      # Um auto-rollback sem teto e um laco. Aqui ele passa a ter teto: perto,
+      # reverte como sempre; longe, RECUSA e falha alto, deixando a build nova no
+      # ar. Entre uma assercao de Newman falhando e 90 commits fora do ar, a
+      # assercao e o problema menor — e um erro visivel no CI e melhor que uma
+      # reversao silenciosa que ninguem le.
+      - name: Confere a distancia antes de reverter
+        if: steps.lastgood.outputs.have == 'true'
+        run: |
+          SHA=${{ steps.lastgood.outputs.sha }}
+          DISTANCE=$(git rev-list --count "$SHA"..HEAD)
+          AGE_DAYS=$(( ( $(date -u +%s) - $(git show -s --format=%ct "$SHA") ) / 86400 ))
+
+          echo "prod-last-good: $SHA ($DISTANCE commits atras, $AGE_DAYS dias)"
+
+          if [ "$DISTANCE" -gt "$MAX_ROLLBACK_DISTANCE" ]; then
+            echo "::error::ROLLBACK RECUSADO — prod-last-good esta $DISTANCE commits atras (teto: $MAX_ROLLBACK_DISTANCE), com $AGE_DAYS dias."
+            echo "::error::Reverter reinstalaria uma build de $AGE_DAYS dias atras e apagaria de producao trabalho que nunca foi provado ruim."
+            echo "::error::A build recem-deployada FICA NO AR. Investigue a falha do Newman acima: o mais provavel e a tag ter congelado, nao o codigo novo estar quebrado."
+            echo "::error::Se o codigo novo estiver mesmo ruim, reverta pelo painel do Railway. Se estiver bom, corrija o que reprovou e deixe a tag avancar."
+            exit 1
+          fi
+
+          echo "Distancia dentro do teto — rollback autorizado."
 
       - name: Checkout do last-good
         if: steps.lastgood.outputs.have == 'true'
