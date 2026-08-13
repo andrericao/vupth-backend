@@ -13228,6 +13228,56 @@
        }
       }
      ]
+    },
+    {
+     "name": "rota inexistente - 404 NOT_FOUND (nao 500)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Regressao 12/08: rota sem handler caia no handleGeneric e virava 500 INTERNAL_ERROR.",
+         "// Enquanto foi 500, o log de producao nao distinguia 'build velha no ar' de 'servidor quebrado'.",
+         "pm.test(\"Status 404 - rota inexistente\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/service-types/nao/existe/canario"
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "rota inexistente sem token - 401 (seguranca antes do dispatcher)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Documenta a ordem: rota desconhecida FORA de prefixo publico nem chega no handler de 404.",
+         "pm.test(\"Status 401 - anonimo em rota protegida\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/rota-que-nao-existe/me"
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
     }
    ]
   },

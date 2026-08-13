@@ -153,6 +153,7 @@ Todos os erros seguem um dos dois formatos:
 | 404 | `CLIENT_NOT_IN_QUEUE` | Cliente nao esta na fila |
 | 404 | `REFRESH_TOKEN_NOT_FOUND` | Refresh token nao existe |
 | 404 | `GEOCODING_ADDRESS_NOT_FOUND` | Reverso nao achou endereco para a coordenada (ou o servico nao respondeu) |
+| 404 | `NOT_FOUND` | Rota inexistente, ou recurso generico nao encontrado. ⚠️ **Mudou em 12/08:** rota desconhecida respondia **500 `INTERNAL_ERROR`** |
 | 409 | `EMAIL_NOT_AVAILABLE` | Email ja cadastrado |
 | 409 | `USER_ALREADY_PROFESSIONAL` | Usuario ja tem perfil profissional |
 | 409 | `AFFILIATION_ALREADY_PENDING` | Ja existe afiliacao pendente |
@@ -3160,6 +3161,16 @@ Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22.
 - `RENDER_SERVICE_ID` — id do servico (`srv-...`, na URL do dashboard do servico).
 
 Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warning::`), mas o Render **nao** reverte sozinho — ai e manual pelo painel do Render. O rollback de PROD (Railway) ja funciona com os secrets existentes (`RAILWAY_TOKEN`, `RAILWAY_SERVICE_ID`).
+
+### ⚠️ 12/08 — o auto-rollback virou um LACO e prendeu PROD em 29 de junho
+
+**Fato, nao hipotese:** `prod-last-good` apontava para `6c710b8` (**2026-06-29**) enquanto `main` estava em `a706a96` (**2026-08-11**) — **90 commits de diferenca**. Tudo de julho/agosto estava **fora do ar em producao**: GPS/proximidade, swap-offers, intencoes, reagendamento, apagar a conta, heartbeat do WS, filtros de periodo, tickets da Expo e o proprio `POST /auth/forgot-password` (criado em `38b872e`, 20/07 — **nao e ancestral** de `prod-last-good`).
+
+**O laco:** a tag so avanca quando o Newman pos-deploy **passa**. Como ele falhava, a tag congelou; e cada nova tentativa de deploy subia o codigo novo, reprovava no Newman e o `rollback-prod` **reinstalava a build de junho**. Quanto mais se tentava deployar, mais firme prod ficava no passado.
+
+**Como isso passou semanas sem ser visto** — e a parte que importa para nao repetir: os apps chamavam rotas que existem no codigo mas nao na build no ar (`/swap-requests/me`, `/geocoding/reverse`, `/attendances/intentions/client/me`, `PATCH /attendances/{id}/reschedule`). Como rota inexistente respondia **500 `INTERNAL_ERROR`** (ver "Formato de Erro Padrao"), o log de producao enchia de `ERROR` com stack trace **na mesma assinatura de um 500 de verdade**. O sintoma ("nao chega nada", "endpoint nao existe") foi lido pelos fronts como defeito de feature. **O 404 corrigido em 12/08 e o que torna esse estado visivel:** a partir de agora, "build velha no ar" aparece como uma chuva de **404**, que ninguem confunde com defeito de servidor.
+
+**Licao operacional:** um auto-rollback sem teto e um laco. Vale (nao implementado ainda, decidir): falhar o pipeline com erro explicito quando `prod-last-good` estiver a mais de N commits de `main`, em vez de reverter em silencio.
 
 ---
 

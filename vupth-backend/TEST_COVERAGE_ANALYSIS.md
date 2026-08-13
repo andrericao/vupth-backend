@@ -175,6 +175,21 @@ Unit (#28): `unit/push/ExpoPushSenderTest` (9) + `unit/push/PushNotificationPubl
 
 ⚠️ **Postman não cobre os tickets e não tem como:** o newman teria de falar com a Expo real e provocar um `DeviceNotRegistered` de verdade. A prova dessa parte são os dois testes unitários; a folder `13` cobre o contrato de `/devices`, que ficou **inalterado**.
 
+### 2.10 Contrato de erro HTTP — rota inexistente (regressão 12/08)
+Testes: `integrations/UnknownRouteIntegrationTest` (5).
+
+A partir do Spring 6.1 um request sem handler cai no servidor de arquivos estáticos e sai uma `NoResourceFoundException`. O `GlobalExceptionHandler` não a tratava → caía no `handleGeneric` e virava **500 `INTERNAL_ERROR`** com stack trace. Agora responde **404 `NOT_FOUND`**, log em `warn` e **sem stack** (o erro é do chamador).
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| Rota inexistente autenticada → 404 `NOT_FOUND` | ✅ | ✅ (não 500) |
+| Rota de feature ausente na build → 404 (caso real: `/swap-requests/me` em prod velha) | ✅ | ✅ |
+| Rota inexistente sob prefixo `permitAll` → 404 sem token | ✅ | ✅ |
+| Rota inexistente **anônima** → **401** (segurança responde antes do dispatcher) | — | ✅ |
+| Método errado em rota existente **continua 405** | — | ✅ (guarda o handler vizinho: um 404 largo demais engoliria o 405) |
+
+⚠️ **Por que isso é teste de cobertura e não cosmética:** enquanto rota inexistente respondia 500, o log de produção não distinguia "build velha no ar" de "servidor quebrado" — foi o que escondeu por semanas que prod rodava um commit de 29/06 (ver PRD, seção 18d).
+
 ---
 
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)

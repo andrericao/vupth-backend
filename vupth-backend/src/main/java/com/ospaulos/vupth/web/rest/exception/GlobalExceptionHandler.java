@@ -73,6 +73,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.OffsetDateTime;
 import java.util.HashMap;
@@ -115,6 +116,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNoSuchElement(
             NoSuchElementException ex, HttpServletRequest req) {
         log.warn("[404] NoSuchElement | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, "Resource not found", "NOT_FOUND");
+    }
+
+    // Rota que nao existe. A partir do Spring 6.1 nenhum handler casa, o request cai no
+    // servidor de arquivos estaticos e sai uma NoResourceFoundException; sem este handler ela
+    // chegava no handleGeneric e virava 500 com stack trace. Dois estragos: o front nao
+    // conseguia separar "rota nao existe" de "servidor quebrou", e o log de producao enchia de
+    // ERROR com a MESMA assinatura de um 500 de verdade — foi o que escondeu, em 12/08, que
+    // producao rodava uma build de seis semanas atras.
+    // Log em warn e sem stack de proposito: o erro e do chamador, nao nosso.
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(
+            NoResourceFoundException ex, HttpServletRequest req) {
+        log.warn("[404] NoResourceFound | {} {} | rota inexistente", req.getMethod(), req.getRequestURI());
         return build(HttpStatus.NOT_FOUND, "Resource not found", "NOT_FOUND");
     }
 
