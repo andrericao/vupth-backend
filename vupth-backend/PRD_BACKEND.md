@@ -3184,6 +3184,24 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 **⚠️ O que ainda NAO esta provado:** a espera nova so pode ser exercitada **em prod** — homolog verifica por commit (o Render injeta `RENDER_GIT_COMMIT`; o Railway nao, num `railway up`). O primeiro merge apos este ajuste e o teste real dela, e o item 3 e justamente a rede para esse caso.
 
+#### 🔴 13/08 (mesmo dia, mais tarde) — a OUTRA metade: **DEPLOYS CONCORRENTES**
+
+O push de `268ed86` para `dev` gerou **4 deploys no Render** (contados no painel, aba Events). O Newman reprovou e o `rollback-homolog` disparou.
+
+**A falha nao era de codigo, e quase foi diagnosticada como se fosse.** O Newman acusou *"esperava 401, veio 404"* em `/rota-que-nao-existe/me`. Uma sonda em container real (`UnknownRouteRealServerIntegrationTest`) provou que a aplicacao responde **401** — igual ao MockMvc, sem divergencia alguma. O **404 veio do edge do Render**, que responde `Not Found` em **texto puro** quando a instancia esta indisponivel. A prova estava no corpo da resposta, e ninguem tinha olhado o corpo: a aplicacao responde JSON, o edge nunca.
+
+Confirmam a queda no meio do run: um request de **2m16s** (cold start) e o request **imediatamente anterior** — que exige corpo JSON com `code` — **passando**.
+
+**A causa:** duas fontes disparam deploy para o mesmo push — o **auto-deploy do Render** (branch conectada) e o **deploy hook do CI**. Some-se o rollback e chega-se a 4.
+
+⚠️ **E a verificacao por commit NAO protege disso.** Os dois primeiros deploys sao do **mesmo commit**: a espera do `test-homolog` aprova quando o primeiro sobe, o Newman comeca, e o segundo **derruba a instancia no meio**. E o mesmo ponto cego do prod — a verificacao diz *o que* esta no ar, nao *qual instancia* esta respondendo.
+
+**Correcao (fora do codigo, painel):** desligar o **Auto-Deploy** no Render — quem controla o deploy e o CI. Sem isso, todo push de `dev` tem chance de reprovar o Newman por sorteio.
+
+**⚠️ CONFERIR O MESMO NO RAILWAY (prod):** se o Railway tambem auto-deploya no push de `main` **enquanto** o CI faz `railway up`, a corrida existe igual em producao — e seria a **metade que faltava** da explicacao de junho. O laco da secao acima explica a reversao; deploys concorrentes explicam por que o Newman falhava de forma **intermitente**, que o laco sozinho nao explica.
+
+**Correcao no teste (feita):** as duas collections ganharam, nos requests de rota inexistente, uma guarda que roda **antes** de julgar o status e distingue "a INSTANCIA respondeu" de "o edge respondeu", falhando com o corpo cru na mensagem. Um teste de contrato que nao separa *"a aplicacao respondeu errado"* de *"a aplicacao nao respondeu"* transforma queda de infra em suspeita de defeito de codigo — foi exatamente o custo desta investigacao.
+
 ---
 
 ## 19. Fluxos de Usuario
