@@ -3184,24 +3184,27 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 **⚠️ O que ainda NAO esta provado:** a espera nova so pode ser exercitada **em prod** — homolog verifica por commit (o Render injeta `RENDER_GIT_COMMIT`; o Railway nao, num `railway up`). O primeiro merge apos este ajuste e o teste real dela, e o item 3 e justamente a rede para esse caso.
 
-#### 🟡 13/08 (mesmo dia, mais tarde) — o Newman de homolog reprovou, e a causa segue EM ABERTO
+#### ✅ 13/08 (mesmo dia, mais tarde) — o Newman de homolog reprovou: o request "sem token" ia COM token
 
-**Estado: NAO resolvido.** Esta secao registra o que esta provado e o que nao esta, de proposito — tres hipoteses ja cairam neste caso, e cada uma parecia boa antes de ser conferida.
+**RESOLVIDO. A causa estava na collection, nao na aplicacao e nao na infra.**
 
-**O fato:** o push de `268ed86` para `dev` deployou, o Newman reprovou em 1 de 508 assercoes e o `rollback-homolog` disparou (funcionou: homolog voltou para `9bca566`, e `homolog-last-good` **nao avancou**). A assercao que falhou: `/rota-que-nao-existe/me` sem token, *"esperava 401, veio 404"*.
+**O fato:** o push para `dev` deployou, o Newman reprovou em 1 de 510 assercoes: `/rota-que-nao-existe/me` **sem token**, *"esperava 401, veio 404"*.
 
-**✅ PROVADO — a aplicacao responde 401, e o codigo nunca esteve errado.** A sonda `UnknownRouteRealServerIntegrationTest` exercita o caminho por HTTP real contra o Tomcat: anonimo em rota inexistente = **401**, igual ao MockMvc. Rota **existente** protegida tambem responde 401 — os dois iguais, entao **nao ha oraculo de enumeracao**. O homolog rodando `9bca566` tambem devolve 401 (conferido por `curl`). A frase do commit do 404 ("sem token continua 401") esta **correta**.
+**A causa:** a collection define `auth` **bearer `{{owner_token}}` na raiz**, e todo request que precisa ser anonimo declara `"auth": {"type": "noauth"}` **dentro de `request`** — ha dezenas assim na pasta *error tests*. Os dois requests criados em 12/08 declararam o `noauth` no nivel do **item** (irmao de `request`), **posicao que o Newman ignora**. O request chamado "sem token" ia **com** o token do owner — e a aplicacao respondeu o **404 correto de rota inexistente autenticada**. Nunca houve defeito.
 
-**❌ HIPOTESES DERRUBADAS** (ficam registradas para nao serem reinventadas):
-1. *"MockMvc mente porque nao faz o ERROR dispatch"* — a sonda em container real deu o mesmo 401 do MockMvc. Nao ha divergencia.
-2. *"A build nova mudou o comportamento anonimo"* — nao mudou.
-3. *"Deploys concorrentes (auto-deploy do Render + hook do CI) derrubaram a instancia no meio do run"* — **o painel desmente**: os 4 eventos sao **2 deploys x 2 eventos** (started + live). `268ed86` as 20:36→20:40 via Deploy Hook, e `9bca566` as 20:45→20:49 via API (o rollback). **Nao houve auto-deploy e nao houve corrida**; durante o Newman o deploy estava estavel.
+⚠️ **Por que passou despercebido:** `auth` no lugar errado nao gera erro, aviso nem diferenca visivel no arquivo. O request parece certo, tem o nome certo, e **falha afirmando uma coisa sobre o servidor**. Conferir a posicao do `auth` (dentro de `request`) sempre que um request novo depender de ser anonimo.
 
-**❓ EM ABERTO — de onde veio o 404.** Duas pistas sobraram, e nenhuma foi confirmada: (a) um request de **2m16s** no run, que em Render free indica **cold start** — e cold start sem evento de deploy significa **restart da instancia** (crash/OOM: o free tier tem 512MB e a JVM roda 295 requests seguidos); (b) o request **imediatamente anterior**, que exige corpo JSON com `code`, **passou** — a aplicacao estava viva num e algo mudou no seguinte. **Proximo passo de diagnostico: os LOGS do Render na janela 20:40–20:45**, procurando restart / OutOfMemory.
+**❌ QUATRO HIPOTESES DERRUBADAS** — ficam registradas porque cada uma parecia boa, e reinventa-las custa horas:
+1. *"MockMvc mente porque nao faz o ERROR dispatch"* — a sonda em container real deu o mesmo **401** do MockMvc. Nao ha divergencia entre teste e producao.
+2. *"A build nova mudou o comportamento anonimo"* — nao mudou. `curl` anonimo contra homolog rodando a build nova: **401**, com `www-authenticate: Bearer`.
+3. *"Deploys concorrentes derrubaram a instancia"* — o painel desmente: os 4 eventos sao **2 deploys x 2 eventos** (started + live), um pelo Deploy Hook do CI e outro pelo rollback via API. **Nao ha auto-deploy do Render ligado.**
+4. *"A instancia caiu por OOM no meio do run"* — desmentida pelo `startedAtEpochMs`: o valor que o CI leu na espera e o que o `curl` leu 11 minutos depois **sao identicos** (`1786667714563`). Mesma instancia o run inteiro, **sem nenhum restart**.
 
-**🔧 O INSTRUMENTO (feito, e e o que resolve o proximo caso):** as duas collections ganharam, nos requests de rota inexistente, uma guarda que roda **antes** de julgar o status e distingue *"a INSTANCIA respondeu"* de *"o edge respondeu"* — o edge do Render devolve `Not Found` em **texto puro**, a aplicacao devolve **JSON**. Falha com o corpo cru na mensagem.
+⚠️ **Observacao que sobrou sem explicacao, e nao e o mesmo assunto:** os dois runs tiveram um request de **~2m15s** (`max` do relatorio do newman). Nao derrubou nada e nao tem relacao com o 404, mas vale olhar quando alguem investigar performance — 2 minutos num request e muito, mesmo com cold start.
 
-⚠️ **A licao, que nao e sobre 404:** um teste de contrato que nao separa *"a aplicacao respondeu errado"* de *"a aplicacao nao respondeu"* transforma qualquer instabilidade de infra em suspeita de defeito de codigo. A evidencia decisiva (o **corpo** da resposta) estava disponivel desde o primeiro minuto e passou tres hipoteses sem ser olhada. **Diante de um status inesperado, olhar o corpo antes de teorizar.**
+**🔧 O que ficou de instrumento** (util independente da causa): (a) `UnknownRouteRealServerIntegrationTest` — os 5 casos por HTTP real contra o Tomcat, incluindo o par que impede o **oraculo de enumeracao** (rota que existe e rota que nao existe respondem o **mesmo** 401 a quem nao tem credencial); (b) nas duas collections, uma guarda que roda **antes** de julgar o status e distingue *"a aplicacao respondeu errado"* de *"a aplicacao nao respondeu"* — o edge do Render nao produz JSON, a aplicacao sempre produz.
+
+⚠️ **A licao, e ela nao e sobre 404:** quando um teste de ambiente diverge de um teste local, a primeira pergunta e **"o request e mesmo o que o nome diz?"** — nao "o que ha de diferente no ambiente?". As quatro hipoteses erradas foram todas sobre o ambiente, e a evidencia que as derrubava (o **corpo JSON**, que so a aplicacao produz, e o **`startedAtEpochMs` identico**) estava disponivel desde o primeiro minuto.
 
 ---
 

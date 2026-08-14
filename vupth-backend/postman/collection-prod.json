@@ -13239,12 +13239,10 @@
          "// Regressao 12/08: rota sem handler caia no handleGeneric e virava 500 INTERNAL_ERROR.",
          "// Enquanto foi 500, o log de producao nao distinguia 'build velha no ar' de 'servidor quebrado'.",
          "",
-         "// ⚠️ Esta guarda vem ANTES de julgar o status, e existe por causa de 13/08.",
-         "// O Newman acusou \"esperava 401, veio 404\" e o 404 NAO era nosso: quando a instancia",
-         "// cai ou reinicia no meio do run, o edge do Render responde 404 com corpo \"Not Found\"",
-         "// em texto puro. Sem separar os dois casos, uma queda de instancia chega disfarcada de",
-         "// defeito de codigo — e custou uma investigacao inteira antes de alguem olhar o corpo.",
-         "// A aplicacao responde JSON nos erros que tem corpo; o edge do Render nunca responde JSON.",
+         "// Guarda defensiva: separa \"a aplicacao respondeu errado\" de \"a aplicacao nao respondeu\".",
+         "// O edge do Render devolve 404 sem corpo JSON quando nao ha instancia saudavel; a aplicacao",
+         "// sempre responde JSON nos erros que tem corpo. Sem essa separacao, instabilidade de infra",
+         "// chega disfarcada de defeito de codigo.",
          "const corpo = (pm.response.text() || '').trim();",
          "const edgeRespondeu = pm.response.code === 404 && corpo.length > 0 && !corpo.startsWith('{');",
          "",
@@ -13262,12 +13260,12 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/service-types/nao/existe/canario"
+      "url": "{{base_url}}/service-types/nao/existe/canario",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "rota inexistente sem token - 401 (seguranca antes do dispatcher)",
@@ -13278,12 +13276,10 @@
         "exec": [
          "// Documenta a ordem: rota desconhecida FORA de prefixo publico nem chega no handler de 404.",
          "",
-         "// ⚠️ Esta guarda vem ANTES de julgar o status, e existe por causa de 13/08.",
-         "// O Newman acusou \"esperava 401, veio 404\" e o 404 NAO era nosso: quando a instancia",
-         "// cai ou reinicia no meio do run, o edge do Render responde 404 com corpo \"Not Found\"",
-         "// em texto puro. Sem separar os dois casos, uma queda de instancia chega disfarcada de",
-         "// defeito de codigo — e custou uma investigacao inteira antes de alguem olhar o corpo.",
-         "// A aplicacao responde JSON nos erros que tem corpo; o edge do Render nunca responde JSON.",
+         "// Guarda defensiva: separa \"a aplicacao respondeu errado\" de \"a aplicacao nao respondeu\".",
+         "// O edge do Render devolve 404 sem corpo JSON quando nao ha instancia saudavel; a aplicacao",
+         "// sempre responde JSON nos erros que tem corpo. Sem essa separacao, instabilidade de infra",
+         "// chega disfarcada de defeito de codigo.",
          "const corpo = (pm.response.text() || '').trim();",
          "const edgeRespondeu = pm.response.code === 404 && corpo.length > 0 && !corpo.startsWith('{');",
          "",
@@ -13300,12 +13296,12 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/rota-que-nao-existe/me"
+      "url": "{{base_url}}/rota-que-nao-existe/me",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     }
    ]
   },

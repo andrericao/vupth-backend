@@ -26,23 +26,25 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p><b>Por que este arquivo existe, separado do {@link UnknownRouteIntegrationTest}.</b> Em
  * 2026-08-13 o Newman de homolog reprovou "rota inexistente sem token → 401" recebendo <b>404</b>,
- * enquanto o teste de MockMvc dava o caso como verde. A leitura imediata foi que o MockMvc estava
- * mentindo e que a build nova havia mudado o comportamento.
+ * enquanto o teste de MockMvc dava o caso como verde. Seguiram-se quatro hipoteses erradas (MockMvc
+ * mentindo, mudanca de comportamento da build nova, deploys concorrentes, OOM da instancia), todas
+ * derrubadas por evidencia.
  *
- * <p><b>Estes testes desfizeram essa leitura.</b> Em container real, com o mesmo codigo, a resposta
- * e <b>401</b> — igual ao MockMvc. Nao ha divergencia entre teste e producao, e a ordem que o
- * commit do 404 afirmava preservar esta correta.
+ * <p><b>A causa real era o proprio request do Postman:</b> a collection tem {@code auth} bearer na
+ * raiz, e o request declarava {@code noauth} no nivel do <b>item</b> em vez de dentro de
+ * {@code request} — posicao que o Newman ignora. O request chamado "sem token" ia <b>com</b> o
+ * token do owner, e a aplicacao respondia o 404 correto de rota inexistente autenticada.
  *
- * <p><b>Entao de onde veio o 404?</b> Nao da aplicacao. O edge do Render responde
- * {@code 404 Not Found} em <b>texto puro</b> quando a instancia esta indisponivel, e o run que
- * falhou tem a impressao digital disso: um request de <b>2m16s</b> (cold start) no meio, e o
- * request IMEDIATAMENTE ANTERIOR — que exige corpo JSON com {@code code} — passando. A aplicacao
- * estava viva num, e sumiu no seguinte.
+ * <p><b>O que estes testes garantem, e por isso ficam:</b> o contrato dos cinco casos, exercitado
+ * por HTTP real contra o Tomcat — inclusive o par que impede o <b>oraculo de enumeracao</b> (rota
+ * que existe e rota que nao existe respondem o MESMO 401 a quem nao tem credencial). Sem eles, a
+ * unica prova do contrato seria uma collection cuja autenticacao ja se provou facil de errar em
+ * silencio.
  *
- * <p><b>A licao, que nao e sobre 404:</b> um teste de contrato so vale se souber distinguir "a
- * aplicacao respondeu errado" de "a aplicacao nao respondeu". Sem isso, uma queda de instancia
- * chega disfarcada de defeito de codigo — e custa uma investigacao inteira, como custou aqui. A
- * guarda que separa os dois casos ficou na collection do Postman, onde o problema aparece.
+ * <p>⚠️ <b>A licao:</b> quando um teste de ambiente diverge de um teste local, a primeira pergunta
+ * e "o request e mesmo o que o nome diz?", nao "o que ha de diferente no ambiente?". A evidencia
+ * decisiva — o corpo JSON da resposta, que so a aplicacao produz — estava disponivel desde o
+ * primeiro minuto e atravessou quatro hipoteses sem ser olhada.
  */
 @Slf4j
 @SpringBootTest(classes = VupthApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -84,10 +86,10 @@ class UnknownRouteRealServerIntegrationTest {
      * ("sem token continua 401, porque a seguranca responde antes do dispatcher") esta correta,
      * e vale tambem fora do MockMvc.
      *
-     * <p>Como o codigo faz o certo nos dois lugares, o 404 que apareceu em homolog nao veio da
-     * aplicacao: veio do edge do Render, que responde {@code 404 Not Found} em texto puro quando
-     * a instancia esta indisponivel. O corpo e o que separa os dois — a aplicacao responde JSON
-     * com {@code code}, o edge responde texto. A guarda que torna isso legivel esta na collection.
+     * <p>O 404 do Newman vinha de o request estar indo <b>autenticado</b> sem que o nome dissesse
+     * (ver o javadoc da classe): para quem tem token, rota inexistente e 404 mesmo — o que este
+     * arquivo prova no teste de cima. Os dois lado a lado sao a diferenca entre "com token" e
+     * "sem token", que e exatamente o que a collection errou.
      */
     @Test
     @DisplayName("rota inexistente SEM token → 401 (a seguranca responde antes do dispatcher)")
