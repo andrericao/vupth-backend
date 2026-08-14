@@ -3184,23 +3184,24 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 **⚠️ O que ainda NAO esta provado:** a espera nova so pode ser exercitada **em prod** — homolog verifica por commit (o Render injeta `RENDER_GIT_COMMIT`; o Railway nao, num `railway up`). O primeiro merge apos este ajuste e o teste real dela, e o item 3 e justamente a rede para esse caso.
 
-#### 🔴 13/08 (mesmo dia, mais tarde) — a OUTRA metade: **DEPLOYS CONCORRENTES**
+#### 🟡 13/08 (mesmo dia, mais tarde) — o Newman de homolog reprovou, e a causa segue EM ABERTO
 
-O push de `268ed86` para `dev` gerou **4 deploys no Render** (contados no painel, aba Events). O Newman reprovou e o `rollback-homolog` disparou.
+**Estado: NAO resolvido.** Esta secao registra o que esta provado e o que nao esta, de proposito — tres hipoteses ja cairam neste caso, e cada uma parecia boa antes de ser conferida.
 
-**A falha nao era de codigo, e quase foi diagnosticada como se fosse.** O Newman acusou *"esperava 401, veio 404"* em `/rota-que-nao-existe/me`. Uma sonda em container real (`UnknownRouteRealServerIntegrationTest`) provou que a aplicacao responde **401** — igual ao MockMvc, sem divergencia alguma. O **404 veio do edge do Render**, que responde `Not Found` em **texto puro** quando a instancia esta indisponivel. A prova estava no corpo da resposta, e ninguem tinha olhado o corpo: a aplicacao responde JSON, o edge nunca.
+**O fato:** o push de `268ed86` para `dev` deployou, o Newman reprovou em 1 de 508 assercoes e o `rollback-homolog` disparou (funcionou: homolog voltou para `9bca566`, e `homolog-last-good` **nao avancou**). A assercao que falhou: `/rota-que-nao-existe/me` sem token, *"esperava 401, veio 404"*.
 
-Confirmam a queda no meio do run: um request de **2m16s** (cold start) e o request **imediatamente anterior** — que exige corpo JSON com `code` — **passando**.
+**✅ PROVADO — a aplicacao responde 401, e o codigo nunca esteve errado.** A sonda `UnknownRouteRealServerIntegrationTest` exercita o caminho por HTTP real contra o Tomcat: anonimo em rota inexistente = **401**, igual ao MockMvc. Rota **existente** protegida tambem responde 401 — os dois iguais, entao **nao ha oraculo de enumeracao**. O homolog rodando `9bca566` tambem devolve 401 (conferido por `curl`). A frase do commit do 404 ("sem token continua 401") esta **correta**.
 
-**A causa:** duas fontes disparam deploy para o mesmo push — o **auto-deploy do Render** (branch conectada) e o **deploy hook do CI**. Some-se o rollback e chega-se a 4.
+**❌ HIPOTESES DERRUBADAS** (ficam registradas para nao serem reinventadas):
+1. *"MockMvc mente porque nao faz o ERROR dispatch"* — a sonda em container real deu o mesmo 401 do MockMvc. Nao ha divergencia.
+2. *"A build nova mudou o comportamento anonimo"* — nao mudou.
+3. *"Deploys concorrentes (auto-deploy do Render + hook do CI) derrubaram a instancia no meio do run"* — **o painel desmente**: os 4 eventos sao **2 deploys x 2 eventos** (started + live). `268ed86` as 20:36→20:40 via Deploy Hook, e `9bca566` as 20:45→20:49 via API (o rollback). **Nao houve auto-deploy e nao houve corrida**; durante o Newman o deploy estava estavel.
 
-⚠️ **E a verificacao por commit NAO protege disso.** Os dois primeiros deploys sao do **mesmo commit**: a espera do `test-homolog` aprova quando o primeiro sobe, o Newman comeca, e o segundo **derruba a instancia no meio**. E o mesmo ponto cego do prod — a verificacao diz *o que* esta no ar, nao *qual instancia* esta respondendo.
+**❓ EM ABERTO — de onde veio o 404.** Duas pistas sobraram, e nenhuma foi confirmada: (a) um request de **2m16s** no run, que em Render free indica **cold start** — e cold start sem evento de deploy significa **restart da instancia** (crash/OOM: o free tier tem 512MB e a JVM roda 295 requests seguidos); (b) o request **imediatamente anterior**, que exige corpo JSON com `code`, **passou** — a aplicacao estava viva num e algo mudou no seguinte. **Proximo passo de diagnostico: os LOGS do Render na janela 20:40–20:45**, procurando restart / OutOfMemory.
 
-**Correcao (fora do codigo, painel):** desligar o **Auto-Deploy** no Render — quem controla o deploy e o CI. Sem isso, todo push de `dev` tem chance de reprovar o Newman por sorteio.
+**🔧 O INSTRUMENTO (feito, e e o que resolve o proximo caso):** as duas collections ganharam, nos requests de rota inexistente, uma guarda que roda **antes** de julgar o status e distingue *"a INSTANCIA respondeu"* de *"o edge respondeu"* — o edge do Render devolve `Not Found` em **texto puro**, a aplicacao devolve **JSON**. Falha com o corpo cru na mensagem.
 
-**⚠️ CONFERIR O MESMO NO RAILWAY (prod):** se o Railway tambem auto-deploya no push de `main` **enquanto** o CI faz `railway up`, a corrida existe igual em producao — e seria a **metade que faltava** da explicacao de junho. O laco da secao acima explica a reversao; deploys concorrentes explicam por que o Newman falhava de forma **intermitente**, que o laco sozinho nao explica.
-
-**Correcao no teste (feita):** as duas collections ganharam, nos requests de rota inexistente, uma guarda que roda **antes** de julgar o status e distingue "a INSTANCIA respondeu" de "o edge respondeu", falhando com o corpo cru na mensagem. Um teste de contrato que nao separa *"a aplicacao respondeu errado"* de *"a aplicacao nao respondeu"* transforma queda de infra em suspeita de defeito de codigo — foi exatamente o custo desta investigacao.
+⚠️ **A licao, que nao e sobre 404:** um teste de contrato que nao separa *"a aplicacao respondeu errado"* de *"a aplicacao nao respondeu"* transforma qualquer instabilidade de infra em suspeita de defeito de codigo. A evidencia decisiva (o **corpo** da resposta) estava disponivel desde o primeiro minuto e passou tres hipoteses sem ser olhada. **Diante de um status inesperado, olhar o corpo antes de teorizar.**
 
 ---
 
