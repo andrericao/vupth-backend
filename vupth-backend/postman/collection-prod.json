@@ -13238,6 +13238,20 @@
         "exec": [
          "// Regressao 12/08: rota sem handler caia no handleGeneric e virava 500 INTERNAL_ERROR.",
          "// Enquanto foi 500, o log de producao nao distinguia 'build velha no ar' de 'servidor quebrado'.",
+         "",
+         "// ⚠️ Esta guarda vem ANTES de julgar o status, e existe por causa de 13/08.",
+         "// O Newman acusou \"esperava 401, veio 404\" e o 404 NAO era nosso: quando a instancia",
+         "// cai ou reinicia no meio do run, o edge do Render responde 404 com corpo \"Not Found\"",
+         "// em texto puro. Sem separar os dois casos, uma queda de instancia chega disfarcada de",
+         "// defeito de codigo — e custou uma investigacao inteira antes de alguem olhar o corpo.",
+         "// A aplicacao responde JSON nos erros que tem corpo; o edge do Render nunca responde JSON.",
+         "const corpo = (pm.response.text() || '').trim();",
+         "const edgeRespondeu = pm.response.code === 404 && corpo.length > 0 && !corpo.startsWith('{');",
+         "",
+         "pm.test('a INSTANCIA respondeu (nao o edge do Render)', function () {",
+         "    pm.expect(edgeRespondeu, `status ${pm.response.code} com corpo nao-JSON: \"${corpo.slice(0, 120)}\" — a aplicacao provavelmente caiu ou reiniciou no meio do run; isto NAO e defeito de codigo`).to.be.false;",
+         "});",
+         "",
          "pm.test(\"Status 404 - rota inexistente\", () => pm.response.to.have.status(404));",
          "pm.test(\"code NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"NOT_FOUND\"));"
         ],
@@ -13263,6 +13277,20 @@
        "script": {
         "exec": [
          "// Documenta a ordem: rota desconhecida FORA de prefixo publico nem chega no handler de 404.",
+         "",
+         "// ⚠️ Esta guarda vem ANTES de julgar o status, e existe por causa de 13/08.",
+         "// O Newman acusou \"esperava 401, veio 404\" e o 404 NAO era nosso: quando a instancia",
+         "// cai ou reinicia no meio do run, o edge do Render responde 404 com corpo \"Not Found\"",
+         "// em texto puro. Sem separar os dois casos, uma queda de instancia chega disfarcada de",
+         "// defeito de codigo — e custou uma investigacao inteira antes de alguem olhar o corpo.",
+         "// A aplicacao responde JSON nos erros que tem corpo; o edge do Render nunca responde JSON.",
+         "const corpo = (pm.response.text() || '').trim();",
+         "const edgeRespondeu = pm.response.code === 404 && corpo.length > 0 && !corpo.startsWith('{');",
+         "",
+         "pm.test('a INSTANCIA respondeu (nao o edge do Render)', function () {",
+         "    pm.expect(edgeRespondeu, `status ${pm.response.code} com corpo nao-JSON: \"${corpo.slice(0, 120)}\" — a aplicacao provavelmente caiu ou reiniciou no meio do run; isto NAO e defeito de codigo`).to.be.false;",
+         "});",
+         "",
          "pm.test(\"Status 401 - anonimo em rota protegida\", () => pm.response.to.have.status(401));"
         ],
         "type": "text/javascript"
