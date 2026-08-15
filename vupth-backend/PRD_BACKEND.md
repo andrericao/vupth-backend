@@ -3206,6 +3206,18 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 ⚠️ **A licao, e ela nao e sobre 404:** quando um teste de ambiente diverge de um teste local, a primeira pergunta e **"o request e mesmo o que o nome diz?"** — nao "o que ha de diferente no ambiente?". As quatro hipoteses erradas foram todas sobre o ambiente, e a evidencia que as derrubava (o **corpo JSON**, que so a aplicacao produz, e o **`startedAtEpochMs` identico**) estava disponivel desde o primeiro minuto.
 
+#### 15/08 — a varredura: nao eram 2 requests, eram 20. A VITRINE ANONIMA nunca foi testada anonima
+
+**Aplicada a licao acima como varredura**, e nao so ao request que falhou. Nas duas collections, **18 requests** (alem dos 2 de 12/08) declaravam `auth` no **nivel do item** com `request.auth` ausente e **sem header `Authorization` proprio** — entao o `bearer {{owner_token}}` da **raiz** valia, e todos iam **autenticados**. O `auth` passou para dentro de `request`; o orfao do item saiu.
+
+**Por que ninguem viu:** os 18 caem em rotas `permitAll`, onde mandar token **nao muda o status**. Passavam verdes afirmando algo que nao exercitavam.
+
+🔴 **O que estava realmente descoberto — 9 dos 18 sao a vitrine PUBLICA:** `list all active establishments`, `search establishment by name`, os filtros `serviceType`/`neighborhood` e `professionals-with-queue`. **A vitrine anonima antes do cadastro — premissa da secao de GPS/proximidade, o que o app-cliente mostra a quem ainda nao tem conta — era testada com o token do dono.** Nenhuma assercao provava que ela responde **sem** token. Os outros 9 (register/login e os erros de credencial) sao cosmeticos: o token e irrelevante ali.
+
+⚠️ **O padrao VALIDO, para nao "consertar" o que esta certo:** 82 requests tem `request.auth: noauth` **mais** um header `Authorization: Bearer {{prof_token}}` explicito — o `noauth` desliga o bearer da raiz e o header carrega o token certo. Esses funcionam; o `auth: bearer` que sobra no nivel do item deles e **inerte** (o Newman ignora). ⚠️ Mas e a mesma forma que engana: **quem editar um desses e apagar o header confiando no `auth` do item deixa o request anonimo sem aviso nenhum.** Limpeza registrada como pendencia — mexe em 82 requests x 2 arquivos **sem mudar comportamento**, entao vale sozinha, fora de um commit que precise de Newman.
+
+**Como conferir isto sozinho** (custa segundos e nao depende de rodar a collection): um request e anonimo de verdade **so** quando o `noauth` esta **dentro de `request`**. `auth` irmao de `request` nao existe para o Newman.
+
 ---
 
 ## 19. Fluxos de Usuario
