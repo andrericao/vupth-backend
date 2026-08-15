@@ -4,10 +4,13 @@ import org.springframework.boot.actuate.info.Info;
 import org.springframework.boot.actuate.info.InfoContributor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.lang.management.ManagementFactory;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -43,6 +46,21 @@ public class GitCommitInfoContributor implements InfoContributor {
     /** Inicio da JVM, nao da criacao deste bean. Fixo enquanto o processo viver. */
     private final long startedAtEpochMs;
 
+    /**
+     * Quanto ESTA instancia levou para ficar pronta, em milissegundos. {@code null} ate o
+     * {@link ApplicationReadyEvent} — quem le o {@code /actuator/info} durante o boot ve o campo
+     * ausente, que e a resposta honesta (*"ainda nao ficou pronta"*), e nao um zero enganoso.
+     *
+     * <p><b>Por que isto existe (D4, 2026-08-15).</b> O Render Free hiberna, e o custo do cold start
+     * so tinha uma medicao: 35s, tirada a mao pelo front-partner em 11/08. Numero de uma medicao
+     * manual nao sustenta decisao de custo nem prova que uma otimizacao funcionou. Publicando aqui,
+     * o tempo de boot passa a ser observavel <b>no ambiente que importa</b> — a CPU compartilhada do
+     * Render, nao a maquina de quem desenvolve, onde este numero nao significa nada.
+     *
+     * <p>{@code volatile} porque quem escreve e a thread do boot e quem le e uma thread de request.
+     */
+    private volatile Long readyInMs;
+
     /** O construtor do bean. Anotado porque a classe tem dois e o Spring precisa escolher. */
     @Autowired
     public GitCommitInfoContributor(
@@ -62,13 +80,32 @@ public class GitCommitInfoContributor implements InfoContributor {
         this.startedAtEpochMs = startedAtEpochMs;
     }
 
+    /**
+     * Registra o tempo ate a instancia ficar pronta. O {@link ApplicationReadyEvent} e o marco
+     * certo: e o mesmo ponto em que o {@code readiness} passa a responder UP, entao este numero e
+     * exatamente o que o portao {@code waitForBackend()} dos apps espera — nao um tempo interno que
+     * so faz sentido aqui dentro.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void registraTempoDeBoot(ApplicationReadyEvent event) {
+        this.readyInMs = event.getTimeTaken().toMillis();
+    }
+
     @Override
     public void contribute(Info.Builder builder) {
         builder.withDetail("git", Map.of("commit", Map.of("id", shortCommit())));
-        builder.withDetail("app", Map.of(
-                "startedAt", Instant.ofEpochMilli(startedAtEpochMs).toString(),
-                "startedAtEpochMs", startedAtEpochMs
-        ));
+
+        // LinkedHashMap, nao Map.of: o bootMillis e opcional (ausente ate ficar pronta) e o Map.of
+        // nao aceita valor nulo. A ordem estavel tambem mantem o JSON legivel para quem le no olho.
+        Map<String, Object> app = new LinkedHashMap<>();
+        app.put("startedAt", Instant.ofEpochMilli(startedAtEpochMs).toString());
+        // ⚠️ O ci.yml recorta este campo com grep ("startedAtEpochMs":[0-9]*) para decidir se o
+        // Newman roda contra a instancia nova. Mantenha-o numero puro e com este nome exato.
+        app.put("startedAtEpochMs", startedAtEpochMs);
+        if (readyInMs != null) {
+            app.put("bootMillis", readyInMs);
+        }
+        builder.withDetail("app", app);
     }
 
     private String shortCommit() {

@@ -3575,9 +3575,47 @@ keep-alive externo e contorno do free tier; aceitar e o que fazemos hoje.
 
 **O lado do backend.** Eles pedem duas coisas a nos, validas em qualquer cenario: **confirmar o tempo
 tipico de boot** (mediram 35s) e dizer **se da para encurtar** — o teto de 90s do gate deles e
-calibrado nesse numero, e eles precisam ser avisados se mudarmos de plano ou de host. Encurtar tem
-caminho real e barato aqui: **`spring.jpa.open-in-view`, lazy init e o custo das migrations no boot**
-sao nossos e nao dependem da sua decisao — da para atacar mesmo mantendo o Free.
+calibrado nesse numero, e eles precisam ser avisados se mudarmos de plano ou de host.
+
+#### ✅ 15/08 — a primeira metade esta ENTREGUE: o boot passou a ser medido
+
+**`GET /actuator/info` agora publica `app.bootMillis`** — quanto **esta** instancia levou para ficar
+pronta, capturado no `ApplicationReadyEvent`, que e **o mesmo marco em que o `readiness` passa a
+responder UP**. Entao o numero e exatamente o que o `waitForBackend()` dos apps espera, e nao um
+tempo interno que so faz sentido aqui dentro.
+
+**Por que medir veio antes de otimizar:** os 35s eram **uma medicao manual, de uma vez so**. Isso nao
+sustenta uma decisao de custo (D4) nem prova que uma otimizacao funcionou — e cronometrar na maquina
+de quem desenvolve nao diz nada, porque o que pesa e a **CPU compartilhada do Render**. Agora da para
+ler o valor a cada deploy, no ambiente que importa. ⚠️ **Antes do ready o campo fica AUSENTE**, nao
+zero: ausente e a resposta honesta (*"ainda nao ficou pronta"*), zero seria um boot instantaneo
+mentiroso. **Guarda no `GitCommitInfoContributorTest`:** um dos testes novos prova que o campo novo
+**nao cega o `grep` do `ci.yml`** — os dois convivem no mesmo bloco `app`, e quebrar aquele recorte
+faria o `test-prod` estourar e o `rollback-prod` reverter um deploy correto (o estrago de 12/08 pelo
+outro lado).
+
+**➡️ Para os fronts:** leiam `app.bootMillis` do `/actuator/info` em vez de cronometrar a mao. Se ele
+subir de forma consistente, o teto de 90s do gate precisa subir junto — **avisem**, e o mesmo combinado
+vale no sentido inverso se mudarmos de plano ou host.
+
+#### ❌ `spring.main.lazy-initialization=true` — AVALIADO E REJEITADO (nao e economia, e mentira)
+
+E a otimizacao de boot mais citada, corta tempo de verdade, e aqui seria **ativamente nociva**. Com
+lazy init os beans nascem **no primeiro uso**, entao a aplicacao anuncia **ready mais cedo sem estar
+mais pronta**: o `readiness` responde UP, o portao dos apps libera o cadastro, e o **primeiro request
+paga** o que o boot deixou de pagar. Ou seja, o numero melhora e a experiencia piora — e pior, o
+contrato que este PRD deu aos fronts na §18c (*"`readiness` UP = pode cadastrar agora"*) **deixaria de
+ser verdade**. ⚠️ Sobra ainda que erro de configuracao de bean, que hoje derruba o boot, passaria a
+aparecer como **500 no primeiro usuario que tocar aquele caminho**.
+
+**O que ainda pode ser tentado** (nao feito, e nao urgente sem numero antes): **CDS / extracao do fat
+jar** (Spring Boot 3.3 suporta `-Djarmode=tools ... extract`, e o ganho documentado e real). ⚠️ Mexe no
+`ENTRYPOINT` do `Dockerfile`, que e o caminho do deploy que **acabou de sair de um laco de rollback** —
+nao vale arriscar as cegas. E o treino do CDS pede um **banco no momento do build** (o contexto sobe e
+o Liquibase roda), o que o build atual nao tem. Fazer **depois** de ter o `bootMillis` de algumas
+subidas, para comparar antes/depois com numero. **Conferido e ja correto:** `open-in-view=false` em
+staging/prod, `ddl-auto=none`. **Liquibase sao 103 changesets em 79 arquivos**, validados a cada boot —
+candidato a medicao, mas mexer em historico de migration com dado em producao e risco proprio.
 
 ---
 
