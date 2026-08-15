@@ -48,6 +48,7 @@
 18. [Endpoints — Professional Intervals](#18-endpoints--professional-intervals)
 19. [Fluxos de Usuario](#19-fluxos-de-usuario)
 20. [Resumo de Testes](#20-resumo-de-testes)
+20b. [**DECISOES PENDENTES DO ANDRE**](#20b-decisoes-pendentes-do-andre--contexto-pergunta-e-o-que-o-mercado-faz) — `D1..D9`, numeracao **estavel**; nada abaixo e implementado sem a resposta
 21. [Pendente de Implementacao no Backend](#21-pendente-de-implementacao-no-backend)
 22. [Evolucao Pos-MVP — Roadmap](#22-evolucao-pos-mvp--roadmap)
 
@@ -3427,6 +3428,271 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 ---
 
+## 20b. DECISOES PENDENTES DO ANDRE — contexto, pergunta e o que o mercado faz
+
+> 🧭 **Para que serve esta secao (criada em 2026-08-15, a pedido dele).** Ha escolhas que **nao sao
+> tecnicas** — sao de produto, custo ou risco — e que **nenhuma equipe deve tomar sozinha**. Cada uma
+> traz **contexto**, **a pergunta**, **o que se faz no mercado** (situacao identica ou proxima) e **o
+> que muda conforme a resposta**. Ate a resposta, **o item nao e implementado**: o custo de errar e
+> refazer, e em varios casos e migracao.
+>
+> **Formato:** `D1..Dn`, numeracao **ESTAVEL — nunca renumerar** (ao contrario do backlog da §21, que
+> renumera por prioridade). Ao decidir: marcar ✅ com **data e razao** e **manter a linha** — a decisao
+> registrada vale mais que a lista curta, porque e ela que impede a pergunta de voltar em 3 meses.
+>
+> ⚠️ **Sobre os `D` das outras equipes:** o Partner (`PRD_FRONT-PARTNER §9-A`) e o Client
+> (`PRD_FRONT-CLIENT §1z`) tem topicos proprios, com numeracao propria — **`D1` la nao e `D1` aqui**.
+> Onde a decisao e a mesma, esta secao registra **o lado do backend** (esquema, contrato, migracao) e
+> aponta para la em vez de copiar a pesquisa deles, para as duas nao divergirem com o tempo.
+
+---
+
+### D1 · Duplo ingresso na fila: qual e o ALCANCE do bloqueio?
+
+**Contexto.** Defeito real, reproduzido no device (Client §4.2, 07/08) e **confirmado no codigo em
+15/08**: o `createAttendance` (`AttendanceServiceImpl:525-574`) tem cinco portoes — profissional
+afiliado, loja bate, loja aberta agora, `accepting_new`, itens do profissional — e **nenhum pergunta
+se aquele cliente ja tem atendimento ativo**. O Andre estava `IN_PROGRESS` e entrou na fila de novo.
+A guarda do front e local (`shouldCreateAttendance` so le o store do aparelho), entao logout/login ou
+reinstalacao fura. A nocao **ja existe no projeto**, em outro caminho: `SwapOfferServiceImpl:155-161`
+recusa oferta de quem ja esta na fila daquele profissional.
+
+**Estrago hoje:** a fila conta o mesmo cliente duas vezes, a estimativa dos outros infla, e o
+atendimento orfao **trava o fechamento da loja e o apagar-conta** — os dois checam atendimento ativo.
+
+**Direcao ja dada pelo Andre (15/08):** um metodo que verifica o status do cliente; estando
+**aguardando / cortando / atrasando**, ele **nao pode marcar de novo em estabelecimentos do mesmo
+TIPO** (barbearia, salao...). Restam tres perguntas que mudam o codigo e o esquema:
+
+**(a) O alcance e mesmo o TIPO de estabelecimento?** Sao tres raios possiveis, do mais estreito ao
+mais largo: **mesmo profissional** · **mesma loja** · **mesmo `service_type` em QUALQUER loja**.
+O terceiro e o que voce descreveu, e e o unico que impede o *hedging* — a pessoa entrar na fila de
+tres barbearias para ver qual anda mais rapido, e furar duas. ⚠️ **Mas ele tambem barra caso
+legitimo:** cortar o cabelo hoje as 15h no bairro do trabalho **e** entrar na fila de outra barbearia
+no fim do dia perto de casa passa a ser recusado enquanto o primeiro nao terminar.
+
+**(b) Quais status contam como "ocupado"?** `SCHEDULED` (aguardando), `IN_PROGRESS` (cortando) e
+`LATE` (atrasando) sao os que voce citou. Faltam decidir: **`PAUSED`** (o corte comecou e esta pausado
+— pela intencao da regra, conta) e sobretudo **`INTENTION`**, que e compromisso vivo **fora** da fila
+e ja conta como bloqueio no apagar-conta. ⚠️ **Se `INTENTION` contar, quem tem intencao para sabado
+nao entra em fila nenhuma do mesmo tipo durante a semana** — quase certamente nao e o que se quer.
+
+**(c) O convidado (`guest`) conta?** E o cliente que a propria loja adiciona na fila, sem conta. Como
+nao tem `clientId`, ele **nao e alcancavel** por esta regra — vale registrar que o buraco continua
+aberto por esse lado, e que fecha-lo exigiria identificar a pessoa.
+
+**O que o mercado faz.**
+- **Companhias aereas** sao o caso **identico** e o mais duro: reserva duplicada (mesmo passageiro,
+  mesmo trecho, datas sobrepostas) e **cancelada automaticamente** — as regras da IATA tratam isso
+  como abuso de inventario, exatamente o *hedging* da pergunta (a). A regra deles e por **rota**, o
+  equivalente ao seu "mesmo tipo de estabelecimento".
+- **Corrida por app** (Uber, 99): **um pedido ativo por vez**, bloqueio duro e sem excecao. E o raio
+  mais estreito possivel, e ninguem reclama porque a duracao e curta.
+- **Filas de restaurante** (Waitwhile, QLess, Yelp Waitlist): **permitem** entrar em varias listas ao
+  mesmo tempo e combatem o furo **pela ponta da punicao** (tolerancia curta, SMS, no-show anotado) —
+  nao pelo bloqueio na entrada. Relatam ate 40% menos no-show so com notificacao.
+- **Agenda de salao** (Booksy, Fresha): bloqueiam **sobreposicao de horario** do mesmo cliente, nao a
+  categoria do servico. Duas reservas em salas diferentes no mesmo horario sao recusadas; duas no
+  mesmo dia, nao.
+- **Saude** (agendamento de consulta): bloqueio por **especialidade** dentro da mesma rede — o mais
+  proximo do "mesmo tipo", e a justificativa e igual: o slot e escasso e a falta e cara.
+
+**O que muda.** Raio (a) estreito = so uma checagem por `professional_id`/`establishment_id`, sem
+esquema novo. Raio por `service_type` = a consulta passa a cruzar **atendimento ativo x tipo da loja**
+em toda a base do cliente, o que pede **indice proprio** e deixa a mensagem de erro mais dificil de
+escrever (*"voce ja esta na fila de outra barbearia"* expoe onde a pessoa esta). Sendo o raio largo,
+o **codigo de erro e a mensagem** viram parte do contrato dos dois apps — hoje nao existe nenhum
+equivalente. ⚠️ E se a resposta for "bloqueio largo", vale decidir junto se ele e **duro** (recusa) ou
+**avisa e deixa passar** — o mercado de filas escolheu o segundo.
+
+---
+
+### D2 · `forgot-password`: continuar mentindo que o e-mail existe?
+
+**Contexto.** Tensao antiga, hoje o **#32/S21** do backlog, e a unica que ja veio das duas pontas. Hoje
+`POST /auth/forgot-password` responde **200 sempre** — inclusive para e-mail que nao existe — por
+**anti-enumeracao**, e ha **teste que assere esse comportamento**. O Partner argumenta que devolver
+`404 EMAIL_NOT_FOUND` sozinho **ja melhora muito** a tela (o usuario digitou errado e nao descobre).
+Este PRD registra **rate limit como pre-requisito**: sem ele, o endpoint vira **verificador de contas
+aberto** — qualquer um confere se um e-mail tem conta no VUPTH, em lote.
+
+**A pergunta.** Manter o 200 mudo, ou expor o 404 — e, se expor, **antes ou depois** do rate limit?
+
+**O que o mercado faz.**
+- **Resposta generica** (Google, GitHub, Microsoft, e a recomendacao explicita do **OWASP**): *"se
+  existir conta, enviamos um e-mail"*. E o padrao de quem tem escala e alvo.
+- **Expor o erro** e comum em produto pequeno e local, onde enumerar a base vale pouco — e a queixa
+  de usabilidade e real: sem o 404, quem errou uma letra fica esperando um e-mail que nunca vem.
+- **Meio-termo que virou padrao de fato:** resposta generica **mais** um texto que ensina o que fazer
+  (*"nao recebeu em 5 min? confira o e-mail digitado ou cadastre-se"*) — resolve a usabilidade **sem**
+  abrir o oraculo, e nao custa backend nenhum.
+- **Rate limit** acompanha os tres casos no mercado; e o controle que impede o abuso em lote,
+  independentemente da resposta escolhida.
+
+**O que muda.** Expor o 404 exige **ajustar o teste que assere o 200** e as **duas collections**, e
+so deveria subir junto do rate limit (que nao existe e e trabalho proprio). O meio-termo **nao custa
+nada aqui** — e mudanca de texto nos apps. ⚠️ Note que isto se cruza com o **D3**: enquanto o e-mail
+nao sai de verdade, nenhuma das tres opcoes melhora a vida de ninguem.
+
+---
+
+### D3 · O codigo de reset em texto puro no log
+
+**Contexto.** Achado em 15/08, ao instrumentar o #1. Com `provider=none` (o default), o
+`NoOpEmailSender` imprime o **codigo de recuperacao em texto puro** no log:
+`[MAIL:noop] reset code para fulano@x.com = 123456`. Enquanto nenhum e-mail sai, **esse log e o unico
+jeito de recuperar uma conta** — tirar hoje fecha a unica porta que existe.
+
+**A pergunta.** Quando o SMTP entrar de verdade, o log continua imprimindo o codigo?
+
+**O que o mercado faz.** A regra e unanime: **credencial e segredo de uso unico nao vao para log** —
+PCI-DSS e OWASP Logging Cheat Sheet listam senha, token e codigo de verificacao como "nunca logar".
+O padrao em dev e **logar so em profile de desenvolvimento** (Spring: `@Profile("dev")`), ou logar o
+**hash**/os 2 ultimos digitos, o suficiente para correlacionar sem permitir uso.
+
+**O que muda.** Enquanto for `none`, **nada** — e o unico canal. No dia em que o SMTP subir, quem
+tiver acesso ao log do Render **tem acesso a qualquer conta**: pede reset do e-mail alvo, le o codigo
+no log, troca a senha. Sugestao a confirmar: manter o log so quando `provider=none` **e** o profile
+nao for `prod`, e derrubar para DEBUG no resto.
+
+---
+
+### D4 · Render Free hiberna — o unico item que sai da regra de custo zero
+
+**Contexto.** Medido pelo Partner em 11/08: instancia hibernada, `readiness` respondeu **200 em 35s**;
+acordada, `/ws/info` em **0,5s**. Ja custou o primeiro login falhando por timeout (mascarado com o
+`waitForBackend()`) e agora a *"falha no handshake do websocket"* (**S29** deles) — o socket conecta
+**depois** do gate e, se a instancia re-hibernou (~15min sem trafego), o handshake morre. ⚠️ **Isto
+tambem e a explicacao mais provavel do §4.1 do Client** (*"o WS nao conecta a partir do React
+Native"*, aberto como defeito nosso em 07/08): o REST funcionava no teste porque acabara de acordar a
+instancia. Vale cruzar antes de alguem cacar bug de React Native.
+
+**A pergunta.** Pagar para nao hibernar, cutucar de fora, ou aceitar e mascarar nos apps?
+
+**O que o mercado faz.** Pesquisa completa no **`PRD_FRONT-PARTNER §9-A, D1`** — nao repito aqui para
+as duas nao divergirem. Resumo: plano pago (~US$7/mes) e o padrao assim que existe usuario real;
+keep-alive externo e contorno do free tier; aceitar e o que fazemos hoje.
+
+**O lado do backend.** Eles pedem duas coisas a nos, validas em qualquer cenario: **confirmar o tempo
+tipico de boot** (mediram 35s) e dizer **se da para encurtar** — o teto de 90s do gate deles e
+calibrado nesse numero, e eles precisam ser avisados se mudarmos de plano ou de host. Encurtar tem
+caminho real e barato aqui: **`spring.jpa.open-in-view`, lazy init e o custo das migrations no boot**
+sao nossos e nao dependem da sua decisao — da para atacar mesmo mantendo o Free.
+
+---
+
+### D5 · Horario por dia da semana: so a semana, ou ja com excecoes?
+
+**Contexto.** Backlog **#35 / Partner S27**, confirmado no codigo: `Establishment` tem **um unico**
+`opening_time`/`closing_time` para a semana inteira — nao da para ter domingo fechado. Nao e
+cosmetico: esse horario alimenta o **gate de entrada na fila**, o **auto-fechamento** e a **grade de
+refeicoes**, e bloqueia a tela `establishment-hours.tsx` deles.
+
+**A pergunta.** Modelar **so a grade semanal** (7 linhas), ou ja incluir **excecoes** por data
+(feriado, folga, fechamento pontual)?
+
+**O que o mercado faz.** Grade semanal recorrente **+ lista de datas que sobrescrevem** e o padrao de
+fato (Google Business Profile, Booksy, Calendly) — praticamente todo produto acaba precisando das
+duas. Duas janelas no mesmo dia (fecha para o almoco) e comum no Brasil, mas aqui o **modelo de
+refeicoes provavelmente ja resolve**, e duplicar o conceito seria erro.
+
+**O que muda.** So a semana e bem menor e ja destrava o pedido. As excecoes podem vir depois **sem
+migracao** apenas se o modelo nascer preparado (tabela de datas que sobrescreve a recorrencia); se
+nascer sem, incluir depois **e migracao** com dado em producao.
+
+---
+
+### D6 · Solicitacao de corte: horario desejado, ou so mostrar o ETA?
+
+**Contexto.** Partner **S26**: o card deve mostrar *"principalmente o horario"*, e hoje o contrato so
+tem **quando o pedido foi feito** e **quando expira**. Aceitar cria atendimento **no fim da fila**,
+entao o profissional decide sem saber se aquilo serve para o cliente.
+
+**A pergunta.** O pedido passa a carregar um **horario desejado**, ou continua "me encaixa quando der"
+e o que falta e **expor o ETA da cauda** no response?
+
+**O que o mercado faz.** *Pedido com horario* (o "solicitar horario" de Booksy/Fresha) vira quase uma
+negociacao — e ai o aceite tem de **respeitar o horario**, nao jogar na cauda. *Pedido sem horario com
+previsao* (delivery, Uber) mostra "por volta de X" e a pessoa aceita — mais simples e coerente com
+fila.
+
+**O que muda.** A primeira opcao aproxima o corte da **INTENCAO** (ja temos motor) — pode ser a mesma
+feature com dois nomes, e vale decidir junto com o D8. A segunda e **barata**: expor o ETA que ja
+calculamos, sem esquema novo.
+
+---
+
+### D7 · Foto de perfil: quem recebe o upload?
+
+**Contexto.** Partner **S22**: o profissional nao tem campo de imagem e **nao existe upload** em lugar
+nenhum dos dois apps (so o `url_image` do estabelecimento, que eles apenas leem).
+
+**A pergunta.** O arquivo sobe **pelo backend** ou **direto do app** para um servico de midia?
+
+**O que o mercado faz.** **URL pre-assinada** (S3, Cloudflare R2, Supabase Storage) e o padrao: o
+backend assina, o app sobe direto, **a banda nao passa pelo servidor** — o que importa muito num
+Render Free. Servico gerenciado (Cloudinary, Uploadcare) ainda redimensiona e serve por CDN, com free
+tier que costuma bastar num MVP. Multipart pelo proprio backend e o mais simples de comecar e o pior
+de manter: o servidor vira gargalo de banda e storage/CDN continuam para resolver.
+
+**O que muda.** Nas duas primeiras o backend expoe so a **URL final** e ganha um endpoint de assinatura
+— e ai falta decidir **quem redimensiona** (mandar 8MP do celular e desperdicio). ⚠️ Custo do lado
+deles: `expo-image-picker` e **modulo nativo**, exige `eas build` novo — entao vale **juntar com outras
+mudancas nativas**. ⚠️ Checar o free tier contra a regra de custo zero antes de escolher.
+
+---
+
+### D8 · Piso de horario ("nao posso antes das 15:00")
+
+**Contexto.** Pedido seu via Client **B9**. ⚠️ **Sao dois casos e hoje so existe um:** o **alvo**
+flexivel (*"quero por volta das 15h, mas se der antes, otimo"*) e o `targetTime`, que **ja existe**;
+o **piso** e rigido (*"nao posso antes das 15h"*) e nao existe. No desenho proposto, o cliente **entra**
+na fila quando a estimativa cruza o piso e **SAI** se ela cair para antes, reentrando depois.
+
+**A pergunta.** (a) Para onde vai o cliente enquanto esta "fora pelo piso" — volta a ser **INTENCAO**
+ou vira **estado proprio**? (b) A regua da multa e o **horario comunicado** a ele? (c) Existe
+**tolerancia**, e de quanto?
+
+**O que o mercado faz.** O piso rigido **nao tem referencia pronta** em fila — e desenho seu. O mais
+proximo e a **janela de entrega** (delivery/logistica: "entre 15h e 17h"), que e compromisso do
+fornecedor, nao do cliente. Sobre a tolerancia, ha padrao claro: restaurante segura a mesa **10 min**;
+salao usa **10-15 min**. Sobre multa, o dado que muda a conversa (Booksy): **so ter o cartao salvo,
+sem cobrar, ja reduz o no-show em 25-30%** — boa parte do efeito vem da ameaca crivel.
+
+**O que muda.** ⚠️ **O buraco que o proprio Client levantou e o mais importante:** quando alguem nao
+aparece, a fila anda para tras no relogio e o **proximo chega "atrasado" em relacao ao horario que lhe
+foi comunicado** — punir esse cliente e multar alguem por um atraso que o sistema criou. Se a regua
+for o horario comunicado, o backend precisa **guardar o horario comunicado a cada cliente**, o que e
+coluna nova e muda o que o WS publica. O gatilho da reavaliacao **nao pode ser "mudou o tamanho da
+fila"**: atendimento que demora mais empurra a estimativa **sem** mudar o tamanho, e e exatamente ai
+que alguem cruza o piso. As decisoes de **valor** de multa estao no `PRD_FRONT-CLIENT §1z, D1-D4`.
+
+---
+
+### D9 · Fila ou agenda pura — um modelo ou dois?
+
+**Contexto.** Voce pediu (05/08) que **o profissional escolha** entre fila dinamica e agenda com
+horarios fixos (backlog **S24**, Partner **D2**, Client **C21**). E a decisao de maior alcance da
+lista: **muda o nucleo**, nao uma tela.
+
+**A pergunta.** (a) Os dois regimes convivem **na mesma loja** (profissional A por fila, B por
+agenda)? (b) No modo agenda o horario e **fixo de verdade** (atraso queima o slot) ou continua
+estimado? (c) Qual e o **default** de quem se cadastra hoje?
+
+**O que o mercado faz.** Agenda pura (Booksy, Fresha, Trinks) domina salao/estetica, onde o servico e
+longo e caro. Fila/walk-in (Waitwhile, QLess, senha de banco) domina onde o servico e curto e a
+demanda e por chegada — **barbearia de bairro e o caso classico**. O **hibrido** (Booksy e Fresha ja
+fazem) usa a agenda como espinha e encaixa o walk-in nos buracos: e o modelo dos apps grandes e o
+**mais caro de construir**, porque os dois compartilham a mesma linha do tempo.
+
+**O que muda.** Praticamente tudo que a fila viva assume — ETA, "iniciar proximo", promover, adiantar,
+refeicao projetada no ETA, auto-fechamento, o gate de entrada — **perde sentido ou muda de regra** no
+modo agenda. Por isso o combinado com o Partner e **comecar por mockup, nao por codigo**. ⚠️ Isto se
+cruza com o **D6** e com o **D8**: os tres mexem na mesma linha do tempo, e decidir um de cada vez
+tende a produzir tres modelos que nao conversam.
+
+---
+
 ## 21. Pendente de Implementacao no Backend
 
 ### Funcionalidades faltantes
@@ -3747,6 +4013,7 @@ nivel desse log junto com a virada.
 | 35 | **Horario de funcionamento e UM SO para a semana inteira — nao existe horario POR DIA nem "dia fechado"** (Partner S27, feedback de teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria — Andre reordena**) | ✅ **CONFERIDO NO CODIGO antes de aceitar** (a licao de 05/08 e 07/08): `Establishment` tem **uma unica** `opening_time` e **uma unica** `closing_time` (`LocalTime`, linhas 73-77), aplicadas a **todos os dias**; nao ha nenhuma nocao de dia da semana em lugar nenhum do modelo. O relato do Partner esta **correto**. **Por que nao e cosmetico:** o horario alimenta o **gate de entrada na fila** (BUG5 C1), o **auto-fechamento** (S1 fatia 5, via `ClosingTimeMath`) e a **grade de refeicoes** — com um horario unico a loja "abre" no domingo e o auto-close mira o horario errado. Nao da para representar o basico do ramo: **domingo fechado**, **sabado ate as 18h**, **segunda so a tarde**. **Modelagem proposta:** lista de `{ dayOfWeek (0..6), openingTime, closingTime, closed }`, com endpoint proprio ou embutida no `general-infos`; expor a **semana inteira** no `EstablishmentResponse` (o Client tambem precisa, p/ dizer "abre amanha as 9h"). **A decidir:** (a) **migration** do par unico atual → replicar para os 7 dias (dado existente nao pode virar loja fechada a semana toda); (b) `isOpenAt`/`isWithinBusinessHours`/`ClosingTimeMath` passam a resolver **pelo dia corrente no `BusinessClock`** — e a virada de meia-noite (janela que cruza o dia) fica mais delicada, porque o dia seguinte pode ter outro horario; (c) feriado/excecao pontual entra agora ou depois? (sugestao: **depois** — fechar a semana primeiro); (d) **mais de uma janela no mesmo dia** (fecha p/ almoco) e o modelo de **refeicoes** ja cobre isso? Responder explicitamente, porque o Partner esta perguntando. ⛔ **Bloqueia a tela `establishment-hours.tsx` do Partner**, que hoje so tem dois campos. |
 | 36 | **Profissional abrir o PROPRIO estabelecimento — o onboarding nao tem essa porta** (Partner S23, reforcado no teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria**) — ⚠️ **mas a pergunta que eles dizem ser o bloqueio JA TEM RESPOSTA: SIM, aceita** | ✅ **CONFERIDO NO CODIGO** (a licao de 05/08 e 07/08, agora aplicada ANTES de aceitar o enunciado): o Partner pergunta *"o `POST /establishment/quick-create` aceita um usuario que ja e PROFESSIONAL?"* e trata isso como o bloqueio. **Aceita hoje, sem uma linha de codigo nova:** o `QuickCreateEstablishmentUseCase` **nao tem barreira nenhuma** contra perfil profissional (so checa `hasRole(OWNER)` e **adiciona** o papel se faltar, linhas ~53), e o matcher `hasRole("CLIENT")` do `SecurityConfig` (linha 120) **nao barra ninguem**, porque o `RegisterUseCase` chama `addClientProfile()` para **todo** usuario que se cadastra — entao todo profissional carrega `ROLE_CLIENT` junto. Papeis sao **acumulativos**, como o PRD ja dizia. **E a reputacao acompanha a pessoa:** `rating_average`/`rating_count` vivem no `Professional`, nao no vinculo — a leitura do Partner esta certa e **nao ha migracao de dado a fazer**. **O que sobra de trabalho REAL, e e decisao de produto (Andre), nao codigo:** (1) ele pode abrir a propria loja **enquanto afiliado a outra**, ou tem de se desafiliar antes? (leitura do Partner: desafiliar antes, senao fica na fila de duas casas — e o `PROFESSIONAL_ALREADY_AFFILIATED` ja existe para o caso inverso); (2) o historico na casa antiga continua no `/professional/me/reports` dele apos a troca? (hoje **continua**, porque o atendimento aponta para o `Professional`); (3) ao abrir a loja, ele se **auto-afilia** como profissional dela? 🆕 **Caso novo e mais urgente (11/08) — o ONBOARDING:** quem escolhe "sou profissional" cria o perfil no 1o passo e cai **direto em "Buscar Estabelecimento"**; nao existe a pergunta *"vai abrir a sua propria loja ou se afiliar a uma?"*. O dono de barbearia que se identifica como profissional fica **preso no fluxo de afiliacao**. ⚠️ **Isso e UI do Partner e ja esta destravado pelo backend** — responder (1)(2)(3) fecha o item |
 | 37 | **Dono permite o GPS DEPOIS do cadastro — nada corrige a coordenada da loja** (identificado por Andre, 2026-08-13) | ⬜ aberto (**posicao provisoria — Andre reordena**) | A fatia A2 usa o GPS do dono como fonte mais precisa da coordenada da LOJA, porque ele esta *dentro dela* ao cadastrar (o CEP resolve faixa de logradouro, nao a porta). **Mas se ele cadastrou sem permitir e concede depois, nada reofereceu a correcao.** A loja fica com a coordenada do CEP — presente, porem imprecisa, e ninguem sabe. O `PATCH /establishments/{id}/addresses/{addressId}` **ja aceita** `lat`/`lng`, entao o backend pode nao ter codigo novo nenhum: falta decidir **quem oferece a correcao e quando** (o Partner detecta a permissao recem-concedida e pergunta "quer usar sua posicao atual para a loja?"). ⚠️ **Irmao do #34** — os dois sao "a loja esta no mapa no lugar errado e ninguem avisa"; avaliar entregar juntos. Ver a secao do GPS: "BURACO ABERTO — o dono que permite o GPS DEPOIS do cadastro". Decisao de modelo relacionada (mesma data): a coordenada persistida e **do estabelecimento, nunca do cliente**.
+| 38 | **Mesmo cliente entra DUAS vezes na fila — falta a invariante no servidor** (Client §4.2, device 2026-08-07; **confirmado no codigo em 15/08**) | ⬜ aberto (**posicao provisoria — Andre reordena**) | ⛔ **ALCANCE AGUARDA A DECISAO [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio) (§20b) — nao implementar antes.** `AttendanceServiceImpl:525-574` tem cinco portoes (profissional afiliado, loja bate, loja aberta agora, `accepting_new`, itens do profissional) e **nenhum pergunta se o cliente ja tem atendimento ativo**; o Andre estava `IN_PROGRESS` e entrou na fila de novo. A guarda do front e **local** (`shouldCreateAttendance` so le o store do aparelho), entao logout/login ou reinstalacao fura. ⚠️ **Nao e so contagem errada:** a fila conta o mesmo cliente duas vezes, a estimativa dos outros infla e o atendimento orfao **trava o fechamento da loja e o apagar-conta**, que checam atendimento ativo. O predicado **ja existe** em `SwapOfferServiceImpl:155-161` (recusa oferta de quem ja esta na fila daquele profissional) — falta no caminho de entrada. **Direcao do Andre (15/08):** bloquear por **status ocupado** (aguardando/cortando/atrasando) em estabelecimentos do **mesmo tipo**; o D1 fecha o raio, os status limitrofes (`PAUSED`, `INTENTION`) e se a recusa e dura ou so aviso. |
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
 **Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging. ⚠️ **O Partner pediu o encerramento destes dois em 2026-07-29** (reportados por eles em 2026-06-09): do lado deles o `/attendances` consta resolvido desde 2026-07-09 e a adicao de servico ja funciona pelo caminho do profissional ("Meus Servicos"). **Confirmar em staging e encerrar** — nao ha codigo a escrever, so a confirmacao.
