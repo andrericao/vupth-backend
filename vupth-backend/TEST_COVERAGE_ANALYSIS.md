@@ -205,6 +205,20 @@ O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` 
 
 ⚠️ **Postman não cobre e não deve:** a collection roda **contra** a instância que este campo identifica — verificar o identificador com o mesmo request que ele autoriza é circular. A prova é o teste unitário; o exercício real da espera só acontece no primeiro deploy de prod após 13/08.
 
+### 2.12 Timeouts de SMTP — config que nenhum teste de lógica alcança
+Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
+
+**Mesma classe do 2.11: guard de configuração.** A ausência de `connectiontimeout`/`timeout`/`writetimeout` **não muda o resultado de nenhum teste** — muda quanto tempo o servidor espera antes de desistir, e o default do JavaMail é **esperar para sempre**. Como o envio roda dentro do `@Transactional` do `ForgotPasswordUseCase`, um SMTP que aceita a conexão e não responde segura a transação e a conexão do pool; no Render free isso esgota o pool a partir de um endpoint **público e sem rate limit**.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| Os 3 timeouts existem no `application.properties` | ✅ | ✅ (falha nomeia a chave ausente) |
+| Vêm como `${VAR:millis}` — ajustável por env var sem novo deploy | ✅ | ✅ |
+| Default **positivo** (`0` em JavaMail = SEM timeout, o próprio defeito) | ✅ | ✅ |
+| `vupth.mail.provider` continua `${MAIL_PROVIDER:none}` — default seguro | ✅ | ✅ (virar `smtp` faria todo ambiente sem `MAIL_HOST` entregar em host vazio) |
+
+⚠️ **Postman não cobre e não tem como:** `POST /auth/forgot-password` responde **200 nos três casos** (não enviou / falhou / entregou) por anti-enumeração — nenhuma asserção de status consegue distingui-los. A separação é pelo **log** (`[MAIL:noop]` · `[MAIL:smtp] enviado` · `[MAIL:smtp] falha`), e desde 15/08 pelo **anúncio de boot** de cada sender. Ver PRD, seção "15/08 — #1 SMTP".
+
 ---
 
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)

@@ -3598,6 +3598,53 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 >   Andre em 11/08: *"email nao chegou e passou mesmo sem ter cadastro"*. **Nenhum** e-mail saiu —
 >   pior que o "reenvio nao chega" de 23/07, onde o primeiro saia. **O unico caminho de recuperacao
 >   de conta esta inutilizavel em producao.** Hipoteses e ordem de investigacao no proprio item.
+>   **➡️ Leitura do codigo em 15/08 abaixo — metade do relato nao e defeito, e a outra metade se
+>   decide com UMA linha de log.**
+
+#### 15/08 — #1 SMTP: o que o codigo diz antes de qualquer hipotese de rede
+
+**Metade do relato de device NAO e defeito.** *"passou mesmo sem ter cadastro"* e **anti-enumeracao
+funcionando** (`ForgotPasswordUseCase:46-50` — e-mail desconhecido retorna 200 em silencio, com teste
+que assere isso). Sobra um sintoma real: **o e-mail nao chegou**.
+
+⚠️ **`POST /auth/forgot-password` responde 200 nos TRES casos** e por isso o sintoma, visto de fora,
+nao distingue nada:
+1. `provider=none` → `NoOpEmailSender` **nunca envia**, so loga o codigo;
+2. `provider=smtp` e a entrega **falha** → a excecao e engolida de proposito (`:63-68`, best-effort,
+   para nao vazar existencia de conta nem invalidar o codigo);
+3. entregue, mas caiu no **spam**.
+
+**Do lado de dentro, cada caso tem uma linha de log PROPRIA** — o diagnostico custa um grep, nao uma
+investigacao: `[MAIL:noop] ...` (caso 1) · `[MAIL:smtp] reset code enviado ...` (caso 3, saiu do
+backend) · `[MAIL:smtp] falha ao enviar ...` (caso 2, com a mensagem do provedor).
+
+**Conferido no codigo:** o envio real depende **so** da env var `MAIL_PROVIDER=smtp`
+(`application.properties`, default `none`), e **nenhum profile sobrescreve mail** — `staging`, `prod`
+e `dev` nao tem uma linha sequer de `spring.mail.*`/`vupth.mail.*`. O item registra as env vars como
+setadas no host em 22/07, mas *"setei no painel"* e *"a JVM recebeu"* sao afirmacoes diferentes — e a
+segunda nunca foi verificada. ⚠️ **E o caso 1 e indistinguivel do 2 sem o log**, entao a ordem de
+hipoteses do item (timeout / porta 587 / chave Brevo / spam) **pressupoe** o que ainda nao foi provado:
+que o `SmtpEmailSender` esta no ar.
+
+**🔧 Instrumento (entregue 15/08):** os dois senders anunciam no **boot** qual provider subiu —
+`NoOpEmailSender` em **WARN** (*"NENHUM e-mail sera enviado"*), `SmtpEmailSender` em INFO com
+`host`/`port`/`from`, e em **ERROR** se `provider=smtp` com `spring.mail.host` **vazio** (o pior caso:
+o bean sobe, o endpoint responde 200 e todo envio falha para um destino que nao existe). **Agora a
+pergunta "o SMTP esta ligado neste ambiente?" se responde no log de boot, sem precisar pedir um reset.**
+
+**🔧 TIMEOUTS DE SMTP (entregue 15/08) — defeito proprio, achado no caminho e independente do #1.**
+Nao havia `connectiontimeout`/`timeout`/`writetimeout`, e o default do JavaMail e **esperar para
+sempre**. O envio roda **dentro do `@Transactional`** do use case: um SMTP que aceita a conexao e nao
+responde segura a transacao e a conexao do pool ate o socket cair sozinho. No Render free, com pool
+pequeno, poucas dessas **esgotam o pool e derrubam o app** — a partir de um endpoint **publico e sem
+rate limit** (o mesmo #32/S21), que qualquer um chama em sequencia. Default 10s nos tres, ajustavel por
+env var. Guard: `MailTimeoutPropertiesTest`, porque a ausencia dessas chaves **nao muda o resultado de
+nenhum teste de logica** — muda so quanto tempo o servidor espera antes de desistir.
+
+⚠️ **Sobrou uma pergunta que so o log responde:** se o provider for `none`, o `[MAIL:noop]` imprime o
+**codigo de reset em texto puro** no log. Enquanto for `none` isso e o unico jeito de recuperar conta;
+no dia em que o SMTP entrar, **quem tiver acesso ao log tem acesso a qualquer conta** — reavaliar o
+nivel desse log junto com a virada.
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao

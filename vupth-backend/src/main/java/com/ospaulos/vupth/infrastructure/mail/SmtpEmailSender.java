@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.mail;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,11 +24,31 @@ public class SmtpEmailSender implements EmailSender {
 
     private final JavaMailSender mailSender;
     private final String from;
+    private final String host;
+    private final int port;
 
     public SmtpEmailSender(JavaMailSender mailSender,
-                           @Value("${vupth.mail.from:no-reply@vupth.app}") String from) {
+                           @Value("${vupth.mail.from:no-reply@vupth.app}") String from,
+                           @Value("${spring.mail.host:}") String host,
+                           @Value("${spring.mail.port:587}") int port) {
         this.mailSender = mailSender;
         this.from = from;
+        this.host = host;
+        this.port = port;
+    }
+
+    /**
+     * Contraparte do aviso do {@link NoOpEmailSender}: o boot diz qual provider esta no ar, sem que
+     * ninguem precise pedir um reset para descobrir. Host vazio com provider=smtp e o caso pior —
+     * o bean sobe, o endpoint responde 200 e cada envio falha para um destino que nao existe.
+     */
+    @PostConstruct
+    void anunciaProvider() {
+        if (host == null || host.isBlank()) {
+            log.error("[MAIL] provider=smtp mas spring.mail.host esta VAZIO — nenhum e-mail vai sair. Configure MAIL_HOST.");
+        } else {
+            log.info("[MAIL] provider=smtp — host={} port={} from={}", host, port, from);
+        }
     }
 
     @Override
