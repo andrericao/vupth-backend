@@ -207,6 +207,23 @@ O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` 
 
 ⚠️ **Postman não cobre e não deve:** a collection roda **contra** a instância que este campo identifica — verificar o identificador com o mesmo request que ele autoriza é circular. A prova é o teste unitário; o exercício real da espera só acontece no primeiro deploy de prod após 13/08.
 
+### 2.12b Duplo ingresso na fila (item #38) — a invariante que faltava no servidor
+Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman folder `07 - client queue`.
+
+**O defeito:** `POST /attendances` tinha cinco portões e nenhum perguntava se o cliente já estava ocupado — reproduzido em device (Client §4.2, 07/08) estando `IN_PROGRESS`. A guarda do app é **local** (lê só o store do aparelho), então logout/login ou reinstalação a furam.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `SCHEDULED` / `IN_PROGRESS` / `PAUSED` / `LATE` no mesmo profissional → **409 `CLIENT_ALREADY_IN_QUEUE`** | — | ✅ (4 casos, um por status) |
+| ⚠️ **D1 — outro profissional da mesma loja continua liberado** | ✅ | — |
+| Outro cliente entra normalmente (o bloqueio é do indivíduo, não da vaga) | ✅ | — |
+| Depois de `FINISHED` / `CANCELLED` o cliente entra de novo | ✅ | — |
+| A mensagem diz **como destravar** (não um "não foi possível" genérico) | — | ✅ |
+
+⚠️ **Os testes que mais importam aqui são os que provam o que CONTINUA PASSANDO.** O raio é decisão registrada (D1): cliente × profissional, e só. Sem os dois casos de "continua entrando", alguém alarga o raio para a loja ou para o `service_type` e **nenhum teste reclama** — a suíte inteira ficaria verde com uma regra de produto diferente da decidida. E os casos de `FINISHED`/`CANCELLED` provam que o bloqueio **libera**: sem eles, isto seria banimento em vez de invariante.
+
+⚠️ **`INTENTION` não entra na lista** e isso é proposital — é compromisso fora da fila. Por isso `OCCUPIED_STATUSES` **não** é a `ACTIVE_STATUSES` do apagar-conta, que inclui `INTENTION`: lá a pergunta é outra ("há compromisso vivo que a exclusão quebraria?").
+
 ### 2.12 Timeouts de SMTP — config que nenhum teste de lógica alcança
 Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
 

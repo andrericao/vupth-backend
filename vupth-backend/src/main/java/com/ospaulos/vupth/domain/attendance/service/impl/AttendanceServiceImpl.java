@@ -9,6 +9,7 @@ import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendancePausedResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
+import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
@@ -79,6 +80,24 @@ public class AttendanceServiceImpl implements AttendanceService {
      * ETA da propria vez a menos disso gera um strike (penalidade) ao cliente registrado.
      */
     private static final int LATE_CANCEL_THRESHOLD_MINUTES = 60;
+
+    /**
+     * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
+     * esta aguardando, atrasado, sendo atendido ou com o atendimento pausado. Nesses quatro, uma
+     * segunda vaga com o MESMO profissional e sempre um erro — a pessoa nao pode ser atendida duas
+     * vezes ao mesmo tempo.
+     *
+     * <p>⚠️ <b>Nao inclui {@code INTENTION}</b>, e a diferenca e proposital (decisao do Andre, D1).
+     * Intencao e compromisso <b>fora</b> da fila, para um horario futuro: conta-la aqui impediria
+     * quem tem intencao para sabado de entrar em qualquer fila durante a semana. E por isso que esta
+     * lista <b>nao</b> e a {@code ACTIVE_STATUSES} do {@code DeleteAccountUseCase} — la a pergunta e
+     * "ha compromisso vivo que a exclusao quebraria?", e ai a intencao pesa.
+     */
+    private static final List<AttendanceStatus> OCCUPIED_STATUSES = List.of(
+            AttendanceStatus.SCHEDULED,
+            AttendanceStatus.LATE,
+            AttendanceStatus.IN_PROGRESS,
+            AttendanceStatus.PAUSED);
 
     // ─────────────────────────────────────────────────────────────
     // CREATE
@@ -565,6 +584,28 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         Client client = clientRepository.findById(request.clientId())
                 .orElseThrow(() -> new ClientNotFoundException(request.clientId()));
+
+        // Item #38 — invariante do duplo ingresso. O cliente ja OCUPADO com este profissional nao
+        // entra de novo. Reproduzido em device (Client §4.2, 07/08): o Andre estava IN_PROGRESS e
+        // conseguiu entrar na fila outra vez, ficando a espera do proprio corte terminar.
+        //
+        // A guarda do front e local (le so o store do aparelho), entao logout/login, reinstalacao ou
+        // corrida entre telas furam — invariante de fila tem de morar no servidor.
+        //
+        // ⚠️ Vem ANTES da primeira escrita, como os portoes do apagar-conta: um atendimento orfao
+        // nao so infla a estimativa dos outros como TRAVA o fechamento da loja e a exclusao da
+        // conta, que checam atendimento ativo.
+        //
+        // INTENCAO fica de FORA de proposito (decisao do Andre, D1): e compromisso futuro fora da
+        // fila, e conta-la impediria quem tem intencao para sabado de entrar em qualquer fila
+        // durante a semana. Por isso a lista nao e a ACTIVE_STATUSES do DeleteAccountUseCase, que
+        // inclui INTENTION — la o que se pergunta e outra coisa ("ha compromisso vivo?").
+        if (attendanceRepository.existsByClient_IdAndProfessional_IdAndStatusIn(
+                client.getId(), professional.getId(), OCCUPIED_STATUSES)) {
+            log.warn("[Attendance] createAttendance — cliente={} ja ocupado com profissional={} (duplo ingresso barrado)",
+                    client.getId(), professional.getId());
+            throw new ClientAlreadyInQueueException(client.getId(), professional.getId());
+        }
 
         List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
         if (serviceItems.isEmpty()) {
