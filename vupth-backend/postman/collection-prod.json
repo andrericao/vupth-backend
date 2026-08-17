@@ -52,12 +52,12 @@
        "mode": "raw",
        "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
       },
-      "url": "{{base_url}}/auth/register"
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "login (owner)",
@@ -91,12 +91,12 @@
        "mode": "raw",
        "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
       },
-      "url": "{{base_url}}/auth/login"
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "complete profile (owner)",
@@ -445,10 +445,10 @@
       "body": {
        "mode": "raw",
        "raw": "{\"email\":\"{{partner_email}}\",\"password\":\"{{partner_password}}\"}"
+      },
+      "auth": {
+       "type": "noauth"
       }
-     },
-     "auth": {
-      "type": "noauth"
      },
      "event": [
       {
@@ -496,10 +496,10 @@
       "body": {
        "mode": "raw",
        "raw": "{\"email\":\"{{partner_email}}\",\"password\":\"{{partner_password}}\"}"
+      },
+      "auth": {
+       "type": "noauth"
       }
-     },
-     "auth": {
-      "type": "noauth"
      },
      "event": [
       {
@@ -1030,12 +1030,12 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment"
+      "url": "{{base_url}}/establishment",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "list includeAll=true — inclui fechados (BUG5)",
@@ -1118,12 +1118,12 @@
          "value": "Barbearia"
         }
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "filter by serviceType=BARBER",
@@ -1172,12 +1172,12 @@
          "value": "true"
         }
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "filter by serviceType=NAIL_SALON",
@@ -1218,12 +1218,12 @@
          "value": "NAIL_SALON"
         }
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "[ERRO] filter serviceType inválido → 400",
@@ -1255,12 +1255,12 @@
          "value": "INVALIDO_XPTO"
         }
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "update open status → CLOSED (owner fecha)",
@@ -4992,12 +4992,12 @@
          "value": "centro"
         }
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "filter by serviceType=BARBER & neighborhood=centro",
@@ -5039,12 +5039,12 @@
          "value": "centro"
         }
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     }
    ]
   },
@@ -5091,12 +5091,12 @@
        "mode": "raw",
        "raw": "{\"email\": \"{{client_email}}\", \"password\": \"{{client_password}}\"}"
       },
-      "url": "{{base_url}}/auth/register"
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "login (client)",
@@ -5130,12 +5130,12 @@
        "mode": "raw",
        "raw": "{\"email\": \"{{client_email}}\", \"password\": \"{{client_password}}\"}"
       },
-      "url": "{{base_url}}/auth/login"
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "complete profile (client)",
@@ -5281,12 +5281,12 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue"
+      "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "create attendance (entrar na fila)",
@@ -11482,12 +11482,12 @@
        "mode": "raw",
        "raw": "{\"email\":\"{{owner_email}}\",\"password\":\"SenhaErrada@999\"}"
       },
-      "url": "{{base_url}}/auth/login"
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "register - email inválido (422)",
@@ -11514,12 +11514,12 @@
        "mode": "raw",
        "raw": "{\"email\":\"nao-e-um-email\",\"password\":\"Senha@123\"}"
       },
-      "url": "{{base_url}}/auth/register"
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "register - senha curta (422)",
@@ -11546,12 +11546,12 @@
        "mode": "raw",
        "raw": "{\"email\":\"curta@test.com\",\"password\":\"123\"}"
       },
-      "url": "{{base_url}}/auth/register"
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "[ERRO] establishment - sem token (401)",
@@ -11652,12 +11652,12 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue"
+      "url": "{{base_url}}/establishment/id/{{owner_establishment_id}}/professionals-with-queue",
+      "auth": {
+       "type": "noauth"
+      }
      },
-     "response": [],
-     "auth": {
-      "type": "noauth"
-     }
+     "response": []
     },
     {
      "name": "[ERRO] update open status CLIENT token → 403",
@@ -13228,6 +13228,80 @@
        }
       }
      ]
+    },
+    {
+     "name": "rota inexistente - 404 NOT_FOUND (nao 500)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Regressao 12/08: rota sem handler caia no handleGeneric e virava 500 INTERNAL_ERROR.",
+         "// Enquanto foi 500, o log de producao nao distinguia 'build velha no ar' de 'servidor quebrado'.",
+         "",
+         "// Guarda defensiva: separa \"a aplicacao respondeu errado\" de \"a aplicacao nao respondeu\".",
+         "// O edge do Render devolve 404 sem corpo JSON quando nao ha instancia saudavel; a aplicacao",
+         "// sempre responde JSON nos erros que tem corpo. Sem essa separacao, instabilidade de infra",
+         "// chega disfarcada de defeito de codigo.",
+         "const corpo = (pm.response.text() || '').trim();",
+         "const edgeRespondeu = pm.response.code === 404 && corpo.length > 0 && !corpo.startsWith('{');",
+         "",
+         "pm.test('a INSTANCIA respondeu (nao o edge do Render)', function () {",
+         "    pm.expect(edgeRespondeu, `status ${pm.response.code} com corpo nao-JSON: \"${corpo.slice(0, 120)}\" — a aplicacao provavelmente caiu ou reiniciou no meio do run; isto NAO e defeito de codigo`).to.be.false;",
+         "});",
+         "",
+         "pm.test(\"Status 404 - rota inexistente\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/service-types/nao/existe/canario",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "rota inexistente sem token - 401 (seguranca antes do dispatcher)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Documenta a ordem: rota desconhecida FORA de prefixo publico nem chega no handler de 404.",
+         "",
+         "// Guarda defensiva: separa \"a aplicacao respondeu errado\" de \"a aplicacao nao respondeu\".",
+         "// O edge do Render devolve 404 sem corpo JSON quando nao ha instancia saudavel; a aplicacao",
+         "// sempre responde JSON nos erros que tem corpo. Sem essa separacao, instabilidade de infra",
+         "// chega disfarcada de defeito de codigo.",
+         "const corpo = (pm.response.text() || '').trim();",
+         "const edgeRespondeu = pm.response.code === 404 && corpo.length > 0 && !corpo.startsWith('{');",
+         "",
+         "pm.test('a INSTANCIA respondeu (nao o edge do Render)', function () {",
+         "    pm.expect(edgeRespondeu, `status ${pm.response.code} com corpo nao-JSON: \"${corpo.slice(0, 120)}\" — a aplicacao provavelmente caiu ou reiniciou no meio do run; isto NAO e defeito de codigo`).to.be.false;",
+         "});",
+         "",
+         "pm.test(\"Status 401 - anonimo em rota protegida\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/rota-que-nao-existe/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

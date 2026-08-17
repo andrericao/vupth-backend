@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.mail;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,18 @@ import org.springframework.stereotype.Component;
 @Component
 @ConditionalOnProperty(prefix = "vupth.mail", name = "provider", havingValue = "none", matchIfMissing = true)
 public class NoOpEmailSender implements EmailSender {
+
+    /**
+     * Anuncia no boot que NENHUM e-mail sai. Sem isto, "provider=none" e indistinguivel de "SMTP
+     * configurado que falhou": o endpoint responde 200 nos dois casos (anti-enumeracao) e so o log
+     * do envio separa — e esse log so aparece se alguem pedir um reset. Em WARN de proposito: num
+     * ambiente real isto e um defeito silencioso, nao uma informacao.
+     */
+    @PostConstruct
+    void avisaQueNaoEnvia() {
+        log.warn("[MAIL] provider=none — NENHUM e-mail sera enviado; o codigo de reset so vai para o log. "
+                + "Para enviar de verdade: MAIL_PROVIDER=smtp + MAIL_HOST/MAIL_USER/MAIL_PASS.");
+    }
 
     @Override
     public void sendPasswordResetCode(String toEmail, String code) {

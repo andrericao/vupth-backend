@@ -175,6 +175,50 @@ Unit (#28): `unit/push/ExpoPushSenderTest` (9) + `unit/push/PushNotificationPubl
 
 ⚠️ **Postman não cobre os tickets e não tem como:** o newman teria de falar com a Expo real e provocar um `DeviceNotRegistered` de verdade. A prova dessa parte são os dois testes unitários; a folder `13` cobre o contrato de `/devices`, que ficou **inalterado**.
 
+### 2.10 Contrato de erro HTTP — rota inexistente (regressão 12/08)
+Testes: `integrations/UnknownRouteIntegrationTest` (5).
+
+A partir do Spring 6.1 um request sem handler cai no servidor de arquivos estáticos e sai uma `NoResourceFoundException`. O `GlobalExceptionHandler` não a tratava → caía no `handleGeneric` e virava **500 `INTERNAL_ERROR`** com stack trace. Agora responde **404 `NOT_FOUND`**, log em `warn` e **sem stack** (o erro é do chamador).
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| Rota inexistente autenticada → 404 `NOT_FOUND` | ✅ | ✅ (não 500) |
+| Rota de feature ausente na build → 404 (caso real: `/swap-requests/me` em prod velha) | ✅ | ✅ |
+| Rota inexistente sob prefixo `permitAll` → 404 sem token | ✅ | ✅ |
+| Rota inexistente **anônima** → **401** (segurança responde antes do dispatcher) | — | ✅ |
+| Método errado em rota existente **continua 405** | — | ✅ (guarda o handler vizinho: um 404 largo demais engoliria o 405) |
+
+⚠️ **Por que isso é teste de cobertura e não cosmética:** enquanto rota inexistente respondia 500, o log de produção não distinguia "build velha no ar" de "servidor quebrado" — foi o que escondeu por semanas que prod rodava um commit de 29/06 (ver PRD, seção 18d).
+
+### 2.11 Identidade da instância — `/actuator/info` (o que o CI usa para verificar um deploy)
+Testes: `unit/shared/GitCommitInfoContributorTest` (10).
+
+O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` desta resposta com o instante em que o deploy foi disparado. **Este teste existe porque o campo é consumido por um `grep` de shell, não por um cliente tipado** — então ele aplica o **mesmo recorte do `ci.yml`** (`"startedAtEpochMs":[0-9]*`) sobre o JSON serializado, em vez de inspecionar o mapa por dentro. Um campo que mude de nome ou vire String quebra aqui, no `mvn test`, e não no deploy.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `startedAtEpochMs` sai como **número puro**, casável pelo grep do CI | ✅ | ✅ (falha imprime o JSON inteiro) |
+| ISO e epoch são o mesmo instante em dois formatos | ✅ | — |
+| Não muda entre chamadas (é o início do processo, não o "agora") | ✅ | — |
+| Precisão variável do `Instant.toString()` — a casa decimal some com ms zero | — | ✅ (é o que quebrou o parse da 1ª versão; o epoch atravessa as duas formas) |
+| `commit`: Render encurtado p/ 7 · Railway como fallback · Render tem precedência | ✅ | ✅ (nenhuma das duas = `railway up` → `unknown`; variável em branco não passa por preenchida; sha < 7 não estoura o `substring`) |
+
+⚠️ **Postman não cobre e não deve:** a collection roda **contra** a instância que este campo identifica — verificar o identificador com o mesmo request que ele autoriza é circular. A prova é o teste unitário; o exercício real da espera só acontece no primeiro deploy de prod após 13/08.
+
+### 2.12 Timeouts de SMTP — config que nenhum teste de lógica alcança
+Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
+
+**Mesma classe do 2.11: guard de configuração.** A ausência de `connectiontimeout`/`timeout`/`writetimeout` **não muda o resultado de nenhum teste** — muda quanto tempo o servidor espera antes de desistir, e o default do JavaMail é **esperar para sempre**. Como o envio roda dentro do `@Transactional` do `ForgotPasswordUseCase`, um SMTP que aceita a conexão e não responde segura a transação e a conexão do pool; no Render free isso esgota o pool a partir de um endpoint **público e sem rate limit**.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| Os 3 timeouts existem no `application.properties` | ✅ | ✅ (falha nomeia a chave ausente) |
+| Vêm como `${VAR:millis}` — ajustável por env var sem novo deploy | ✅ | ✅ |
+| Default **positivo** (`0` em JavaMail = SEM timeout, o próprio defeito) | ✅ | ✅ |
+| `vupth.mail.provider` continua `${MAIL_PROVIDER:none}` — default seguro | ✅ | ✅ (virar `smtp` faria todo ambiente sem `MAIL_HOST` entregar em host vazio) |
+
+⚠️ **Postman não cobre e não tem como:** `POST /auth/forgot-password` responde **200 nos três casos** (não enviou / falhou / entregou) por anti-enumeração — nenhuma asserção de status consegue distingui-los. A separação é pelo **log** (`[MAIL:noop]` · `[MAIL:smtp] enviado` · `[MAIL:smtp] falha`), e desde 15/08 pelo **anúncio de boot** de cada sender. Ver PRD, seção "15/08 — #1 SMTP".
+
 ---
 
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)

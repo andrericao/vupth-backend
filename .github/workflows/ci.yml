@@ -225,12 +225,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Marca o instante ANTES de disparar: e o corte que o test-prod usa para
+      # separar a instancia nova da que ainda esta respondendo.
+      - name: Marca o inicio do deploy
+        id: deploy_start
+        run: echo "at=$(date -u +%s)000" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Railway (PROD)
         run: |
           npm install -g @railway/cli
           railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+    outputs:
+      deploy_started_at: ${{ steps.deploy_start.outputs.at }}
 
 
   # =========================
@@ -239,7 +248,11 @@ jobs:
   test-prod:
     needs: deploy-prod
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # O teto cobre a espera (15 min) + newman com folga. O `railway up --detach`
+    # volta assim que o upload termina, entao a espera abaixo ainda paga o build
+    # do Railway (Maven) ANTES do boot da JVM — 10 min nao davam conta, e estourar
+    # aqui aciona o rollback de um deploy que estava vindo bem.
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v4
@@ -247,21 +260,46 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
-      # 🔥 ALTERADO: antes era sleep 15
-      - name: Wait for Railway (readiness check)
+      # Health UP nao prova nada durante um rollout: a instancia ANTERIOR continua
+      # respondendo UP enquanto a nova sobe, e o newman acaba testando o codigo
+      # velho. Foi o que reprovou o deploy de 12/08 e disparou o rollback de um
+      # deploy que estava correto.
+      #
+      # O corte e o startedAtEpochMs do /actuator/info: so serve a instancia que
+      # subiu DEPOIS de o deploy ser disparado. Comparamos numero com numero de
+      # proposito — interpretar data em shell falharia para o lado errado (o loop
+      # estouraria o tempo e o rollback reverteria um deploy bom).
+      #
+      # Nao usamos o commit porque o railway up nao carrega contexto de git: la o
+      # valor fica "unknown". No Render, onde ele existe, o test-homolog ja o usa.
+      - name: Wait for Railway (instancia NOVA, nao so healthy)
         run: |
-          for i in {1..20}; do
-            echo "Tentativa $i..."
-            RESPONSE=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
-            echo "Resposta: $RESPONSE"
-            if echo "$RESPONSE" | grep -q '"status":"UP"'; then
-              echo "App PRONTA!"
-              exit 0
+          DEPLOY_AT=${{ needs.deploy-prod.outputs.deploy_started_at }}
+          echo "Corte: instancias iniciadas antes de $DEPLOY_AT (epoch ms) nao servem."
+
+          for i in $(seq 1 60); do
+            INFO=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/info" || true)
+            STARTED_MS=$(echo "$INFO" | grep -o '"startedAtEpochMs":[0-9]*' | cut -d: -f2 || true)
+
+            if [ -z "$STARTED_MS" ]; then
+              # Build anterior a este ajuste: sem o campo nao da para distinguir a
+              # instancia nova da velha. Seguir esperando e melhor que testar as cegas.
+              echo "Tentativa $i/60 — /actuator/info ainda sem startedAtEpochMs."
+            elif [ "$STARTED_MS" -gt "$DEPLOY_AT" ]; then
+              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
+              if echo "$HEALTH" | grep -q '"status":"UP"'; then
+                echo "Instancia NOVA no ar (startedAtEpochMs=$STARTED_MS) e saudavel."
+                exit 0
+              fi
+              echo "Tentativa $i/60 — instancia nova subindo, ainda nao saudavel."
+            else
+              echo "Tentativa $i/60 — respondendo a instancia anterior ($STARTED_MS)."
             fi
-            echo "Ainda não está pronta..."
             sleep 15
           done
-          echo "Timeout aguardando app"
+
+          echo "::error::Timeout: nenhuma instancia iniciada apos o deploy respondeu em 15 min."
+          echo "::error::Se o /actuator/info nunca trouxe startedAtEpochMs, a build no ar e anterior a este ajuste."
           exit 1
 
       - name: Debug API
@@ -298,6 +336,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Distancia maxima que o rollback aceita percorrer para tras. Acima disso ele
+    # RECUSA (ver o passo "Confere a distancia"). Um rollback existe para desfazer
+    # UM deploy ruim; quando a tag esta muito atras, ela nao e mais um ponto de
+    # retorno, e sim uma tag congelada — e reinstala-la joga fora trabalho que
+    # nunca foi provado ruim.
+    env:
+      MAX_ROLLBACK_DISTANCE: 20
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -315,6 +361,35 @@ jobs:
           echo "Ultimo commit bom de PROD: $SHA"
           echo "have=true" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      # O laco de 12/08: a tag so avanca quando o Newman passa, entao um Newman que
+      # falha a congela; e cada tentativa de deploy seguinte reinstalava a build
+      # congelada. Quanto mais se tentava deployar, mais firme prod ficava no
+      # passado — prod-last-good parou em 29/06 enquanto main andou 90 commits.
+      #
+      # Um auto-rollback sem teto e um laco. Aqui ele passa a ter teto: perto,
+      # reverte como sempre; longe, RECUSA e falha alto, deixando a build nova no
+      # ar. Entre uma assercao de Newman falhando e 90 commits fora do ar, a
+      # assercao e o problema menor — e um erro visivel no CI e melhor que uma
+      # reversao silenciosa que ninguem le.
+      - name: Confere a distancia antes de reverter
+        if: steps.lastgood.outputs.have == 'true'
+        run: |
+          SHA=${{ steps.lastgood.outputs.sha }}
+          DISTANCE=$(git rev-list --count "$SHA"..HEAD)
+          AGE_DAYS=$(( ( $(date -u +%s) - $(git show -s --format=%ct "$SHA") ) / 86400 ))
+
+          echo "prod-last-good: $SHA ($DISTANCE commits atras, $AGE_DAYS dias)"
+
+          if [ "$DISTANCE" -gt "$MAX_ROLLBACK_DISTANCE" ]; then
+            echo "::error::ROLLBACK RECUSADO — prod-last-good esta $DISTANCE commits atras (teto: $MAX_ROLLBACK_DISTANCE), com $AGE_DAYS dias."
+            echo "::error::Reverter reinstalaria uma build de $AGE_DAYS dias atras e apagaria de producao trabalho que nunca foi provado ruim."
+            echo "::error::A build recem-deployada FICA NO AR. Investigue a falha do Newman acima: o mais provavel e a tag ter congelado, nao o codigo novo estar quebrado."
+            echo "::error::Se o codigo novo estiver mesmo ruim, reverta pelo painel do Railway. Se estiver bom, corrija o que reprovou e deixe a tag avancar."
+            exit 1
+          fi
+
+          echo "Distancia dentro do teto — rollback autorizado."
 
       - name: Checkout do last-good
         if: steps.lastgood.outputs.have == 'true'
