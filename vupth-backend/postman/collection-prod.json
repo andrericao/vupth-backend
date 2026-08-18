@@ -6512,12 +6512,16 @@
          "// existem so para EMPURRAR o ETA, entao viraram CONVIDADOS (o profissional adiciona quem",
          "// nao tem conta): sem cliente, o par cliente x profissional do #38 nao se aplica, e a fila",
          "// fica com o mesmo tamanho e a mesma duracao de antes.",
+         "// ⚠️ Achado no Newman de 17/08: pegar fila[fila.length-1] NAO serve aqui. A fila vem",
+         "// ordenada por horario previsto, e a intencao desta pasta tem slot +12h — entao o ULTIMO",
+         "// era a intencao, nao o convidado. A variavel ficava sem valor, o cleanup mandava",
+         "// {{intent_walkin_N}} literal na URL e voltava 400, cinco requests depois do erro real.",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_1\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === \"FilaIntent1\");",
+         "  pm.test(\"id do convidado FilaIntent1 capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"intent_walkin_1\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -6558,10 +6562,10 @@
          "// Convidado de enchimento — ver o comentario do walk-in 1 (#38).",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_2\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === \"FilaIntent2\");",
+         "  pm.test(\"id do convidado FilaIntent2 capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"intent_walkin_2\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -6602,10 +6606,10 @@
          "// Convidado de enchimento — ver o comentario do walk-in 1 (#38).",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_3\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === \"FilaIntent3\");",
+         "  pm.test(\"id do convidado FilaIntent3 capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"intent_walkin_3\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -9587,11 +9591,17 @@
        "listen": "test",
        "script": {
         "exec": [
+         "// ⚠️ Este atendimento ficava na fila para SEMPRE — ninguem o removia. Antes do item #38",
+         "// era so ruido no ETA; hoje ele deixa o {{client_id}} OCUPADO com este profissional, e",
+         "// toda pasta que roda depois desta e tenta pos esse cliente na fila leva 409",
+         "// CLIENT_ALREADY_IN_QUEUE (foi assim que a 08k reprovou). Por isso agora guarda o id e",
+         "// devolve a fila ao estado em que a encontrou.",
          "pm.test(\"Status 201 - Attendance criado via add-attendance\", () => pm.response.to.have.status(201));",
-         "pm.test(\"Schema: id presente\", () => {",
+         "if (pm.response.code === 201) {",
          "  const r = pm.response.json();",
-         "  pm.expect(r.id).to.be.a(\"string\");",
-         "});"
+         "  pm.test(\"Schema: id presente\", () => pm.expect(r.id).to.be.a(\"string\"));",
+         "  pm.collectionVariables.set(\"attendance_id_add\", r.id);",
+         "}"
         ],
         "type": "text/javascript"
        }
@@ -9731,6 +9741,36 @@
        }
       ]
      }
+    },
+    {
+     "name": "cleanup: remove o attendance do add-attendance",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Sem isto o {{client_id}} sai desta pasta ocupado, e o #38 barra todo mundo depois.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional-queue/{{attendance_id_add}}/remove",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
@@ -14158,10 +14198,10 @@
          "// fila de verdade; B continua sendo o cliente, porque e o id que o teste do promote assere.",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"promote_id_a\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === \"CabecaA\");",
+         "  pm.test(\"id do convidado CabecaA capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"promote_id_a\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -15039,7 +15079,14 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.collectionVariables.set(\"agenda_desired\", new Date(Date.now() + 3*3600*1000).toISOString());"
+         "// ⚠️ +8h, nao +3h. Esta pasta tinha um acoplamento INVISIVEL com o tamanho da fila viva:",
+         "// a intencao e recusada com 422 INTENTION_BEFORE_QUEUE_END quando o horario pretendido cai",
+         "// antes do termino previsto da fila — e o termino previsto soma os atendimentos vivos MAIS",
+         "// as refeicoes do profissional. Medido em homolog (17/08): com 4 atendimentos de 30min na",
+         "// fila + a refeicao de 60min, o alvo de +3h perdia por SETE SEGUNDOS. O setup desta pasta",
+         "// nao quer testar essa regra (ela tem pasta propria) — quer uma intencao que exista para a",
+         "// agenda ser lida. Com folga de 8h ela para de depender do que as pastas anteriores deixaram.",
+         "pm.collectionVariables.set(\"agenda_desired\", new Date(Date.now() + 8*3600*1000).toISOString());"
         ]
        }
       },
@@ -21206,6 +21253,11 @@
   },
   {
    "key": "intent_err_token",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "attendance_id_add",
    "value": "",
    "type": "string"
   }
