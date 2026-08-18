@@ -585,6 +585,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         Client client = clientRepository.findById(request.clientId())
                 .orElseThrow(() -> new ClientNotFoundException(request.clientId()));
 
+        List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
+        if (serviceItems.isEmpty()) {
+            log.warn("[Attendance] createAttendance — no serviceItem ids={}", request.serviceItemIds());
+            throw new ServiceItemNotFoundException();
+        }
+        assertServiceItemsBelongToProfessional(serviceItems, professional);
+
         // Item #38 — invariante do duplo ingresso. O cliente ja OCUPADO com este profissional nao
         // entra de novo. Reproduzido em device (Client §4.2, 07/08): o Andre estava IN_PROGRESS e
         // conseguiu entrar na fila outra vez, ficando a espera do proprio corte terminar.
@@ -592,9 +599,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         // A guarda do front e local (le so o store do aparelho), entao logout/login, reinstalacao ou
         // corrida entre telas furam — invariante de fila tem de morar no servidor.
         //
-        // ⚠️ Vem ANTES da primeira escrita, como os portoes do apagar-conta: um atendimento orfao
-        // nao so infla a estimativa dos outros como TRAVA o fechamento da loja e a exclusao da
-        // conta, que checam atendimento ativo.
+        // ⚠️ Vem ANTES da primeira escrita (um atendimento orfao nao so infla a estimativa dos
+        // outros como TRAVA o fechamento da loja e o apagar-conta, que checam atendimento ativo),
+        // mas DEPOIS da validacao dos serviceItems, e essa ordem e deliberada: quando o pedido esta
+        // errado nas DUAS coisas, quem responde e a validacao do PEDIDO (422
+        // SERVICE_ITEM_NOT_OF_PROFESSIONAL), nao o conflito de ESTADO (409). Colocado antes, este
+        // portao mudava o status de um erro que ja existia e ja estava documentado —
+        // QueueVisibilityBug8IntegrationTest (BUG8 c) passou a receber 409 no lugar do 422.
+        // Invariante nova nao pode reescrever contrato antigo de carona.
         //
         // INTENCAO fica de FORA de proposito (decisao do Andre, D1): e compromisso futuro fora da
         // fila, e conta-la impediria quem tem intencao para sabado de entrar em qualquer fila
@@ -606,13 +618,6 @@ public class AttendanceServiceImpl implements AttendanceService {
                     client.getId(), professional.getId());
             throw new ClientAlreadyInQueueException(client.getId(), professional.getId());
         }
-
-        List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
-        if (serviceItems.isEmpty()) {
-            log.warn("[Attendance] createAttendance — no serviceItem ids={}", request.serviceItemIds());
-            throw new ServiceItemNotFoundException();
-        }
-        assertServiceItemsBelongToProfessional(serviceItems, professional);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
                 new com.ospaulos.vupth.domain.attendance.model.Attendance();

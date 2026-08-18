@@ -103,6 +103,33 @@ class DoubleQueueEntryIntegrationTest {
                 establishmentId, ownerProfessionalId, employee.id());
     }
 
+    /**
+     * ⚠️ Libera a CADEIRA do profissional entre um teste e outro.
+     *
+     * <p>A classe reusa um unico profissional, e o app tem uma invariante que <b>ja existia</b>:
+     * {@code startAttendance} recusa com <b>409 {@code ATTENDANCE_ALREADY_IN_PROGRESS}</b> quando o
+     * profissional ja tem atendimento {@code IN_PROGRESS} <b>ou {@code PAUSED}</b>
+     * ({@code Professional.getCurrentAttendance}). Como cada teste deixa o seu atendimento vivo de
+     * proposito (e o estado que o #38 tem de barrar), sem esta limpeza o teste seguinte falha no
+     * {@code /start} — por um motivo que <b>nao tem nada a ver com o duplo ingresso</b>.
+     *
+     * <p>Foi exatamente isso que a suite completa mostrou em 17/08: dois vermelhos apontando para
+     * {@code patchOk}, e a leitura apressada era "pause e finish quebraram". O 409 vinha do
+     * {@code /start} da linha de cima, com o assento ainda ocupado pelo teste anterior.
+     *
+     * <p>Fecha pelo repositorio, nao pela API: {@code PATCH /finish} exige {@code IN_PROGRESS} e nao
+     * aceita {@code PAUSED} — limpar pela porta da frente exigiria {@code resume} antes, o que poria
+     * regra de negocio dentro do cleanup. Isto aqui e arrumacao de estado, nao exercicio de fluxo.
+     */
+    @AfterEach
+    void liberaACadeiraDoProfissional() {
+        var ocupando = attendanceRepository.findByProfessional_IdAndStatusInOrderByScheduledTimeAsc(
+                UUID.fromString(ownerProfessionalId),
+                List.of(AttendanceStatus.IN_PROGRESS, AttendanceStatus.PAUSED));
+        ocupando.forEach(a -> a.setStatus(AttendanceStatus.FINISHED));
+        attendanceRepository.saveAll(ocupando);
+    }
+
     /** Sem as refeicoes seedadas o ETA fica puramente o tempo de servico (ver QueueIntentIntegrationTest). */
     private void limpaRefeicoes(String professionalId) {
         professionalIntervalRepository.deleteAll(

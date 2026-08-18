@@ -215,6 +215,7 @@ Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman 
 | Regra | Feliz | Erros |
 |---|---|---|
 | `SCHEDULED` / `IN_PROGRESS` / `PAUSED` / `LATE` no mesmo profissional → **409 `CLIENT_ALREADY_IN_QUEUE`** | — | ✅ (4 casos, um por status) |
+| Pedido errado **nas duas coisas** (serviceItem de outro profissional + cliente ocupado) → vence o **422** | — | ✅ (`QueueVisibilityBug8IntegrationTest`, BUG8 c) |
 | ⚠️ **D1 — outro profissional da mesma loja continua liberado** | ✅ | — |
 | Outro cliente entra normalmente (o bloqueio é do indivíduo, não da vaga) | ✅ | — |
 | Depois de `FINISHED` / `CANCELLED` o cliente entra de novo | ✅ | — |
@@ -223,6 +224,8 @@ Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman 
 ⚠️ **Os testes que mais importam aqui são os que provam o que CONTINUA PASSANDO.** O raio é decisão registrada (D1): cliente × profissional, e só. Sem os dois casos de "continua entrando", alguém alarga o raio para a loja ou para o `service_type` e **nenhum teste reclama** — a suíte inteira ficaria verde com uma regra de produto diferente da decidida. E os casos de `FINISHED`/`CANCELLED` provam que o bloqueio **libera**: sem eles, isto seria banimento em vez de invariante.
 
 ⚠️ **`INTENTION` não entra na lista** e isso é proposital — é compromisso fora da fila. Por isso `OCCUPIED_STATUSES` **não** é a `ACTIVE_STATUSES` do apagar-conta, que inclui `INTENTION`: lá a pergunta é outra ("há compromisso vivo que a exclusão quebraria?").
+
+⚠️ **Lição de 17/08, que só a suíte COMPLETA deu.** Os testes desta classe passavam isolados e reprovaram no `mvn test` inteiro, com dois vermelhos apontando para o helper `patchOk` — e a leitura apressada era "`pause` e `finish` quebraram". Não: o 409 vinha do **`/start` da linha de cima**, com `ATTENDANCE_ALREADY_IN_PROGRESS`, uma invariante que **já existia** (`Professional.getCurrentAttendance` conta `IN_PROGRESS` **e** `PAUSED`). Como cada teste deixa o seu atendimento vivo **de propósito** — é o estado que o #38 barra —, o teste seguinte encontrava a cadeira do profissional ocupada. Corrigido com `@AfterEach` que libera a cadeira pelo repositório. **Duas coisas a levar adiante:** (1) classe que reusa profissional e deixa estado vivo precisa de cleanup explícito, senão a ordem dos testes vira dependência oculta; (2) **a linha do stack trace é do helper, não da regra** — conferir *qual* chamada dentro dele falhou antes de acusar o endpoint errado.
 
 ### 2.12 Timeouts de SMTP — config que nenhum teste de lógica alcança
 Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
