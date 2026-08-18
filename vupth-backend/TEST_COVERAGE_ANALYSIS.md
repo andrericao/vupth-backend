@@ -208,7 +208,7 @@ O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` 
 ⚠️ **Postman não cobre e não deve:** a collection roda **contra** a instância que este campo identifica — verificar o identificador com o mesmo request que ele autoriza é circular. A prova é o teste unitário; o exercício real da espera só acontece no primeiro deploy de prod após 13/08.
 
 ### 2.12b Duplo ingresso na fila (item #38) — a invariante que faltava no servidor
-Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman folder `07 - client queue`.
+Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman folders `07 - client queue`, `08d`, `08e`, `08k`.
 
 **O defeito:** `POST /attendances` tinha cinco portões e nenhum perguntava se o cliente já estava ocupado — reproduzido em device (Client §4.2, 07/08) estando `IN_PROGRESS`. A guarda do app é **local** (lê só o store do aparelho), então logout/login ou reinstalação a furam.
 
@@ -224,6 +224,12 @@ Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman 
 ⚠️ **Os testes que mais importam aqui são os que provam o que CONTINUA PASSANDO.** O raio é decisão registrada (D1): cliente × profissional, e só. Sem os dois casos de "continua entrando", alguém alarga o raio para a loja ou para o `service_type` e **nenhum teste reclama** — a suíte inteira ficaria verde com uma regra de produto diferente da decidida. E os casos de `FINISHED`/`CANCELLED` provam que o bloqueio **libera**: sem eles, isto seria banimento em vez de invariante.
 
 ⚠️ **`INTENTION` não entra na lista** e isso é proposital — é compromisso fora da fila. Por isso `OCCUPIED_STATUSES` **não** é a `ACTIVE_STATUSES` do apagar-conta, que inclui `INTENTION`: lá a pergunta é outra ("há compromisso vivo que a exclusão quebraria?").
+
+⚠️ **A invariante quebrou a COLLECTION em três pastas, e o motivo é instrutivo.** O Newman de homolog reprovou em `08d` com 409 no lugar de 201. A varredura das 500 requests (simulando o par cliente × profissional ao longo de todo o run) achou **6 pontos**, todos com a mesma origem: **a collection usava UM cliente para representar uma FILA INTEIRA** — `08d` (o "cliente da frente" e o "encaixe" eram a mesma pessoa), `08e` (três walk-ins de enchimento, o mesmo cliente que acabara de criar a intenção) e `08k` (a "cabeça A" e o "alvo B" do promote). Antes do #38 o servidor aceitava, então ninguém percebeu que os cenários descreviam algo impossível: encaixar alguém atrás de si mesmo, promover-se à frente de si mesmo.
+
+**Como ficou:** quem existe só para **encher a fila** virou **convidado** (`POST /professional-queue/add-quest-attendance` — sem cliente, o par do #38 não se aplica, e é assim que uma loja enche fila de verdade); quem precisa **ser** um cliente distinto ganhou usuário próprio (o "cliente da frente" da `08d`, o cliente dos casos de erro da `08e`). ⚠️ **Os dois casos de erro da `08e` são o detalhe fácil de errar:** eles esperam `422 QUEUE_TARGET_NOT_FEASIBLE` e `400`, mas o cliente que os disparava já estava ocupado pela intenção viável da mesma pasta — receberiam **409 antes de chegar na regra que testam**, e passariam a afirmar outra coisa.
+
+**Regra para requests novos:** fila de N pessoas precisa de N pessoas. Cliente com conta só quando o teste depende da **identidade** dele (token, histórico, id asserido); para volume, convidado.
 
 ⚠️ **Lição de 17/08, que só a suíte COMPLETA deu.** Os testes desta classe passavam isolados e reprovaram no `mvn test` inteiro, com dois vermelhos apontando para o helper `patchOk` — e a leitura apressada era "`pause` e `finish` quebraram". Não: o 409 vinha do **`/start` da linha de cima**, com `ATTENDANCE_ALREADY_IN_PROGRESS`, uma invariante que **já existia** (`Professional.getCurrentAttendance` conta `IN_PROGRESS` **e** `PAUSED`). Como cada teste deixa o seu atendimento vivo **de propósito** — é o estado que o #38 barra —, o teste seguinte encontrava a cadeira do profissional ocupada. Corrigido com `@AfterEach` que libera a cadeira pelo repositório. **Duas coisas a levar adiante:** (1) classe que reusa profissional e deixa estado vivo precisa de cleanup explícito, senão a ordem dos testes vira dependência oculta; (2) **a linha do stack trace é do helper, não da regra** — conferir *qual* chamada dentro dele falhou antes de acusar o endpoint errado.
 
