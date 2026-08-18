@@ -3220,6 +3220,67 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 **Como conferir isto sozinho** (custa segundos e nao depende de rodar a collection): um request e anonimo de verdade **so** quando o `noauth` esta **dentro de `request`**. `auth` irmao de `request` nao existe para o Newman.
 
+#### 17/08 — 🔴 `/actuator/health` de HOMOLOG esta DOWN agora, e a mesma armadilha esta armada para o proximo deploy de PROD
+
+**Medido em 17/08, nao deduzido** (3 tentativas seguidas, resultado identico):
+
+| Endpoint | Resposta | Tempo |
+|---|---|---|
+| `https://vupth-backend-ia.onrender.com/actuator/health` | **503 `{"status":"DOWN"}`** | **10,5–10,9s** |
+| `.../actuator/health/readiness` | `200 {"status":"UP"}` | 0,54s |
+| `https://vupth-backend-ia-production.up.railway.app/actuator/health` | `200 {"status":"UP"}` | 0,83s |
+
+**A causa:** o Actuator registra um indicador de saude de mail **sozinho** — sem uma linha de codigo
+nossa — sempre que existe um `JavaMailSender` no contexto, e ele **abre conexao SMTP a cada checagem**.
+⚠️ **`spring.mail.host=${MAIL_HOST:}` cria o bean mesmo com o host VAZIO** (`@ConditionalOnProperty`
+casa com propriedade presente e nao-`false`), entao o indicador existe em **todo** ambiente que suba
+este `application.properties`.
+
+**Os 10,7s sao a assinatura de um `connectiontimeout` estourando** — exatamente o de 10s que entrou em
+15/08. Host vazio falharia **na hora** (`Unknown SMTP host`). Ou seja, isto tambem responde uma das
+hipoteses do **#1**: no Render o `MAIL_HOST` **chegou na JVM** e a saida para a **587 nao completa**.
+Nao e chave errada nem spam — **nao ha entrega saindo do Render**, e nao havia como saber disso sem
+esta medicao.
+
+🔴 **Por que PROD estar UP nao e alivio, e o contrario.** O `/actuator/info` de prod responde
+`{"git":{"commit":{"id":"unknown"}}}` **sem `startedAtEpochMs`** — e a build de **junho** do laco de
+12/08, anterior ao proprio `forgot-password`. Ela esta UP porque **nao tem configuracao de mail
+nenhuma**. ⚠️ **O primeiro deploy de prod que sair daqui leva o `spring.mail.*` junto** — com ou sem
+`MAIL_HOST` setado no Railway, o indicador sobe e o agregado vira **DOWN** (devagar se o host existe e
+a porta esta bloqueada, rapido se o host e vazio).
+
+⚠️ **E o `deploy-prod` do `ci.yml` espera `/actuator/health`, com `--max-time 10`,** procurando
+`"status":"UP"`. Com o agregado DOWN a espera **nunca se satisfaz**: o `test-prod` nao roda e o
+pipeline fecha vermelho — com o `rollback-prod` decidindo entre reverter um deploy correto ou (pelo
+teto `MAX_ROLLBACK_DISTANCE`, com `prod-last-good` ~90 commits atras) recusar e deixar tudo parado.
+**Homolog escapou por acidente de configuracao:** la a espera e `/actuator/health/readiness`, e o grupo
+`readiness` inclui **so** `readinessState` + `db` — por isso o CI de homolog segue verde com o agregado
+respondendo 503 ha dias.
+
+**🔧 Correcao:** `management.health.mail.enabled=${MAIL_HEALTH_ENABLED:false}` no
+`application.properties` (todos os ambientes, religavel por env var sem deploy novo).
+
+**A razao de fundo — e o motivo de desligar em vez de aumentar o `--max-time`:** e-mail aqui e
+**best-effort** por decisao explicita (o `ForgotPasswordUseCase` engole a falha de envio para nao vazar
+existencia de conta). Uma instancia que serve **toda** a API nao esta doente porque um provedor externo
+esta fora do ar; amarrar a saude do processo a ele transforma **indisponibilidade de terceiro em
+rollback nosso**. Aumentar o timeout do curl so adiaria o estrago — e deixaria prod respondendo DOWN
+para qualquer monitor externo, incluindo o keep-alive descrito no topo deste PRD.
+
+**Guard: `MailHealthIndicatorDisabledTest` (3 testes).** ⚠️ O terceiro e o que faz o guard valer: ele
+monta um contexto **com** um `JavaMailSender` e prova os **dois** lados — com o valor lido do proprio
+`application.properties` o indicador **nao sobe**; **sem** a chave, sobe. Um assert que so olhasse o
+contexto normal de teste passaria verde por motivo errado, que e a mesma armadilha do teste de fuso do
+BUG2b.
+
+> **Duas pontas soltas (nao mexidas de proposito):**
+> 1. `deploy-prod` espera o agregado e homolog espera o grupo `readiness`. Com o mail fora, o agregado
+>    ainda carrega `diskSpace` e `ping` — prod continua com **mais** superficie para reverter um deploy
+>    correto do que homolog. Alinhar as duas esperas em `readiness` e decisao de CI, nao de aplicacao.
+> 2. O topo deste PRD descreve um `keep-alive.yml` pingando `/actuator/health` a cada 14 min. **Esse
+>    workflow nao existe mais** em `.github/workflows/` (so `ci.yml` e `rollback.yml`) — o que explica,
+>    junto com a hibernacao, o cold start do **D4**.
+
 ---
 
 ## 19. Fluxos de Usuario
@@ -3983,6 +4044,16 @@ nenhum teste de logica** — muda so quanto tempo o servidor espera antes de des
 **codigo de reset em texto puro** no log. Enquanto for `none` isso e o unico jeito de recuperar conta;
 no dia em que o SMTP entrar, **quem tiver acesso ao log tem acesso a qualquer conta** — reavaliar o
 nivel desse log junto com a virada.
+
+**🔴 17/08 — MEDICAO QUE FECHA UMA HIPOTESE DO #1, achada pelo lado do deploy.** O indicador de saude
+de mail do Actuator (que abre conexao SMTP) faz o `/actuator/health` de **homolog** responder
+**503 DOWN em 10,7s**, medido 3 vezes. **10,7s e `connectiontimeout` estourando** — host vazio ou chave
+errada falhariam na hora. Logo: no Render o `MAIL_HOST` **chegou na JVM** e a saida para a **587 nao
+completa**. ✅ Hipotese *"porta 587 bloqueada no Render"* **confirmada**; *"chave Brevo expirada"* e
+*"caiu no spam"* saem da frente enquanto a conexao nem se estabelece. **Consequencia para o #1: nenhum
+e-mail sai do Render por SMTP — a saida e a API HTTP do provedor (Brevo REST, porta 443) ou outro host.**
+O mesmo indicador estava prestes a derrubar o `deploy-prod`; historia completa e a correcao na secao
+**18d, "17/08"**.
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
@@ -4048,7 +4119,7 @@ nivel desse log junto com a virada.
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔴 **QUEBRADO EM PRODUCAO — provado em device 2026-08-11** (era "falta testar") | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario.
+| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔴 **QUEBRADO EM PRODUCAO — provado em device 2026-08-11** (era "falta testar") | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**.
 | 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatias A (geocoding), A2 (GPS do dono + reverso + validacao) e B (ordenacao + raio + `distance_km`) ENTREGUES; resta so a C (fallback sem GPS)** — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |

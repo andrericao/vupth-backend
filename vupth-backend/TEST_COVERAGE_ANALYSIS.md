@@ -238,6 +238,23 @@ Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
 
 ⚠️ **Postman não cobre e não tem como:** `POST /auth/forgot-password` responde **200 nos três casos** (não enviou / falhou / entregou) por anti-enumeração — nenhuma asserção de status consegue distingui-los. A separação é pelo **log** (`[MAIL:noop]` · `[MAIL:smtp] enviado` · `[MAIL:smtp] falha`), e desde 15/08 pelo **anúncio de boot** de cada sender. Ver PRD, seção "15/08 — #1 SMTP".
 
+### 2.13 Health check de mail desligado — o guard que protege o DEPLOY, não um endpoint
+Testes: `unit/shared/MailHealthIndicatorDisabledTest` (3).
+
+**Terceiro guard de configuração seguido, e o de maior alcance:** o Actuator registra um indicador de saúde de mail **sozinho** sempre que existe um `JavaMailSender`, e ele **abre conexão SMTP a cada checagem**. **Medido em 17/08:** o `/actuator/health` de homolog responde **503 DOWN em 10,7s** (3x) enquanto o `readiness` responde **UP em 0,54s**. É esse agregado que o job `deploy-prod` do `ci.yml` espera com `--max-time 10` — espera nunca satisfeita, `test-prod` não roda, pipeline vermelho. Ver PRD 18d, "17/08".
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `management.health.mail.enabled` existe como `${MAIL_HEALTH_ENABLED:false}` | ✅ | ✅ (falha se a chave sumir ou virar `true` fixo) |
+| Com o valor lido do próprio `application.properties`, o indicador **não sobe** num contexto com `JavaMailSender` | ✅ | — |
+| **Controle:** sem a chave, o indicador **sobe** | ✅ | ✅ (é o assert que impede o teste acima de virar verde vazio) |
+
+⚠️ **O terceiro teste é o que faz este guard valer.** O indicador só existe quando há um `JavaMailSender` no contexto, então um assert de "não achei o indicador" pode passar verde por **motivo errado** — inclusive com a chave apagada. Por isso o teste monta um contexto próprio **com** um `JavaMailSender` e prova os **dois** lados (com o valor do arquivo: não sobe; sem a chave: sobe). É a lição do teste de fuso do BUG2b, que ficava verde no CI em UTC **com o bug presente**.
+
+⚠️ **Nota de configuração que o teste torna explícita:** `spring.mail.host=${MAIL_HOST:}` cria o `JavaMailSenderImpl` **mesmo com host vazio** (`@ConditionalOnProperty` casa com propriedade presente e não-`false`) — ou seja, sem esta chave o indicador subiria em **todo** ambiente, não só onde o SMTP está configurado.
+
+⚠️ **Postman não cobre e não tem como:** o efeito só aparece num ambiente onde a saída SMTP está bloqueada e o provider é `smtp` — nenhuma das duas collections roda contra `/actuator/health` de prod. Ver PRD, seção 18d, "17/08 — o health check de MAIL derrubava o deploy de PROD".
+
 ---
 
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)
