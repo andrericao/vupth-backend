@@ -5344,6 +5344,54 @@
      }
     },
     {
+     "name": "[ERRO] entrar na fila 2x com o mesmo profissional → 409 (item #38)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Item #38 — invariante do duplo ingresso. O request ANTERIOR deixou este mesmo cliente",
+         "// SCHEDULED com este profissional; repetir tem de ser recusado pelo servidor.",
+         "// Reproduzido em device (Client 4.2, 07/08): o cliente estava IN_PROGRESS e entrou de novo,",
+         "// ficando a espera do proprio corte. A guarda do app e local e furava com logout/reinstalacao.",
+         "pm.test(\"Status 409 - duplo ingresso recusado\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code CLIENT_ALREADY_IN_QUEUE\", () => {",
+         "  pm.expect(pm.response.json().code).to.equal(\"CLIENT_ALREADY_IN_QUEUE\");",
+         "});",
+         "// A mensagem tem de dizer o que fazer para destravar — bloqueio sem saida reprova na loja de apps.",
+         "pm.test(\"a mensagem diz como destravar\", () => {",
+         "  pm.expect(pm.response.json().message).to.include(\"Conclua ou cancele\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      },
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "[ERRO] fechar loja com fila ativa → 409 (BUG6)",
      "event": [
       {
@@ -5937,6 +5985,86 @@
    "name": "08d - prof attendance fit-in (#38)",
    "item": [
     {
+     "name": "setup: register cliente da FRENTE (#38 — precisa ser outra pessoa)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"fit_front_email\",\"fitfront_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"fit_front_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// O encaixe precisa de DUAS pessoas na fila. Antes do item #38 esta pasta usava o mesmo",
+         "// {{client_token}} nas duas vagas, e o backend aceitava — que era exatamente o defeito.",
+         "// Agora a segunda entrada do mesmo cliente responde 409 CLIENT_ALREADY_IN_QUEUE, entao o",
+         "// cliente da frente passa a ser um usuario proprio.",
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"fit_front_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{fit_front_email}}\",\"password\":\"{{fit_front_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login cliente da FRENTE",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"fit_front_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{fit_front_email}}\",\"password\":\"{{fit_front_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "create attendance da frente",
      "event": [
       {
@@ -5959,7 +6087,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{fit_front_token}}",
         "type": "text"
        }
       ],
@@ -6237,6 +6365,85 @@
    "description": "Item #40 — intencao de fila com horario-alvo. POST /attendances com targetTime: presente=intencao (reserva slot no futuro, cede a vez aos walk-ins ate o previsto encostar no alvo); ausente=walk-in normal. Trava de viabilidade (422 QUEUE_TARGET_NOT_FEASIBLE) e alvo no passado (400).",
    "item": [
     {
+     "name": "setup: register cliente dos casos de erro (#40)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"intent_err_email\",\"intent_err_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"intent_err_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// ⚠️ Item #38: os dois casos de erro abaixo sao feitos por um cliente PROPRIO. O",
+         "// {{client_token}} esta ocupado pela intencao viavel criada nesta mesma pasta, entao ele",
+         "// receberia 409 CLIENT_ALREADY_IN_QUEUE ANTES de chegar na regra que se quer testar —",
+         "// o teste passaria a afirmar outra coisa, ou reprovaria por um motivo que nao e o dele.",
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{intent_err_email}}\",\"password\":\"{{intent_err_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login cliente dos casos de erro (#40)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"intent_err_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{intent_err_email}}\",\"password\":\"{{intent_err_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "create intencao viavel (targetTime futuro) -> 201",
      "event": [
       {
@@ -6294,14 +6501,24 @@
      "response": []
     },
     {
-     "name": "fila: walk-in 1 (empurra o previsto)",
+     "name": "fila: walk-in 1 (convidado — enche a fila) (empurra o previsto)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
+         "// ⚠️ Item #38: estes walk-ins de ENCHIMENTO eram do mesmo {{client_token}} que acabou de",
+         "// criar a intencao — hoje o servidor recusa isso com 409 CLIENT_ALREADY_IN_QUEUE. Eles",
+         "// existem so para EMPURRAR o ETA, entao viraram CONVIDADOS (o profissional adiciona quem",
+         "// nao tem conta): sem cliente, o par cliente x profissional do #38 nao se aplica, e a fila",
+         "// fica com o mesmo tamanho e a mesma duracao de antes.",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if (pm.response.code === 201) pm.collectionVariables.set(\"intent_walkin_1\", pm.response.json().id);"
+         "if (pm.response.code === 201) {",
+         "  const r = pm.response.json();",
+         "  const fila = r.attendancesInQueue || r.waitingList || [];",
+         "  const ultimo = fila[fila.length - 1];",
+         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_1\", ultimo.id);",
+         "}"
         ],
         "type": "text/javascript"
        }
@@ -6316,30 +6533,36 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{prof_token}}",
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances",
+      "url": "{{base_url}}/professional-queue/add-quest-attendance",
       "auth": {
        "type": "noauth"
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent1\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
     },
     {
-     "name": "fila: walk-in 2",
+     "name": "fila: walk-in 2 (convidado — enche a fila)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
+         "// Convidado de enchimento — ver o comentario do walk-in 1 (#38).",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if (pm.response.code === 201) pm.collectionVariables.set(\"intent_walkin_2\", pm.response.json().id);"
+         "if (pm.response.code === 201) {",
+         "  const r = pm.response.json();",
+         "  const fila = r.attendancesInQueue || r.waitingList || [];",
+         "  const ultimo = fila[fila.length - 1];",
+         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_2\", ultimo.id);",
+         "}"
         ],
         "type": "text/javascript"
        }
@@ -6354,30 +6577,36 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{prof_token}}",
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances",
+      "url": "{{base_url}}/professional-queue/add-quest-attendance",
       "auth": {
        "type": "noauth"
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent2\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
     },
     {
-     "name": "fila: walk-in 3",
+     "name": "fila: walk-in 3 (convidado — enche a fila)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
+         "// Convidado de enchimento — ver o comentario do walk-in 1 (#38).",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if (pm.response.code === 201) pm.collectionVariables.set(\"intent_walkin_3\", pm.response.json().id);"
+         "if (pm.response.code === 201) {",
+         "  const r = pm.response.json();",
+         "  const fila = r.attendancesInQueue || r.waitingList || [];",
+         "  const ultimo = fila[fila.length - 1];",
+         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_3\", ultimo.id);",
+         "}"
         ],
         "type": "text/javascript"
        }
@@ -6392,17 +6621,17 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{prof_token}}",
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances",
+      "url": "{{base_url}}/professional-queue/add-quest-attendance",
       "auth": {
        "type": "noauth"
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent3\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6439,7 +6668,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{intent_err_token}}",
         "type": "text"
        }
       ],
@@ -6485,7 +6714,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{intent_err_token}}",
         "type": "text"
        }
       ],
@@ -13917,17 +14146,22 @@
    "name": "08k - promover ao 1o lugar (S7)",
    "item": [
     {
-     "name": "setup: cria cabeca A (cliente)",
+     "name": "setup: cria cabeca A (convidado)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
+         "// ⚠️ Item #38: A e B eram o MESMO {{client_token}} no mesmo profissional — hoje o segundo",
+         "// recebe 409 CLIENT_ALREADY_IN_QUEUE, e com razao: promover B na frente de A so faz sentido",
+         "// entre DUAS pessoas. A cabeca A virou convidado (sem conta), que e como uma loja enche a",
+         "// fila de verdade; B continua sendo o cliente, porque e o id que o teste do promote assere.",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const r = pm.response.json();",
-         "  pm.test(\"SCHEDULED + salva id A\", () => pm.expect(r.status).to.equal(\"SCHEDULED\"));",
-         "  pm.collectionVariables.set(\"promote_id_a\", r.id);",
+         "  const fila = r.attendancesInQueue || r.waitingList || [];",
+         "  const ultimo = fila[fila.length - 1];",
+         "  if (ultimo) pm.collectionVariables.set(\"promote_id_a\", ultimo.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -13943,17 +14177,17 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{client_token}}",
+        "value": "Bearer {{prof_token}}",
         "type": "text"
        }
       ],
-      "body": {
-       "mode": "raw",
-       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
-      },
-      "url": "{{base_url}}/attendances",
+      "url": "{{base_url}}/professional-queue/add-quest-attendance",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"CabecaA\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -20939,6 +21173,41 @@
   {
    "key": "da_att_id",
    "value": ""
+  },
+  {
+   "key": "fit_front_email",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "fit_front_pass",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "fit_front_token",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "fit_front_id",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "intent_err_email",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "intent_err_pass",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "intent_err_token",
+   "value": "",
+   "type": "string"
   }
  ],
  "auth": {

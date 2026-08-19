@@ -277,6 +277,22 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     boolean existsByEstablishment_IdAndStatusIn(UUID establishmentId, List<AttendanceStatus> statuses);
 
+    /**
+     * Item #38 — invariante do duplo ingresso: este cliente ja tem atendimento OCUPADO com este
+     * profissional? Chamada no {@code createAttendance}, antes de qualquer escrita.
+     *
+     * <p><b>Raio estreito por decisao do Andre (D1, 15/08):</b> compara pelo par cliente x
+     * profissional, sobre colunas que ja sao chave estrangeira e ja estao indexadas — a consulta nao
+     * sai do estabelecimento que a requisicao ja carregou. O raio largo (mesmo {@code service_type}
+     * em qualquer loja) exigiria varrer os atendimentos do cliente na base inteira e cruzar com o
+     * tipo de cada estabelecimento; ficou registrado no D1 como decisao separada.
+     */
+    boolean existsByClient_IdAndProfessional_IdAndStatusIn(
+            UUID clientId,
+            UUID professionalId,
+            List<AttendanceStatus> statuses
+    );
+
     // S1 fatia 3 — fila propria do profissional (ex.: SCHEDULED/LATE) para o anuncio de "fila
     // fechada" aos clientes que ja estao dentro (drenagem: eles seguem sendo atendidos).
     List<Attendance> findByProfessional_IdAndStatusInOrderByScheduledTimeAsc(

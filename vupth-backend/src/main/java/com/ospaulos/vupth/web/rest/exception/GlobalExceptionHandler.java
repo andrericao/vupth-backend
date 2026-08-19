@@ -8,6 +8,7 @@ import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundExcept
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
+import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
@@ -605,6 +606,19 @@ public class GlobalExceptionHandler {
             EstablishmentNotOpenException ex, HttpServletRequest req) {
         log.warn("[409] EstablishmentNotOpen | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_NOT_OPEN");
+    }
+
+    /**
+     * Item #38 — duplo ingresso na fila. 409 e nao 422: o corpo esta correto e o mesmo request vale
+     * daqui a pouco, quando o atendimento atual terminar. O log carrega os ids; a mensagem ao
+     * usuario, nao.
+     */
+    @ExceptionHandler(ClientAlreadyInQueueException.class)
+    public ResponseEntity<ErrorResponse> handleClientAlreadyInQueue(
+            ClientAlreadyInQueueException ex, HttpServletRequest req) {
+        log.warn("[409] ClientAlreadyInQueue | {} {} | cliente={} profissional={}",
+                req.getMethod(), req.getRequestURI(), ex.getClientId(), ex.getProfessionalId());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "CLIENT_ALREADY_IN_QUEUE");
     }
 
     // ─────────────────────────────────────────────

@@ -6,13 +6,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.actuate.info.Info;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests — {@link GitCommitInfoContributor}, a identidade que o {@code /actuator/info}
@@ -55,6 +59,60 @@ class GitCommitInfoContributorTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> app(Map<String, Object> details) {
         return (Map<String, Object>) details.get("app");
+    }
+
+    @Nested
+    @DisplayName("bootMillis — quanto ESTA instancia levou para ficar pronta (D4, cold start do Render)")
+    class BootMillis {
+
+        /** Dispara o mesmo evento que o Spring publica quando a aplicacao fica pronta. */
+        private GitCommitInfoContributor prontaEm(long millis) {
+            GitCommitInfoContributor contributor = new GitCommitInfoContributor("", "", BOOT);
+            ApplicationReadyEvent event = mock(ApplicationReadyEvent.class);
+            when(event.getTimeTaken()).thenReturn(Duration.ofMillis(millis));
+            contributor.registraTempoDeBoot(event);
+            return contributor;
+        }
+
+        private Map<String, Object> appDe(GitCommitInfoContributor contributor) {
+            Info.Builder builder = new Info.Builder();
+            contributor.contribute(builder);
+            return app(builder.build().getDetails());
+        }
+
+        @Test
+        @DisplayName("ANTES de ficar pronta o campo esta AUSENTE — nao zero, que seria um boot instantaneo mentiroso")
+        void antesDoReady_campoAusente() {
+            assertThat(appDe(new GitCommitInfoContributor("", "", BOOT)))
+                    .doesNotContainKey("bootMillis");
+        }
+
+        @Test
+        @DisplayName("depois do ready publica o tempo medido, em milissegundos")
+        void depoisDoReady_publicaOTempo() {
+            assertThat(appDe(prontaEm(35_000L))).containsEntry("bootMillis", 35_000L);
+        }
+
+        @Test
+        @DisplayName("sai como numero puro — quem compara e script, e o front le para calibrar o teto do gate")
+        void bootMillis_saiComoNumeroPuro() throws Exception {
+            String json = new ObjectMapper().writeValueAsString(appDe(prontaEm(35_000L)));
+
+            assertThat(json).containsPattern("\"bootMillis\":\\s*35000");
+        }
+
+        @Test
+        @DisplayName("publicar o bootMillis NAO quebra o grep do ci.yml — os dois convivem no mesmo bloco")
+        void bootMillis_naoQuebraOGrepDoCi() throws Exception {
+            String json = new ObjectMapper().writeValueAsString(appDe(prontaEm(35_000L)));
+
+            Matcher matcher = CI_GREP.matcher(json);
+
+            assertThat(matcher.find())
+                    .as("campo novo no bloco 'app' cegou o recorte do CI: %s", json)
+                    .isTrue();
+            assertThat(Long.parseLong(matcher.group(1))).isEqualTo(BOOT);
+        }
     }
 
     @Nested

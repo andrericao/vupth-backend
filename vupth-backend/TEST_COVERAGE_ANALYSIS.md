@@ -191,7 +191,7 @@ A partir do Spring 6.1 um request sem handler cai no servidor de arquivos estát
 ⚠️ **Por que isso é teste de cobertura e não cosmética:** enquanto rota inexistente respondia 500, o log de produção não distinguia "build velha no ar" de "servidor quebrado" — foi o que escondeu por semanas que prod rodava um commit de 29/06 (ver PRD, seção 18d).
 
 ### 2.11 Identidade da instância — `/actuator/info` (o que o CI usa para verificar um deploy)
-Testes: `unit/shared/GitCommitInfoContributorTest` (10).
+Testes: `unit/shared/GitCommitInfoContributorTest` (14).
 
 O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` desta resposta com o instante em que o deploy foi disparado. **Este teste existe porque o campo é consumido por um `grep` de shell, não por um cliente tipado** — então ele aplica o **mesmo recorte do `ci.yml`** (`"startedAtEpochMs":[0-9]*`) sobre o JSON serializado, em vez de inspecionar o mapa por dentro. Um campo que mude de nome ou vire String quebra aqui, no `mvn test`, e não no deploy.
 
@@ -202,8 +202,36 @@ O job `test-prod` decide se o Newman pode rodar comparando o `startedAtEpochMs` 
 | Não muda entre chamadas (é o início do processo, não o "agora") | ✅ | — |
 | Precisão variável do `Instant.toString()` — a casa decimal some com ms zero | — | ✅ (é o que quebrou o parse da 1ª versão; o epoch atravessa as duas formas) |
 | `commit`: Render encurtado p/ 7 · Railway como fallback · Render tem precedência | ✅ | ✅ (nenhuma das duas = `railway up` → `unknown`; variável em branco não passa por preenchida; sha < 7 não estoura o `substring`) |
+| **`bootMillis`** (D4): ausente antes do ready, publicado depois, número puro | ✅ | ✅ (**ausente ≠ 0** — zero seria um boot instantâneo mentiroso) |
+| **`bootMillis` não cega o `grep` do `ci.yml`** — os dois convivem no bloco `app` | — | ✅ (quebrar o recorte faria o `test-prod` estourar e reverter um deploy correto) |
 
 ⚠️ **Postman não cobre e não deve:** a collection roda **contra** a instância que este campo identifica — verificar o identificador com o mesmo request que ele autoriza é circular. A prova é o teste unitário; o exercício real da espera só acontece no primeiro deploy de prod após 13/08.
+
+### 2.12b Duplo ingresso na fila (item #38) — a invariante que faltava no servidor
+Testes: `integrations/attendance/DoubleQueueEntryIntegrationTest` (8) + Postman folders `07 - client queue`, `08d`, `08e`, `08k`.
+
+**O defeito:** `POST /attendances` tinha cinco portões e nenhum perguntava se o cliente já estava ocupado — reproduzido em device (Client §4.2, 07/08) estando `IN_PROGRESS`. A guarda do app é **local** (lê só o store do aparelho), então logout/login ou reinstalação a furam.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `SCHEDULED` / `IN_PROGRESS` / `PAUSED` / `LATE` no mesmo profissional → **409 `CLIENT_ALREADY_IN_QUEUE`** | — | ✅ (4 casos, um por status) |
+| Pedido errado **nas duas coisas** (serviceItem de outro profissional + cliente ocupado) → vence o **422** | — | ✅ (`QueueVisibilityBug8IntegrationTest`, BUG8 c) |
+| ⚠️ **D1 — outro profissional da mesma loja continua liberado** | ✅ | — |
+| Outro cliente entra normalmente (o bloqueio é do indivíduo, não da vaga) | ✅ | — |
+| Depois de `FINISHED` / `CANCELLED` o cliente entra de novo | ✅ | — |
+| A mensagem diz **como destravar** (não um "não foi possível" genérico) | — | ✅ |
+
+⚠️ **Os testes que mais importam aqui são os que provam o que CONTINUA PASSANDO.** O raio é decisão registrada (D1): cliente × profissional, e só. Sem os dois casos de "continua entrando", alguém alarga o raio para a loja ou para o `service_type` e **nenhum teste reclama** — a suíte inteira ficaria verde com uma regra de produto diferente da decidida. E os casos de `FINISHED`/`CANCELLED` provam que o bloqueio **libera**: sem eles, isto seria banimento em vez de invariante.
+
+⚠️ **`INTENTION` não entra na lista** e isso é proposital — é compromisso fora da fila. Por isso `OCCUPIED_STATUSES` **não** é a `ACTIVE_STATUSES` do apagar-conta, que inclui `INTENTION`: lá a pergunta é outra ("há compromisso vivo que a exclusão quebraria?").
+
+⚠️ **A invariante quebrou a COLLECTION em três pastas, e o motivo é instrutivo.** O Newman de homolog reprovou em `08d` com 409 no lugar de 201. A varredura das 500 requests (simulando o par cliente × profissional ao longo de todo o run) achou **6 pontos**, todos com a mesma origem: **a collection usava UM cliente para representar uma FILA INTEIRA** — `08d` (o "cliente da frente" e o "encaixe" eram a mesma pessoa), `08e` (três walk-ins de enchimento, o mesmo cliente que acabara de criar a intenção) e `08k` (a "cabeça A" e o "alvo B" do promote). Antes do #38 o servidor aceitava, então ninguém percebeu que os cenários descreviam algo impossível: encaixar alguém atrás de si mesmo, promover-se à frente de si mesmo.
+
+**Como ficou:** quem existe só para **encher a fila** virou **convidado** (`POST /professional-queue/add-quest-attendance` — sem cliente, o par do #38 não se aplica, e é assim que uma loja enche fila de verdade); quem precisa **ser** um cliente distinto ganhou usuário próprio (o "cliente da frente" da `08d`, o cliente dos casos de erro da `08e`). ⚠️ **Os dois casos de erro da `08e` são o detalhe fácil de errar:** eles esperam `422 QUEUE_TARGET_NOT_FEASIBLE` e `400`, mas o cliente que os disparava já estava ocupado pela intenção viável da mesma pasta — receberiam **409 antes de chegar na regra que testam**, e passariam a afirmar outra coisa.
+
+**Regra para requests novos:** fila de N pessoas precisa de N pessoas. Cliente com conta só quando o teste depende da **identidade** dele (token, histórico, id asserido); para volume, convidado.
+
+⚠️ **Lição de 17/08, que só a suíte COMPLETA deu.** Os testes desta classe passavam isolados e reprovaram no `mvn test` inteiro, com dois vermelhos apontando para o helper `patchOk` — e a leitura apressada era "`pause` e `finish` quebraram". Não: o 409 vinha do **`/start` da linha de cima**, com `ATTENDANCE_ALREADY_IN_PROGRESS`, uma invariante que **já existia** (`Professional.getCurrentAttendance` conta `IN_PROGRESS` **e** `PAUSED`). Como cada teste deixa o seu atendimento vivo **de propósito** — é o estado que o #38 barra —, o teste seguinte encontrava a cadeira do profissional ocupada. Corrigido com `@AfterEach` que libera a cadeira pelo repositório. **Duas coisas a levar adiante:** (1) classe que reusa profissional e deixa estado vivo precisa de cleanup explícito, senão a ordem dos testes vira dependência oculta; (2) **a linha do stack trace é do helper, não da regra** — conferir *qual* chamada dentro dele falhou antes de acusar o endpoint errado.
 
 ### 2.12 Timeouts de SMTP — config que nenhum teste de lógica alcança
 Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
@@ -218,6 +246,23 @@ Testes: `unit/shared/MailTimeoutPropertiesTest` (2).
 | `vupth.mail.provider` continua `${MAIL_PROVIDER:none}` — default seguro | ✅ | ✅ (virar `smtp` faria todo ambiente sem `MAIL_HOST` entregar em host vazio) |
 
 ⚠️ **Postman não cobre e não tem como:** `POST /auth/forgot-password` responde **200 nos três casos** (não enviou / falhou / entregou) por anti-enumeração — nenhuma asserção de status consegue distingui-los. A separação é pelo **log** (`[MAIL:noop]` · `[MAIL:smtp] enviado` · `[MAIL:smtp] falha`), e desde 15/08 pelo **anúncio de boot** de cada sender. Ver PRD, seção "15/08 — #1 SMTP".
+
+### 2.13 Health check de mail desligado — o guard que protege o DEPLOY, não um endpoint
+Testes: `unit/shared/MailHealthIndicatorDisabledTest` (3).
+
+**Terceiro guard de configuração seguido, e o de maior alcance:** o Actuator registra um indicador de saúde de mail **sozinho** sempre que existe um `JavaMailSender`, e ele **abre conexão SMTP a cada checagem**. **Medido em 17/08:** o `/actuator/health` de homolog responde **503 DOWN em 10,7s** (3x) enquanto o `readiness` responde **UP em 0,54s**. É esse agregado que o job `deploy-prod` do `ci.yml` espera com `--max-time 10` — espera nunca satisfeita, `test-prod` não roda, pipeline vermelho. Ver PRD 18d, "17/08".
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `management.health.mail.enabled` existe como `${MAIL_HEALTH_ENABLED:false}` | ✅ | ✅ (falha se a chave sumir ou virar `true` fixo) |
+| Com o valor lido do próprio `application.properties`, o indicador **não sobe** num contexto com `JavaMailSender` | ✅ | — |
+| **Controle:** sem a chave, o indicador **sobe** | ✅ | ✅ (é o assert que impede o teste acima de virar verde vazio) |
+
+⚠️ **O terceiro teste é o que faz este guard valer.** O indicador só existe quando há um `JavaMailSender` no contexto, então um assert de "não achei o indicador" pode passar verde por **motivo errado** — inclusive com a chave apagada. Por isso o teste monta um contexto próprio **com** um `JavaMailSender` e prova os **dois** lados (com o valor do arquivo: não sobe; sem a chave: sobe). É a lição do teste de fuso do BUG2b, que ficava verde no CI em UTC **com o bug presente**.
+
+⚠️ **Nota de configuração que o teste torna explícita:** `spring.mail.host=${MAIL_HOST:}` cria o `JavaMailSenderImpl` **mesmo com host vazio** (`@ConditionalOnProperty` casa com propriedade presente e não-`false`) — ou seja, sem esta chave o indicador subiria em **todo** ambiente, não só onde o SMTP está configurado.
+
+⚠️ **Postman não cobre e não tem como:** o efeito só aparece num ambiente onde a saída SMTP está bloqueada e o provider é `smtp` — nenhuma das duas collections roda contra `/actuator/health` de prod. Ver PRD, seção 18d, "17/08 — o health check de MAIL derrubava o deploy de PROD".
 
 ---
 

@@ -160,6 +160,7 @@ Todos os erros seguem um dos dois formatos:
 | 409 | `AFFILIATION_ALREADY_PENDING` | Ja existe afiliacao pendente |
 | 409 | `PROFESSIONAL_ALREADY_AFFILIATED` | Profissional ja esta em outro establishment |
 | 409 | `ATTENDANCE_ALREADY_IN_PROGRESS` | Profissional ja tem attendance em andamento |
+| 409 | `CLIENT_ALREADY_IN_QUEUE` | Cliente ja tem atendimento ocupado com esse **mesmo profissional** (item #38) |
 | 409 | `ATTENDANCE_ALREADY_CANCELLED` | Attendance ja foi cancelado |
 | 409 | `SERVICE_ITEM_ALREADY_EXISTS` | Service item duplicado |
 | 409 | `SERVICE_TYPE_KEYWORD_ALREADY_EXISTS` | Sinonimo ja existe para o tipo de servico (base ou adicionado) |
@@ -1914,7 +1915,9 @@ Ao enviar `targetTime`, o cliente reserva um lugar mirando um horario futuro (ex
 
 **Gate de entrada — "aberto agora" (BUG5 parte C1):** um **walk-in imediato** (sem `targetTime`) so entra na fila se a loja estiver **aberta agora** = `open_status == OPEN` **E** horario atual dentro de `[opening_time, closing_time)` (o mesmo `is_open` efetivo da parte B). Loja fechada — ou aberta mas **fora do horario** — devolve **409 `ESTABLISHMENT_NOT_OPEN`**; o cliente **nao entra sozinho** na fila viva. A fila ja existente continua sendo atendida normalmente. **A intencao de fila (`targetTime` presente, #40) NAO passa por esse gate** — mira um horario do expediente e e aceita mesmo com a loja marcada fechada. O guest (`add-quest-attendance`, adicionado pela loja) tambem nao passa pelo gate. O caminho "solicitar corte" (C2) fica para depois.
 
-**Erros:** `400` (alvo no passado) · `409 ESTABLISHMENT_NOT_OPEN` (walk-in com a loja nao "aberta agora" — BUG5 C1) · `409 PROFESSIONAL_NOT_ACCEPTING_NEW` (fila do profissional fechada — S1 fatia 3; vale p/ walk-in E intent com `targetTime`, ambos fila viva; agendar p/ data futura segue livre via INTENTION `POST /attendances/intentions`). **Nota (Client §12, decisao 2026-07-15/23):** o **intent #40 (`targetTime`) esta APOSENTADO como entrada de agendamento do CLIENTE** — o app-client agenda via INTENTION (#4); o `targetTime` segue no contrato p/ compatibilidade (`reschedule` interno o usa), mas nao e mais caminho de UI · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (serviceItem de outro profissional) · `404 SERVICE_ITEM_NOT_FOUND` (nenhum id valido)
+**⚠️ Precedencia entre os erros (fixada 17/08):** quando o pedido esta errado **nas duas coisas** — serviceItem de outro profissional **e** cliente ja ocupado — responde **`422 SERVICE_ITEM_NOT_OF_PROFESSIONAL`**. Validacao do **pedido** vem antes de conflito de **estado**: o 409 depende de quem esta na fila agora, entao um pedido malformado receberia mensagens diferentes conforme o momento. (Foi assim que o portao do #38 entrou errado: colocado antes da validacao, ele mudou de carona o status de um erro ja documentado — `QueueVisibilityBug8IntegrationTest` reprovou.)
+
+**Erros:** `400` (alvo no passado) · **`409 CLIENT_ALREADY_IN_QUEUE`** (item #38 — o cliente ja tem atendimento `SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED` **com esse mesmo profissional**; ⚠️ **`INTENTION` nao conta**, e o bloqueio vale **so** para o par cliente x profissional: outro profissional, outra loja e ate outra loja do mesmo tipo continuam liberados — decisao [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio--decidido-2026-08-15). **Handoff fronts:** exibir a mensagem do backend, que diz o que fazer para destravar (concluir ou cancelar o atendimento atual) — traduzir para um "nao foi possivel" generico deixa o usuario sem saida) · `409 ESTABLISHMENT_NOT_OPEN` (walk-in com a loja nao "aberta agora" — BUG5 C1) · `409 PROFESSIONAL_NOT_ACCEPTING_NEW` (fila do profissional fechada — S1 fatia 3; vale p/ walk-in E intent com `targetTime`, ambos fila viva; agendar p/ data futura segue livre via INTENTION `POST /attendances/intentions`). **Nota (Client §12, decisao 2026-07-15/23):** o **intent #40 (`targetTime`) esta APOSENTADO como entrada de agendamento do CLIENTE** — o app-client agenda via INTENTION (#4); o `targetTime` segue no contrato p/ compatibilidade (`reschedule` interno o usa), mas nao e mais caminho de UI · `422 QUEUE_TARGET_NOT_FEASIBLE` (fila ja preve atender em cima/depois do alvo) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (serviceItem de outro profissional) · `404 SERVICE_ITEM_NOT_FOUND` (nenhum id valido)
 
 **Testes:** Unitario (funcoes puras `QueueUtils.isTargetFeasible`/`shouldConfirmIntent`/`assignAgendaSlot`; gate no `AttendanceServiceImplTest`) + Integracao (`QueueIntentIntegrationTest`, `QueueVisibilityBug8IntegrationTest`, `WalkInOpenGateIntegrationTest`)
 
@@ -3219,6 +3222,67 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 **Como conferir isto sozinho** (custa segundos e nao depende de rodar a collection): um request e anonimo de verdade **so** quando o `noauth` esta **dentro de `request`**. `auth` irmao de `request` nao existe para o Newman.
 
+#### 17/08 — 🔴 `/actuator/health` de HOMOLOG esta DOWN agora, e a mesma armadilha esta armada para o proximo deploy de PROD
+
+**Medido em 17/08, nao deduzido** (3 tentativas seguidas, resultado identico):
+
+| Endpoint | Resposta | Tempo |
+|---|---|---|
+| `https://vupth-backend-ia.onrender.com/actuator/health` | **503 `{"status":"DOWN"}`** | **10,5–10,9s** |
+| `.../actuator/health/readiness` | `200 {"status":"UP"}` | 0,54s |
+| `https://vupth-backend-ia-production.up.railway.app/actuator/health` | `200 {"status":"UP"}` | 0,83s |
+
+**A causa:** o Actuator registra um indicador de saude de mail **sozinho** — sem uma linha de codigo
+nossa — sempre que existe um `JavaMailSender` no contexto, e ele **abre conexao SMTP a cada checagem**.
+⚠️ **`spring.mail.host=${MAIL_HOST:}` cria o bean mesmo com o host VAZIO** (`@ConditionalOnProperty`
+casa com propriedade presente e nao-`false`), entao o indicador existe em **todo** ambiente que suba
+este `application.properties`.
+
+**Os 10,7s sao a assinatura de um `connectiontimeout` estourando** — exatamente o de 10s que entrou em
+15/08. Host vazio falharia **na hora** (`Unknown SMTP host`). Ou seja, isto tambem responde uma das
+hipoteses do **#1**: no Render o `MAIL_HOST` **chegou na JVM** e a saida para a **587 nao completa**.
+Nao e chave errada nem spam — **nao ha entrega saindo do Render**, e nao havia como saber disso sem
+esta medicao.
+
+🔴 **Por que PROD estar UP nao e alivio, e o contrario.** O `/actuator/info` de prod responde
+`{"git":{"commit":{"id":"unknown"}}}` **sem `startedAtEpochMs`** — e a build de **junho** do laco de
+12/08, anterior ao proprio `forgot-password`. Ela esta UP porque **nao tem configuracao de mail
+nenhuma**. ⚠️ **O primeiro deploy de prod que sair daqui leva o `spring.mail.*` junto** — com ou sem
+`MAIL_HOST` setado no Railway, o indicador sobe e o agregado vira **DOWN** (devagar se o host existe e
+a porta esta bloqueada, rapido se o host e vazio).
+
+⚠️ **E o `deploy-prod` do `ci.yml` espera `/actuator/health`, com `--max-time 10`,** procurando
+`"status":"UP"`. Com o agregado DOWN a espera **nunca se satisfaz**: o `test-prod` nao roda e o
+pipeline fecha vermelho — com o `rollback-prod` decidindo entre reverter um deploy correto ou (pelo
+teto `MAX_ROLLBACK_DISTANCE`, com `prod-last-good` ~90 commits atras) recusar e deixar tudo parado.
+**Homolog escapou por acidente de configuracao:** la a espera e `/actuator/health/readiness`, e o grupo
+`readiness` inclui **so** `readinessState` + `db` — por isso o CI de homolog segue verde com o agregado
+respondendo 503 ha dias.
+
+**🔧 Correcao:** `management.health.mail.enabled=${MAIL_HEALTH_ENABLED:false}` no
+`application.properties` (todos os ambientes, religavel por env var sem deploy novo).
+
+**A razao de fundo — e o motivo de desligar em vez de aumentar o `--max-time`:** e-mail aqui e
+**best-effort** por decisao explicita (o `ForgotPasswordUseCase` engole a falha de envio para nao vazar
+existencia de conta). Uma instancia que serve **toda** a API nao esta doente porque um provedor externo
+esta fora do ar; amarrar a saude do processo a ele transforma **indisponibilidade de terceiro em
+rollback nosso**. Aumentar o timeout do curl so adiaria o estrago — e deixaria prod respondendo DOWN
+para qualquer monitor externo, incluindo o keep-alive descrito no topo deste PRD.
+
+**Guard: `MailHealthIndicatorDisabledTest` (3 testes).** ⚠️ O terceiro e o que faz o guard valer: ele
+monta um contexto **com** um `JavaMailSender` e prova os **dois** lados — com o valor lido do proprio
+`application.properties` o indicador **nao sobe**; **sem** a chave, sobe. Um assert que so olhasse o
+contexto normal de teste passaria verde por motivo errado, que e a mesma armadilha do teste de fuso do
+BUG2b.
+
+> **Duas pontas soltas (nao mexidas de proposito):**
+> 1. `deploy-prod` espera o agregado e homolog espera o grupo `readiness`. Com o mail fora, o agregado
+>    ainda carrega `diskSpace` e `ping` — prod continua com **mais** superficie para reverter um deploy
+>    correto do que homolog. Alinhar as duas esperas em `readiness` e decisao de CI, nao de aplicacao.
+> 2. O topo deste PRD descreve um `keep-alive.yml` pingando `/actuator/health` a cada 14 min. **Esse
+>    workflow nao existe mais** em `.github/workflows/` (so `ci.yml` e `rollback.yml`) — o que explica,
+>    junto com a hibernacao, o cold start do **D4**.
+
 ---
 
 ## 19. Fluxos de Usuario
@@ -3447,7 +3511,38 @@ Sem eles, o job de rollback de homolog **nao quebra o build** (sai com `::warnin
 
 ---
 
-### D1 · Duplo ingresso na fila: qual e o ALCANCE do bloqueio?
+### D1 · Duplo ingresso na fila: qual e o ALCANCE do bloqueio? — ✅ **DECIDIDO 2026-08-15**
+
+> ✅ **DECISAO DO ANDRE (2026-08-15): raio ESTREITO — bloqueia o par cliente x profissional, com
+> recusa dura (409). Entregue no item #38.** Status que contam: `SCHEDULED`, `LATE`, `IN_PROGRESS`,
+> `PAUSED`. **`INTENTION` fica de fora.**
+>
+> **A razao.** A regra original juntava **dois problemas** com certeza e custo de erro muito
+> diferentes. O primeiro e **integridade de dados** — duas vagas com o mesmo profissional, que nao
+> tem caso legitimo nenhum e ja quebrava fechamento de loja e exclusao de conta. O segundo e
+> **comportamento** (o *hedging* entre lojas), que e real mas de tamanho desconhecido e **tem** caso
+> legitimo por baixo: marcar perto do trabalho hoje e perto de casa amanha.
+>
+> O raio largo por `service_type` foi recusado por tres motivos: **(1)** e vazado e largo ao mesmo
+> tempo — nao fecha o hedging (da para alternar entre "barbearia" e "salao" pelo mesmo corte) e ainda
+> barra o caso legitimo; **(2)** o controle de no-show **ja existe** e e o padrao de mercado para
+> fila — os **strikes** — e o analogo direto (Waitwhile, QLess, Yelp Waitlist) deixa entrar em varias
+> listas e pune na saida, com a Booksy medindo que **notificacao sozinha corta no-show ate 40%**;
+> **(3)** assimetria de reversibilidade — apertar depois e facil, mas um bloqueio que recusa cliente
+> legitimo vira ticket de suporte, e a pessoa **nao consegue se diagnosticar**.
+>
+> ⚠️ **Premissa corrigida na conversa:** o Andre supunha que travar por profissional/loja custaria
+> **mais** recursos. E o contrario — o estreito e o mais barato dos tres (`client_id` + `professional_id`
+> + `status`, colunas que ja sao chave estrangeira e ja estao indexadas, no estabelecimento que a
+> requisicao ja carregou). O **largo** e o caro: varre os atendimentos do cliente na base inteira e
+> cruza com o `service_type` de cada estabelecimento.
+>
+> **O que fica em aberto (nao e regressao, e escopo):** o hedging entre lojas. Se um dia doer, a
+> recomendacao registrada e **avisar, nao bloquear** — e reavaliar os strikes antes de qualquer
+> bloqueio novo. E o **convidado** (`guest`) segue fora do alcance por nao ter `clientId`.
+
+<details>
+<summary>Contexto original da decisao (mantido — a decisao registrada vale mais que a lista curta)</summary>
 
 **Contexto.** Defeito real, reproduzido no device (Client §4.2, 07/08) e **confirmado no codigo em
 15/08**: o `createAttendance` (`AttendanceServiceImpl:525-574`) tem cinco portoes — profissional
@@ -3504,6 +3599,8 @@ escrever (*"voce ja esta na fila de outra barbearia"* expoe onde a pessoa esta).
 o **codigo de erro e a mensagem** viram parte do contrato dos dois apps — hoje nao existe nenhum
 equivalente. ⚠️ E se a resposta for "bloqueio largo", vale decidir junto se ele e **duro** (recusa) ou
 **avisa e deixa passar** — o mercado de filas escolheu o segundo.
+
+</details>
 
 ---
 
@@ -3575,9 +3672,47 @@ keep-alive externo e contorno do free tier; aceitar e o que fazemos hoje.
 
 **O lado do backend.** Eles pedem duas coisas a nos, validas em qualquer cenario: **confirmar o tempo
 tipico de boot** (mediram 35s) e dizer **se da para encurtar** — o teto de 90s do gate deles e
-calibrado nesse numero, e eles precisam ser avisados se mudarmos de plano ou de host. Encurtar tem
-caminho real e barato aqui: **`spring.jpa.open-in-view`, lazy init e o custo das migrations no boot**
-sao nossos e nao dependem da sua decisao — da para atacar mesmo mantendo o Free.
+calibrado nesse numero, e eles precisam ser avisados se mudarmos de plano ou de host.
+
+#### ✅ 15/08 — a primeira metade esta ENTREGUE: o boot passou a ser medido
+
+**`GET /actuator/info` agora publica `app.bootMillis`** — quanto **esta** instancia levou para ficar
+pronta, capturado no `ApplicationReadyEvent`, que e **o mesmo marco em que o `readiness` passa a
+responder UP**. Entao o numero e exatamente o que o `waitForBackend()` dos apps espera, e nao um
+tempo interno que so faz sentido aqui dentro.
+
+**Por que medir veio antes de otimizar:** os 35s eram **uma medicao manual, de uma vez so**. Isso nao
+sustenta uma decisao de custo (D4) nem prova que uma otimizacao funcionou — e cronometrar na maquina
+de quem desenvolve nao diz nada, porque o que pesa e a **CPU compartilhada do Render**. Agora da para
+ler o valor a cada deploy, no ambiente que importa. ⚠️ **Antes do ready o campo fica AUSENTE**, nao
+zero: ausente e a resposta honesta (*"ainda nao ficou pronta"*), zero seria um boot instantaneo
+mentiroso. **Guarda no `GitCommitInfoContributorTest`:** um dos testes novos prova que o campo novo
+**nao cega o `grep` do `ci.yml`** — os dois convivem no mesmo bloco `app`, e quebrar aquele recorte
+faria o `test-prod` estourar e o `rollback-prod` reverter um deploy correto (o estrago de 12/08 pelo
+outro lado).
+
+**➡️ Para os fronts:** leiam `app.bootMillis` do `/actuator/info` em vez de cronometrar a mao. Se ele
+subir de forma consistente, o teto de 90s do gate precisa subir junto — **avisem**, e o mesmo combinado
+vale no sentido inverso se mudarmos de plano ou host.
+
+#### ❌ `spring.main.lazy-initialization=true` — AVALIADO E REJEITADO (nao e economia, e mentira)
+
+E a otimizacao de boot mais citada, corta tempo de verdade, e aqui seria **ativamente nociva**. Com
+lazy init os beans nascem **no primeiro uso**, entao a aplicacao anuncia **ready mais cedo sem estar
+mais pronta**: o `readiness` responde UP, o portao dos apps libera o cadastro, e o **primeiro request
+paga** o que o boot deixou de pagar. Ou seja, o numero melhora e a experiencia piora — e pior, o
+contrato que este PRD deu aos fronts na §18c (*"`readiness` UP = pode cadastrar agora"*) **deixaria de
+ser verdade**. ⚠️ Sobra ainda que erro de configuracao de bean, que hoje derruba o boot, passaria a
+aparecer como **500 no primeiro usuario que tocar aquele caminho**.
+
+**O que ainda pode ser tentado** (nao feito, e nao urgente sem numero antes): **CDS / extracao do fat
+jar** (Spring Boot 3.3 suporta `-Djarmode=tools ... extract`, e o ganho documentado e real). ⚠️ Mexe no
+`ENTRYPOINT` do `Dockerfile`, que e o caminho do deploy que **acabou de sair de um laco de rollback** —
+nao vale arriscar as cegas. E o treino do CDS pede um **banco no momento do build** (o contexto sobe e
+o Liquibase roda), o que o build atual nao tem. Fazer **depois** de ter o `bootMillis` de algumas
+subidas, para comparar antes/depois com numero. **Conferido e ja correto:** `open-in-view=false` em
+staging/prod, `ddl-auto=none`. **Liquibase sao 103 changesets em 79 arquivos**, validados a cada boot —
+candidato a medicao, mas mexer em historico de migration com dado em producao e risco proprio.
 
 ---
 
@@ -3911,6 +4046,16 @@ nenhum teste de logica** — muda so quanto tempo o servidor espera antes de des
 **codigo de reset em texto puro** no log. Enquanto for `none` isso e o unico jeito de recuperar conta;
 no dia em que o SMTP entrar, **quem tiver acesso ao log tem acesso a qualquer conta** — reavaliar o
 nivel desse log junto com a virada.
+
+**🔴 17/08 — MEDICAO QUE FECHA UMA HIPOTESE DO #1, achada pelo lado do deploy.** O indicador de saude
+de mail do Actuator (que abre conexao SMTP) faz o `/actuator/health` de **homolog** responder
+**503 DOWN em 10,7s**, medido 3 vezes. **10,7s e `connectiontimeout` estourando** — host vazio ou chave
+errada falhariam na hora. Logo: no Render o `MAIL_HOST` **chegou na JVM** e a saida para a **587 nao
+completa**. ✅ Hipotese *"porta 587 bloqueada no Render"* **confirmada**; *"chave Brevo expirada"* e
+*"caiu no spam"* saem da frente enquanto a conexao nem se estabelece. **Consequencia para o #1: nenhum
+e-mail sai do Render por SMTP — a saida e a API HTTP do provedor (Brevo REST, porta 443) ou outro host.**
+O mesmo indicador estava prestes a derrubar o `deploy-prod`; historia completa e a correcao na secao
+**18d, "17/08"**.
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
@@ -3976,7 +4121,7 @@ nivel desse log junto com a virada.
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔴 **QUEBRADO EM PRODUCAO — provado em device 2026-08-11** (era "falta testar") | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario.
+| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔴 **QUEBRADO EM PRODUCAO — provado em device 2026-08-11** (era "falta testar") | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**.
 | 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatias A (geocoding), A2 (GPS do dono + reverso + validacao) e B (ordenacao + raio + `distance_km`) ENTREGUES; resta so a C (fallback sem GPS)** — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
@@ -4013,7 +4158,7 @@ nivel desse log junto com a virada.
 | 35 | **Horario de funcionamento e UM SO para a semana inteira — nao existe horario POR DIA nem "dia fechado"** (Partner S27, feedback de teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria — Andre reordena**) | ✅ **CONFERIDO NO CODIGO antes de aceitar** (a licao de 05/08 e 07/08): `Establishment` tem **uma unica** `opening_time` e **uma unica** `closing_time` (`LocalTime`, linhas 73-77), aplicadas a **todos os dias**; nao ha nenhuma nocao de dia da semana em lugar nenhum do modelo. O relato do Partner esta **correto**. **Por que nao e cosmetico:** o horario alimenta o **gate de entrada na fila** (BUG5 C1), o **auto-fechamento** (S1 fatia 5, via `ClosingTimeMath`) e a **grade de refeicoes** — com um horario unico a loja "abre" no domingo e o auto-close mira o horario errado. Nao da para representar o basico do ramo: **domingo fechado**, **sabado ate as 18h**, **segunda so a tarde**. **Modelagem proposta:** lista de `{ dayOfWeek (0..6), openingTime, closingTime, closed }`, com endpoint proprio ou embutida no `general-infos`; expor a **semana inteira** no `EstablishmentResponse` (o Client tambem precisa, p/ dizer "abre amanha as 9h"). **A decidir:** (a) **migration** do par unico atual → replicar para os 7 dias (dado existente nao pode virar loja fechada a semana toda); (b) `isOpenAt`/`isWithinBusinessHours`/`ClosingTimeMath` passam a resolver **pelo dia corrente no `BusinessClock`** — e a virada de meia-noite (janela que cruza o dia) fica mais delicada, porque o dia seguinte pode ter outro horario; (c) feriado/excecao pontual entra agora ou depois? (sugestao: **depois** — fechar a semana primeiro); (d) **mais de uma janela no mesmo dia** (fecha p/ almoco) e o modelo de **refeicoes** ja cobre isso? Responder explicitamente, porque o Partner esta perguntando. ⛔ **Bloqueia a tela `establishment-hours.tsx` do Partner**, que hoje so tem dois campos. |
 | 36 | **Profissional abrir o PROPRIO estabelecimento — o onboarding nao tem essa porta** (Partner S23, reforcado no teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria**) — ⚠️ **mas a pergunta que eles dizem ser o bloqueio JA TEM RESPOSTA: SIM, aceita** | ✅ **CONFERIDO NO CODIGO** (a licao de 05/08 e 07/08, agora aplicada ANTES de aceitar o enunciado): o Partner pergunta *"o `POST /establishment/quick-create` aceita um usuario que ja e PROFESSIONAL?"* e trata isso como o bloqueio. **Aceita hoje, sem uma linha de codigo nova:** o `QuickCreateEstablishmentUseCase` **nao tem barreira nenhuma** contra perfil profissional (so checa `hasRole(OWNER)` e **adiciona** o papel se faltar, linhas ~53), e o matcher `hasRole("CLIENT")` do `SecurityConfig` (linha 120) **nao barra ninguem**, porque o `RegisterUseCase` chama `addClientProfile()` para **todo** usuario que se cadastra — entao todo profissional carrega `ROLE_CLIENT` junto. Papeis sao **acumulativos**, como o PRD ja dizia. **E a reputacao acompanha a pessoa:** `rating_average`/`rating_count` vivem no `Professional`, nao no vinculo — a leitura do Partner esta certa e **nao ha migracao de dado a fazer**. **O que sobra de trabalho REAL, e e decisao de produto (Andre), nao codigo:** (1) ele pode abrir a propria loja **enquanto afiliado a outra**, ou tem de se desafiliar antes? (leitura do Partner: desafiliar antes, senao fica na fila de duas casas — e o `PROFESSIONAL_ALREADY_AFFILIATED` ja existe para o caso inverso); (2) o historico na casa antiga continua no `/professional/me/reports` dele apos a troca? (hoje **continua**, porque o atendimento aponta para o `Professional`); (3) ao abrir a loja, ele se **auto-afilia** como profissional dela? 🆕 **Caso novo e mais urgente (11/08) — o ONBOARDING:** quem escolhe "sou profissional" cria o perfil no 1o passo e cai **direto em "Buscar Estabelecimento"**; nao existe a pergunta *"vai abrir a sua propria loja ou se afiliar a uma?"*. O dono de barbearia que se identifica como profissional fica **preso no fluxo de afiliacao**. ⚠️ **Isso e UI do Partner e ja esta destravado pelo backend** — responder (1)(2)(3) fecha o item |
 | 37 | **Dono permite o GPS DEPOIS do cadastro — nada corrige a coordenada da loja** (identificado por Andre, 2026-08-13) | ⬜ aberto (**posicao provisoria — Andre reordena**) | A fatia A2 usa o GPS do dono como fonte mais precisa da coordenada da LOJA, porque ele esta *dentro dela* ao cadastrar (o CEP resolve faixa de logradouro, nao a porta). **Mas se ele cadastrou sem permitir e concede depois, nada reofereceu a correcao.** A loja fica com a coordenada do CEP — presente, porem imprecisa, e ninguem sabe. O `PATCH /establishments/{id}/addresses/{addressId}` **ja aceita** `lat`/`lng`, entao o backend pode nao ter codigo novo nenhum: falta decidir **quem oferece a correcao e quando** (o Partner detecta a permissao recem-concedida e pergunta "quer usar sua posicao atual para a loja?"). ⚠️ **Irmao do #34** — os dois sao "a loja esta no mapa no lugar errado e ninguem avisa"; avaliar entregar juntos. Ver a secao do GPS: "BURACO ABERTO — o dono que permite o GPS DEPOIS do cadastro". Decisao de modelo relacionada (mesma data): a coordenada persistida e **do estabelecimento, nunca do cliente**.
-| 38 | **Mesmo cliente entra DUAS vezes na fila — falta a invariante no servidor** (Client §4.2, device 2026-08-07; **confirmado no codigo em 15/08**) | ⬜ aberto (**posicao provisoria — Andre reordena**) | ⛔ **ALCANCE AGUARDA A DECISAO [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio) (§20b) — nao implementar antes.** `AttendanceServiceImpl:525-574` tem cinco portoes (profissional afiliado, loja bate, loja aberta agora, `accepting_new`, itens do profissional) e **nenhum pergunta se o cliente ja tem atendimento ativo**; o Andre estava `IN_PROGRESS` e entrou na fila de novo. A guarda do front e **local** (`shouldCreateAttendance` so le o store do aparelho), entao logout/login ou reinstalacao fura. ⚠️ **Nao e so contagem errada:** a fila conta o mesmo cliente duas vezes, a estimativa dos outros infla e o atendimento orfao **trava o fechamento da loja e o apagar-conta**, que checam atendimento ativo. O predicado **ja existe** em `SwapOfferServiceImpl:155-161` (recusa oferta de quem ja esta na fila daquele profissional) — falta no caminho de entrada. **Direcao do Andre (15/08):** bloquear por **status ocupado** (aguardando/cortando/atrasando) em estabelecimentos do **mesmo tipo**; o D1 fecha o raio, os status limitrofes (`PAUSED`, `INTENTION`) e se a recusa e dura ou so aviso. |
+| 38 | ~~Mesmo cliente entra DUAS vezes na fila~~ | ✅ **ENTREGUE 2026-08-15** (Client §4.2, device 07/08) | Portao novo no `createAttendance`, **depois da validacao dos serviceItems e antes da primeira escrita** (precedencia fixada em 17/08 — ver contrato do `POST /attendances`): cliente com atendimento em `SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED` no **mesmo profissional** recebe **409 `CLIENT_ALREADY_IN_QUEUE`**. Raio estreito por decisao [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio--decidido-2026-08-15) — **`INTENTION` NAO conta** (compromisso fora da fila; conta-la trancaria quem tem intencao para sabado o resto da semana), e por isso a lista **nao** e a `ACTIVE_STATUSES` do apagar-conta. ⚠️ **Achado no Newman de homolog (17/08):** a invariante reprovou **3 pastas da collection** (`08d`, `08e`, `08k`) que usavam **um unico cliente para representar uma fila inteira** — encaixar alguem atras de si mesmo, promover-se a frente de si mesmo. Nao era teste quebrado: eram cenarios impossiveis que o servidor aceitava antes. Quem so enchia fila virou **convidado** (`add-quest-attendance`); quem precisa ser outra pessoa ganhou usuario proprio. ⚠️ Os dois casos de erro da `08e` (422 `QUEUE_TARGET_NOT_FEASIBLE` e 400) receberiam **409 antes da regra que testam** — passariam a afirmar outra coisa. ⚠️ **Achado ao rodar a suite completa (17/08):** a classe de teste reusa um profissional e ignorava uma invariante que **ja existia** — `startAttendance` recusa com **409 `ATTENDANCE_ALREADY_IN_PROGRESS`** quando o profissional ja tem atendimento `IN_PROGRESS` **ou** `PAUSED`. Como cada teste deixa o seu atendimento vivo de proposito, o teste seguinte reprovava no `/start`, **por motivo alheio ao #38**; corrigido com um `@AfterEach` que libera a cadeira. `DoubleQueueEntryIntegrationTest` (8): os que provam o que **continua passando** (outro profissional da mesma loja, outro cliente) sao os que fixam a decisao, e os de `FINISHED`/`CANCELLED` provam que o bloqueio **libera** — sem eles seria banimento, nao invariante. |
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
 **Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging. ⚠️ **O Partner pediu o encerramento destes dois em 2026-07-29** (reportados por eles em 2026-06-09): do lado deles o `/attendances` consta resolvido desde 2026-07-09 e a adicao de servico ja funciona pelo caminho do profissional ("Meus Servicos"). **Confirmar em staging e encerrar** — nao ha codigo a escrever, so a confirmacao.
