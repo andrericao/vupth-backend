@@ -19999,6 +19999,516 @@
    ]
   },
   {
+   "name": "18b - escopo de cidade/UF (fatia C, #29)",
+   "description": "GET /establishment?city=&uf= — o filtro de quem esta SEM coordenada (fatia C do #2). Sem ele a lista sem GPS e nacional: quem esta em Niteroi ve loja de qualquer lugar do pais. NAO depende de o usuario ter negado a permissao — aparelho sem fix, localizacao do sistema desligada, modo aviao ou timeout caem todos aqui. A comparacao de cidade ignora ACENTO e caixa de proposito: a cidade que o app manda vem de geocodificacao reversa e a do banco foi digitada pelo dono, entao comparar cru devolveria lista vazia por causa de uma cedilha. uf casa por igualdade (sigla nao tem parcial) e fora do formato de 2 letras e 422, porque nunca casaria com nada. O ?name= tem PRECEDENCIA sobre o escopo. Self-contained: cria dono+loja+endereco em Sao Goncalo/RJ e apaga no fim; nenhuma assercao olha a lista inteira.",
+   "item": [
+    {
+     "name": "setup: register dono (LOC)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"loc_owner_email\",\"locowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"loc_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{loc_owner_email}}\",\"password\":\"{{loc_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (LOC)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"loc_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{loc_owner_email}}\",\"password\":\"{{loc_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (LOC)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) {",
+         "  pm.collectionVariables.set(\"loc_estab_id\", pm.response.json().id);",
+         "  // Nome SEM espaco de proposito: ele vai cru na query string do teste de precedencia.",
+         "  pm.collectionVariables.set(\"loc_estab_name\", pm.response.json().name);",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{loc_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"LojaLOC{{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: endereco em Sao Goncalo/RJ — cidade gravada COM acento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"cidade acentuada persistida\", () => pm.expect(pm.response.json().city).to.eql(\"S\\u00e3o Gon\\u00e7alo\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{loc_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{loc_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua Feliciano Sodre\",\"number\":\"100\",\"neighborhood\":\"Centro\",\"city\":\"São Gonçalo\",\"state\":\"RJ\",\"zipCode\":\"24440000\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?uf=RJ -> a loja do RJ aparece",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=RJ",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?uf=SP -> a loja do RJ SAI (o escopo corta de verdade)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja do RJ nao aparece na busca por SP\", () => pm.expect(minha).to.not.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=SP",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?uf=rj minusculo funciona — a sigla e normalizada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=rj",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=Sao Goncalo SEM acento acha a loja gravada COM acento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "// A cidade que o app manda vem do reverse geocode; a do banco foi digitada pelo dono.",
+         "// Comparar cru devolveria lista vazia por causa de uma cedilha."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=Sao Goncalo COM acento e minusculo tambem acha",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=s%C3%A3o%20gon%C3%A7alo",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=...&uf=RJ -> as duas condicoes batem",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo&uf=RJ",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=...&uf=SP -> combinacao impossivel e 200 com a loja fora, nunca erro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"cidade do RJ com uf=SP nao casa\", () => pm.expect(minha).to.not.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo&uf=SP",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?name= tem PRECEDENCIA sobre o escopo: acha a loja mesmo com uf errada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "// city/uf sao preenchidos pelo APP; o nome foi digitado pela pessoa. Cruzar os dois",
+         "// devolveria lista vazia por causa de um escopo que ela nao escolheu nem ve na tela."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&name={{loc_estab_name}}&uf=SP",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "city e uf em branco sao ignorados — a lista nao fica vazia por isso",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"a lista veio cheia\", () => pm.expect(lista.length).to.be.above(0));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=&uf=",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] uf que nao e sigla -> 422 ADDRESS_INVALID_UF",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_UF\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_UF\"));",
+         "// Recusar em vez de deixar passar: uf fora do formato nunca casaria com nada e devolveria",
+         "// lista vazia sempre — o usuario nao distingue isso de \"o app quebrou\"."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=Rio%20de%20Janeiro",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] uf de 3 caracteres (SP1) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_UF\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_UF\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=SP1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "vitrine ANONIMA: escopo de localidade sem token -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo&uf=RJ",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono (LOC)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{loc_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{loc_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "19 - apagar a conta (S19)",
    "description": "Apagar a conta (Partner S19 / LGPD / exigencia de publicacao nas lojas de app).\n\nSELF-CONTAINED de proposito: cria dono, loja, profissional, servico e cliente proprios (prefixo da_), porque esta folder APAGA as contas que usa. Se ela tocasse o owner/client compartilhados da collection, todas as folders seguintes quebrariam.\n\nA invariante que estas requests protegem: apaga-se o TITULAR, nao as relacoes dele — o atendimento sobrevive, atribuido a \"Usuario removido\", porque pertence tambem ao profissional e ao estabelecimento.",
    "item": [
@@ -21570,6 +22080,26 @@
    "key": "attendance_id_add",
    "value": "",
    "type": "string"
+  },
+  {
+   "key": "loc_owner_email",
+   "value": ""
+  },
+  {
+   "key": "loc_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "loc_owner_token",
+   "value": ""
+  },
+  {
+   "key": "loc_estab_id",
+   "value": ""
+  },
+  {
+   "key": "loc_estab_name",
+   "value": ""
   }
  ],
  "auth": {

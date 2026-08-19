@@ -3,6 +3,7 @@ package com.ospaulos.vupth.domain.establishment.service;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
+import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
@@ -27,12 +28,17 @@ public interface EstablishmentService {
      * por proximidade cada ramo passaria a precisar do mesmo tratamento de distancia. Com uma porta
      * so, a ordenacao por distancia vale para <b>qualquer</b> combinacao de filtros de graca.</p>
      *
+     * @param location escopo de cidade/UF (backlog #29), ou {@code null} quando a busca nao mandou
+     *                 nenhum dos dois. E o filtro de quem esta <b>sem coordenada</b> — a fatia C do
+     *                 #2 — e por isso ele <b>cede a vez ao {@code name}</b>: ver o javadoc da
+     *                 implementacao.
      * @param geo criterio de proximidade, ou {@code null} quando a busca nao mandou coordenada —
      *            nesse caso a ordenacao continua sendo por menor tempo de espera.
      */
     List<EstablishmentResponse> searchPublic(String name,
                                              ServiceType serviceType,
                                              String neighborhood,
+                                             LocationFilter location,
                                              GeoSearch geo);
 
     EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus);
