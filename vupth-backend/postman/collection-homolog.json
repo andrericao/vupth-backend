@@ -20000,7 +20000,7 @@
   },
   {
    "name": "18b - escopo de cidade/UF (fatia C, #29)",
-   "description": "GET /establishment?city=&uf= — o filtro de quem esta SEM coordenada (fatia C do #2). Sem ele a lista sem GPS e nacional: quem esta em Niteroi ve loja de qualquer lugar do pais. NAO depende de o usuario ter negado a permissao — aparelho sem fix, localizacao do sistema desligada, modo aviao ou timeout caem todos aqui. A comparacao de cidade ignora ACENTO e caixa de proposito: a cidade que o app manda vem de geocodificacao reversa e a do banco foi digitada pelo dono, entao comparar cru devolveria lista vazia por causa de uma cedilha. uf casa por igualdade (sigla nao tem parcial) e fora do formato de 2 letras e 422, porque nunca casaria com nada. O ?name= tem PRECEDENCIA sobre o escopo. Self-contained: cria dono+loja+endereco em Sao Goncalo/RJ e apaga no fim; nenhuma assercao olha a lista inteira.",
+   "description": "GET /establishment?city=&uf= — o filtro de quem esta SEM coordenada (fatia C do #2). Sem ele a lista sem GPS e nacional: quem esta em Niteroi ve loja de qualquer lugar do pais. NAO depende de o usuario ter negado a permissao — aparelho sem fix, localizacao do sistema desligada, modo aviao ou timeout caem todos aqui. A comparacao de cidade ignora ACENTO e caixa de proposito: a cidade que o app manda vem de geocodificacao reversa e a do banco foi digitada pelo dono, entao comparar cru devolveria lista vazia por causa de uma cedilha. uf casa por igualdade (sigla nao tem parcial) e fora do formato de 2 letras e 422, porque nunca casaria com nada. O ?name= tem PRECEDENCIA sobre o escopo. Self-contained: cria dono+loja+endereco em Petropolis/RJ (acento SEM espaco, para o teste principal de acento ser uma query ASCII pura) e apaga no fim; nenhuma assercao olha a lista inteira.",
    "item": [
     {
      "name": "setup: register dono (LOC)",
@@ -20120,14 +20120,14 @@
      "response": []
     },
     {
-     "name": "setup: endereco em Sao Goncalo/RJ — cidade gravada COM acento",
+     "name": "setup: endereco em Petropolis/RJ — cidade gravada COM acento",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "pm.test(\"cidade acentuada persistida\", () => pm.expect(pm.response.json().city).to.eql(\"S\\u00e3o Gon\\u00e7alo\"));"
+         "pm.test(\"cidade acentuada persistida\", () => pm.expect(pm.response.json().city).to.eql(\"Petr\\u00f3polis\"));"
         ],
         "type": "text/javascript"
        }
@@ -20152,7 +20152,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"street\":\"Rua Feliciano Sodre\",\"number\":\"100\",\"neighborhood\":\"Centro\",\"city\":\"São Gonçalo\",\"state\":\"RJ\",\"zipCode\":\"24440000\"}"
+       "raw": "{\"street\":\"Rua do Imperador\",\"number\":\"100\",\"neighborhood\":\"Centro\",\"city\":\"Petrópolis\",\"state\":\"RJ\",\"zipCode\":\"25680000\"}"
       }
      },
      "response": []
@@ -20236,7 +20236,7 @@
      "response": []
     },
     {
-     "name": "?city=Sao Goncalo SEM acento acha a loja gravada COM acento",
+     "name": "?city=Petropolis SEM acento acha a loja gravada COM acento (query 100% ASCII)",
      "event": [
       {
        "listen": "test",
@@ -20246,8 +20246,8 @@
          "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
-         "// A cidade que o app manda vem do reverse geocode; a do banco foi digitada pelo dono.",
-         "// Comparar cru devolveria lista vazia por causa de uma cedilha."
+         "// Query sem um unico caractere especial: se este passar e o de baixo falhar, o problema e",
+         "// encoding do cliente HTTP, nao a dobra de acento do backend."
         ],
         "type": "text/javascript"
        }
@@ -20256,7 +20256,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo",
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis",
       "auth": {
        "type": "noauth"
       }
@@ -20264,7 +20264,7 @@
      "response": []
     },
     {
-     "name": "?city=Sao Goncalo COM acento e minusculo tambem acha",
+     "name": "?city=petropolis COM acento e minusculo tambem acha",
      "event": [
       {
        "listen": "test",
@@ -20282,7 +20282,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&city=s%C3%A3o%20gon%C3%A7alo",
+      "url": "{{base_url}}/establishment?includeAll=true&city=petr%C3%B3polis",
       "auth": {
        "type": "noauth"
       }
@@ -20308,7 +20308,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo&uf=RJ",
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis&uf=RJ",
       "auth": {
        "type": "noauth"
       }
@@ -20334,7 +20334,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo&uf=SP",
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis&uf=SP",
       "auth": {
        "type": "noauth"
       }
@@ -20462,7 +20462,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&city=Sao%20Goncalo&uf=RJ",
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis&uf=RJ",
       "auth": {
        "type": "noauth"
       }

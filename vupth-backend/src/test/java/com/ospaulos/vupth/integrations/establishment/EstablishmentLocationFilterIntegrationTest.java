@@ -16,9 +16,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +94,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(1)
     @DisplayName("sem nenhum filtro: as 5 lojas aparecem — a lista NUNCA vem vazia por falta de GPS")
     void semFiltroNadaSome() throws Exception {
-        List<String> ids = idsDoTeste(buscar(""));
+        List<String> ids = idsDoTeste(buscar());
 
         assertThat(ids).contains(niteroiId, saoGoncaloId, saoGoncaloSemId, saoPauloId, semEnderecoId);
     }
@@ -104,7 +103,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(2)
     @DisplayName("?uf=SP: traz so a loja de SP e corta as do RJ")
     void filtraPorUf() throws Exception {
-        List<String> ids = idsDoTeste(buscar("&uf=SP"));
+        List<String> ids = idsDoTeste(buscar("uf", "SP"));
 
         assertThat(ids).containsOnly(saoPauloId);
     }
@@ -113,7 +112,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(3)
     @DisplayName("?uf=rj minusculo funciona — a sigla e normalizada")
     void ufMinuscula() throws Exception {
-        List<String> ids = idsDoTeste(buscar("&uf=rj"));
+        List<String> ids = idsDoTeste(buscar("uf", "rj"));
 
         assertThat(ids).contains(niteroiId, saoGoncaloId, saoGoncaloSemId);
         assertThat(ids).doesNotContain(saoPauloId);
@@ -123,8 +122,8 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(4)
     @DisplayName("?city=Niteroi: casa por trecho e sem caixa, como o ?neighborhood= sempre fez")
     void filtraPorCidade() throws Exception {
-        assertThat(idsDoTeste(buscar("&city=" + enc("niteroi")))).containsOnly(niteroiId);
-        assertThat(idsDoTeste(buscar("&city=" + enc("NITEROI")))).containsOnly(niteroiId);
+        assertThat(idsDoTeste(buscar("city", "niteroi"))).containsOnly(niteroiId);
+        assertThat(idsDoTeste(buscar("city", "NITEROI"))).containsOnly(niteroiId);
     }
 
     @Test
@@ -133,7 +132,7 @@ class EstablishmentLocationFilterIntegrationTest {
     void acentoNaoSeparaAsDuasLojas() throws Exception {
         // A cidade vem do reverse geocode do aparelho e a do banco foi digitada pelo dono: comparar
         // cru devolveria meia lista, ou nenhuma, sem que ninguem conseguisse explicar por que.
-        List<String> ids = idsDoTeste(buscar("&city=" + enc("Sao Goncalo")));
+        List<String> ids = idsDoTeste(buscar("city", "Sao Goncalo"));
 
         assertThat(ids).containsExactlyInAnyOrder(saoGoncaloId, saoGoncaloSemId);
     }
@@ -142,7 +141,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(6)
     @DisplayName("?city=São Gonçalo COM acento acha as mesmas duas — a dobra vale nas duas pontas")
     void acentoNaBuscaTambem() throws Exception {
-        List<String> ids = idsDoTeste(buscar("&city=" + enc("São Gonçalo")));
+        List<String> ids = idsDoTeste(buscar("city", "São Gonçalo"));
 
         assertThat(ids).containsExactlyInAnyOrder(saoGoncaloId, saoGoncaloSemId);
     }
@@ -151,9 +150,9 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(7)
     @DisplayName("cidade + UF juntas: as duas precisam bater")
     void cidadeMaisUf() throws Exception {
-        assertThat(idsDoTeste(buscar("&city=" + enc("Niteroi") + "&uf=RJ"))).containsOnly(niteroiId);
+        assertThat(idsDoTeste(buscar("city", "Niteroi", "uf", "RJ"))).containsOnly(niteroiId);
         // Combinacao que nao existe: 200 com lista vazia, nunca erro.
-        assertThat(idsDoTeste(buscar("&city=" + enc("Niteroi") + "&uf=SP"))).isEmpty();
+        assertThat(idsDoTeste(buscar("city", "Niteroi", "uf", "SP"))).isEmpty();
     }
 
     @Test
@@ -161,8 +160,8 @@ class EstablishmentLocationFilterIntegrationTest {
     @DisplayName("loja SEM endereco sai quando ha filtro de localidade, e volta quando nao ha")
     void lojaSemEndereco() throws Exception {
         // Mesma regra do radiusKm: a pergunta virou "o que fica em X" e ela nao tem resposta.
-        assertThat(idsDoTeste(buscar("&uf=RJ"))).doesNotContain(semEnderecoId);
-        assertThat(idsDoTeste(buscar(""))).contains(semEnderecoId);
+        assertThat(idsDoTeste(buscar("uf", "RJ"))).doesNotContain(semEnderecoId);
+        assertThat(idsDoTeste(buscar())).contains(semEnderecoId);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -176,7 +175,7 @@ class EstablishmentLocationFilterIntegrationTest {
         // city/uf sao preenchidos pelo APP (a localidade do aparelho); o nome foi digitado pela
         // pessoa. Cruzar os dois devolveria lista vazia por causa de um escopo que ela nao escolheu
         // nem ve na tela — e "nao existe" e "existe, mas nao no seu estado" ficam indistinguiveis.
-        List<String> ids = idsDoTeste(buscar("&name=" + enc(nomeDaLojaDeSp) + "&uf=RJ"));
+        List<String> ids = idsDoTeste(buscar("name", nomeDaLojaDeSp, "uf", "RJ"));
 
         assertThat(ids).contains(saoPauloId);
     }
@@ -185,7 +184,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(21)
     @DisplayName("escopo combina com o bairro (?neighborhood=) — filtros de localidade se somam")
     void combinaComBairro() throws Exception {
-        List<String> ids = idsDoTeste(buscar("&neighborhood=Centro&uf=RJ"));
+        List<String> ids = idsDoTeste(buscar("neighborhood", "Centro", "uf", "RJ"));
 
         assertThat(ids).contains(niteroiId, saoGoncaloId, saoGoncaloSemId);
         assertThat(ids).doesNotContain(saoPauloId);
@@ -197,7 +196,7 @@ class EstablishmentLocationFilterIntegrationTest {
     void combinaComProximidade() throws Exception {
         // Quem tem GPS normalmente nao manda city/uf, mas mandar os dois nao pode quebrar nada:
         // o escopo corta e a distancia ordena o que sobrou.
-        List<Map<String, Object>> lista = buscar("&uf=RJ&lat=" + NITEROI_LAT + "&lng=" + NITEROI_LNG);
+        List<Map<String, Object>> lista = buscar("uf", "RJ", "lat", String.valueOf(NITEROI_LAT), "lng", String.valueOf(NITEROI_LNG));
         List<String> ids = idsDoTeste(lista);
 
         assertThat(ids).doesNotContain(saoPauloId);
@@ -214,7 +213,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @DisplayName("[ERRO] uf que nao e sigla -> 422 ADDRESS_INVALID_UF (nunca casaria com nada)")
     void ufInvalida() throws Exception {
         for (String invalida : List.of("Rio de Janeiro", "SP1", "R")) {
-            mvc.perform(get("/establishment?includeAll=true&uf=" + enc(invalida)))
+            mvc.perform(listagem("uf", invalida))
                     .andExpect(status().isUnprocessableEntity())
                     .andExpect(jsonPath("$.code").value("ADDRESS_INVALID_UF"));
         }
@@ -224,7 +223,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(31)
     @DisplayName("city e uf em branco sao ignorados, sem erro e sem esvaziar a lista")
     void camposEmBrancoSaoIgnorados() throws Exception {
-        List<String> ids = idsDoTeste(buscar("&city=&uf="));
+        List<String> ids = idsDoTeste(buscar("city", "", "uf", ""));
 
         assertThat(ids).contains(niteroiId, saoPauloId, semEnderecoId);
     }
@@ -233,7 +232,7 @@ class EstablishmentLocationFilterIntegrationTest {
     @Order(32)
     @DisplayName("o escopo tambem e ANONIMO — sem token, 200")
     void semToken() throws Exception {
-        mvc.perform(get("/establishment?includeAll=true&uf=RJ")).andExpect(status().isOk());
+        mvc.perform(listagem("uf", "RJ")).andExpect(status().isOk());
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -266,16 +265,30 @@ class EstablishmentLocationFilterIntegrationTest {
         return new Loja(estab.id(), estab.name());
     }
 
-    private String enc(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
+    /**
+     * Busca na vitrine publica com os filtros passados em pares chave/valor.
+     *
+     * <p><b>Os valores vao por {@code .param()}, nunca concatenados na URL.</b> O
+     * {@code MockMvcRequestBuilders.get} trata a string como <b>URI template</b> e a codifica: um
+     * valor ja percent-encoded ("Sao%20Goncalo") viraria "Sao%2520Goncalo" e chegaria literal no
+     * controller — o teste falharia com o endpoint certo. Com {@code param} o valor nao passa pelo
+     * parser de URI. Vale para acento, espaco e para o nome de loja gerado pelo faker.</p>
+     */
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> buscar(String queryExtra) throws Exception {
-        MvcResult result = mvc.perform(get("/establishment?includeAll=true" + queryExtra))
+    private List<Map<String, Object>> buscar(String... filtros) throws Exception {
+        MvcResult result = mvc.perform(listagem(filtros))
                 .andExpect(status().isOk())
                 .andReturn();
         return mapper.readValue(result.getResponse().getContentAsString(), List.class);
+    }
+
+    /** Mesmo request da {@link #buscar}, sem exigir 200 — usado pelos casos de 422. */
+    private MockHttpServletRequestBuilder listagem(String... filtros) {
+        MockHttpServletRequestBuilder request = get("/establishment").param("includeAll", "true");
+        for (int i = 0; i < filtros.length; i += 2) {
+            request = request.param(filtros[i], filtros[i + 1]);
+        }
+        return request;
     }
 
     /** Ids desta suite, na ordem em que a API devolveu — ignora o que mais houver no banco. */
