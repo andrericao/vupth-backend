@@ -13,10 +13,12 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundEx
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.model.EstablishmentAddress;
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.address.valueObject.Haversine;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
+import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.owner.model.Owner;
@@ -74,13 +76,27 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 .toList();
     }
 
+    /**
+     * <b>Precedencia do {@code name} (backlog #29):</b> o escopo de cidade/UF <b>nao</b> se aplica
+     * quando a busca veio com nome — exatamente como {@code serviceType} e {@code neighborhood} ja
+     * nao se aplicam. Nao e economia de codigo, e a mesma regra de produto que faz o
+     * {@code radiusKm} sem origem ser <b>ignorado sem erro</b>: {@code city}/{@code uf} sao um
+     * escopo que o <b>app</b> preenche sozinho (a localidade do aparelho), enquanto o nome foi
+     * <b>digitado pela pessoa</b>. Cruzar os dois faria quem procura uma loja pelo nome receber
+     * lista vazia por causa de um escopo que ela nao escolheu nem ve na tela — e "nao existe" e
+     * "existe, mas nao no seu estado" sao indistinguiveis do lado de fora.
+     */
     @Override
     public List<EstablishmentResponse> searchPublic(String name, ServiceType serviceType,
-                                                    String neighborhood, GeoSearch geo) {
-        log.info("[Establishment] searchPublic — name={} type={} neighborhood={} geo={}",
-                name, serviceType, neighborhood, geo);
+                                                    String neighborhood, LocationFilter location,
+                                                    GeoSearch geo) {
+        log.info("[Establishment] searchPublic — name={} type={} neighborhood={} location={} geo={}",
+                name, serviceType, neighborhood, location, geo);
 
-        List<EstablishmentResponse> responses = findByFilters(name, serviceType, neighborhood).stream()
+        LocationFilter scope = hasText(name) ? null : location;
+
+        List<EstablishmentResponse> responses = inLocation(
+                findByFilters(name, serviceType, neighborhood), scope).stream()
                 .map(e -> {
                     QueueSummary summary = queueSummary(e.getId());
                     return EstablishmentResponse.fromEntity(
@@ -92,12 +108,38 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     /**
+     * Aplica o escopo de cidade/UF sobre o que a query trouxe. Roda em Java, e nao em mais um
+     * {@code @Query}: com {@code city} e {@code uf} somados aos filtros que ja existiam, a cascata
+     * de queries por combinacao passaria de 5 para 16 — e a comparacao sem acento, que e o ponto
+     * do filtro, exigiria a extensao {@code unaccent} ou uma coluna normalizada. Aqui a carga extra
+     * e nula: as lojas ja estao na memoria e o endereco ja e lido no mapeamento
+     * ({@code getMainAddress}).
+     *
+     * <p>Casa com <b>qualquer</b> endereco da loja, nao so o principal — e o mesmo alcance do
+     * {@code ?neighborhood=}, que faz {@code JOIN e.addresses}.</p>
+     */
+    private List<Establishment> inLocation(List<Establishment> found, LocationFilter location) {
+        if (location == null) {
+            return found;
+        }
+        return found.stream()
+                .filter(e -> e.getAddresses().stream()
+                        .map(EstablishmentAddress::getAddress)
+                        .anyMatch(location::matches))
+                .toList();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    /**
      * Escolhe a query pelo filtro presente. O {@code name} tem prioridade sobre os demais — quem
      * digitou o nome da loja quer aquela loja, nao o cruzamento com categoria/bairro.
      */
     private List<Establishment> findByFilters(String name, ServiceType serviceType, String neighborhood) {
-        boolean hasName = name != null && !name.isBlank();
-        boolean hasNeighborhood = neighborhood != null && !neighborhood.isBlank();
+        boolean hasName = hasText(name);
+        boolean hasNeighborhood = hasText(neighborhood);
 
         if (hasName) {
             return establishmentRepository.findByNameContainingIgnoreCaseAndStatusNot(name);

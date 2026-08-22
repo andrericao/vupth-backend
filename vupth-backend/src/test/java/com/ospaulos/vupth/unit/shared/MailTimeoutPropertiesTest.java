@@ -72,4 +72,32 @@ class MailTimeoutPropertiesTest {
                 .as("trocar o default para smtp faria todo ambiente sem MAIL_HOST tentar entregar em host vazio")
                 .isEqualTo("${MAIL_PROVIDER:none}");
     }
+
+    @Test
+    @DisplayName("a API HTTP do Brevo tem timeout com default positivo — a 443 nao pendura menos que a 587")
+    void brevo_timeoutExisteComDefaultPositivo() throws Exception {
+        // Mesmo raciocinio do bloco de SMTP acima: o transporte mudou de porta, o risco nao mudou.
+        // O envio continua dentro do @Transactional de um endpoint publico e sem rate limit.
+        Properties props = carregaApplicationProperties();
+
+        String valor = props.getProperty("vupth.mail.brevo.timeout-ms");
+        assertThat(valor).as("vupth.mail.brevo.timeout-ms ausente").isNotNull();
+
+        Matcher m = PLACEHOLDER_COM_DEFAULT.matcher(valor.trim());
+        assertThat(m.matches()).as("vupth.mail.brevo.timeout-ms = '%s' — esperado ${VAR:millis}", valor).isTrue();
+        assertThat(Integer.parseInt(m.group(1))).isPositive();
+    }
+
+    @Test
+    @DisplayName("a chave da API do Brevo vem de env var e nasce VAZIA — segredo nao mora no repositorio")
+    void brevo_apiKeyVemDeEnvVarEDefaultVazio() throws Exception {
+        Properties props = carregaApplicationProperties();
+
+        assertThat(props.getProperty("vupth.mail.brevo.api-key"))
+                .as("um default nao vazio aqui seria uma credencial commitada — e ela da acesso a conta de envio")
+                .isEqualTo("${BREVO_API_KEY:}");
+        assertThat(props.getProperty("vupth.mail.brevo.url"))
+                .as("a URL fica ajustavel por env var para dar como apontar o envio a um stub em teste manual")
+                .isEqualTo("${BREVO_API_URL:https://api.brevo.com/v3/smtp/email}");
+    }
 }

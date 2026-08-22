@@ -376,7 +376,7 @@ Inicia o "esqueci minha senha" (backlog #1). Envia um **codigo de 6 digitos** po
 
 > 🔒 **Anti-enumeracao:** a resposta e 200 mesmo para e-mail nao cadastrado — o backend nao revela se a conta existe. So dispara e-mail se o usuario existir.
 >
-> ⚠️ **Envio real = fatia 2 (SMTP).** Hoje o provedor default e `none` (`NoOpEmailSender` — o codigo so vai pro log). A fatia 2 liga o `SmtpEmailSender` setando `MAIL_PROVIDER=smtp` + `spring.mail.*` (env). Provedores gratuitos: Gmail (500/dia), Brevo (300/dia sem cartao), Mailtrap (sandbox de teste). Nenhuma mudanca de codigo entre eles.
+> ⚠️ **Envio real = fatia 2.** Hoje o provedor default e `none` (`NoOpEmailSender` — o codigo so vai pro log). A fatia 2 liga um transporte por env var: **`MAIL_PROVIDER=brevo`** (API HTTP, porta 443 — **o unico que sai do Render**, ver secao **22/08**) ou `MAIL_PROVIDER=smtp` + `spring.mail.*` (587, para host sem bloqueio de saida). Provedores gratuitos: Brevo (300/dia sem cartao), Gmail (500/dia), Mailtrap (sandbox de teste). Nenhuma mudanca de codigo entre eles — so a env var.
 
 **Testes:** Integracao (`ForgotPasswordIntegrationTest`) + unit (`PasswordResetUseCasesTest`) + Postman folder `01 - auth`
 
@@ -824,6 +824,8 @@ Lista establishments ativos com filtros opcionais.
 |-------|------|-----------|
 | name | String | Busca parcial por nome, case-insensitive |
 | neighborhood | String | Busca parcial por bairro do endereco, case-insensitive (`LIKE`). So retorna establishments que tem endereco no bairro |
+| city | String | **Novo 2026-08-18 (#29 / fatia C).** Cidade do endereco, parcial, sem caixa e **sem acento** ("sao goncalo" acha "São Gonçalo"). E o escopo de quem esta **sem coordenada** |
+| uf | String | **Novo 2026-08-18 (#29 / fatia C).** Sigla do estado, 2 letras, por **igualdade** (sigla nao tem parcial). Fora do formato -> `422 ADDRESS_INVALID_UF` |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
 | includeAll | Boolean | Default `false`. Se `false`, a listagem devolve **apenas lojas `open_status == OPEN`**. `true` devolve todas as ativas (inclui `CLOSED`/`TEMPORARILY_CLOSED`), p/ o Front-Partner/gestao |
 | lat, lng | Double | **Novo 2026-08-01 (GPS fatia B).** Coordenada do aparelho do cliente. Presentes, a lista passa a ser **ordenada por distancia** e cada item ganha `distance_km`. Tem de vir **o par** |
@@ -833,7 +835,8 @@ Lista establishments ativos com filtros opcionais.
 
 > **Combinacao e precedencia:**
 > - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
-> - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais).
+> - `name` tem prioridade: se enviado, e usado sozinho (ignora os demais — **inclusive `city`/`uf`**, ver abaixo).
+> - `city` e `uf` **combinam entre si e com `neighborhood`/`serviceType`**, e tambem com `lat`/`lng` (o escopo corta, a distancia ordena).
 > - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
 > - Sem filtro, lista todos os ativos.
 > - `includeAll` e ortogonal aos demais: o filtro de open-status roda **por cima** do resultado de qualquer combinacao acima.
@@ -937,6 +940,61 @@ mas **aquela** loja ainda nao tem coordenada resolvida.
 > **nunca vem vazia** por causa disso.
 
 **Testes:** `EstablishmentGeoSearchIntegrationTest`, `HaversineTest` · Postman folder **18**
+
+#### Escopo de localidade — `?city=&uf=` (fatia C do GPS + backlog #29, 2026-08-18)
+
+**O caminho de quem esta SEM coordenada.** Sem ele a lista sem GPS e **nacional**: quem esta em
+Niteroi ve loja de qualquer lugar do pais, ordenada por tempo de espera. O app ja sabe a cidade/UF
+(reverse geocode no aparelho) e so faltava onde mandar.
+
+⚠️ **Isto nao e "a tela de quem negou a permissao".** "Permissao concedida" e "tem coordenada agora"
+sao coisas diferentes: aparelho sem fix (dentro de loja ou predio), localizacao do **sistema**
+desligada, modo aviao ou GPS que demorou mais que o timeout caem todos aqui. **Todo** request em que
+a coordenada nao chegou a tempo usa este caminho.
+
+| Situacao | Comportamento |
+|---|---|
+| `uf=RJ` | So lojas com endereco no RJ. Casa por **igualdade** — sigla nao tem "parcial", e buscar trecho faria `R` trazer o pais inteiro |
+| `city=niteroi` | Casa por **trecho**, sem caixa e **sem acento** (como o `neighborhood` sempre casou, mais a dobra de acento) |
+| `city` + `uf` | As duas condicoes precisam bater — ha "Sao Jose" em quase todo estado |
+| Combinacao que nao existe (`city=Niteroi&uf=SP`) | `200` com lista vazia. **Nunca erro**: a pergunta era valida, a resposta e que e "nenhuma" |
+| Loja **sem endereco** | **Sai** do resultado — mesma regra do `radiusKm`: a pergunta virou "o que fica em X" e ela nao tem resposta. Sem filtro de localidade ela continua na lista |
+| `city`/`uf` em branco | Ignorados, sem erro (o app pode mandar o campo vazio antes de resolver a localidade) |
+| `uf` fora do formato de sigla | `422 ADDRESS_INVALID_UF`. A coluna `address.state` tem 2 caracteres, entao "Rio de Janeiro"/"SP1"/"R" **nunca casariam com nada** e devolveriam lista vazia sempre — mesmo criterio do `radiusKm <= 0` |
+
+**Comparacao de cidade ignora acento de proposito.** A cidade que o app manda vem de
+**geocodificacao reversa** ("Sao Goncalo" ou "São Gonçalo", conforme a fonte); a que esta no banco
+foi **digitada pelo dono**. Comparar cru faria a lista vir vazia por causa de uma cedilha — e o
+usuario le isso como "nao ha lojas aqui". A dobra (acento + caixa) roda **em Java**, pelo mesmo
+motivo que a distancia da fatia B: a listagem ja faz uma query por establishment para o tempo de
+espera, entao filtrar no banco pouparia uma fracao irrelevante — e em Java o acento sai de graca,
+sem a extensao `unaccent` (que pode nem ser permitida no Postgres free) e sem coluna normalizada.
+
+**Precedencia: o `name` vence o escopo.** Com `?name=` na busca, `city`/`uf` **nao se aplicam** —
+exatamente como `serviceType` e `neighborhood` ja nao se aplicam. Nao e economia de codigo, e a mesma
+regra que faz o `radiusKm` sem origem ser *ignorado sem erro*: `city`/`uf` sao um escopo que o **app**
+preenche sozinho, enquanto o nome foi **digitado pela pessoa**. Cruzar os dois faria quem procura uma
+loja pelo nome receber lista vazia por causa de um escopo que ela nao escolheu nem ve na tela — e
+"nao existe" e "existe, mas nao no seu estado" ficam indistinguiveis do lado de fora.
+
+> ⚠️ **Ponta solta conhecida (nao entrou nesta entrega):** o `?neighborhood=` continua sendo `LIKE` em
+> SQL e portanto **sensivel a acento** — "Botafogo" acha, "Sao Cristovao" nao acha "São Cristóvão".
+> Nao foi mexido junto porque e um filtro que os fronts **ja usam**, e mudar o alcance dele e decisao
+> propria, nao efeito colateral. Se for para alinhar, o caminho e o mesmo (dobra em Java).
+
+> **Handoff Front-Client (o B6 / C1 "Fase 2" de voces).** A localidade que ja esta no `locationStore`
+> pode ir direto: `GET /establishment?includeAll=true&city=<cidade>&uf=<UF>`. Tres avisos: (1) mandem
+> **`uf` so quando tiverem a sigla de 2 letras** — o nome do estado por extenso volta `422`; (2)
+> **nao precisam normalizar acento** antes de enviar, o backend dobra os dois lados; (3) quando o GPS
+> resolver, **parem de mandar `city`/`uf` e mandem `lat`/`lng`** — mandar os dois funciona (o escopo
+> corta e a distancia ordena), mas o escopo passa a ser redundante e pode esconder uma loja vizinha
+> logo do outro lado da divisa do municipio.
+
+> **Handoff Front-Partner:** nada a fazer. Nenhum contrato existente mudou — os dois params sao novos
+> e opcionais, e a listagem sem eles responde exatamente como antes.
+
+**Testes:** `LocationFilterTest` (unit, 8), `EstablishmentLocationFilterIntegrationTest` (14) ·
+Postman folder **18b** (17 requests, homolog + prod)
 
 ---
 
@@ -4056,6 +4114,53 @@ completa**. ✅ Hipotese *"porta 587 bloqueada no Render"* **confirmada**; *"cha
 e-mail sai do Render por SMTP — a saida e a API HTTP do provedor (Brevo REST, porta 443) ou outro host.**
 O mesmo indicador estava prestes a derrubar o `deploy-prod`; historia completa e a correcao na secao
 **18d, "17/08"**.
+
+#### 22/08 — #1: o codigo passou a sair pela API HTTP do Brevo (porta 443), e o SMTP fica de reserva
+
+**A medicao de 17/08 nao deixou nada para decidir: se a conexao TCP com a 587 nao completa a partir
+do Render, nenhuma configuracao de SMTP resolve** — chave nova, remetente reverificado ou timeout
+maior batem todos na mesma porta fechada. Entrou o `BrevoApiEmailSender`, que fala com o **mesmo
+provedor e a mesma caixa de entrada** por `POST https://api.brevo.com/v3/smtp/email` (443, que o
+Render deixa sair). O `SmtpEmailSender` **continua no codigo** e nao foi tocado: em host sem bloqueio
+de saida ele funciona e nao exige chave de API — a escolha e uma env var, nao um deploy diferente.
+
+| `MAIL_PROVIDER` | Sender | Transporte | Quando usar |
+|---|---|---|---|
+| `none` (default) | `NoOpEmailSender` | nenhum — loga o codigo | dev/teste; **anuncia em WARN no boot** que nada sai |
+| `smtp` | `SmtpEmailSender` | SMTP 587 | host sem bloqueio de saida (local, Railway) |
+| `brevo` | `BrevoApiEmailSender` | **HTTPS 443** | **Render** — e o unico que sai de la |
+
+**Env vars do modo `brevo`:** `MAIL_PROVIDER=brevo` · `BREVO_API_KEY=<api key v3>` · `MAIL_FROM=<remetente
+verificado>` · (opcionais: `BREVO_FROM_NAME`, `BREVO_API_URL`, `BREVO_TIMEOUT_MS`).
+
+⚠️ **`BREVO_API_KEY` NAO e a `MAIL_PASS`.** O Brevo tem duas credenciais diferentes na mesma conta: a
+**SMTP key** (a que ja esta em `MAIL_PASS` desde 22/07) e a **API key v3**, gerada em *SMTP & API →
+API keys*. Trocar uma pela outra devolve **401 `Key not found`** — e, como o endpoint responde 200 por
+anti-enumeracao, o sintoma visivel continua sendo exatamente "o e-mail nao chegou". **A unica forma de
+ver a diferenca e o log**, e por isso o corpo do erro do Brevo e impresso junto do status:
+`[MAIL:brevo] falha ao enviar reset code para ...: HTTP 401 — {"code":"unauthorized",...}`.
+
+**Linhas de log, completando a tabela de 15/08:** `[MAIL] provider=brevo — url=... from=...` (boot, ou
+**ERROR** se a chave estiver vazia) · `[MAIL:brevo] reset code enviado para ... (messageId=...)` — o
+`messageId` e o que permite casar "o backend mandou" com a entrega no painel do Brevo; sem ele, um
+e-mail que nao chega nao tem rastro do lado de la.
+
+**O que segue igual:** contrato (`POST /auth/forgot-password` responde **200 sempre**), best-effort (a
+falha de entrega e logada e engolida, e o codigo de reset **continua valido**) e o codigo de 6 digitos
+com TTL de 15min. **Nenhum front precisa de release por causa desta mudanca.**
+
+**Testes:** `BrevoApiEmailSenderTest` (4, unit, `MockRestServiceServer`) — header `api-key`, corpo com
+remetente/destinatario/codigo, 401 e 500 virando `EmailDeliveryException` (o tipo importa: o
+`ForgotPasswordUseCase` so engole **essa**; qualquer outra sobe pelo `@Transactional` e o endpoint
+responde 500 onde deve responder 200), e 2xx **sem corpo** nao quebrando o envio. +2 guards em
+`MailTimeoutPropertiesTest` (timeout com default positivo; chave vinda de env var e **vazia** no
+repositorio).
+
+⚠️ **O que este codigo NAO prova.** Todo o teste e de transporte contra um servidor simulado: ele
+garante a **forma** da requisicao, nao que a conta do Brevo aceite o envio. **A validacao final e do
+Andre, em device**, com as env vars no Render — e o log de boot ja diz, antes de qualquer reset, se o
+provider certo subiu.
+
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
@@ -4119,10 +4224,48 @@ O mesmo indicador estava prestes a derrubar o `deploy-prod`; historia completa e
 > que os clientes antigos veem e **400**, nao 422 — e vale procurar quem no proprio repo chama a rota
 > do jeito antigo antes de prometer um codigo aos fronts.
 
+> **Sessao 2026-08-18 — a fatia C do GPS (#2) + o filtro de localidade (#29). Uma entrega so, porque
+> eram o mesmo item: a propria linha do #29 ja dizia "avaliar entregar os dois juntos".** Contrato
+> **aditivo** — dois query params novos e opcionais no `GET /establishment`; nenhum front precisa de
+> release por causa desta sessao, e a listagem sem eles responde exatamente como antes.
+>
+> **(a) O "fallback sem GPS" existia e mesmo assim estava errado.** O caminho sem `lat`/`lng` sempre
+> respondeu 200 com a lista ordenada por tempo de espera — so que **nacional**: quem esta em Niteroi
+> sem coordenada via loja de qualquer lugar do pais. Isso e a lista errada com cara de lista certa,
+> que e pior do que erro, porque ninguem abre bug. O escopo `?city=&uf=` da o recorte que faltava.
+> ⚠️ E isto **nao** e "a tela de quem negou a permissao": aparelho sem fix, localizacao do sistema
+> desligada, modo aviao e timeout do GPS caem todos aqui — **permissao concedida e coordenada
+> disponivel sao coisas diferentes**, e o app precisa deste caminho em qualquer request onde a
+> coordenada nao chegou a tempo.
+>
+> **(b) A cidade compara SEM ACENTO, e essa e a decisao com consequencia.** A cidade que o app manda
+> vem de **geocodificacao reversa**; a que esta no banco foi **digitada pelo dono**. "São Gonçalo" e
+> "Sao Goncalo" sao a mesma cidade para qualquer pessoa e duas strings diferentes para o Postgres —
+> comparar cru devolveria lista vazia por causa de uma cedilha, e o usuario le isso como "nao ha
+> lojas aqui". A dobra roda **em Java** pelo mesmo motivo que a distancia da fatia B (a listagem ja
+> faz uma query por loja para o tempo de espera): sai de graca, sem a extensao `unaccent` — que pode
+> nem ser permitida no Postgres free — e sem coluna normalizada nem migration.
+>
+> **(c) `uf` fora do formato de sigla e 422, nao lista vazia.** A coluna `address.state` tem 2
+> caracteres: "Rio de Janeiro", "SP1" ou "R" **nunca casariam com nada**. Deixar passar devolveria
+> `200 []` para sempre, e o front nao teria como perceber que mandou o campo errado — mesmo criterio
+> ja aplicado ao `radiusKm <= 0`.
+>
+> **(d) A regra de precedencia foi decidida aqui: o `name` vence o escopo.** `city`/`uf` sao
+> preenchidos pelo **app** (a localidade do aparelho); o nome foi **digitado pela pessoa**. Cruzar os
+> dois faria quem procura uma loja pelo nome receber lista vazia por causa de um escopo que ela nao
+> escolheu nem ve na tela — e "nao existe" e "existe, mas nao no seu estado" ficam indistinguiveis do
+> lado de fora. E a mesma familia de decisao do `radiusKm` sem origem, que e **ignorado sem erro**.
+>
+> **(e) Ponta solta assumida, nao esquecida:** o `?neighborhood=` continua `LIKE` em SQL e portanto
+> **sensivel a acento**, enquanto o `?city=` novo nao e. Dois filtros de localidade no mesmo endpoint
+> com alcances diferentes e uma inconsistencia real — nao foi mexida porque o `neighborhood` os fronts
+> **ja usam**, e alargar o alcance dele e decisao propria, nao efeito colateral de outra entrega.
+
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Esqueci minha senha — **fatia 2: envio real por SMTP** | 🔴 **QUEBRADO EM PRODUCAO — provado em device 2026-08-11** (era "falta testar") | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**.
-| 2 | **Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)** | 🔨 **fatias A (geocoding), A2 (GPS do dono + reverso + validacao) e B (ordenacao + raio + `distance_km`) ENTREGUES; resta so a C (fallback sem GPS)** — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
+| 1 | Esqueci minha senha — **fatia 2: envio real (API HTTP do Brevo)** | 🟠 **CODIGO PRONTO 2026-08-22 — falta LIGAR no Render** (era 🔴 quebrado em producao desde 11/08) | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**. ✅ **22/08 — o transporte trocou: `BrevoApiEmailSender` (HTTPS 443).** Se a 587 nao abre, nenhuma configuracao de SMTP resolve — o envio passou para a **API HTTP do mesmo provedor**, com `MAIL_PROVIDER=brevo`. **O que falta e do Andre, e nao e codigo:** (1) gerar a **API key v3** no painel do Brevo (*SMTP & API → API keys* — **NAO** e a SMTP key do `MAIL_PASS`); (2) setar `MAIL_PROVIDER=brevo` e `BREVO_API_KEY` no Render (o `MAIL_FROM` ja esta la e o remetente ja foi verificado em 22/07); (3) pedir um reset em device e conferir a chegada. O log de boot (`[MAIL] provider=brevo — url=...`) confirma o provider ANTES de qualquer teste, e `[MAIL:brevo] ... HTTP 401 — {corpo}` separa chave errada de remetente nao verificado. **O item so fecha com a chegada confirmada em device** — o teste automatizado cobre a forma da requisicao, nao a conta. Detalhes: secao **22/08** logo acima.
+| 2 | ~~**Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)**~~ | ✅ **ENTREGUE 2026-08-18 — fatias A, A2, B e C completas** (a C saiu como `?city=&uf=`, junto do #29) — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
 | 5 | Estender strike de tempo (#39) a reschedule/move-to-end | ⬜ aberto | **Client #16** — hoje o strike so sai no cancelar; aplicar tambem ao vagar lugar com ETA < 1h em reschedule/move-to-end |
@@ -4149,7 +4292,7 @@ O mesmo indicador estava prestes a derrubar o `deploy-prod`; historia completa e
 | 26 | Agendamento futuro dia+hora (overlap c/ intencao de fila) | ⬜ aberto | reavaliar apos intencao de fila (#40) |
 | 27 | Infra: WhatsApp · Analytics avancado · API publica · Sentry · Rate limiting | ⬜ aberto | baixa prioridade |
 | 28 | **Apelido (`nickname`) nao e pesquisavel** (Partner S13) | ⬜ aberto (**posicao provisoria**) | O apelido persiste e ja sai nos DTOs (BUG10), mas **nenhuma query de busca casa por ele**: `EstablishmentRepository` filtra so `LOWER(e.name)` (+ bairro) e **nao faz join com os profissionais**; `ProfessionalRepository.searchByNameAndSpecialty` casa so `firstName`. Resultado: o cliente que conhece o profissional pelo apelido **nao acha nada em lugar nenhum**. Rota recomendada (ja esbocada na tabela MEDIA): param `?professional=<termo>` no `GET /establishment`, join + `LIKE` case-insensitive em `firstName`/`nickname`, devolvendo a LOJA. Decidir a UX com o client (o apelido leva a que — a loja ou o card do profissional?). |
-| 29 | **Filtro de localidade por `uf`/`city` na listagem publica** (Client B6 / C1 "Fase 2") | ⬜ aberto (**posicao provisoria**) | Hoje `GET /establishment` aceita `name`, `neighborhood`, `serviceType` e `includeAll` — **falta `uf` e `city`**. O client ja tem a localidade do usuario no `locationStore` para mandar nos params (a Fase 1, ordenar no device, ja roda). Item pequeno e independente do GPS (#2): serve a quem negou a permissao de localizacao — que e exatamente a **fatia C** do #2. Avaliar entregar os dois juntos. |
+| 29 | ~~**Filtro de localidade por `uf`/`city` na listagem publica**~~ (Client B6 / C1 "Fase 2") | ✅ **ENTREGUE 2026-08-18** — junto com a fatia C do #2, como a propria linha sugeria | Hoje `GET /establishment` aceita `name`, `neighborhood`, `serviceType` e `includeAll` — **falta `uf` e `city`**. O client ja tem a localidade do usuario no `locationStore` para mandar nos params (a Fase 1, ordenar no device, ja roda). Item pequeno e independente do GPS (#2): serve a quem negou a permissao de localizacao — que e exatamente a **fatia C** do #2. Avaliar entregar os dois juntos. |
 | 30 | **WS: recusar o CONNECT com token invalido em vez de conectar anonimo** (Partner S14, rebaixado) | ⬜ aberto (**posicao provisoria**) | `StompAuthChannelInterceptor.preSend`: token que falha no `decode` cai no `catch`, loga `warn` e segue **sem principal**. Com `jwt.access-token-expiration=PT1H`, uma reconexao com token velho sobe anonima e o `/user/queue/notifications` para de entregar **em silencio**. Fazer: **lancar quando ha header `Authorization` mas o token e invalido** (o cliente recebe o frame `ERROR` e sabe que precisa renovar); manter o anonimo **so quando NAO ha header** (visitante em topico publico). Os dois fronts ja corrigiram a metade deles (token fresco no `beforeConnect`), o que encurta a janela — mas sem a recusa o app nao tem como **saber** que esta mudo. ⚠️ **Nao fechar antes do QA de device:** a hipotese de ser a causa-raiz de C9/C14 foi rebaixada, mas a explicacao alternativa (as flags do stompjs) tambem nao foi validada no canal PESSOAL. |
 | 31 | **Receita LIQUIDA do profissional — o valor acordado e a absorcao nunca sao persistidos** (Partner S18, feedback de device 2026-08-05) | ⬜ aberto (**posicao provisoria**) | **Confirmado no codigo:** o `ServiceItem` guarda `price`, `client_price` e `uses_platform_pricing` — **nao guarda o que o profissional acordou receber nem a absorcao escolhida**. O partner calcula `{clientPrice, proReceives, platformFee}` na criacao do servico (`pricing.ts`) mas **envia so o `price`**, entao `totalRevenue`/`professionals[].revenue` dos relatorios sao **o bruto pago pelo cliente** e o front **nao tem como reconstruir** o liquido. Fazer: **(a)** persistir no `ServiceItem` o valor acordado (ex.: `professional_amount`) e a `absorption_percent` — **migration**; **(b)** expor nos relatorios duas linhas distintas, `total_revenue` (bruto) e **`professional_revenue`** (soma do acordado), por profissional e no consolidado do owner; **(c)** definir o retroativo dos itens ja criados (proposta do front: `professional_amount = price * (1 − 0.06)`, a formula com absorcao 0%). ⚠️ A taxa de **6%** (4% intermediador + 2% plataforma) esta **hardcoded no front** — se e regra de negocio, o valor tem de vir do backend (ver #22, precificacao calculada no backend). |
 | 32 | **Diferenciar "e-mail nao cadastrado" de "senha errada" em `/auth/login` E `/auth/forgot-password` — entregue JUNTO com rate limit** (Partner S21 + decisao do Andre 2026-08-05 e 2026-08-06) | ⬜ aberto (**posicao provisoria — o rate limit e PRE-REQUISITO, nao acompanhamento**) | **Os dois endpoints hoje sao deliberadamente opacos e cada um tem teste que assere isso.** `forgot-password` responde **200 sempre**, exista o e-mail ou nao (`ForgotPasswordIntegrationTest` linha ~70 + `PasswordResetUseCasesTest` linha ~76), e por isso os apps mostram *"se este e-mail estiver cadastrado…"*. `login` responde **`401 BAD_CREDENTIALS` generico** nos dois casos. **Andre decidiu (05/08 p/ forgot-password, 06/08 p/ login) que quer a diferenciacao nos dois** — decisao mantida, trade-off registrado: resposta distinta para e-mail existente vs inexistente **transforma o endpoint num verificador de cadastro aberto** — qualquer um roda uma lista de e-mails e descobre quem tem conta no VUPTH, sem senha e sem login. No login o risco e maior que no forgot-password, porque e o alvo obvio de varredura, e a base exposta e dado pessoal sob LGPD. **Por isso o rate limit vem PRIMEIRO, no mesmo PR** (ex.: 5 tentativas/15min por IP **e** por e-mail) — ele e o grosso do trabalho e nao existe hoje (ver #27 e o item 28 da tabela historica, que cobrem o mesmo rate limit; fechar os tres juntos). **Fazer:** rate limit → `404 EMAIL_NOT_FOUND` no forgot-password e codigo distinto no login quando o e-mail nao existe → ajustar os **2 testes** que asserem a opacidade → **2 collections** do Postman → handoff aos fronts, que hoje tratam 401 generico. ⚠️ **Consequencia pratica ja sentida (06/08):** como o 401 do login nao distingue os casos, o hash quebrado do seed (ver Concluidos) foi diagnosticado errado de inicio — o mesmo 401 significava "senha errada" e "usuario inexistente". Quem provou foi `bcrypt.checkpw` contra o literal do YAML, nao a API. | 🔴 **REFORCADO POR DEVICE (2026-08-11, Partner S21):** no teste manual do Andre a tela **seguiu para o passo do codigo com um e-mail SEM CADASTRO** — comportamento correto do contrato atual (200 sempre), mas que deixa o usuario esperando um codigo que nunca vai existir. ⚠️ **TENSAO A DECIDIR (Andre):** o Partner argumenta que **"consertar o S21 sozinho ja melhora muito"**, mesmo antes do SMTP voltar — o app passaria a dizer "e-mail nao cadastrado" na hora. Este item, porem, registra o **rate limit como PRE-REQUISITO** (subir sozinho transforma o endpoint num verificador de contas aberto). **Os dois estao certos no proprio eixo** — e uma escolha entre UX imediata e exposicao da base, e e do Andre. Nota factual para a decisao: enquanto o **#1 (SMTP) estiver quebrado**, o forgot-password nao recupera conta nenhuma de qualquer jeito, entao o ganho de UX do S21 sozinho e **avisar mais cedo que nao vai funcionar** — nao e o fluxo voltando a servir.
@@ -4724,7 +4867,7 @@ Pedido do Front-Partner em 2026-06-18 (checagem de alinhamento). **Status: espec
 
 ### Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro (backlog #2, modelo fechado 2026-07-27)
 
-**Status (atualizado 2026-08-07): fatias A, A2 e B ENTREGUES; resta a C** (fallback sem GPS, junto com o #30).
+**Status (atualizado 2026-08-18): fatias A, A2, B e C ENTREGUES — o item #2 esta FECHADO.** A fatia C saiu como o escopo `?city=&uf=` (backlog #29), documentado na secao do `GET /establishment`.
 O Front-Client **encerrou o B7 em 06/08** e removeu o Haversine local. Esta secao e o handoff para os fronts —
 Client e Partner podem ler daqui. *(Antes dizia "ESPECIFICADO, nao implementado" — ficou stale.)*
 
@@ -4872,7 +5015,16 @@ coordenada, **2) Nominatim** com busca textual, que exige **rua E cidade** (`has
 - **Escala:** sem raio, o Haversine e calculado sobre a base toda a cada request (sequential scan + sort). Aceitavel no volume atual; se pesar, o passo seguinte e um **pre-filtro por bounding box** (`lat BETWEEN ? AND ?` com indice) para reduzir os candidatos ANTES do Haversine — e nao PostGIS.
 - Estabelecimento **sem coordenada** fica fora do resultado com raio (nao da para medir) — por isso a Fatia A vem antes.
 
-**Fatia C — fallback sem GPS.** Permissao negada / GPS indisponivel → o front chama **sem** `lat`/`lng` e recebe a listagem atual (ordenacao por cidade/nome). **A lista NUNCA pode vir vazia so porque o usuario negou a permissao.**
+**Fatia C — fallback sem GPS. ✅ ENTREGUE 2026-08-18.** Permissao negada / GPS indisponivel → o front chama **sem** `lat`/`lng` e recebe a listagem de sempre (ordenacao por tempo de espera). **A lista NUNCA pode vir vazia so porque o usuario negou a permissao.**
+
+> **O que faltava de verdade, e por que o #29 fechou a fatia.** O caminho "sem coordenada" ja respondia
+> desde sempre — o que ele nao tinha era **recorte**: a lista sem GPS era **nacional**, e quem esta em
+> Niteroi via loja de Manaus ordenada por tempo de espera. Um fallback que devolve o pais inteiro nao e
+> fallback, e a lista errada com status 200. Por isso a C so pode ser considerada entregue com o escopo
+> `?city=&uf=` (#29): **contrato completo, tabela de casos e handoff na secao "Escopo de localidade" do
+> `GET /establishment`.** Destaques que valem para quem le so daqui: a cidade casa **sem acento** (a do
+> app vem de reverse geocode, a do banco foi digitada pelo dono), `uf` casa por **igualdade** e fora do
+> formato de sigla e `422 ADDRESS_INVALID_UF`, e o **`name` tem precedencia sobre o escopo**.
 
 > ⚠️ **A fatia C nao e opcional nem mesmo se 100% dos usuarios autorizarem o GPS.** "Permissao concedida" e "tem coordenada agora" sao coisas diferentes: o aparelho pode estar sem fix (dentro de loja/predio), com a localizacao do SISTEMA desligada, em modo aviao, ou simplesmente demorar mais que o timeout. O app precisa do caminho sem `lat`/`lng` para **todo** request em que a coordenada nao chegou a tempo — nao so para quem clicou "negar".
 

@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.web.rest.exception;
 
 import com.ospaulos.vupth.domain.address.exception.InvalidCoordinatesException;
+import com.ospaulos.vupth.domain.address.exception.InvalidUfException;
 import com.ospaulos.vupth.domain.address.exception.ReverseGeocodeNotFoundException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAccessDeniedException;
 import com.ospaulos.vupth.domain.affiliation.exception.AffiliationAlreadyPendingException;
@@ -160,6 +161,13 @@ public class GlobalExceptionHandler {
             InvalidCoordinatesException ex, HttpServletRequest req) {
         log.warn("[422] InvalidCoordinates | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ADDRESS_INVALID_COORDINATES");
+    }
+
+    @ExceptionHandler(InvalidUfException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidUf(
+            InvalidUfException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidUf | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ADDRESS_INVALID_UF");
     }
 
     @ExceptionHandler(EstablishmentNotReadyException.class)

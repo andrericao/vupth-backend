@@ -25,6 +25,7 @@ import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepositor
 import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
 import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
+import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
@@ -110,6 +111,7 @@ public class EstablishmentController {
      *   ?serviceType=BARBER&neighborhood=centro — combina categoria + bairro ("barbearia no Centro")
      *   ?neighborhood=centro                 — so bairro
      *   ?serviceType=BARBER                  — so categoria
+     *   ?city=Niteroi&uf=RJ                  — escopo de localidade p/ quem esta SEM coordenada
      *   ?lat=-22.84&lng=-43.27               — ordena por PROXIMIDADE e devolve distance_km
      *   ?lat=..&lng=..&radiusKm=10           — + filtra ate 10km (opcional; NAO ha raio default)
      * Sem filtro, lista todos os ativos, ordenados por menor tempo de espera.
@@ -122,21 +124,27 @@ public class EstablishmentController {
     public ResponseEntity<List<EstablishmentResponse>> findAll(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String neighborhood,
+            @RequestParam(required = false) String city,
+            @RequestParam(required = false) String uf,
             @RequestParam(required = false) ServiceType serviceType,
             @RequestParam(required = false, defaultValue = "false") boolean includeAll,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
             @RequestParam(required = false) Double radiusKm) {
 
-        log.info("[Establishment] findAll — name={} neighborhood={} serviceType={} includeAll={}"
-                        + " lat={} lng={} radiusKm={}",
-                name, neighborhood, serviceType, includeAll, lat, lng, radiusKm);
+        log.info("[Establishment] findAll — name={} neighborhood={} city={} uf={} serviceType={}"
+                        + " includeAll={} lat={} lng={} radiusKm={}",
+                name, neighborhood, city, uf, serviceType, includeAll, lat, lng, radiusKm);
 
         // null quando nao veio coordenada — a listagem cai na ordenacao por tempo de espera.
         // Coordenada invalida (meia, fora do globo, (0,0)) ou raio <= 0 param aqui, com 422.
         GeoSearch geo = GeoSearch.from(lat, lng, radiusKm);
 
-        List<EstablishmentResponse> result = service.searchPublic(name, serviceType, neighborhood, geo);
+        // null quando nao veio nem cidade nem UF. `uf` fora do formato de sigla para aqui, com 422.
+        LocationFilter location = LocationFilter.from(city, uf);
+
+        List<EstablishmentResponse> result =
+                service.searchPublic(name, serviceType, neighborhood, location, geo);
 
         // BUG5: por padrão a listagem pública só devolve lojas ABERTAS (OPEN).
         // ?includeAll=true devolve todas as ativas (inclui CLOSED/TEMPORARILY_CLOSED),

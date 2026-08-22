@@ -5954,7 +5954,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));",
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));",
          "pm.test(\"(BUG9) remove -> status CANCELLED (sai do read ativo do cliente)\", () => {",
          "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"CANCELLED\");",
          "});"
@@ -6307,7 +6311,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6336,7 +6344,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6504,6 +6516,28 @@
      "name": "fila: walk-in 1 (convidado — enche a fila) (empurra o previsto)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_intent_1\", \"FilaIntent1-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
@@ -6512,12 +6546,16 @@
          "// existem so para EMPURRAR o ETA, entao viraram CONVIDADOS (o profissional adiciona quem",
          "// nao tem conta): sem cliente, o par cliente x profissional do #38 nao se aplica, e a fila",
          "// fica com o mesmo tamanho e a mesma duracao de antes.",
+         "// ⚠️ Achado no Newman de 17/08: pegar fila[fila.length-1] NAO serve aqui. A fila vem",
+         "// ordenada por horario previsto, e a intencao desta pasta tem slot +12h — entao o ULTIMO",
+         "// era a intencao, nao o convidado. A variavel ficava sem valor, o cleanup mandava",
+         "// {{intent_walkin_N}} literal na URL e voltava 400, cinco requests depois do erro real.",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_1\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_intent_1\"));",
+         "  pm.test(\"id do convidado FilaIntent1 (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"intent_walkin_1\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -6543,7 +6581,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent1\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_intent_1}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6552,16 +6590,38 @@
      "name": "fila: walk-in 2 (convidado — enche a fila)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_intent_2\", \"FilaIntent2-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
          "// Convidado de enchimento — ver o comentario do walk-in 1 (#38).",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_2\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_intent_2\"));",
+         "  pm.test(\"id do convidado FilaIntent2 (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"intent_walkin_2\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -6587,7 +6647,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent2\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_intent_2}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6596,16 +6656,38 @@
      "name": "fila: walk-in 3 (convidado — enche a fila)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_intent_3\", \"FilaIntent3-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
          "// Convidado de enchimento — ver o comentario do walk-in 1 (#38).",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"intent_walkin_3\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_intent_3\"));",
+         "  pm.test(\"id do convidado FilaIntent3 (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"intent_walkin_3\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -6631,7 +6713,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent3\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_intent_3}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6736,7 +6818,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6765,7 +6851,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6794,7 +6884,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6823,7 +6917,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -7242,7 +7340,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ]
        }
       }
@@ -7462,7 +7564,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ]
        }
       }
@@ -7832,7 +7938,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
         ]
        }
       }
@@ -9587,11 +9697,17 @@
        "listen": "test",
        "script": {
         "exec": [
+         "// ⚠️ Este atendimento ficava na fila para SEMPRE — ninguem o removia. Antes do item #38",
+         "// era so ruido no ETA; hoje ele deixa o {{client_id}} OCUPADO com este profissional, e",
+         "// toda pasta que roda depois desta e tenta pos esse cliente na fila leva 409",
+         "// CLIENT_ALREADY_IN_QUEUE (foi assim que a 08k reprovou). Por isso agora guarda o id e",
+         "// devolve a fila ao estado em que a encontrou.",
          "pm.test(\"Status 201 - Attendance criado via add-attendance\", () => pm.response.to.have.status(201));",
-         "pm.test(\"Schema: id presente\", () => {",
+         "if (pm.response.code === 201) {",
          "  const r = pm.response.json();",
-         "  pm.expect(r.id).to.be.a(\"string\");",
-         "});"
+         "  pm.test(\"Schema: id presente\", () => pm.expect(r.id).to.be.a(\"string\"));",
+         "  pm.collectionVariables.set(\"attendance_id_add\", r.id);",
+         "}"
         ],
         "type": "text/javascript"
        }
@@ -9731,6 +9847,40 @@
        }
       ]
      }
+    },
+    {
+     "name": "cleanup: remove o attendance do add-attendance",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "// Sem isto o {{client_id}} sai desta pasta ocupado, e o #38 barra todo mundo depois.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional-queue/{{attendance_id_add}}/remove",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
@@ -14149,6 +14299,28 @@
      "name": "setup: cria cabeca A (convidado)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_cabeca_a\", \"CabecaA-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
@@ -14158,10 +14330,10 @@
          "// fila de verdade; B continua sendo o cliente, porque e o id que o teste do promote assere.",
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
-         "  const r = pm.response.json();",
-         "  const fila = r.attendancesInQueue || r.waitingList || [];",
-         "  const ultimo = fila[fila.length - 1];",
-         "  if (ultimo) pm.collectionVariables.set(\"promote_id_a\", ultimo.id);",
+         "  const fila = pm.response.json().attendancesInQueue || [];",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_cabeca_a\"));",
+         "  pm.test(\"id do convidado CabecaA (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  if (meu) pm.collectionVariables.set(\"promote_id_a\", meu.id);",
          "}"
         ],
         "type": "text/javascript"
@@ -14187,7 +14359,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"CabecaA\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_cabeca_a}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -14375,7 +14547,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
         ],
         "type": "text/javascript"
        }
@@ -14404,7 +14580,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
         ],
         "type": "text/javascript"
        }
@@ -14967,7 +15147,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -15039,7 +15223,14 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.collectionVariables.set(\"agenda_desired\", new Date(Date.now() + 3*3600*1000).toISOString());"
+         "// ⚠️ +8h, nao +3h. Esta pasta tinha um acoplamento INVISIVEL com o tamanho da fila viva:",
+         "// a intencao e recusada com 422 INTENTION_BEFORE_QUEUE_END quando o horario pretendido cai",
+         "// antes do termino previsto da fila — e o termino previsto soma os atendimentos vivos MAIS",
+         "// as refeicoes do profissional. Medido em homolog (17/08): com 4 atendimentos de 30min na",
+         "// fila + a refeicao de 60min, o alvo de +3h perdia por SETE SEGUNDOS. O setup desta pasta",
+         "// nao quer testar essa regra (ela tem pasta propria) — quer uma intencao que exista para a",
+         "// agenda ser lida. Com folga de 8h ela para de depender do que as pastas anteriores deixaram.",
+         "pm.collectionVariables.set(\"agenda_desired\", new Date(Date.now() + 8*3600*1000).toISOString());"
         ]
        }
       },
@@ -18170,7 +18361,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -18199,7 +18394,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -19635,6 +19834,516 @@
       "body": {
        "mode": "raw",
        "raw": "{\"current_password\":\"{{geo_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
+   "name": "18b - escopo de cidade/UF (fatia C, #29)",
+   "description": "GET /establishment?city=&uf= — o filtro de quem esta SEM coordenada (fatia C do #2). Sem ele a lista sem GPS e nacional: quem esta em Niteroi ve loja de qualquer lugar do pais. NAO depende de o usuario ter negado a permissao — aparelho sem fix, localizacao do sistema desligada, modo aviao ou timeout caem todos aqui. A comparacao de cidade ignora ACENTO e caixa de proposito: a cidade que o app manda vem de geocodificacao reversa e a do banco foi digitada pelo dono, entao comparar cru devolveria lista vazia por causa de uma cedilha. uf casa por igualdade (sigla nao tem parcial) e fora do formato de 2 letras e 422, porque nunca casaria com nada. O ?name= tem PRECEDENCIA sobre o escopo. Self-contained: cria dono+loja+endereco em Petropolis/RJ (acento SEM espaco, para o teste principal de acento ser uma query ASCII pura) e apaga no fim; nenhuma assercao olha a lista inteira.",
+   "item": [
+    {
+     "name": "setup: register dono (LOC)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"loc_owner_email\",\"locowner_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"loc_owner_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{loc_owner_email}}\",\"password\":\"{{loc_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login dono (LOC)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"loc_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{loc_owner_email}}\",\"password\":\"{{loc_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (LOC)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) {",
+         "  pm.collectionVariables.set(\"loc_estab_id\", pm.response.json().id);",
+         "  // Nome SEM espaco de proposito: ele vai cru na query string do teste de precedencia.",
+         "  pm.collectionVariables.set(\"loc_estab_name\", pm.response.json().name);",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{loc_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"LojaLOC{{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: endereco em Petropolis/RJ — cidade gravada COM acento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"cidade acentuada persistida\", () => pm.expect(pm.response.json().city).to.eql(\"Petr\\u00f3polis\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{loc_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishments/{{loc_estab_id}}/addresses",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"street\":\"Rua do Imperador\",\"number\":\"100\",\"neighborhood\":\"Centro\",\"city\":\"Petrópolis\",\"state\":\"RJ\",\"zipCode\":\"25680000\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?uf=RJ -> a loja do RJ aparece",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=RJ",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?uf=SP -> a loja do RJ SAI (o escopo corta de verdade)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja do RJ nao aparece na busca por SP\", () => pm.expect(minha).to.not.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=SP",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?uf=rj minusculo funciona — a sigla e normalizada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=rj",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=Petropolis SEM acento acha a loja gravada COM acento (query 100% ASCII)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "// Query sem um unico caractere especial: se este passar e o de baixo falhar, o problema e",
+         "// encoding do cliente HTTP, nao a dobra de acento do backend."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=petropolis COM acento e minusculo tambem acha",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=petr%C3%B3polis",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=...&uf=RJ -> as duas condicoes batem",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis&uf=RJ",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?city=...&uf=SP -> combinacao impossivel e 200 com a loja fora, nunca erro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"cidade do RJ com uf=SP nao casa\", () => pm.expect(minha).to.not.exist);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis&uf=SP",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?name= tem PRECEDENCIA sobre o escopo: acha a loja mesmo com uf errada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "// city/uf sao preenchidos pelo APP; o nome foi digitado pela pessoa. Cruzar os dois",
+         "// devolveria lista vazia por causa de um escopo que ela nao escolheu nem ve na tela."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&name={{loc_estab_name}}&uf=SP",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "city e uf em branco sao ignorados — a lista nao fica vazia por isso",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "const lista = pm.response.json();",
+         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
+         "pm.test(\"a lista veio cheia\", () => pm.expect(lista.length).to.be.above(0));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=&uf=",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] uf que nao e sigla -> 422 ADDRESS_INVALID_UF",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_UF\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_UF\"));",
+         "// Recusar em vez de deixar passar: uf fora do formato nunca casaria com nada e devolveria",
+         "// lista vazia sempre — o usuario nao distingue isso de \"o app quebrou\"."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=Rio%20de%20Janeiro",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] uf de 3 caracteres (SP1) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ADDRESS_INVALID_UF\", () => pm.expect(pm.response.json().code).to.eql(\"ADDRESS_INVALID_UF\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&uf=SP1",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "vitrine ANONIMA: escopo de localidade sem token -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?includeAll=true&city=Petropolis&uf=RJ",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: deletar dono (LOC)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{loc_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{loc_owner_pass}}\"}"
       }
      },
      "response": []
@@ -21208,6 +21917,31 @@
    "key": "intent_err_token",
    "value": "",
    "type": "string"
+  },
+  {
+   "key": "attendance_id_add",
+   "value": "",
+   "type": "string"
+  },
+  {
+   "key": "loc_owner_email",
+   "value": ""
+  },
+  {
+   "key": "loc_owner_pass",
+   "value": ""
+  },
+  {
+   "key": "loc_owner_token",
+   "value": ""
+  },
+  {
+   "key": "loc_estab_id",
+   "value": ""
+  },
+  {
+   "key": "loc_estab_name",
+   "value": ""
   }
  ],
  "auth": {
