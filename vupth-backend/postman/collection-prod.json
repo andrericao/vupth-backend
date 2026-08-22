@@ -5954,7 +5954,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));",
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));",
          "pm.test(\"(BUG9) remove -> status CANCELLED (sai do read ativo do cliente)\", () => {",
          "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"CANCELLED\");",
          "});"
@@ -6307,7 +6311,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6336,7 +6344,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6504,6 +6516,28 @@
      "name": "fila: walk-in 1 (convidado — enche a fila) (empurra o previsto)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_intent_1\", \"FilaIntent1-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
@@ -6519,8 +6553,8 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const fila = pm.response.json().attendancesInQueue || [];",
-         "  const meu = fila.find(a => a.clientName === \"FilaIntent1\");",
-         "  pm.test(\"id do convidado FilaIntent1 capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_intent_1\"));",
+         "  pm.test(\"id do convidado FilaIntent1 (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
          "  if (meu) pm.collectionVariables.set(\"intent_walkin_1\", meu.id);",
          "}"
         ],
@@ -6547,7 +6581,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent1\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_intent_1}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6556,6 +6590,28 @@
      "name": "fila: walk-in 2 (convidado — enche a fila)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_intent_2\", \"FilaIntent2-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
@@ -6563,8 +6619,8 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const fila = pm.response.json().attendancesInQueue || [];",
-         "  const meu = fila.find(a => a.clientName === \"FilaIntent2\");",
-         "  pm.test(\"id do convidado FilaIntent2 capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_intent_2\"));",
+         "  pm.test(\"id do convidado FilaIntent2 (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
          "  if (meu) pm.collectionVariables.set(\"intent_walkin_2\", meu.id);",
          "}"
         ],
@@ -6591,7 +6647,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent2\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_intent_2}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6600,6 +6656,28 @@
      "name": "fila: walk-in 3 (convidado — enche a fila)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_intent_3\", \"FilaIntent3-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
@@ -6607,8 +6685,8 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const fila = pm.response.json().attendancesInQueue || [];",
-         "  const meu = fila.find(a => a.clientName === \"FilaIntent3\");",
-         "  pm.test(\"id do convidado FilaIntent3 capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_intent_3\"));",
+         "  pm.test(\"id do convidado FilaIntent3 (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
          "  if (meu) pm.collectionVariables.set(\"intent_walkin_3\", meu.id);",
          "}"
         ],
@@ -6635,7 +6713,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"FilaIntent3\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_intent_3}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -6740,7 +6818,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6769,7 +6851,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6798,7 +6884,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -6827,7 +6917,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -7246,7 +7340,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ]
        }
       }
@@ -7466,7 +7564,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ]
        }
       }
@@ -7836,7 +7938,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
         ]
        }
       }
@@ -9749,8 +9855,12 @@
        "listen": "test",
        "script": {
         "exec": [
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
          "// Sem isto o {{client_id}} sai desta pasta ocupado, e o #38 barra todo mundo depois.",
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -14189,6 +14299,28 @@
      "name": "setup: cria cabeca A (convidado)",
      "event": [
       {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "// ⚠️ NOME UNICO POR EXECUCAO (vermelho do merge dev->main em 22/08).",
+         "// O convidado era criado com nome FIXO e recuperado da fila por esse nome. Em base",
+         "// compartilhada que nunca e zerada (homolog/prod), esse nome casa TAMBEM com os convidados",
+         "// que execucoes anteriores deixaram para tras — o find pegava o mais ANTIGO da fila, e o",
+         "// cleanup entao removia a sobra de outra execucao, nao a linha desta. Duas execucoes ao",
+         "// mesmo tempo (ou uma re-run) miram a MESMA sobra: a primeira cancela, a segunda recebe",
+         "// 400 ATTENDANCE_INVALID_STATUS ao tentar remover o que ja esta CANCELLED.",
+         "// Com o sufixo por execucao o find so pode achar a linha que ESTA execucao criou.",
+         "let tag = pm.collectionVariables.get(\"run_tag\");",
+         "if (!tag) {",
+         "  tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+         "  pm.collectionVariables.set(\"run_tag\", tag);",
+         "}",
+         "pm.collectionVariables.set(\"guest_cabeca_a\", \"CabecaA-\" + tag);"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
        "listen": "test",
        "script": {
         "exec": [
@@ -14199,8 +14331,8 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const fila = pm.response.json().attendancesInQueue || [];",
-         "  const meu = fila.find(a => a.clientName === \"CabecaA\");",
-         "  pm.test(\"id do convidado CabecaA capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
+         "  const meu = fila.find(a => a.clientName === pm.collectionVariables.get(\"guest_cabeca_a\"));",
+         "  pm.test(\"id do convidado CabecaA (desta execucao) capturado\", () => pm.expect(meu, \"convidado na fila devolvida\").to.not.be.undefined);",
          "  if (meu) pm.collectionVariables.set(\"promote_id_a\", meu.id);",
          "}"
         ],
@@ -14227,7 +14359,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"CabecaA\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
+       "raw": "{\"establishmentId\": \"{{owner_establishment_id}}\", \"professionalId\": \"{{prof_professional_id}}\", \"clientName\": \"{{guest_cabeca_a}}\", \"serviceItemIds\": [\"{{service_item_id}}\"]}"
       }
      },
      "response": []
@@ -14415,7 +14547,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
         ],
         "type": "text/javascript"
        }
@@ -14444,7 +14580,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
         ],
         "type": "text/javascript"
        }
@@ -15007,7 +15147,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -18217,7 +18361,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }
@@ -18246,7 +18394,11 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204]).to.include(pm.response.code));"
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
         ],
         "type": "text/javascript"
        }

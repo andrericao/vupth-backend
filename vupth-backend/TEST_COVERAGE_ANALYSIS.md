@@ -317,6 +317,12 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 
 ## 6. CHANGELOG DE COBERTURA
 
+### 2026-08-22 (2)
+- **Convidado de teste passou a ter nome UNICO por execucao (Postman, 4 requests × 2 collections)** — `FilaIntent1/2/3` (folder 08e) e `CabecaA` (folder 08k) viraram `<nome>-<tag da execucao>`, e o `find` na fila compara com a variavel, nao com a string fixa. +16 cleanups por collection passaram a imprimir o **corpo da resposta** na mensagem da falha.
+- ⚠️ **O defeito e de ambiente compartilhado, e ele so aparece em homolog/prod.** A base de teste local nasce limpa a cada run; a de homolog/prod **nunca e zerada**. Com nome fixo, o `find` casa tambem com os convidados que execucoes ANTERIORES deixaram na fila — e como a fila vem ordenada por horario previsto, ele pega o **mais antigo**, ou seja, a sobra de outra execucao em vez da linha recem-criada.
+- ⚠️ **`--bail` transforma cada vermelho em mais sobra.** O CI para no primeiro erro, entao os cleanups seguintes **nao rodam** e os convidados daquela execucao ficam na fila para sempre. O proprio mecanismo que protege o deploy alimenta a condicao que quebra o teste seguinte — por isso o conserto tinha de ser o **nome**, nao a assercao.
+- ⚠️ **A instrumentacao existe porque `400` aqui e ambiguo:** `INVALID_PATH_VARIABLE` (a variavel do id ficou vazia — defeito de captura) e `ATTENDANCE_INVALID_STATUS` (a linha ja saiu da fila — defeito de estado) chegam com o mesmo status e mandam investigar lugares diferentes. Sem o corpo, o log do CI nao separa os dois.
+
 ### 2026-08-22
 - **Envio do reset por API HTTP do Brevo (backlog #1)** — `BrevoApiEmailSenderTest` (unit, 4, `MockRestServiceServer`) + 2 guards novos em `MailTimeoutPropertiesTest` (timeout com default positivo; `BREVO_API_KEY` vinda de env var e **vazia** no repositorio). Sem teste de integracao e sem Postman: **nenhum endpoint mudou** — o contrato do `POST /auth/forgot-password` (200 sempre, anti-enumeracao) continua exatamente igual, e o `ForgotPasswordIntegrationTest` ja o cobre.
 - ⚠️ **Este e o defeito que NENHUM teste de fluxo consegue pegar.** O endpoint responde **200 quando envia e 200 quando falha** — de fora, "e-mail entregue" e "provedor recusou" sao a mesma resposta. Por isso o teste desce ao transporte: e o unico lugar onde da para afirmar que a requisicao sai com a forma que o Brevo aceita (header `api-key`, e nao `Authorization: Bearer`) e com o codigo dentro do corpo.
