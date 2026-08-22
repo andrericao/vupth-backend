@@ -56,11 +56,8 @@ public class SmtpEmailSender implements EmailSender {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(toEmail);
-        message.setSubject("VUPTH — código de recuperação de senha");
-        message.setText(
-                "Seu código de recuperação de senha é: " + code + "\n\n"
-                        + "Ele expira em 15 minutos e só pode ser usado uma vez.\n"
-                        + "Se você não pediu a troca de senha, ignore este e-mail.");
+        message.setSubject(PasswordResetMessage.SUBJECT);
+        message.setText(PasswordResetMessage.body(code));
         try {
             mailSender.send(message);
             log.info("[MAIL:smtp] reset code enviado para {}", toEmail);

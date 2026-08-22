@@ -317,6 +317,13 @@ Métrica atual = **cobertura comportamental** (endpoint × {feliz, erros}). Para
 
 ## 6. CHANGELOG DE COBERTURA
 
+### 2026-08-22
+- **Envio do reset por API HTTP do Brevo (backlog #1)** — `BrevoApiEmailSenderTest` (unit, 4, `MockRestServiceServer`) + 2 guards novos em `MailTimeoutPropertiesTest` (timeout com default positivo; `BREVO_API_KEY` vinda de env var e **vazia** no repositorio). Sem teste de integracao e sem Postman: **nenhum endpoint mudou** — o contrato do `POST /auth/forgot-password` (200 sempre, anti-enumeracao) continua exatamente igual, e o `ForgotPasswordIntegrationTest` ja o cobre.
+- ⚠️ **Este e o defeito que NENHUM teste de fluxo consegue pegar.** O endpoint responde **200 quando envia e 200 quando falha** — de fora, "e-mail entregue" e "provedor recusou" sao a mesma resposta. Por isso o teste desce ao transporte: e o unico lugar onde da para afirmar que a requisicao sai com a forma que o Brevo aceita (header `api-key`, e nao `Authorization: Bearer`) e com o codigo dentro do corpo.
+- ⚠️ **O caso que parece burocracia e nao e: 401 e 500 tem de virar `EmailDeliveryException`.** O `ForgotPasswordUseCase` engole **so esse tipo**; qualquer outra excecao sobe pelo `@Transactional` e o endpoint devolve **500 onde o contrato exige 200** — ou seja, um erro do provedor viraria vazamento de comportamento na API.
+- ⚠️ **`MockRestServiceServer` obriga o cliente HTTP a vir de fora do sender.** Quem fixa a fabrica de requests no proprio construtor sobrescreve a do mock e o teste **bate na internet de verdade** (verde ou vermelho conforme a rede, e gastando envio real). Dai o `BrevoRestClientConfig` separado — ele existe pelo timeout, e a testabilidade veio junto.
+- ⚠️ **O que estes testes NAO provam:** que a conta do Brevo aceita o envio. Servidor simulado nao valida credencial nem remetente verificado — **a confirmacao final e device + log de boot**, com as env vars ligadas no Render.
+
 ### 2026-08-18
 - **Escopo de localidade `?city=&uf=` no `GET /establishment` (fatia C do #2 + backlog #29)** — `LocationFilterTest` (unit, 8) + `EstablishmentLocationFilterIntegrationTest` (14) + Postman folder **18b** (17 requests nas duas collections). Contrato **aditivo**: dois params novos e opcionais, a listagem sem eles responde como antes.
 - ⚠️ **O teste que mais paga aqui e o par de acento** (busca sem acento achando a loja acentuada, e o inverso): e a unica coisa que separa "o filtro funciona" de "o filtro devolve 200 com lista vazia por causa de uma cedilha", que e o modo de falha que ninguem abre bug para reportar — o usuario so conclui que nao ha loja na cidade dele.
