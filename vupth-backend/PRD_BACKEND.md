@@ -8,7 +8,7 @@
 > **Base URL prod:** `https://vupth-backend-ia-production.up.railway.app` (Railway, branch `main`)
 > **Base URL local:** `http://localhost:8080`
 >
-> **Ultima atualizacao:** 2026-06-08
+> **Ultima atualizacao:** 2026-08-26
 >
 > ### Keep-Alive (Render staging)
 >
@@ -4161,6 +4161,57 @@ garante a **forma** da requisicao, nao que a conta do Brevo aceite o envio. **A 
 Andre, em device**, com as env vars no Render — e o log de boot ja diz, antes de qualquer reset, se o
 provider certo subiu.
 
+#### 26/08 — o provider efetivo virou campo do `/actuator/info` (era so linha de log)
+
+**O #1 ficou quatro dias travado numa pergunta que nao tinha como ser respondida por fora:** *"o deploy
+pegou o `MAIL_PROVIDER` novo?"*. O staging expoe so `health,info,metrics` — **nao existe
+`/actuator/env`** — entao a unica testemunha do valor efetivo era a linha do `@PostConstruct` no boot,
+que **some do painel do Render assim que o log rola**. Foi assim que o codigo do `BrevoApiEmailSender`
+ficou pronto em 22/08 e o ambiente seguiu em `smtp` sem ninguem conseguir provar isso com um comando.
+
+`GET /actuator/info` agora traz um bloco `mail`:
+
+```json
+{
+  "mail": {
+    "provider": "brevo",
+    "sender": "BrevoApiEmailSender",
+    "from": "andrericao49@gmail.com",
+    "credentials": "present"
+  }
+}
+```
+
+**Como se le (a ordem dos campos e a ordem do diagnostico):**
+
+| campo | o que e | quando denuncia |
+|---|---|---|
+| `provider` | o texto que chegou em `vupth.mail.provider` (env `MAIL_PROVIDER`) | ainda `smtp` = **o Save no painel nao foi dado**, nao e bug de codigo |
+| `sender` | a **classe que o Spring instanciou de verdade** | diferente do `provider` = condicao quebrada (isto o log nao mostra dias depois) |
+| `from` | remetente (`MAIL_FROM`) | explica entrega em spam; `no-reply@vupth.app` = **dominio que nao existe** (NXDOMAIN) |
+| `credentials` | `present` / `MISSING` / `n/a` | `MISSING` = bean no ar sem chave: 200 na tela e **nenhum e-mail sai** |
+
+**`sender` e a prova; `provider` e so a intencao** — um e a env var, o outro e o bean. `credentials`
+olha a credencial **daquele transporte** (`brevo` → `BREVO_API_KEY`; `smtp` → `MAIL_HOST` + `MAIL_PASS`),
+entao `provider=brevo` com so a SMTP key configurada aparece como **`MISSING`**, que e exatamente a
+confusao que devolve `401 Key not found`. **Ele nao afirma que a chave e valida** — so que ha algo
+preenchido; chave errada continua so no log `[MAIL:brevo]`.
+
+🔒 **Nenhum segredo sai daqui, nem mascarado** — o `/actuator/info` do staging e **publico**. Chave e
+senha viram o estado de tres valores acima, e ha teste dedicado afirmando que os valores nao aparecem
+no JSON em nenhuma forma.
+
+**Verificacao de um comando (staging):**
+
+```bash
+curl -s https://vupth-backend-ia.onrender.com/actuator/info | jq .mail
+```
+
+**Testes:** `MailInfoContributorTest` (11, unit) — sender vindo do bean e nao do texto; divergencia
+env var × bean ficando visivel; `credentials` por transporte (incluindo a chave do transporte errado
+nao contando); `none` como `n/a` e nao `MISSING`; comparacao sem diferenciar caixa (igual ao
+`@ConditionalOnProperty`); e os dois guards de vazamento. O campo novo **nao cega o grep do `ci.yml`**
+(`"startedAtEpochMs":[0-9]*`): o bloco `mail` e irmao do `app`, nao entra dentro dele.
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao

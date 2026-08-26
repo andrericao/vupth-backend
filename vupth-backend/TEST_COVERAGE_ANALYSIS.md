@@ -1,6 +1,6 @@
 # 📊 Análise de Cobertura de Testes — Vupth Backend
 
-**Última atualização**: 2026-06-22
+**Última atualização**: 2026-08-26
 **Meta**: 🎯 **100%** — todo endpoint/regra coberto por teste **unitário e/ou de integração**, sempre com **caminho feliz + erros** (401/403/404/409/422).
 **Inventário atual**: ~**175** testes unitários + ~**405** testes de integração (~**580** métodos `@Test`), 15 controllers, ~70 endpoints.
 
@@ -271,6 +271,27 @@ Testes: `unit/shared/MailHealthIndicatorDisabledTest` (3).
 ⚠️ **Nota de configuração que o teste torna explícita:** `spring.mail.host=${MAIL_HOST:}` cria o `JavaMailSenderImpl` **mesmo com host vazio** (`@ConditionalOnProperty` casa com propriedade presente e não-`false`) — ou seja, sem esta chave o indicador subiria em **todo** ambiente, não só onde o SMTP está configurado.
 
 ⚠️ **Postman não cobre e não tem como:** o efeito só aparece num ambiente onde a saída SMTP está bloqueada e o provider é `smtp` — nenhuma das duas collections roda contra `/actuator/health` de prod. Ver PRD, seção 18d, "17/08 — o health check de MAIL derrubava o deploy de PROD".
+
+---
+
+### 2.14 Provider de e-mail no `/actuator/info` — a testemunha que sobrevive ao boot
+Testes: `unit/mail/MailInfoContributorTest` (11).
+
+**Quarto guard da mesma familia, e o que fecha o buraco de diagnostico do #1.** O anuncio de boot de 15/08 responde "qual provider subiu?" **enquanto o log estiver a mao** — e no painel do Render ele rola e some. Como o staging expoe so `health,info,metrics` (**nao existe `/actuator/env`**), ficou quatro dias impossivel provar por fora que o ambiente seguia em `smtp` com o `BrevoApiEmailSender` ja em `main`. O bloco `mail` do `/actuator/info` troca isso por um `curl` repetivel.
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| `sender` vem da **classe do bean**, nao do texto da env var | ✅ | ✅ (divergencia `provider` × `sender` fica visivel) |
+| `credentials` olha a credencial **do transporte no ar** (`brevo`→API key; `smtp`→host+senha) | ✅ | ✅ (chave em branco e chave do transporte errado viram `MISSING`) |
+| `provider=none` → `n/a`, nao `MISSING` | ✅ | — |
+| Comparacao do provider **ignora caixa**, igual ao `@ConditionalOnProperty` | ✅ | ✅ |
+| **Nenhum segredo no JSON** — nem API key, nem senha de SMTP | — | ✅ (assert direto sobre o JSON serializado) |
+
+⚠️ **Os dois asserts de vazamento sao o motivo de este teste existir em par com os outros:** o `/actuator/info` do staging e **publico**. Um campo de diagnostico que imprimisse a chave — inclusive mascarada — trocaria um problema de observabilidade por um de seguranca.
+
+⚠️ **O que ele NAO prova:** que a credencial e **valida**. `present` diz so que ha algo preenchido; `401 Key not found` continua aparecendo apenas no log `[MAIL:brevo]`.
+
+⚠️ **Postman nao cobre e nao tem como:** as duas collections nao rodam contra `/actuator/*`, e o valor util e o do **ambiente hospedado** — em `mvn test` o provider e sempre `none`. Ver PRD, secao "26/08".
 
 ---
 
