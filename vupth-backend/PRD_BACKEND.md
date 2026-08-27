@@ -3359,13 +3359,13 @@ BUG2b.
 
 ## 18e. Acesso por link (build web) — CORS, WebSocket e keep-warm — HANDOFF PARA OS FRONTS
 
-> **Status em 2026-08-26:** CORS 🟠 **especificado, ainda NAO implementado** · WebSocket ✅ **ja aberto, nada a fazer** · fechamento do `/actuator/metrics` 🟠 pendente · pinger externo = configuracao do Andre. Esta secao e a fonte; enquanto o CORS nao entrar, **nao ha build web funcionando**.
+> **Status em 2026-08-26 (atualizado no mesmo dia):** CORS ✅ **implementado** · WebSocket ✅ **ja aberto, nada a fazer** · `/actuator/metrics` ✅ **fechado** · pinger externo 🟠 = configuracao do Andre (painel). Falta **1 passo fora do codigo** para a build web subir: a env var `CORS_ALLOWED_ORIGINS` no Render.
 
 **Contexto.** Os testadores nao instalam APK: abrem o app por **link**, numa build web publicada no Cloudflare Pages (`https://vupth-partner.pages.dev`, com previews da branch `dev` em `https://<hash>.vupth-partner.pages.dev`). Isso muda o cliente de *app nativo* para *navegador* — e navegador aplica CORS.
 
-### 1. CORS — 🟠 o que HOJE derruba a build web
+### 1. CORS — ✅ implementado em 26/08
 
-**Nao e "falta autorizar a origem": nao existe CORS nenhum no backend.**
+**O diagnostico que originou o item:** nao era "falta autorizar a origem" — **nao existia CORS nenhum no backend**.
 
 | Onde | Estado auditado em 26/08 |
 |---|---|
@@ -3378,14 +3378,34 @@ BUG2b.
 
 ⚠️ **O modo de falha e mudo, e e por isso que o front nao consegue diagnosticar sozinho.** Sem `.cors()`, o **preflight `OPTIONS`** cai no `anyRequest().authenticated()` — e preflight **nao carrega `Authorization`**. O navegador leva **401 no OPTIONS**, antes de qualquer chamada real. No console aparece so o erro generico de CORS, sem corpo e sem status util: *"o link abre bonito e nenhuma chamada completa"*.
 
-**Desenho aprovado (a implementar):**
+**Entregue exatamente assim:**
 
 1. Bean `CorsConfigurationSource` + `.cors(Customizer.withDefaults())` no `SecurityConfig` — e isso que faz o `CorsFilter` responder o preflight **antes** da autorizacao.
 2. Origens via **`setAllowedOriginPatterns`**, nao `allowedOrigins`: `https://*.vupth-partner.pages.dev` tem curinga **no meio**, e a API antiga nao aceita — e justamente onde caem os previews da `dev`.
 3. Lista vinda de env var **`CORS_ALLOWED_ORIGINS`** (separada por virgula), **default vazio**. Sem a var, nenhuma origem de navegador e aceita e **os apps nativos seguem intactos** (cliente nativo nao manda `Origin`). Origem nova = uma linha no painel + restart, **sem deploy de codigo**.
 4. **`allowCredentials(false)`** — a autenticacao e por `Authorization: Bearer`, nao por cookie. Basta liberar os headers `Authorization` e `Content-Type`; metodos `GET,POST,PUT,PATCH,DELETE,OPTIONS`.
 
-**📣 Para os fronts:** nada muda no codigo de vocES. Continuem mandando o JWT no header `Authorization`. **Nao usem cookie** — com `allowCredentials(false)` ele nao atravessa, e mudar isso exigiria abandonar o curinga de subdominio. Origem nova (dominio proprio, outro projeto do Pages) = avisar aqui para entrar na env var.
+**⚙️ O passo que falta, e e do Andre (painel do Render → Environment):**
+
+```
+CORS_ALLOWED_ORIGINS=https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev
+```
+
+Sem essa variavel o backend sobe com **zero** origens autorizadas e anuncia no boot:
+`[MAIL]`-style, em WARN — `[CORS] nenhuma origem autorizada (CORS_ALLOWED_ORIGINS vazia) — build web nao funciona; apps nativos nao sao afetados.` Com a variavel: `[CORS] origens autorizadas: [...]`. **Mesma jogada do anuncio de provider de e-mail:** o boot diz o que esta valendo, sem ninguem precisar reproduzir o erro no navegador.
+
+**Verificacao de um comando, depois do deploy:**
+
+```bash
+curl -si -X OPTIONS https://vupth-backend-ia.onrender.com/auth/login \
+  -H 'Origin: https://abc123.vupth-partner.pages.dev' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization,content-type' | head -12
+```
+
+**200** com `access-control-allow-origin` ecoando a origem = no ar. **401** = o preflight ainda bate na autorizacao, ou seja a build no ar e anterior a este commit.
+
+**📣 Para os fronts:** nada muda no codigo de voces. Continuem mandando o JWT no header `Authorization`. **Nao usem cookie** — com `allowCredentials(false)` ele nao atravessa, e mudar isso exigiria abandonar o curinga de subdominio. Origem nova (dominio proprio, outro projeto do Pages) = avisar aqui para entrar na env var.
 
 ### 2. WebSocket — ✅ ja esta aberto, NAO esperem por nos
 
@@ -3417,11 +3437,15 @@ Ver o topo deste PRD para a correcao historica. O desenho:
 
 Nenhuma credencial vai para o cron-job.org: so uma URL publica. Conferido que **nao ha access log** configurado em nenhum `application-*.properties`, entao os pings **nao poluem** o log do Render.
 
-### 4. Superficie do `/actuator` — 🟠 fechamento pendente
+### 4. Superficie do `/actuator` — ✅ fechada em 26/08
 
 Auditado junto: `SecurityConfig` tem `.requestMatchers("/actuator/**").permitAll()` e **staging e prod** expoem `health,info,metrics`. Ou seja, **`GET /actuator/metrics` e publico e sem token, inclusive em producao** — entrega inventario de rotas por template de URI (`http.server.requests`, com status e classes de excecao), saturacao do pool do Postgres (`hikaricp.connections`) e dimensionamento da JVM. Nao vaza credencial nem dado de usuario, mas e reconhecimento de graca — e casa mal com o `/auth/forgot-password` publico e **sem rate limit** do #32.
 
-**Correcao especificada:** (a) tirar `metrics` do `exposure.include` de staging e prod (`dev` fica `*`); (b) trocar o `permitAll` largo por explicito — `permitAll` em `/actuator/health/**` e `/actuator/info`, `denyAll` no resto, para que expor `env`/`heapdump`/`loggers` um dia nao abra a porta junto. **Raio de explosao zero:** `ci.yml` e `rollback.yml` so usam `/actuator/info` e `/actuator/health*`; nada toca em `metrics`.
+**Correcao entregue:** (a) tirar `metrics` do `exposure.include` de staging e prod (`dev` fica `*`); (b) trocar o `permitAll` largo por explicito — `permitAll` em `/actuator/health/**` e `/actuator/info`, `denyAll` no resto, para que expor `env`/`heapdump`/`loggers` um dia nao abra a porta junto. **Raio de explosao zero:** `ci.yml` e `rollback.yml` so usam `/actuator/info` e `/actuator/health*`; nada toca em `metrics`.
+
+⚠️ **Em `dev` nada fecha:** a regra le `vupth.actuator.expose-all`, que o perfil local poe em `true` — senao o `management.endpoints.web.exposure.include=*` do `application-dev.properties` viraria letra morta, que e o mesmo defeito do `cors.allowed-origins` que este commit removeu.
+
+**Testes:** `CorsAndActuatorIntegrationTest` (10) + `CorsOriginPatternsTest` (3, unit). A configuracao de teste **expoe `metrics` de proposito**: se o endpoint nem estivesse exposto, o assert de "negado" passaria verde pelo motivo errado, inclusive com a regra de seguranca apagada — a licao do `MailHealthIndicatorDisabledTest`.
 
 ⚠️ **`/actuator/info` continua publico de proposito** — o CI depende dele (`startedAtEpochMs`) e os fronts leem `bootMillis`. Por isso o bloco `mail` publicado em 26/08 e **livre de segredo por construcao**, com teste dedicado provando que chave e senha nao aparecem no JSON.
 
@@ -4016,8 +4040,8 @@ tende a produzir tres modelos que nao conversam.
 | Item | Descricao |
 |------|-----------|
 | Rate limiting | Nenhum rate limit nos endpoints publicos |
-| **CORS ausente** | 🟠 Nao existe CORS no backend — **bloqueia qualquer build web** (acesso por link). Desenho fechado na **secao 18e**, a implementar |
-| **`/actuator/metrics` publico** | 🟠 `permitAll` em `/actuator/**` + `metrics` exposto em staging **e prod**: inventario de rotas, pool do Postgres e JVM legiveis sem token. Correcao especificada na **secao 18e** |
+| ~~CORS ausente~~ | ✅ **ENTREGUE 26/08** — `CorsConfigurationSource` + `.cors()` no `SecurityConfig`, origens por `CORS_ALLOWED_ORIGINS`. Resta a env var no painel. Ver **secao 18e** |
+| ~~`/actuator/metrics` publico~~ | ✅ **ENTREGUE 26/08** — `metrics` fora da exposicao de staging/prod + `denyAll` no que nao e `health`/`info`. Ver **secao 18e** |
 | Paginacao | Endpoints de listagem (GET /establishment, GET /users) nao tem paginacao |
 | Upload de imagem | `profile_image_url` e `urlImage` aceitam URL, nao ha upload real |
 

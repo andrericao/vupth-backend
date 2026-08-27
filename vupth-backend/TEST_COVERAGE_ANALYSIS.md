@@ -295,6 +295,32 @@ Testes: `unit/mail/MailInfoContributorTest` (11).
 
 ---
 
+### 2.15 CORS e a superfície do `/actuator` — os dois defeitos que falham EM SILÊNCIO
+Testes: `integrations/security/CorsAndActuatorIntegrationTest` (10) + `unit/security/CorsOriginPatternsTest` (3).
+
+**Por que entram juntos:** os dois falham sem mensagem. CORS errado não devolve nada útil — o navegador recusa a resposta e o console mostra o erro genérico, sem corpo e sem status; actuator aberto demais não quebra coisa alguma, só entrega informação a quem pedir. Nenhum dos dois aparece em teste de regra de negócio, e nenhum aparece no Postman (ver abaixo).
+
+| Regra | Feliz | Erros |
+|---|---|---|
+| Preflight `OPTIONS` de origem autorizada → **200 + `Access-Control-Allow-Origin`** | ✅ | ✅ (antes de 26/08 era **401**: sem `.cors()` o preflight caía no `anyRequest().authenticated()` e preflight não carrega `Authorization`) |
+| Preview do Cloudflare Pages casa pelo **curinga de subdomínio** | ✅ | — |
+| Origem não listada **não** recebe o cabeçalho | — | ✅ |
+| O **apex** só passa porque está listado — o curinga sozinho não o cobre | ✅ | ✅ (guarda contra "simplificar" a env var e quebrar só o link principal) |
+| Resposta **real** (não só o preflight) leva o cabeçalho | ✅ | — |
+| **Sem `Origin`** (app nativo Expo) segue igual, sem cabeçalho de CORS | ✅ | ✅ (prova que ligar CORS não mexeu no que já estava em produção) |
+| `/ws/**` fica **fora** da política e não é barrado por origem desconhecida | ✅ | ✅ |
+| `/actuator/metrics` **negado mesmo estando exposto** | — | ✅ |
+| `/actuator/info` e `/actuator/health/readiness` seguem públicos | ✅ | — |
+| `CORS_ALLOWED_ORIGINS` vazia/ausente = **nenhuma** origem (não um padrão em branco) | ✅ | ✅ (unit) |
+
+⚠️ **A configuração de teste expõe `metrics` de propósito.** É a lição do 2.13: se o endpoint nem estivesse exposto, o assert de "negado" passaria verde **pelo motivo errado** — inclusive com a regra de segurança apagada. Exposto e recusado é a única forma de provar que quem barra é a cadeia de segurança.
+
+⚠️ **O teste do `/ws/info` guarda uma decisão, não um endpoint.** O SockJS do Spring emite os **próprios** cabeçalhos de CORS a partir do `setAllowedOriginPatterns("*")` do `WebSocketConfig`. Se o `CorsFilter` também escrevesse os dele, a resposta sairia com `Access-Control-Allow-Origin` **duplicado** e o navegador recusaria — quebrando a fila em tempo real, que hoje funciona. Por isso o `CorsConfigurationSource` devolve `null` para `/ws/**`, e é isso que o teste fixa.
+
+⚠️ **Postman não cobre e não tem como:** CORS é decisão do **navegador**, não do servidor — o servidor só emite cabeçalhos. Newman/curl completam a chamada mesmo sem `Access-Control-Allow-Origin` nenhum, então uma collection verde não diz nada sobre a build web funcionar. A verificação real é o `curl -X OPTIONS` da seção 18e do PRD (que checa o **cabeçalho**, não o status da chamada) ou o link aberto no navegador.
+
+---
+
 ## 3. LACUNAS REAIS RUMO A 100% (checklist vivo)
 
 ### 🟠 Alta (fecha o "Erros" pendente da matriz)
