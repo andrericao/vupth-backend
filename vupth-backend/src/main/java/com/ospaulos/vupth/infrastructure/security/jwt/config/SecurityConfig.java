@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -26,9 +27,13 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 @Configuration
@@ -45,6 +50,22 @@ public class SecurityConfig {
 
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
 
+    /**
+     * Origens de navegador autorizadas (env {@code CORS_ALLOWED_ORIGINS}, separadas por virgula).
+     * <b>Default vazio = nenhuma</b>: sem a variavel, nenhuma build web funciona e os apps nativos
+     * seguem intactos, porque cliente nativo nao manda {@code Origin} e portanto nao e request CORS.
+     */
+    @Value("${vupth.cors.allowed-origin-patterns:}")
+    private String corsAllowedOriginPatterns;
+
+    /**
+     * Libera TODO o {@code /actuator/**}. {@code true} so em {@code dev} — e o que faz o
+     * {@code management.endpoints.web.exposure.include=*} do perfil local continuar significando
+     * alguma coisa. Em staging/prod fica {@code false}: passam apenas {@code health} e {@code info}.
+     */
+    @Value("${vupth.actuator.expose-all:false}")
+    private boolean actuatorExposeAll;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
 
@@ -53,9 +74,21 @@ public class SecurityConfig {
         return httpSecurity
                 .authorizeHttpRequests(authorize -> authorize
 
+                        // Publicos de proposito e com consumidor conhecido: o portao
+                        // waitForBackend() dos apps (readiness), o ci.yml (startedAtEpochMs do
+                        // /info) e os fronts (bootMillis). Por isso o /info e livre de segredo
+                        // por construcao — ver MailInfoContributor.
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/info").permitAll()
+                        // O resto do actuator fecha fora de dev. Antes de 26/08 era permitAll
+                        // largo, e com `metrics` exposto em staging E prod isso deixava publico o
+                        // inventario de rotas (http.server.requests), a saturacao do pool
+                        // (hikaricp.connections) e o dimensionamento da JVM — sem token. A regra
+                        // por ULTIMO tambem impede que expor `env`/`heapdump`/`loggers` um dia
+                        // abra a porta junto.
+                        .requestMatchers("/actuator/**")
+                        .access((authentication, context) -> new AuthorizationDecision(actuatorExposeAll))
 
                         // WebSocket handshake — autenticacao da sessao STOMP e feita
                         // no StompAuthChannelInterceptor (frame CONNECT), nao no HTTP.
@@ -176,6 +209,11 @@ public class SecurityConfig {
 
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())
+                // Sem isto o preflight OPTIONS cai no anyRequest().authenticated() e, como
+                // preflight NAO carrega Authorization, o navegador leva 401 antes de qualquer
+                // chamada real — o erro generico de CORS no console, sem corpo e sem status util.
+                // Com o .cors(), o CorsFilter responde o preflight ANTES da autorizacao.
+                .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
@@ -185,6 +223,76 @@ public class SecurityConfig {
                 .sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
+    }
+
+    /**
+     * Politica de CORS da API.
+     *
+     * <p><b>Por que existe (26/08).</b> Os testadores deixaram de instalar APK e passaram a abrir o
+     * app por link, numa build web (Cloudflare Pages). Isso troca o cliente de app nativo por
+     * navegador — e navegador aplica CORS. Ate aqui o backend nao tinha CORS <i>nenhum</i>: nem
+     * {@code .cors()}, nem este bean, nem {@code addCorsMappings}; so uma chave morta
+     * {@code cors.allowed-origins} nos {@code .properties} que ninguem lia.
+     *
+     * <p><b>{@code allowedOriginPatterns}, nao {@code allowedOrigins}:</b> os previews da branch
+     * {@code dev} caem em {@code https://<hash>.vupth-partner.pages.dev} — curinga no <i>meio</i>,
+     * que a API antiga nao aceita. ⚠️ O padrao com curinga <b>nao casa o apex</b>: para autorizar
+     * {@code https://vupth-partner.pages.dev} e os previews sao <b>duas</b> entradas na variavel.
+     *
+     * <p><b>{@code allowCredentials} fica FALSO</b> porque a autenticacao e por
+     * {@code Authorization: Bearer}, nao por cookie. Com credenciais desligadas, liberar
+     * {@code allowedHeaders=*} nao abre nada — a origem continua restrita — e evita a classe de bug
+     * "esqueci de liberar um header", que falha exatamente com a mesma tela muda.
+     *
+     * <p><b>⚠️ {@code /ws/**} fica de fora, retornando {@code null}.</b> Nao e esquecimento: o
+     * SockJS do Spring emite os <i>proprios</i> cabecalhos de CORS a partir do
+     * {@code setAllowedOriginPatterns("*")} do {@code WebSocketConfig}. Se este filtro tambem
+     * escrevesse os dele, a resposta sairia com {@code Access-Control-Allow-Origin} <b>duplicado</b>
+     * e o navegador recusaria — quebrando a fila em tempo real, que hoje funciona. Retornar
+     * {@code null} faz o {@code CorsFilter} passar reto e deixa o WebSocket exatamente como esta.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        List<String> patterns = parseOriginPatterns(corsAllowedOriginPatterns);
+
+        if (patterns.isEmpty()) {
+            log.warn("[CORS] nenhuma origem autorizada (CORS_ALLOWED_ORIGINS vazia) — "
+                    + "build web nao funciona; apps nativos nao sao afetados.");
+        } else {
+            log.info("[CORS] origens autorizadas: {}", patterns);
+        }
+
+        CorsConfiguration api = new CorsConfiguration();
+        api.setAllowedOriginPatterns(patterns);
+        api.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        api.setAllowedHeaders(List.of("*"));
+        api.setAllowCredentials(false);
+        api.setMaxAge(3600L);
+
+        return request -> {
+            String path = request.getRequestURI().substring(request.getContextPath().length());
+            boolean isWebSocket = path.equals("/ws") || path.startsWith("/ws/");
+            return isWebSocket ? null : api;
+        };
+    }
+
+    /**
+     * Quebra a variavel de ambiente em padroes de origem. Extraido para poder ser testado sem subir
+     * contexto: o caso que importa e a <b>string vazia</b> — ela tem de virar lista <b>vazia</b>
+     * (nenhuma origem autorizada), e nao uma lista com um elemento em branco, que o
+     * {@code CorsConfiguration} trataria como padrao invalido em vez de "fechado".
+     *
+     * <p>Publico porque os testes unitarios vivem em {@code unit/...} e nao espelham o pacote de
+     * producao — mesma razao do construtor de teste do {@code GitCommitInfoContributor}.
+     */
+    public static List<String> parseOriginPatterns(String raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        return Arrays.stream(raw.split(","))
+                .map(String::trim)
+                .filter(pattern -> !pattern.isEmpty())
+                .toList();
     }
 
     @Bean

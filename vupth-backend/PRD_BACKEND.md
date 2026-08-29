@@ -8,21 +8,28 @@
 > **Base URL prod:** `https://vupth-backend-ia-production.up.railway.app` (Railway, branch `main`)
 > **Base URL local:** `http://localhost:8080`
 >
-> **Ultima atualizacao:** 2026-06-08
+> **Ultima atualizacao:** 2026-08-26
 >
-> ### Keep-Alive (Render staging)
+> ### Keep-Alive (Render staging) — ⚠️ CORRIGIDO EM 2026-08-26
 >
-> O Render free tier dorme o servico apos 15 min de inatividade. O cold start do Spring Boot
-> leva 1-3 min em recursos limitados, causando timeout nos clientes.
+> O Render Free dorme o servico apos ~15 min de inatividade, e o cold start custa ~50s
+> (boot da JVM + migrations) — o primeiro request depois disso falha por timeout se o app
+> nao esperar.
 >
-> **Solucao:** GitHub Actions cron (`.github/workflows/keep-alive.yml`) pinga
-> `GET /actuator/health` a cada 14 minutos para manter o servico acordado.
+> ⚠️ **Ate 26/08 esta secao descrevia um `.github/workflows/keep-alive.yml` com toggle por
+> `KEEP_ALIVE_ENABLED`. Esse workflow NAO EXISTE:** foi deletado de proposito no commit
+> `363019d` ("economizar minutos do Actions") e a secao nunca foi corrigida. Quem lesse este
+> PRD acreditava haver um keep-alive rodando; nao ha. O unico artefato vivo e
+> `vupth-backend/ping.sh`, um `while true` que roda **no terminal do Andre** — morre quando o
+> terminal fecha ou a maquina suspende.
 >
-> **Toggle:** Variavel de repositorio no GitHub Actions:
-> - **Ativar:** `KEEP_ALIVE_ENABLED=true` (Settings > Secrets and variables > Actions > Variables)
-> - **Desativar:** Mudar para `false` ou deletar a variavel
+> **Direcao decidida (ver secao 18e):** pinger **externo** gratuito (cron-job.org), em
+> `GET /actuator/health/readiness`, intervalo de **5 min**, restrito a uma **janela de teste**.
+> A janela e o que protege as **750h/mes** de instancia do free tier — o intervalo nao afeta a
+> cota, porque a hora conta enquanto a instancia esta **acordada**, nao por requisicao.
 >
-> Quando nao estiver testando, desative para nao consumir minutos do GitHub Actions.
+> ⚠️ **Keep-warm nao substitui o portao `waitForBackend()` da secao 18c.** Deploy, restart,
+> falha do cron, fora da janela e teto de cota produzem instancia fria de novo.
 
 ---
 
@@ -46,6 +53,10 @@
 16. [Endpoints — User Address](#16-endpoints--user-address)
 17. [Endpoints — Establishment Address](#17-endpoints--establishment-address)
 18. [Endpoints — Professional Intervals](#18-endpoints--professional-intervals)
+18b. [Tempo Real (WebSocket / STOMP)](#18b-tempo-real-websocket--stomp)
+18c. [Readiness / cold start (Render Free)](#18c-readiness--cold-start-render-free--handoff-para-os-fronts) — **HANDOFF**
+18d. [Rollback / deploy seguro](#18d-rollback--deploy-seguro-anti-quebra)
+18e. [Acesso por link (build web) — CORS, WebSocket e keep-warm](#18e-acesso-por-link-build-web--cors-websocket-e-keep-warm--handoff-para-os-fronts) — **HANDOFF**
 19. [Fluxos de Usuario](#19-fluxos-de-usuario)
 20. [Resumo de Testes](#20-resumo-de-testes)
 20b. [**DECISOES PENDENTES DO ANDRE**](#20b-decisoes-pendentes-do-andre--contexto-pergunta-e-o-que-o-mercado-faz) — `D1..D9`, numeracao **estavel**; nada abaixo e implementado sem a resposta
@@ -3198,7 +3209,9 @@ Config responsavel (prod + staging): `management.endpoint.health.probes.enabled=
 
 Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22. Aplica igual ao Front-Partner.
 
-**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Opcional: keep-warm (ping a cada ~10min) ou tier pago pra eliminar a hibernacao.
+**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Keep-warm: pinger externo gratuito, **5 min, em janela** — desenho e a conta das 750h na **secao 18e**.
+
+⚠️ **O keep-warm NAO dispensa este portao.** Ele reduz a *frequencia* de instancia fria; o portao garante que, quando ela estiver fria assim mesmo (deploy, restart, falha do cron, fora da janela, teto de cota), o cadastro nao dispare antes da hora. Um e probabilidade e mora num servico de terceiro; o outro e correcao e mora no app. Com o pinger ativo o portao custa ~0,5s e ninguem ve a tela.
 
 > **Status de alinhamento:** backend ✅ pronto (config aplicada). **Fronts:** implementar o portao `waitForBackend()` no splash. Quando um front concluir, ele avisa e o backend revisa o alinhamento. Backlog #35 (broker externo) **so** quando escalar pra multi-instancia — readiness/cold start e independente dele.
 
@@ -3337,9 +3350,104 @@ BUG2b.
 > 1. `deploy-prod` espera o agregado e homolog espera o grupo `readiness`. Com o mail fora, o agregado
 >    ainda carrega `diskSpace` e `ping` — prod continua com **mais** superficie para reverter um deploy
 >    correto do que homolog. Alinhar as duas esperas em `readiness` e decisao de CI, nao de aplicacao.
-> 2. O topo deste PRD descreve um `keep-alive.yml` pingando `/actuator/health` a cada 14 min. **Esse
->    workflow nao existe mais** em `.github/workflows/` (so `ci.yml` e `rollback.yml`) — o que explica,
->    junto com a hibernacao, o cold start do **D4**.
+> 2. ✅ **RESOLVIDO EM 26/08 (documentalmente).** O topo deste PRD descrevia um `keep-alive.yml`
+>    pingando `/actuator/health` a cada 14 min; o workflow **nao existe** (deletado em `363019d`).
+>    O topo foi corrigido e a direcao — pinger externo, 5 min, em janela — esta na **secao 18e**.
+>    Falta so a criacao do job no cron-job.org, que e painel, nao codigo.
+
+---
+
+## 18e. Acesso por link (build web) — CORS, WebSocket e keep-warm — HANDOFF PARA OS FRONTS
+
+> **Status em 2026-08-26 (atualizado no mesmo dia):** CORS ✅ **implementado** · WebSocket ✅ **ja aberto, nada a fazer** · `/actuator/metrics` ✅ **fechado** · pinger externo 🟠 = configuracao do Andre (painel). Falta **1 passo fora do codigo** para a build web subir: a env var `CORS_ALLOWED_ORIGINS` no Render.
+
+**Contexto.** Os testadores nao instalam APK: abrem o app por **link**, numa build web publicada no Cloudflare Pages (`https://vupth-partner.pages.dev`, com previews da branch `dev` em `https://<hash>.vupth-partner.pages.dev`). Isso muda o cliente de *app nativo* para *navegador* — e navegador aplica CORS.
+
+### 1. CORS — ✅ implementado em 26/08
+
+**O diagnostico que originou o item:** nao era "falta autorizar a origem" — **nao existia CORS nenhum no backend**.
+
+| Onde | Estado auditado em 26/08 |
+|---|---|
+| `SecurityConfig` | **nenhum `.cors(...)`**, nenhum bean `CorsConfigurationSource` |
+| `WebMvcConfigurer` | nao existe `addCorsMappings` |
+| `@CrossOrigin` | um unico, **comentado**, em `ProfessionalIntervalController:34` |
+| `cors.allowed-origins` nos `application-{dev,staging,prod}.properties` | ⚠️ **propriedade MORTA — nenhum codigo le** |
+
+⚠️ **A armadilha da propriedade morta:** e possivel "autorizar a origem" no `application-staging.properties`, reiniciar, e **nada mudar** — porque a chave nao e consumida. Ela sai quando o CORS de verdade entrar.
+
+⚠️ **O modo de falha e mudo, e e por isso que o front nao consegue diagnosticar sozinho.** Sem `.cors()`, o **preflight `OPTIONS`** cai no `anyRequest().authenticated()` — e preflight **nao carrega `Authorization`**. O navegador leva **401 no OPTIONS**, antes de qualquer chamada real. No console aparece so o erro generico de CORS, sem corpo e sem status util: *"o link abre bonito e nenhuma chamada completa"*.
+
+**Entregue exatamente assim:**
+
+1. Bean `CorsConfigurationSource` + `.cors(Customizer.withDefaults())` no `SecurityConfig` — e isso que faz o `CorsFilter` responder o preflight **antes** da autorizacao.
+2. Origens via **`setAllowedOriginPatterns`**, nao `allowedOrigins`: `https://*.vupth-partner.pages.dev` tem curinga **no meio**, e a API antiga nao aceita — e justamente onde caem os previews da `dev`.
+3. Lista vinda de env var **`CORS_ALLOWED_ORIGINS`** (separada por virgula), **default vazio**. Sem a var, nenhuma origem de navegador e aceita e **os apps nativos seguem intactos** (cliente nativo nao manda `Origin`). Origem nova = uma linha no painel + restart, **sem deploy de codigo**.
+4. **`allowCredentials(false)`** — a autenticacao e por `Authorization: Bearer`, nao por cookie. Basta liberar os headers `Authorization` e `Content-Type`; metodos `GET,POST,PUT,PATCH,DELETE,OPTIONS`.
+
+**⚙️ O passo que falta, e e do Andre (painel do Render → Environment):**
+
+```
+CORS_ALLOWED_ORIGINS=https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev
+```
+
+Sem essa variavel o backend sobe com **zero** origens autorizadas e anuncia no boot:
+`[MAIL]`-style, em WARN — `[CORS] nenhuma origem autorizada (CORS_ALLOWED_ORIGINS vazia) — build web nao funciona; apps nativos nao sao afetados.` Com a variavel: `[CORS] origens autorizadas: [...]`. **Mesma jogada do anuncio de provider de e-mail:** o boot diz o que esta valendo, sem ninguem precisar reproduzir o erro no navegador.
+
+**Verificacao de um comando, depois do deploy:**
+
+```bash
+curl -si -X OPTIONS https://vupth-backend-ia.onrender.com/auth/login \
+  -H 'Origin: https://abc123.vupth-partner.pages.dev' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Headers: authorization,content-type' | head -12
+```
+
+**200** com `access-control-allow-origin` ecoando a origem = no ar. **401** = o preflight ainda bate na autorizacao, ou seja a build no ar e anterior a este commit.
+
+**📣 Para os fronts:** nada muda no codigo de voces. Continuem mandando o JWT no header `Authorization`. **Nao usem cookie** — com `allowCredentials(false)` ele nao atravessa, e mudar isso exigiria abandonar o curinga de subdominio. Origem nova (dominio proprio, outro projeto do Pages) = avisar aqui para entrar na env var.
+
+### 2. WebSocket — ✅ ja esta aberto, NAO esperem por nos
+
+O front-client levantou que autorizar so o HTTPS deixaria a fila em tempo real morta. A preocupacao e legitima em geral, mas **aqui ja esta coberto** — `WebSocketConfig:68-69`:
+
+```java
+registry.addEndpoint("/ws").setAllowedOriginPatterns("*");
+registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
+```
+
+mais `.requestMatchers("/ws/**").permitAll()` no `SecurityConfig`. O handshake aceita **qualquer** origem hoje, no endpoint nativo e no SockJS. Detalhe tecnico que fecha a duvida: handshake de WebSocket **nativo nao passa por CORS** (o navegador nao aplica CORS a WS — aplica a checagem de origem do proprio servidor, que esta `*`); o fallback **SockJS**, que usa XHR e *e* sujeito a CORS, tem os headers emitidos pelo proprio SockJS a partir desse mesmo `allowedOriginPatterns`.
+
+**Este e o mesmo padrao do S19/#36:** o front descreve como bloqueio de backend algo que ja esta liberado. Vale para as duas pontas — so descobrimos indo ao codigo. O risco real e o inverso: apertar o CORS do HTTP e apertar junto a origem do WS quebraria o que hoje funciona. Por isso o commit do CORS **nao toca** no `*` do WS.
+
+⚖️ **Decisao registrada, nao executada:** com o WS em `*`, um site qualquer consegue assinar `/topic/establishment/{id}/queue`, que e **publico e sem token** (as notificacoes pessoais em `/user/queue/**` seguem exigindo JWT no CONNECT). Baixo impacto — e o mesmo dado da vitrine publica REST — mas da para alinhar com a lista do HTTP depois, em commit separado.
+
+### 3. Keep-warm — pinger externo (configuracao, nao codigo)
+
+Ver o topo deste PRD para a correcao historica. O desenho:
+
+| Parametro | Valor | Por que |
+|---|---|---|
+| Servico | **cron-job.org** | gratuito e permite **janela** (dias/horas). O free do UptimeRobot e intervalo fixo e sempre ligado |
+| URL | `/actuator/health/readiness` | **nao** o `/actuator/health`: o agregado carrega `diskSpace`/`ping` e foi ele que respondeu 503 por terceiro em 17/08. O `readiness` so fica UP com Postgres respondendo + migrations rodadas |
+| Intervalo | **5 min** | tolera **2** falhas consecutivas antes dos 15 min de ociosidade. 10 ou 13 min toleram **zero** |
+| Janela | horario de teste | **e o unico parametro que protege a cota** |
+
+**A conta que decide (e que o pedido dos fronts nao considerou):** o Render Free da **750 horas de instancia por mes, somadas entre todos os servicos free da conta**. Ping 24/7 = ~744h — cabe so se este for o unico servico free, com ~6h de folga; estourou, o servico e **suspenso ate o proximo ciclo**, que e muito pior que cold start. Janela de 08–22 em dias uteis = ~308h, com folga larga. **O intervalo nao entra nessa conta** — a hora conta enquanto a instancia esta acordada, nao por requisicao.
+
+Nenhuma credencial vai para o cron-job.org: so uma URL publica. Conferido que **nao ha access log** configurado em nenhum `application-*.properties`, entao os pings **nao poluem** o log do Render.
+
+### 4. Superficie do `/actuator` — ✅ fechada em 26/08
+
+Auditado junto: `SecurityConfig` tem `.requestMatchers("/actuator/**").permitAll()` e **staging e prod** expoem `health,info,metrics`. Ou seja, **`GET /actuator/metrics` e publico e sem token, inclusive em producao** — entrega inventario de rotas por template de URI (`http.server.requests`, com status e classes de excecao), saturacao do pool do Postgres (`hikaricp.connections`) e dimensionamento da JVM. Nao vaza credencial nem dado de usuario, mas e reconhecimento de graca — e casa mal com o `/auth/forgot-password` publico e **sem rate limit** do #32.
+
+**Correcao entregue:** (a) tirar `metrics` do `exposure.include` de staging e prod (`dev` fica `*`); (b) trocar o `permitAll` largo por explicito — `permitAll` em `/actuator/health/**` e `/actuator/info`, `denyAll` no resto, para que expor `env`/`heapdump`/`loggers` um dia nao abra a porta junto. **Raio de explosao zero:** `ci.yml` e `rollback.yml` so usam `/actuator/info` e `/actuator/health*`; nada toca em `metrics`.
+
+⚠️ **Em `dev` nada fecha:** a regra le `vupth.actuator.expose-all`, que o perfil local poe em `true` — senao o `management.endpoints.web.exposure.include=*` do `application-dev.properties` viraria letra morta, que e o mesmo defeito do `cors.allowed-origins` que este commit removeu.
+
+**Testes:** `CorsAndActuatorIntegrationTest` (10) + `CorsOriginPatternsTest` (3, unit). A configuracao de teste **expoe `metrics` de proposito**: se o endpoint nem estivesse exposto, o assert de "negado" passaria verde pelo motivo errado, inclusive com a regra de seguranca apagada — a licao do `MailHealthIndicatorDisabledTest`.
+
+⚠️ **`/actuator/info` continua publico de proposito** — o CI depende dele (`startedAtEpochMs`) e os fronts leem `bootMillis`. Por isso o bloco `mail` publicado em 26/08 e **livre de segredo por construcao**, com teste dedicado provando que chave e senha nao aparecem no JSON.
 
 ---
 
@@ -3923,12 +4031,17 @@ tende a produzir tres modelos que nao conversam.
 | Item | Descricao |
 |------|-----------|
 | `POST /profile/register` | Duplica `POST /auth/register` — mesma funcionalidade, endpoints diferentes |
+| `cors.allowed-origins` | ⚠️ **Propriedade MORTA** em `application-{dev,staging,prod}.properties`: nenhum codigo le. Da a impressao de que basta editar o arquivo para autorizar uma origem — nao basta, nao ha CORS no backend. Sai quando o CORS entrar (secao 18e) |
+| `keep-alive.yml` | ✅ **CORRIGIDO 26/08** — o topo do PRD descrevia um workflow deletado em `363019d`. Ver topo + secao 18e |
+| Indice incompleto | ✅ **CORRIGIDO 26/08** — 18b/18c/18d nunca entraram no indice; 18e entrou junto |
 
 ### Itens de seguranca/melhorias
 
 | Item | Descricao |
 |------|-----------|
 | Rate limiting | Nenhum rate limit nos endpoints publicos |
+| ~~CORS ausente~~ | ✅ **ENTREGUE 26/08** — `CorsConfigurationSource` + `.cors()` no `SecurityConfig`, origens por `CORS_ALLOWED_ORIGINS`. Resta a env var no painel. Ver **secao 18e** |
+| ~~`/actuator/metrics` publico~~ | ✅ **ENTREGUE 26/08** — `metrics` fora da exposicao de staging/prod + `denyAll` no que nao e `health`/`info`. Ver **secao 18e** |
 | Paginacao | Endpoints de listagem (GET /establishment, GET /users) nao tem paginacao |
 | Upload de imagem | `profile_image_url` e `urlImage` aceitam URL, nao ha upload real |
 
@@ -4161,6 +4274,57 @@ garante a **forma** da requisicao, nao que a conta do Brevo aceite o envio. **A 
 Andre, em device**, com as env vars no Render — e o log de boot ja diz, antes de qualquer reset, se o
 provider certo subiu.
 
+#### 26/08 — o provider efetivo virou campo do `/actuator/info` (era so linha de log)
+
+**O #1 ficou quatro dias travado numa pergunta que nao tinha como ser respondida por fora:** *"o deploy
+pegou o `MAIL_PROVIDER` novo?"*. O staging expoe so `health,info,metrics` — **nao existe
+`/actuator/env`** — entao a unica testemunha do valor efetivo era a linha do `@PostConstruct` no boot,
+que **some do painel do Render assim que o log rola**. Foi assim que o codigo do `BrevoApiEmailSender`
+ficou pronto em 22/08 e o ambiente seguiu em `smtp` sem ninguem conseguir provar isso com um comando.
+
+`GET /actuator/info` agora traz um bloco `mail`:
+
+```json
+{
+  "mail": {
+    "provider": "brevo",
+    "sender": "BrevoApiEmailSender",
+    "from": "andrericao49@gmail.com",
+    "credentials": "present"
+  }
+}
+```
+
+**Como se le (a ordem dos campos e a ordem do diagnostico):**
+
+| campo | o que e | quando denuncia |
+|---|---|---|
+| `provider` | o texto que chegou em `vupth.mail.provider` (env `MAIL_PROVIDER`) | ainda `smtp` = **o Save no painel nao foi dado**, nao e bug de codigo |
+| `sender` | a **classe que o Spring instanciou de verdade** | diferente do `provider` = condicao quebrada (isto o log nao mostra dias depois) |
+| `from` | remetente (`MAIL_FROM`) | explica entrega em spam; `no-reply@vupth.app` = **dominio que nao existe** (NXDOMAIN) |
+| `credentials` | `present` / `MISSING` / `n/a` | `MISSING` = bean no ar sem chave: 200 na tela e **nenhum e-mail sai** |
+
+**`sender` e a prova; `provider` e so a intencao** — um e a env var, o outro e o bean. `credentials`
+olha a credencial **daquele transporte** (`brevo` → `BREVO_API_KEY`; `smtp` → `MAIL_HOST` + `MAIL_PASS`),
+entao `provider=brevo` com so a SMTP key configurada aparece como **`MISSING`**, que e exatamente a
+confusao que devolve `401 Key not found`. **Ele nao afirma que a chave e valida** — so que ha algo
+preenchido; chave errada continua so no log `[MAIL:brevo]`.
+
+🔒 **Nenhum segredo sai daqui, nem mascarado** — o `/actuator/info` do staging e **publico**. Chave e
+senha viram o estado de tres valores acima, e ha teste dedicado afirmando que os valores nao aparecem
+no JSON em nenhuma forma.
+
+**Verificacao de um comando (staging):**
+
+```bash
+curl -s https://vupth-backend-ia.onrender.com/actuator/info | jq .mail
+```
+
+**Testes:** `MailInfoContributorTest` (11, unit) — sender vindo do bean e nao do texto; divergencia
+env var × bean ficando visivel; `credentials` por transporte (incluindo a chave do transporte errado
+nao contando); `none` como `n/a` e nao `MISSING`; comparacao sem diferenciar caixa (igual ao
+`@ConditionalOnProperty`); e os dois guards de vazamento. O campo novo **nao cega o grep do `ci.yml`**
+(`"startedAtEpochMs":[0-9]*`): o bloco `mail` e irmao do `app`, nao entra dentro dele.
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
