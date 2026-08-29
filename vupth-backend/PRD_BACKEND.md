@@ -3283,7 +3283,7 @@ segue pendente e so a linha de painel abaixo, que e do Andre.
 cron, fora da janela e teto de cota produzem instancia fria de novo, e ai quem segura o usuario e o
 portao.
 
-**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Keep-warm: pinger externo gratuito, **5 min, em janela** — desenho e a conta das 750h na **secao 18e**.
+**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo — **P4**). Keep-warm: pinger externo gratuito, **5 min, em janela** (**P3**) — desenho e a conta das 750h na **secao 18e**. ➡️ **Os dois estao rastreados na lista "Pendencias de PAINEL" da secao 22**, com valor exato e estado.
 
 ⚠️ **O keep-warm NAO dispensa este portao.** Ele reduz a *frequencia* de instancia fria; o portao garante que, quando ela estiver fria assim mesmo (deploy, restart, falha do cron, fora da janela, teto de cota), o cadastro nao dispare antes da hora. Um e probabilidade e mora num servico de terceiro; o outro e correcao e mora no app. Com o pinger ativo o portao custa ~0,5s e ninguem ve a tela.
 
@@ -4247,6 +4247,43 @@ Toda transicao automatica esbarra na mesma classe de armadilha do `affiliate`.
 > - **Backend** — API Spring Boot
 > - **Front-Client** — app React Native do cliente final
 > - **Front-Partner** — app React Native do profissional/owner
+
+### 🎛️ Pendencias de PAINEL — fora do codigo (FONTE UNICA)
+
+> **Por que esta lista existe (2026-08-29).** A lista de codigo abaixo rastreia **so codigo**, e por
+> isso tarefas de painel viviam soltas na prosa. Foi exatamente assim que o PRD **afirmou por meses**
+> haver um `keep-alive.yml` rodando, deletado em `363019d` — ninguem conferia porque nao havia onde.
+> Mesma regra da lista de codigo: **fecha, sai, renumera**. Commits referenciam o NOME, nao o numero.
+
+| # | Tarefa | Painel | Valor exato | Estado |
+|---|--------|--------|-------------|--------|
+| P1 | Transporte de e-mail em prod | **Railway** | `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key **v3**, nao a SMTP key do `MAIL_PASS`) | ✅ **FEITO 2026-08-29** |
+| P2 | Origens do CORS | **Render** ✅ / **Railway** ⬜ | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | 🟡 **Render FEITO 29/08; Railway pendente** (so depois do merge `dev`->`main`, que leva o codigo do CORS pra la) |
+| P3 | Keep-warm — pinger externo | **cron-job.org** | `GET https://vupth-backend-ia.onrender.com/actuator/health/readiness`, **5 min**, **em janela** (08–22 dias uteis) | ⬜ **aberto** — desenho e a conta das 750h na secao **18e.3** |
+| P4 | Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ⬜ **aberto** |
+
+**P4 — o que o campo resolve, e por que este path e nao o outro.** Com o campo **vazio** (estado de
+hoje) o Render considera o servico no ar assim que a **porta abre** — e numa app Spring Boot a porta
+abre **antes** de o Liquibase terminar. Ha portanto, **a cada deploy**, uma janela em que o Render
+roteia trafego real para uma instancia cujo banco ainda nao esta pronto: o usuario toma 500. Com o
+path preenchido, o Render so manda trafego depois do `200` e marca o deploy como falho se ele nunca vier.
+
+⚠️ **Tem de ser `/actuator/health/readiness`, NAO `/actuator/health`.** O agregado carrega todos os
+indicadores: em 17/08 o de `mail` devolvia **503 em 10,7s** com a API perfeitamente utilizavel. Apontar
+o health check para o agregado faria o Render reprovar **deploys saudaveis**. O grupo `readiness` foi
+recortado justamente para isso — `management.endpoint.health.group.readiness.include=readinessState,db`
+nos dois profiles: Postgres respondendo + migrations rodadas, nada mais. O path e **publico**
+(`SecurityConfig:82`, `permitAll` em `/actuator/health/**`), entao o checador do Render alcanca sem token.
+
+⚠️ **P4 nao e keep-warm — nao impede a hibernacao.** Quem reduz a frequencia de instancia fria e o
+**P3**. Sao coisas diferentes que so parecem parecidas: P4 diz *"nao me mande trafego antes de eu estar
+pronto"* (mata os 500 de cada deploy); P3 diz *"nao me deixe dormir"* (mata a espera de ~50s). E
+nenhum dos dois dispensa o portao `waitForBackend()` dos fronts — ver secao **18c**.
+
+> 📌 **Nao ha `render.yaml` no repositorio** — o servico foi criado a mao pelo painel, entao estes
+> campos **nao podem ser versionados hoje**. Converter para Blueprint resolveria isso, mas arrisca
+> recriar o servico com **outra URL**, e a atual esta cravada nos builds dos dois fronts
+> (`EXPO_PUBLIC_API_ENV`). Nao vale o risco pelo ganho; por isso a lista acima e o registro possivel.
 
 ### 🎯 Pendencias abertas do BACKEND — por prioridade (FONTE UNICA)
 
