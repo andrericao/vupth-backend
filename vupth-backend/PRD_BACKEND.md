@@ -73,9 +73,58 @@
 - **Refresh token:** rotativo — cada uso invalida o anterior e gera novo par access+refresh
 - **Roles:** carregadas do banco a cada request (NAO usa claims do JWT para autorizacao)
 
-### Fluxo de refresh obrigatorio
+### Contrato do claim `roles` (confirmado no codigo em 2026-08-29 — Partner **S34**)
 
-Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PROFESSIONAL), o frontend **DEVE** chamar `POST /auth/refresh` para obter um novo token que inclua as novas roles. Sem isso, os endpoints protegidos por ROLE_OWNER ou ROLE_PROFESSIONAL retornarao 403.
+⚠️ **O `roles` do JWT e uma STRING separada por virgula, COM o prefixo `ROLE_`** — nao um array:
+
+```
+"roles": "ROLE_OWNER,ROLE_CLIENT"
+```
+
+Vem de `JwtTokenProvider:44-46` (`Collectors.joining(",")` sobre `GrantedAuthority::getAuthority`). E a
+`GrantedAuthority` do Spring **vazando** para o contrato: nao foi decisao de desenho, mas **e o contrato
+de fato** e nao muda sem aviso previo aos fronts. O front-partner ja normaliza na fronteira.
+
+⚠️ **O CORPO do `/auth/login` tem OUTRA forma, e outra CHAVE.** A resposta e
+`{ user: {...}, tokens: {...} }` e dentro de `user` o campo e **`user_roles`** — **array de objetos**,
+sem prefixo:
+
+```json
+"user_roles": [ { "role_type": "OWNER", "is_active": true } ]
+```
+
+**Um front que declare `user.roles: string[]` le `undefined` sempre** — chave errada e forma errada.
+As duas formas coexistem de proposito? Nao: e historico. Ate haver unificacao, **as duas valem**.
+
+**`is_active` ja viaja no corpo** (`user_roles[].is_active`), no login, no registro e no perfil, e
+**nao esta no JWT** — deliberadamente. O servidor decide a cada request (abaixo); o front recebe o flag
+**so para a UI** (esconder area, explicar por que sumiu), nunca como autorizacao. Colocar o flag dentro
+do token o transformaria em retrato congelado ate expirar, que e o problema classico de revogacao
+com JWT.
+
+### Quem autoriza e o BANCO, nao o token
+
+`JwtAuthenticationConverter:34-52` carrega o `BaseUser` **a cada request** e monta as authorities em
+`UserDetailsImpl:47-51`, filtrando **`UserRole::getIsActive`**. Tres consequencias que valem contrato:
+
+1. **Papel desativado deixa de valer no request seguinte** — nao espera o token expirar. O mecanismo de
+   revogacao ja existe fim-a-fim; o que nao existe e quem escreva `is_active=false` (ver **D11**).
+2. **Conta desativada/apagada mata o access token na hora** (`DisabledException` no converter), em vez
+   de ele seguir valido por ate 1h.
+3. **Papel recem-ganho ja vale no request seguinte, sem refresh** — a autorizacao le do banco.
+
+### Fluxo de refresh — o que ele resolve de verdade
+
+Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PROFESSIONAL), o frontend
+**DEVE** chamar `POST /auth/refresh`.
+
+⚠️ **CORRECAO 2026-08-29 — o MOTIVO registrado aqui estava errado.** Este PRD dizia *"sem isso, os
+endpoints protegidos por ROLE_OWNER ou ROLE_PROFESSIONAL retornarao 403"*. **Nao retornam:** a
+autorizacao nao le o claim, le o banco (acima), entao o papel novo ja vale no request seguinte. O
+refresh continua **obrigatorio na pratica**, mas por outra razao: **os apps leem o papel DO TOKEN**
+(o partner via `getRolesFromToken`) para decidir navegacao e o que exibir — sem refresh o **app** nao
+sabe que a pessoa virou dona, ainda que o **servidor** ja saiba. Nenhum teste cobria a afirmacao
+antiga, que e do mesmo genero dos tres registros falsos corrigidos em 26/08.
 
 ---
 
@@ -3998,6 +4047,75 @@ tende a produzir tres modelos que nao conversam.
 
 ---
 
+### D10 · Papel e por PESSOA ou por VINCULO pessoa↔loja? (Partner **S32**, chegou ao backend em 2026-08-29)
+
+**Contexto.** Hoje o modelo e `BaseUser -> {Client, Professional, Owner}` — **um de cada, sem escopo**.
+O papel nasce como **efeito** de criar a entidade: `addClientProfile()` no registro,
+`addProfessionalProfile()` no `/professional/register` e `/professional/quick-create`,
+`addOwnerProfile()` no `/establishment/quick-create` e na transferencia de propriedade
+(`BaseUser:287-305`). O JWT carrega `roles` e **nao diz em que contexto a pessoa esta agindo**.
+
+**A pergunta.** (a) O modelo continua **um perfil de cada por pessoa**, ou vira **vinculo
+pessoa↔estabelecimento** (N vinculos, cada um com papel e status)? (b) Com multi-loja, o token ganha
+**escopo**, ou o backend resolve tudo por `establishmentId` no path — e o app carrega um seletor de
+loja em toda tela? (c) A **taxa por atendimento** e atribuida ao profissional, a loja, ou ao vinculo?
+
+**Por que a pergunta ficou urgente.** Duas coisas que voce mesmo respondeu ao Partner: **multi-loja
+"esta para ser feito"** e **OWNER/PROFESSIONAL tambem sao CLIENT por definicao**. A segunda torna o
+acumulo dos tres papeis o caso **normal**, o que faz `roles` dizer cada vez menos sobre contexto; a
+primeira quebra a pergunta que importa — no instante em que existir a segunda loja, `"e OWNER"` nao
+responde **OWNER de qual**. ⚠️ O argumento anterior do Partner (24/08) apoiava tudo em **assinatura**,
+que voce descartou; **a conclusao sobreviveu ao fundamento**, agora por multi-loja e pela taxa, que
+nasce de um atendimento — e atendimento acontece **numa** loja.
+
+**O que ja existe e serve as duas respostas.** O trilho "criar entidade → `refreshToken()` → papel novo
+no JWT" roda em 4 pontos e **nao muda** em nenhuma das hipoteses; o que muda e o que vem depois dele.
+`Professional.establishment` ja e o vinculo (hoje **um so**, nulavel) — a hipotese (a)-vinculo e
+promove-lo a entidade com papel e status, nao inventar do zero.
+
+⚠️ **Os fronts declararam que NAO codam troca de papel antes desta resposta.** A UI e barata nas duas
+hipoteses; o caro e o modelo, e escolher errado se paga duas vezes. Decidir junto com o **D11**.
+
+---
+
+### D11 · Papel deve ser REVOGAVEL? (Partner **S33**, chegou ao backend em 2026-08-29)
+
+**Contexto — confirmado no codigo em 2026-08-29.** Existe caminho para **ganhar** papel
+(`BaseUser.addRole`, chamado pelos tres `add*Profile()`) e **nenhum para perder**: nao ha `removeRole`,
+nao ha `DELETE /professional`, e o unico `revoke*` do repositorio e de **refresh token**, nao de papel.
+
+**Os tres casos concretos, todos ja em producao:**
+1. O profissional que sai da loja (`DELETE /professional/me/establishment` →
+   `LeaveEstablishmentUseCase:52`) tem o **vinculo** desfeito (`setEstablishment(null)`) e **mantem o
+   papel `PROFESSIONAL` para sempre**. Deixou de atender ali e segue profissional do sistema, sem loja.
+2. Quem tocou "Eu tambem vou atender" e se arrependeu **nao tem como desfazer**.
+3. O dono que fecha a loja continua `OWNER`.
+
+**A pergunta.** (a) Papel deve ser revogavel? Se sim, por **endpoint proprio** ou como **efeito de
+apagar a entidade** (o espelho exato de como ele nasce)? (b) Sair da loja deve tirar o `PROFESSIONAL`,
+ou **papel e "o que a pessoa JA FOI" e o vinculo e que diz o que ela E hoje**? (c) Se a resposta for
+(b)-vinculo, e a mesma decisao do **D10** — e as duas devem ser respondidas juntas.
+
+**Por que importa mesmo sem assinatura.** Papel que so acumula vira ruido: em pouco tempo todo usuario
+antigo e OWNER+PROFESSIONAL+CLIENT sem que isso descreva o que ele faz hoje, e qualquer regra futura
+que dependa de papel (roteamento, cobranca da taxa, permissao) passa a decidir por **dado que
+envelheceu**.
+
+🔑 **O ITEM E MUITO MAIS BARATO DO QUE O ENUNCIADO SUGERE — o mecanismo de revogacao JA EXISTE
+fim-a-fim.** Conferido em 29/08: `JwtAuthenticationConverter` carrega o usuario **a cada request** e
+`UserDetailsImpl:47-51` monta as authorities filtrando **`UserRole::getIsActive`**. Ou seja,
+**`is_active=false` faz o papel sumir no request seguinte**, sem esperar o token expirar e sem
+migration — a coluna existe, o filtro existe, e ate o `DisabledException` para conta inteira ja esta
+la. **O que NAO existe e o unico buraco: nada escreve `false`.** `UserRole.activate()` e chamado no
+nascimento e nunca ha o inverso.
+
+**Logo, a decisao nao e "da para revogar?" — e "QUANDO revogar?", que e produto, nao engenharia.** Se a
+resposta for "sair da loja tira o PROFESSIONAL", a implementacao e uma chamada nova dentro do
+`LeaveEstablishmentUseCase` e um teste; se for "papel e o que a pessoa JA FOI", nao se escreve **nada**
+e o item fecha como decisao registrada.
+
+---
+
 ## 21. Pendente de Implementacao no Backend
 
 ### Funcionalidades faltantes
@@ -4367,6 +4485,93 @@ acabou respondendo uma pergunta maior — "qual host o app do device esta chaman
 **O que resta e so PROD, e nao e codigo:** `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (**API key v3**, nao
 a SMTP key da `MAIL_PASS`) no painel do **Railway**. Depois do merge `dev`->`main`, prod passa a ser
 conferivel por curl exatamente como o staging ja e.
+
+#### 29/08 — reconciliacao com o Partner: **S30 a S34 chegaram ao backend**, e tres ja tinham resposta no codigo
+
+**Os cinco itens nunca tinham chegado aqui** — `grep` de `S30`..`S34` neste PRD voltava **zero** ate
+hoje. Nasceram na branch de design do partner e so entraram na `dev` deles com o merge do PR #18
+(27/08); o handoff registra o efeito com todas as letras: *"quem tem de responder ainda nao sabe que
+existem"* e **"nada sera codado nos fronts antes desta resposta"**. Ou seja: **dois times parados
+esperando o backend**, sem que o backend soubesse. Incorporados agora como **#39 a #42** + **D10/D11**.
+
+⚠️ **Colisao de numeracao a nao confundir:** existem **dois `S30`** no handoff do partner — o novo
+(*convite para quem nao tem conta*, 21/08, que virou o **#39**) e um antigo (*canal de recuperacao de
+senha*, 12/08, que e o nosso **#1**, ja fechado). Ao citar, usar o **nome**, como combinado.
+
+**Tres deles se responderam lendo o codigo — e o padrao ja e conhecido.** Pela **quarta** vez (05/08 o
+S20, 07/08 o S19, 26/08 o `cors.allowed-origins`, agora estes) um front descreveu como ausencia de
+backend algo que ja existe. **Vale para as duas pontas** — nos so descobrimos indo ao codigo tambem.
+
+**(1) ✅ S34 — o contrato do `roles` esta CONFIRMADO, e o front tinha razao no diagnostico.**
+`JwtTokenProvider:44-46` monta o claim com `Collectors.joining(",")` sobre
+`GrantedAuthority::getAuthority` → o `roles` do JWT e **string separada por virgula, COM o prefixo
+`ROLE_`** (`"ROLE_OWNER,ROLE_CLIENT"`). E a `GrantedAuthority` do Spring vazando para o contrato —
+**nao e proposital, mas e o contrato de fato**, e nao muda sem aviso. **Respostas as tres perguntas:**
+(1) sim, string CSV, definitivo por ora; (2) o prefixo e vazamento, nao decisao — se um dia sair, sai
+com aviso previo; (3) **nao, o corpo tem outra forma.**
+
+⚠️ **A terceira resposta e a que corrige o front-client, e o problema e maior do que "array vs
+string": a CHAVE tambem e outra.** O `/auth/login` devolve `UserProfileGeneralInfosAndToken` →
+`{ user: {...}, tokens: {...} }`, e dentro de `user` o campo e **`user_roles`** (`@JsonProperty`), um
+**array de objetos** `[{role_type, is_active}]` (`UserRoleResponse`) — sem prefixo. O client declara
+`user.roles: string[]`: **chave errada e forma errada**, por isso le `undefined` sempre. Nao ha nada a
+mudar no backend; ha o que corrigir no client.
+
+**(2) ✅ A PERGUNTA DO ANDRE sobre `is_active` — ja esta exposto, e no lugar certo.** A pergunta era
+*"da para expor `is_active` no campo que o front consome, e isso tem efeito colateral ou custo?"*.
+**Ja esta:** `UserRoleResponse` tem `@JsonProperty("is_active")` e viaja no `user_roles` do login, do
+registro e do perfil. **Custo zero** (booleano ja persistido no agregado que ja e carregado, sem
+consulta nova) e **efeito colateral zero**, porque ele **nao esta no JWT** — que e exatamente a
+separacao proposta pelo partner e que este PRD assina: **o servidor decide a cada request** (fonte da
+verdade) e o front recebe `is_active` **so para a UI**, nunca como autorizacao. Colocar o flag dentro
+do token o transformaria em **retrato congelado** ate expirar, que e o problema classico de revogacao
+com JWT. **Nada a implementar; o que faltava era o front saber que o campo existe.**
+
+**(3) 🔧 S31 — o enunciado esta ERRADO no ponto principal: 403 por papel NAO e teoria, e ja tem `code`
+proprio.** O handoff afirma que *"todo 403 que existe hoje e de propriedade do recurso, nunca de
+papel"*. **Nao e o caso.** O `SecurityConfig` tem **69 matchers** `hasRole`/`hasAnyRole` (nao 7), e
+quando um deles recusa, o Spring lanca `AccessDeniedException` → o `GlobalExceptionHandler:451-455`
+responde **`403 ACCESS_DENIED`**. Ou seja, **o 403 por PAPEL e justamente o generico**, e ja e
+distinguivel dos outros. Hoje existem **tres familias** de 403, cada uma com codigo proprio:
+
+| familia | `code` | quando |
+|---|---|---|
+| **papel** | `ACCESS_DENIED` | o matcher `hasRole` recusou — o papel nao esta no token |
+| **propriedade** | `ESTABLISHMENT_ACCESS_DENIED` · `AFFILIATION_ACCESS_DENIED` · `ATTENDANCE_CANCEL_NOT_ALLOWED` | o recurso existe e nao e seu |
+| **estado/capacidade** | `NOT_A_PROFESSIONAL` · `PROFESSIONAL_NOT_AFFILIATED` | o papel esta certo, falta o vinculo |
+
+⚠️ **A terceira familia e o achado real do item** — ela nao aparece no enunciado do partner e e a que
+mais confunde na tela, porque "voce e profissional mas nao esta em loja nenhuma" nao e nem papel nem
+propriedade. ⚠️ **E a pergunta (2) do item — "papel recem-ganho + token antigo" — tem uma resposta que surpreende:
+esse cenario NAO existe no servidor.** A autorizacao **nao le o claim**: o `JwtAuthenticationConverter`
+carrega o usuario a cada request e monta as authorities do banco. **Papel novo ja vale no request
+seguinte, sem refresh nenhum.** O 403 por token velho e um caso imaginario — o que existe e o **app**
+nao saber do papel novo, porque ele le do token; e isso um `refreshToken()` resolve, e ja e o fluxo
+documentado. *(Isto expos um registro obsoleto no topo deste PRD, corrigido na secao 1 — ver abaixo.)*
+
+**O que de fato falta** (e vira o **#40**): documentar o mapa endpoint × papel — hoje sao **69**
+matchers no codigo contra ~7 anotados no contrato. *(A frase de contorno que o partner ja usa — "se
+acabou de mudar algo na sua conta, feche e abra o app" — continua honesta.)*
+
+**(4) 🔴 ACHADO NAO PEDIDO, e o mais valioso da rodada: o topo deste PRD estava MENTINDO ha meses.** A
+secao "Fluxo de refresh obrigatorio" afirmava que *"sem o refresh, os endpoints protegidos por
+ROLE_OWNER ou ROLE_PROFESSIONAL retornarao 403"*. **Nao retornam** — a autorizacao le do banco, como
+a linha logo acima dela ja dizia ("NAO usa claims do JWT para autorizacao"). **Duas afirmacoes
+contraditorias convivendo na mesma secao**, e nenhum teste cobrindo a errada. Corrigido: o refresh
+segue obrigatorio na pratica, mas **pelo motivo certo** (o app le o papel do token e sem refresh nao
+sabe que virou dono). Mesma familia dos tres registros falsos de 26/08 — e o segundo achado da semana
+que so apareceu porque alguem foi ao codigo conferir uma pergunta de front.
+
+🔑 **E o mesmo caminho de codigo barateia o D11:** `UserDetailsImpl:47-51` ja filtra
+`UserRole::getIsActive` ao montar as authorities, entao **desativar um papel ja o derruba no request
+seguinte**. O mecanismo de revogacao existe fim-a-fim; falta so **quem escreva `false`**.
+
+**(5) ⬜ S30 (convite) e S32/S33 seguem abertos, e sao decisao sua.** O **#39** (convite para
+quem ainda nao tem conta) precisa de endpoint novo e da escolha entre convite por contato e link/codigo
+— com o #1 fechado, a dependencia de e-mail deixou de ser argumento contra a opcao por contato, mas o
+link segue mais barato. **S32 e S33 viraram D10 e D11** na secao 20b: sao decisao de **modelo**, nao
+implementacao, e devem ser respondidas **juntas** — a resposta "papel e o vinculo" responde as duas.
+
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
@@ -4508,6 +4713,10 @@ conferivel por curl exatamente como o staging ja e.
 | 36 | **Profissional abrir o PROPRIO estabelecimento — o onboarding nao tem essa porta** (Partner S23, reforcado no teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria**) — ⚠️ **mas a pergunta que eles dizem ser o bloqueio JA TEM RESPOSTA: SIM, aceita** | ✅ **CONFERIDO NO CODIGO** (a licao de 05/08 e 07/08, agora aplicada ANTES de aceitar o enunciado): o Partner pergunta *"o `POST /establishment/quick-create` aceita um usuario que ja e PROFESSIONAL?"* e trata isso como o bloqueio. **Aceita hoje, sem uma linha de codigo nova:** o `QuickCreateEstablishmentUseCase` **nao tem barreira nenhuma** contra perfil profissional (so checa `hasRole(OWNER)` e **adiciona** o papel se faltar, linhas ~53), e o matcher `hasRole("CLIENT")` do `SecurityConfig` (linha 120) **nao barra ninguem**, porque o `RegisterUseCase` chama `addClientProfile()` para **todo** usuario que se cadastra — entao todo profissional carrega `ROLE_CLIENT` junto. Papeis sao **acumulativos**, como o PRD ja dizia. **E a reputacao acompanha a pessoa:** `rating_average`/`rating_count` vivem no `Professional`, nao no vinculo — a leitura do Partner esta certa e **nao ha migracao de dado a fazer**. **O que sobra de trabalho REAL, e e decisao de produto (Andre), nao codigo:** (1) ele pode abrir a propria loja **enquanto afiliado a outra**, ou tem de se desafiliar antes? (leitura do Partner: desafiliar antes, senao fica na fila de duas casas — e o `PROFESSIONAL_ALREADY_AFFILIATED` ja existe para o caso inverso); (2) o historico na casa antiga continua no `/professional/me/reports` dele apos a troca? (hoje **continua**, porque o atendimento aponta para o `Professional`); (3) ao abrir a loja, ele se **auto-afilia** como profissional dela? 🆕 **Caso novo e mais urgente (11/08) — o ONBOARDING:** quem escolhe "sou profissional" cria o perfil no 1o passo e cai **direto em "Buscar Estabelecimento"**; nao existe a pergunta *"vai abrir a sua propria loja ou se afiliar a uma?"*. O dono de barbearia que se identifica como profissional fica **preso no fluxo de afiliacao**. ⚠️ **Isso e UI do Partner e ja esta destravado pelo backend** — responder (1)(2)(3) fecha o item |
 | 37 | **Dono permite o GPS DEPOIS do cadastro — nada corrige a coordenada da loja** (identificado por Andre, 2026-08-13) | ⬜ aberto (**posicao provisoria — Andre reordena**) | A fatia A2 usa o GPS do dono como fonte mais precisa da coordenada da LOJA, porque ele esta *dentro dela* ao cadastrar (o CEP resolve faixa de logradouro, nao a porta). **Mas se ele cadastrou sem permitir e concede depois, nada reofereceu a correcao.** A loja fica com a coordenada do CEP — presente, porem imprecisa, e ninguem sabe. O `PATCH /establishments/{id}/addresses/{addressId}` **ja aceita** `lat`/`lng`, entao o backend pode nao ter codigo novo nenhum: falta decidir **quem oferece a correcao e quando** (o Partner detecta a permissao recem-concedida e pergunta "quer usar sua posicao atual para a loja?"). ⚠️ **Irmao do #34** — os dois sao "a loja esta no mapa no lugar errado e ninguem avisa"; avaliar entregar juntos. Ver a secao do GPS: "BURACO ABERTO — o dono que permite o GPS DEPOIS do cadastro". Decisao de modelo relacionada (mesma data): a coordenada persistida e **do estabelecimento, nunca do cliente**.
 | 38 | ~~Mesmo cliente entra DUAS vezes na fila~~ | ✅ **ENTREGUE 2026-08-15** (Client §4.2, device 07/08) | Portao novo no `createAttendance`, **depois da validacao dos serviceItems e antes da primeira escrita** (precedencia fixada em 17/08 — ver contrato do `POST /attendances`): cliente com atendimento em `SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED` no **mesmo profissional** recebe **409 `CLIENT_ALREADY_IN_QUEUE`**. Raio estreito por decisao [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio--decidido-2026-08-15) — **`INTENTION` NAO conta** (compromisso fora da fila; conta-la trancaria quem tem intencao para sabado o resto da semana), e por isso a lista **nao** e a `ACTIVE_STATUSES` do apagar-conta. ⚠️ **Achado no Newman de homolog (17/08):** a invariante reprovou **3 pastas da collection** (`08d`, `08e`, `08k`) que usavam **um unico cliente para representar uma fila inteira** — encaixar alguem atras de si mesmo, promover-se a frente de si mesmo. Nao era teste quebrado: eram cenarios impossiveis que o servidor aceitava antes. Quem so enchia fila virou **convidado** (`add-quest-attendance`); quem precisa ser outra pessoa ganhou usuario proprio. ⚠️ Os dois casos de erro da `08e` (422 `QUEUE_TARGET_NOT_FEASIBLE` e 400) receberiam **409 antes da regra que testam** — passariam a afirmar outra coisa. ⚠️ **Achado ao rodar a suite completa (17/08):** a classe de teste reusa um profissional e ignorava uma invariante que **ja existia** — `startAttendance` recusa com **409 `ATTENDANCE_ALREADY_IN_PROGRESS`** quando o profissional ja tem atendimento `IN_PROGRESS` **ou** `PAUSED`. Como cada teste deixa o seu atendimento vivo de proposito, o teste seguinte reprovava no `/start`, **por motivo alheio ao #38**; corrigido com um `@AfterEach` que libera a cadeira. `DoubleQueueEntryIntegrationTest` (8): os que provam o que **continua passando** (outro profissional da mesma loja, outro cliente) sao os que fixam a decisao, e os de `FINISHED`/`CANCELLED` provam que o bloqueio **libera** — sem eles seria banimento, nao invariante. |
+| 39 | **Convite para profissional que AINDA NAO TEM CONTA — hoje o dono nao tem caminho nenhum** (Partner S30, achado de 2026-08-21) | ⬜ aberto (**posicao provisoria — Andre reordena**) | O unico caminho e `GET /professional?name=` → `ProfessionalRepository.searchByNameAndSpecialty`, e a query e mais estreita do que o handoff supoe: casa **so `firstName`** (`LOWER(u.firstName) LIKE`), e ainda filtra `p.establishment IS NULL` **e** ausencia de `AffiliationRequest` PENDING. **Ou seja, some da busca quem ja tem loja e quem tem convite pendente** — tres motivos diferentes produzem a MESMA tela "Nenhum profissional encontrado", e nenhum deles e "nao tem conta". ⚠️ **O caso mais provavel do dono e o unico que nao funciona:** o barbeiro que ja trabalha com ele e nao usa o app. **Precisa de endpoint novo, e a escolha e do Andre:** **(A)** convite por contato — `POST /establishment/{id}/invitations` com e-mail/telefone, gera convite PENDENTE que se resolve quando a pessoa se cadastra com aquele contato; **(B)** link/codigo — o dono gera o link, a pessoa se cadastra por ele e ja nasce vinculada. **(B) e mais barata**; a objecao historica contra (A) era depender de e-mail, e ela **caiu com o #1 fechado em 29/08** — entao hoje a escolha e so de produto. Ver tambem o **#28** (busca nao casa apelido), que piora o mesmo fluxo. |
+| 40 | **Documentar o mapa endpoint x papel — 69 matchers no codigo, ~7 no contrato** (Partner S31, recorte corrigido em 2026-08-29) | ⬜ aberto (**posicao provisoria**; virou **so documentacao** — as duas premissas do enunciado cairam) | ⚠️ **O enunciado do partner esta errado na premissa** — 403 por papel **ja existe e ja tem `code` proprio** (`ACCESS_DENIED`, vindo dos **69** matchers `hasRole`/`hasAnyRole` do `SecurityConfig` via `AccessDeniedException`), distinto dos 403 de propriedade (`ESTABLISHMENT_ACCESS_DENIED`, `AFFILIATION_ACCESS_DENIED`, `ATTENDANCE_CANCEL_NOT_ALLOWED`) e de uma **terceira familia que o item nao viu**: estado/capacidade (`NOT_A_PROFESSIONAL`, `PROFESSIONAL_NOT_AFFILIATED`). Detalhamento na secao **29/08**. ⚠️ **A segunda premissa tambem caiu:** a pergunta (2) do item — *"papel ganho agora + token antigo, o backend manda refazer o refresh?"* — descreve um cenario que **nao existe no servidor**. A autorizacao nao le o claim: o `JwtAuthenticationConverter` carrega o usuario a cada request e monta as authorities do banco, entao **papel novo ja vale no request seguinte, sem refresh**. Quem precisa do refresh e o **app**, que le o papel do token — e esse fluxo ja esta documentado. *(Este item expos, de quebra, um registro obsoleto no topo do PRD, corrigido na secao 1.)* **O que sobra e SO documentacao, sem mudanca de contrato:** publicar o mapa endpoint x papel — hoje **69** matchers no codigo contra ~7 anotados aqui — e a tabela das tres familias de 403 (papel / propriedade / estado). |
+| 41 | **Papel e por PESSOA e nao diz DE QUAL LOJA — decisao de modelo antes de virar codigo** (Partner S32) | ⛔ **BLOQUEIA OS DOIS FRONTS** — decisao do Andre, ver **D10** (secao 20b) | Hoje `BaseUser -> {Client, Professional, Owner}`, um de cada, sem escopo; papel nasce como efeito de criar a entidade (`add*Profile()` em 4 pontos) e o JWT nao diz em que contexto a pessoa age. Com multi-loja — que o Andre disse estar "para ser feito" — `"e OWNER"` deixa de responder **OWNER de qual**, e a taxa por atendimento tem o mesmo furo (ela nasce numa loja, e quem absorve ou repassa e o profissional **naquela** loja). **Os fronts declararam que nao codam troca de papel antes da resposta.** Pergunta completa e o que ja existe pronto para as duas hipoteses: **D10**. |
+| 42 | **Nao existe caminho para PERDER papel, so para ganhar** (Partner S33) | ⛔ **BLOQUEIA OS DOIS FRONTS** — decisao do Andre, ver **D11** (secao 20b) | Confirmado no codigo em 29/08: ha `BaseUser.addRole` e **nao ha** `removeRole`, nao ha `DELETE /professional`, e o unico `revoke*` do repo e de refresh token. Tres casos ja em producao: quem sai da loja (`LeaveEstablishmentUseCase:52` desfaz o **vinculo** e mantem o papel), quem se arrependeu do "Eu tambem vou atender", e o dono que fechou a loja. 🔑 **O item e muito mais barato do que parece: o mecanismo de revogacao JA EXISTE fim-a-fim** — o `JwtAuthenticationConverter` carrega o usuario a cada request e o `UserDetailsImpl:47-51` filtra `UserRole::getIsActive`, entao **`is_active=false` derruba o papel no request seguinte**, sem esperar o token expirar e sem migration. **O unico buraco e que nada escreve `false`.** A decisao deixa de ser "da para revogar?" e vira "QUANDO revogar?" — produto, nao engenharia. Deve ser respondido **junto com o D10**. |
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
 **Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging. ⚠️ **O Partner pediu o encerramento destes dois em 2026-07-29** (reportados por eles em 2026-06-09): do lado deles o `/attendances` consta resolvido desde 2026-07-09 e a adicao de servico ja funciona pelo caminho do profissional ("Meus Servicos"). **Confirmar em staging e encerrar** — nao ha codigo a escrever, so a confirmacao.
