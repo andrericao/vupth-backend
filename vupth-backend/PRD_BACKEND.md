@@ -3283,7 +3283,7 @@ segue pendente e so a linha de painel abaixo, que e do Andre.
 cron, fora da janela e teto de cota produzem instancia fria de novo, e ai quem segura o usuario e o
 portao.
 
-**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo — **P4**). Keep-warm: pinger externo gratuito, **5 min, em janela** (**P3**) — desenho e a conta das 750h na **secao 18e**. ➡️ **Os dois estao rastreados na lista "Pendencias de PAINEL" da secao 22**, com valor exato e estado.
+**~~Pendente fora do codigo (Andre)~~ ✅ FEITO:** o **Health Check Path = `/actuator/health/readiness`** ja esta setado no painel do Render (**P4**, confirmado em 29/08). Keep-warm: pinger externo gratuito, **5 min, em janela** (**P3**) — desenho e a conta das 750h na **secao 18e**. ➡️ **Os dois estao rastreados na lista "Pendencias de PAINEL" da secao 22**, com valor exato e estado.
 
 ⚠️ **O keep-warm NAO dispensa este portao.** Ele reduz a *frequencia* de instancia fria; o portao garante que, quando ela estiver fria assim mesmo (deploy, restart, falha do cron, fora da janela, teto de cota), o cadastro nao dispare antes da hora. Um e probabilidade e mora num servico de terceiro; o outro e correcao e mora no app. Com o pinger ativo o portao custa ~0,5s e ninguem ve a tela.
 
@@ -4260,7 +4260,7 @@ Toda transicao automatica esbarra na mesma classe de armadilha do `affiliate`.
 | P1 | Transporte de e-mail em prod | **Railway** | `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key **v3**, nao a SMTP key do `MAIL_PASS`) | ✅ **FEITO 2026-08-29** |
 | P2 | Origens do CORS | **Render** ✅ / **Railway** ⬜ | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | 🟡 **Render FEITO 29/08; Railway pendente** (so depois do merge `dev`->`main`, que leva o codigo do CORS pra la) |
 | P3 | Keep-warm — pinger externo | **cron-job.org** | `GET https://vupth-backend-ia.onrender.com/actuator/health/readiness`, **5 min**, **em janela** (08–22 dias uteis) | ⬜ **aberto** — desenho e a conta das 750h na secao **18e.3** |
-| P4 | Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ⬜ **aberto** |
+| P4 | Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ✅ **JA ESTAVA FEITO** (confirmado por Andre em 29/08). O PRD e que estava desatualizado: a secao 18c seguia pedindo o campo como pendente — ver a licao abaixo |
 
 **P4 — o que o campo resolve, e por que este path e nao o outro.** Com o campo **vazio** (estado de
 hoje) o Render considera o servico no ar assim que a **porta abre** — e numa app Spring Boot a porta
@@ -4279,6 +4279,13 @@ nos dois profiles: Postgres respondendo + migrations rodadas, nada mais. O path 
 **P3**. Sao coisas diferentes que so parecem parecidas: P4 diz *"nao me mande trafego antes de eu estar
 pronto"* (mata os 500 de cada deploy); P3 diz *"nao me deixe dormir"* (mata a espera de ~50s). E
 nenhum dos dois dispensa o portao `waitForBackend()` dos fronts — ver secao **18c**.
+
+> ⚠️ **A licao do P4 (29/08): esta lista nasceu ja com um registro errado.** O P4 entrou como aberto
+> porque a secao 18c dizia *"pendente fora do codigo"* — e ele **ja estava feito**. E o mesmo defeito do
+> `keep-alive.yml` fantasma, na direcao contraria: **prosa que ninguem reconfere envelhece nos dois
+> sentidos**, inventando pendencia tanto quanto escondendo. Config de painel nao e verificavel por
+> `curl` de fora (o health check so aparece no log de deploy do Render), entao **o unico jeito de esta
+> lista nao apodrecer e conferir no painel antes de afirmar** — nao herdar o estado do texto anterior.
 
 > 📌 **Nao ha `render.yaml` no repositorio** — o servico foi criado a mao pelo painel, entao estes
 > campos **nao podem ser versionados hoje**. Converter para Blueprint resolveria isso, mas arrisca
