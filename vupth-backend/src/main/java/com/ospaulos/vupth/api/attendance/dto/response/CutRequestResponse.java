@@ -24,6 +24,10 @@ public record CutRequestResponse(
         @JsonProperty("client_id")
         UUID clientId,
 
+        /** Nome do cliente que pediu — o Partner monta o card sem um GET a mais (S-nice-to-have). */
+        @JsonProperty("client_name")
+        String clientName,
+
         @JsonProperty("service_item_ids")
         List<UUID> serviceItemIds,
 
@@ -44,6 +48,7 @@ public record CutRequestResponse(
                 c.getProfessional() != null ? c.getProfessional().getId() : null,
                 c.getEstablishment() != null ? c.getEstablishment().getId() : null,
                 c.getClient() != null ? c.getClient().getId() : null,
+                c.getClient() != null ? c.getClient().getFirstName() : null,
                 c.getServiceItems() == null ? List.of()
                         : c.getServiceItems().stream().map(ServiceItem::getId).toList(),
                 c.getStatus() != null ? c.getStatus().name() : null,

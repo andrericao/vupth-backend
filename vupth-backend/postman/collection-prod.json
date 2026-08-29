@@ -14928,6 +14928,7 @@
          "  pm.test(\"array de pendentes\", () => pm.expect(arr).to.be.an(\"array\"));",
          "  const mine = arr.find(x => x.id === pm.collectionVariables.get(\"cut_id\"));",
          "  pm.test(\"o pedido criado esta na lista, PENDING\", () => { pm.expect(mine, \"pedido na lista\").to.be.an(\"object\"); pm.expect(mine.status).to.equal(\"PENDING\"); });",
+         "  pm.test(\"client_name presente no read-model (pode vir null se o cliente nao preencheu o perfil)\", () => { pm.expect(mine).to.have.property(\"client_name\"); });",
          "  pm.test(\"todos PENDING\", () => arr.forEach(x => pm.expect(x.status).to.equal(\"PENDING\"))); }"
         ]
        }
