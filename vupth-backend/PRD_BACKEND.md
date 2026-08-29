@@ -2371,7 +2371,7 @@ o pedido pode ser recusado e nunca virar atendimento, entao **nunca aparece em r
 
 **Body:** `{ "professionalId": UUID, "establishmentId": UUID, "serviceItemIds": [UUID] }`
 
-**Response (201):** `CutRequestResponse` (`id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`).
+**Response (201):** `CutRequestResponse` (`id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `client_name` (pode ser `null` — ver nota no GET), `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`).
 
 **Erros:** `409 CUT_REQUEST_NOT_ALLOWED` (loja **aberta agora** — deve entrar via `POST /attendances`) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (servico de outro profissional) · `404` profissional/servico/loja inexistente · `401` sem token.
 
@@ -2386,13 +2386,19 @@ BUG5 **C2 — desbloqueio da UI do Partner.** Lista os pedidos **`PENDING`** dir
 
 **Acesso:** PROFESSIONAL (por JWT).
 
-**Response (200):** lista de `CutRequestResponse` (vazia se nenhum); cada item traz `id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`. So o proprio profissional ve seus pedidos — pedidos de outra loja/prof nao aparecem.
+**Response (200):** lista de `CutRequestResponse` (vazia se nenhum); cada item traz `id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, **`client_name`**, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`. So o proprio profissional ve seus pedidos — pedidos de outra loja/prof nao aparecem.
+
+> **`client_name` (2026-08-29, Partner nice-to-have).** Nome do cliente que pediu, no proprio read-model — o card do Partner deixa de precisar de um GET a mais so para descobrir de quem e o pedido. Presente em **todas** as respostas de `CutRequestResponse` (create, list, accept, refuse).
+>
+> ⚠️ **Pode vir `null`, e isso e normal — o fallback do card CONTINUA necessario.** `POST /auth/register` recebe **so e-mail e senha**: quem nunca preencheu o perfil (`PATCH /profile/general-infos`) tem `first_name` nulo no banco, e o campo reflete isso. O nome so e escrito nos fluxos de profissional e na atualizacao de perfil — nao no cadastro do cliente. **Front-Partner: mantenha o "Cliente" como fallback.**
+>
+> Custo zero de query: o `findByProfessionalIdAndStatusOrderByCreatedAtAsc` ganhou `@EntityGraph({"client","client.baseUser"})`. Sem ele seriam **dois** SELECTs por linha da lista — `Client.getFirstName()` le do `BaseUser`, que e `@OneToOne(LAZY)` com `@MapsId`.
 
 **Erros:** `403` sem role PROFESSIONAL (ex.: cliente) · `401` sem token.
 
 > **Handoff fronts:** Front-Partner: ao abrir a tela de fila/pedidos (e ao voltar do background), chamar `GET /attendances/cut-requests` para montar a lista de pendentes; ao receber o WS `CUT_REQUESTED` ao vivo, pode usar o `cutRequestId` do envelope (ver nota abaixo) direto ou re-consultar este GET.
 
-**Testes:** Integracao (`CutRequestListPendingIntegrationTest` — 2 pendentes ordenados / outro prof ve vazio / some apos aceitar / cliente 403)
+**Testes:** Integracao (`CutRequestListPendingIntegrationTest` — 2 pendentes ordenados **+ `client_id`/`client_name`** / **`client_name` vazio quando o cliente nunca preencheu o perfil** / outro prof ve vazio / some apos aceitar / cliente 403)
 
 > **⚠️ Envelope do WS `CUT_REQUESTED` (corrigido no desbloqueio C2).** O `cutRequestId` agora viaja num **campo proprio** `cutRequestId` do `QueueNotification` — antes ele vinha embutido no campo `attendanceId` (semanticamente errado: nao e um Attendance). Todos os eventos de corte (`CUT_REQUESTED`/`CUT_ACCEPTED`/`CUT_REFUSED`/`CUT_EXPIRED`) passaram a preencher `cutRequestId`; o `CUT_ACCEPTED` traz **ambos** (`attendanceId` = o atendimento gerado, `cutRequestId` = o pedido que fechou). Os demais eventos (nao-corte) seguem com `cutRequestId=null`. **Front-Partner:** ler `cutRequestId` do envelope (nao mais `attendanceId`). O push ja carregava `cutRequestId` correto — inalterado.
 
@@ -4550,6 +4556,34 @@ acabou respondendo uma pergunta maior — "qual host o app do device esta chaman
 a SMTP key da `MAIL_PASS`) no painel do **Railway**. Depois do merge `dev`->`main`, prod passa a ser
 conferivel por curl exatamente como o staging ja e.
 
+#### 29/08 (fim do dia) — dois itens fechados: o `client_name` saiu, e o **S12 ja existia** (5a vez)
+
+**#15 (S12, filtro de periodo no `GET /attendances`) fechou sem uma linha de codigo.** O
+`AttendanceController:46-47` **ja declara** `dateFrom`/`dateTo` com `@DateTimeFormat(ISO.DATE)`, e o
+`AttendanceServiceImpl.listAttendances` os converte com `BusinessClock.startOfDay/endOfDayExclusive`
+antes de `findByFilters`. O pedido do partner era *"aceitar `dateFrom`/`dateTo` como o
+`/professional/me/reports` ja faz"* — o endpoint nao so aceita como **entrega mais**: o recorte e o
+dia da **LOJA**, nao o dia UTC (residuo do BUG2b, corrigido em 11/08). O mesmo vale para
+`/attendances/client/me`. **A tela "Meu dia" do partner pode ligar hoje.**
+
+🔁 **Esta e a QUINTA vez** (05/08 S20 · 07/08 S19 · 26/08 `cors.allowed-origins` · 29/08 S31+S34+`is_active`
+· agora o S12) que um pedido de front ja estava respondido pelo codigo. **O padrao nao e coincidencia
+e o custo e sempre o mesmo: tempo de dois times.** O antidoto barato continua sendo o **#40** — publicar
+o mapa do que existe, em vez de responder um a um quando alguem pergunta.
+
+**#13 (`client_name` no `CutRequestResponse`) entregue.** Campo no read-model, seguindo o padrao que
+ja existia em cinco DTOs de attendance (`AttendanceListResponse`, `AttendanceInQueueResponse`, etc.),
+mais `@EntityGraph({"client","client.baseUser"})` na query de pendentes — sem ele seriam **dois**
+SELECTs por linha, porque `Client.getFirstName()` le do `BaseUser`, que e `@OneToOne(LAZY)` com `@MapsId`.
+
+⚠️ **Achado que o item nao previa, e que muda o handoff: `client_name` vem `null` com frequencia.**
+`POST /auth/register` recebe **so e-mail e senha** — `setFirstName` so acontece nos fluxos de
+profissional (`RegisterProfessionalUseCase`, `QuickCreateProfessionalUseCase`) e no
+`UpdateMyProfileUseCase`. **Cliente que nunca preencheu o perfil nao tem nome no banco**, entao o
+campo reflete um vazio real, nao um bug. O handoff honesto para o Partner e: *o nome chega quando
+existe, e **o fallback "Cliente" continua necessario***. Coberto por teste dedicado
+(`listPending_clientWithoutProfileName_returnsEmptyName`).
+
 #### 29/08 — reconciliacao com o Partner: **S30 a S34 chegaram ao backend**, e tres ja tinham resposta no codigo
 
 **Os cinco itens nunca tinham chegado aqui** — `grep` de `S30`..`S34` neste PRD voltava **zero** ate
@@ -4751,9 +4785,9 @@ implementacao, e devem ser respondidas **juntas** — a resposta "papel e o vinc
 | 10 | **ETA com buffer de −10min (regra GLOBAL) — Partner S10** | ⬜ aberto (pedido 2026-07-14) | O tempo de espera EXIBIDO = ETA calculado **−10min (piso 0)**, p/ o cliente chegar antes. Decisao Andre: regra GLOBAL — **o backend calcula** e client+partner so exibem o MESMO numero (nada de cada front subtrair por conta). Definir: buffer embutido no valor exposto do read-model vs campo separado (`display_wait` vs `raw_eta`). |
 | 11 | **Listar TODOS os profissionais do estabelecimento (incl. sem servico) — Partner S8** | ⬜ aberto (pedido 2026-07-09) | `professionals-with-queue` ESCONDE profissional sem servico (#31). Falta `GET /establishment/{id}/professionals` (ou count) com **todos os vinculados** + flag/contagem de servicos. Desbloqueia: owner ver o profissional recem-vinculado que ainda nao cadastrou servico; checklist de prontidao separar "1+ vinculado" de "1+ com servico". |
 | 12 | **Melhorias de rating (Client §3 — nao bloqueiam o front)** | ⬜ aberto | (a) **`rated: boolean`** no `GET /attendances/client/me` — fonte da verdade p/ esconder o "Avaliar"; hoje o front usa `ratedStore` local (SecureStore) que nao sincroniza entre aparelhos nem sobrevive a reinstalar; (b) **rollup por ESTABELECIMENTO** em `GET /establishment` — media ponderada = Σ`ratingSum` ÷ Σ`ratingCount` dos profissionais, p/ os cards da Home; (c) **`rating_best`** (maior nota entre os profissionais) no card + considerar rating como desempate na ordenacao (#11); (d) **`establishmentName`** no `client/me` (hoje so `establishmentId`). |
-| 13 | **`client_name` no `CutRequestResponse` (Partner nice-to-have)** | ⬜ aberto (pequeno) | O `GET /attendances/cut-requests` traz so `client_id` — o partner monta o card com fallback "Cliente". O front JA consome o campo opcional: adicionar `client_name` (e avaliar `service_names`) faz o nome aparecer **sem nenhuma mudanca no front**. |
+| 13 | ~~**`client_name` no `CutRequestResponse`** (Partner nice-to-have)~~ | ✅ **ENTREGUE 2026-08-29** | Campo no read-model + `@EntityGraph({"client","client.baseUser"})` na query de pendentes (sem ele, 2 SELECTs por linha). ⚠️ **Vem `null` para quem nunca preencheu o perfil** — `POST /auth/register` so recebe e-mail+senha, entao **o fallback "Cliente" do card segue necessario**. Ver `GET /attendances/cut-requests`. |
 | 14 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
-| 15 | **Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`) — Partner S12** | ⬜ aberto (nice-to-have, pedido 2026-07-22) | Aceitar `dateFrom`/`dateTo` como o `/professional/me/reports` ja faz. Motivo: a tela "Meu dia" do partner unificou resumo+historico — o resumo filtra por periodo e o historico nao consegue acompanhar (hoje so filtros de STATUS). |
+| 15 | ~~**Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`)** — Partner S12~~ | ✅ **JA EXISTIA — fechado sem codigo em 2026-08-29** | `AttendanceController:46-47` ja declara os dois `@RequestParam` com `@DateTimeFormat(ISO.DATE)`, e `AttendanceServiceImpl.listAttendances` os converte com `BusinessClock.startOfDay/endOfDayExclusive` antes de `findByFilters` — ou seja, **entrega mais do que o S12 pediu**: o recorte e o dia da **LOJA**, nao o dia UTC. O mesmo vale para `/attendances/client/me`. **Nada a implementar; o Partner pode ligar hoje.** |
 | 16 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
 | 17 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
 | 18 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
