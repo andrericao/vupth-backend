@@ -3258,6 +3258,25 @@ Config responsavel (prod + staging): `management.endpoint.health.probes.enabled=
 
 Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22. Aplica igual ao Front-Partner.
 
+### ✅ STATUS 2026-08-29 — o portao esta IMPLEMENTADO NOS DOIS FRONTS (conferido nos repos)
+
+A regra do `CLAUDE.md` pede que o front **avise** ao ligar o portao, para o backend revisar o
+alinhamento. O Front-Partner avisou no `HANDOFF_BACKEND.md` de 27/08 (item 5, *"ja esta implementado
+aqui e nunca avisamos"*) e a checagem de alinhamento de 29/08 confirmou os dois lados:
+
+| front | onde | estado |
+|---|---|---|
+| **Partner** | `src/lib/readiness.ts` (`waitForBackend`) + `src/components/ServerWarmup.tsx` | ✅ implementado e montado |
+| **Client** | `src/services/healthService.ts`, consumido em `AppBoot` / `ForgotPassword` / `QueueStatus` | ✅ implementado, com testes (`healthService.test.ts`, `AppBoot.test.tsx`) |
+
+⚠️ **A secao acima ("O QUE OS FRONTS PRECISAM FAZER") deixa de ser pedido e passa a ser
+ESPECIFICACAO do que ja existe** — vale como contrato para quem for mexer, nao como pendencia. O que
+segue pendente e so a linha de painel abaixo, que e do Andre.
+
+⚠️ **Keep-warm nao substitui o portao** e o portao nao substitui o keep-warm: deploy, restart, falha do
+cron, fora da janela e teto de cota produzem instancia fria de novo, e ai quem segura o usuario e o
+portao.
+
 **Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Keep-warm: pinger externo gratuito, **5 min, em janela** — desenho e a conta das 750h na **secao 18e**.
 
 ⚠️ **O keep-warm NAO dispensa este portao.** Ele reduz a *frequencia* de instancia fria; o portao garante que, quando ela estiver fria assim mesmo (deploy, restart, falha do cron, fora da janela, teto de cota), o cadastro nao dispare antes da hora. Um e probabilidade e mora num servico de terceiro; o outro e correcao e mora no app. Com o pinger ativo o portao custa ~0,5s e ninguem ve a tela.
