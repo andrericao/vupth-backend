@@ -4047,7 +4047,7 @@ tende a produzir tres modelos que nao conversam.
 
 ---
 
-### D10 · Papel e por PESSOA ou por VINCULO pessoa↔loja? (Partner **S32**, chegou ao backend em 2026-08-29)
+### D10 · Papel e por PESSOA ou por VINCULO pessoa↔loja? — ✅ **DECIDIDO 2026-08-29**
 
 **Contexto.** Hoje o modelo e `BaseUser -> {Client, Professional, Owner}` — **um de cada, sem escopo**.
 O papel nasce como **efeito** de criar a entidade: `addClientProfile()` no registro,
@@ -4074,11 +4074,35 @@ no JWT" roda em 4 pontos e **nao muda** em nenhuma das hipoteses; o que muda e o
 promove-lo a entidade com papel e status, nao inventar do zero.
 
 ⚠️ **Os fronts declararam que NAO codam troca de papel antes desta resposta.** A UI e barata nas duas
-hipoteses; o caro e o modelo, e escolher errado se paga duas vezes. Decidir junto com o **D11**.
+hipoteses; o caro e o modelo, e escolher errado se paga duas vezes. Decidido junto com o **D11**.
 
 ---
 
-### D11 · Papel deve ser REVOGAVEL? (Partner **S33**, chegou ao backend em 2026-08-29)
+#### ✅ DECISAO (Andre, 2026-08-29): **o contexto vem do `establishmentId` no PATH, nunca do token** — e o modelo de vinculo fica ADIADO, nao descartado
+
+**(a) O modelo continua `User -> {Client, Professional, Owner}` por enquanto.** Promover para vinculo
+pessoa↔loja e a direcao provavel no dia em que multi-loja for construida de verdade, mas **nao se paga
+migration + mexida na autenticacao por uma segunda loja que ainda nao existe**. O que se decide hoje e
+o **contrato**, para que a migracao futura seja aditiva em vez de quebrar tudo.
+
+**(b) 🔒 O ESCOPO NUNCA ENTRA NO JWT.** Esta e a parte que vale como regra permanente, mesmo depois de
+multi-loja: **quem sabe de qual loja se esta falando e o `establishmentId` da rota**, e o servidor
+autoriza conferindo o vinculo no banco a cada request. Escopo dentro do token recriaria exatamente o
+problema que este projeto acabou de evitar ao manter o `is_active` fora dele: **retrato congelado ate
+expirar** — perder o acesso a uma loja nao teria efeito ate o token vencer. E o mesmo raciocinio,
+aplicado uma vez a papel e outra a escopo.
+
+**(c) Consequencia pratica para os fronts, que podem voltar a codar:** o app **nao** deve tentar
+descobrir "de qual loja eu sou dono" lendo o token — le do proprio recurso (`/establishment/mine`,
+`/professional/me`) e manda o `establishmentId` na rota. Quando a segunda loja existir, o que muda e o
+**seletor de loja na UI**, nao o formato do papel. **Nada do que eles codarem agora sera jogado fora.**
+
+**(d) A taxa por atendimento fica atribuida ao ATENDIMENTO** (que ja carrega profissional e loja), nao
+ao papel nem ao vinculo — assim ela nao depende desta decisao e nao trava quando o modelo evoluir.
+
+---
+
+### D11 · Papel deve ser REVOGAVEL? — ✅ **DECIDIDO 2026-08-29**
 
 **Contexto — confirmado no codigo em 2026-08-29.** Existe caminho para **ganhar** papel
 (`BaseUser.addRole`, chamado pelos tres `add*Profile()`) e **nenhum para perder**: nao ha `removeRole`,
@@ -4109,10 +4133,31 @@ migration — a coluna existe, o filtro existe, e ate o `DisabledException` para
 la. **O que NAO existe e o unico buraco: nada escreve `false`.** `UserRole.activate()` e chamado no
 nascimento e nunca ha o inverso.
 
-**Logo, a decisao nao e "da para revogar?" — e "QUANDO revogar?", que e produto, nao engenharia.** Se a
-resposta for "sair da loja tira o PROFESSIONAL", a implementacao e uma chamada nova dentro do
-`LeaveEstablishmentUseCase` e um teste; se for "papel e o que a pessoa JA FOI", nao se escreve **nada**
-e o item fecha como decisao registrada.
+**Logo, a decisao nao e "da para revogar?" — e "QUANDO revogar?", que e produto, nao engenharia.**
+
+---
+
+#### ✅ DECISAO (Andre, 2026-08-29): **papel e "o que a pessoa JA FOI"; o VINCULO diz o que ela e hoje**
+
+**Sair da loja NAO tira o `PROFESSIONAL`.** O `LeaveEstablishmentUseCase` continua exatamente como
+esta: desfaz o vinculo, preserva o papel. **Custo da decisao: zero linha de codigo.**
+
+🔒 **O argumento que fechou a questao e uma armadilha concreta, nao preferencia de modelo:**
+`POST /professional/affiliate` e `hasRole("PROFESSIONAL")` (`SecurityConfig:187`), assim como
+`/professional/me/affiliations` (188-190). **Se sair da loja revogasse o papel, o profissional ficaria
+trancado do lado de fora** — sairia de uma barbearia e nao conseguiria se afiliar a proxima, porque o
+endpoint de afiliacao exige justamente o papel que a saida acabou de tirar. Revogar no `leave`
+transformaria "trocar de loja" em "perder a conta profissional".
+
+**O que continua valendo como revogacao legitima:** o **arrependimento explicito** — "nao quero mais
+atender", "nao quero mais ser dono". Esse caso e real (o `also-professional` sem volta) e vira um item
+**pequeno**, porque o mecanismo ja existe: basta um endpoint que escreva `is_active=false` no
+`UserRole`, e as authorities param de incluir o papel **no request seguinte**. Nao ha migration, nao ha
+mudanca de contrato, e o papel fica **auditavel** (a linha continua na tabela) em vez de sumir.
+
+⚠️ **O que NAO fazer, registrado para nao voltar:** revogar papel como efeito colateral de sair da
+loja, fechar a loja ou qualquer outra transicao automatica. **Papel so muda quando a pessoa pede.**
+Toda transicao automatica esbarra na mesma classe de armadilha do `affiliate`.
 
 ---
 
@@ -4715,8 +4760,8 @@ implementacao, e devem ser respondidas **juntas** — a resposta "papel e o vinc
 | 38 | ~~Mesmo cliente entra DUAS vezes na fila~~ | ✅ **ENTREGUE 2026-08-15** (Client §4.2, device 07/08) | Portao novo no `createAttendance`, **depois da validacao dos serviceItems e antes da primeira escrita** (precedencia fixada em 17/08 — ver contrato do `POST /attendances`): cliente com atendimento em `SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED` no **mesmo profissional** recebe **409 `CLIENT_ALREADY_IN_QUEUE`**. Raio estreito por decisao [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio--decidido-2026-08-15) — **`INTENTION` NAO conta** (compromisso fora da fila; conta-la trancaria quem tem intencao para sabado o resto da semana), e por isso a lista **nao** e a `ACTIVE_STATUSES` do apagar-conta. ⚠️ **Achado no Newman de homolog (17/08):** a invariante reprovou **3 pastas da collection** (`08d`, `08e`, `08k`) que usavam **um unico cliente para representar uma fila inteira** — encaixar alguem atras de si mesmo, promover-se a frente de si mesmo. Nao era teste quebrado: eram cenarios impossiveis que o servidor aceitava antes. Quem so enchia fila virou **convidado** (`add-quest-attendance`); quem precisa ser outra pessoa ganhou usuario proprio. ⚠️ Os dois casos de erro da `08e` (422 `QUEUE_TARGET_NOT_FEASIBLE` e 400) receberiam **409 antes da regra que testam** — passariam a afirmar outra coisa. ⚠️ **Achado ao rodar a suite completa (17/08):** a classe de teste reusa um profissional e ignorava uma invariante que **ja existia** — `startAttendance` recusa com **409 `ATTENDANCE_ALREADY_IN_PROGRESS`** quando o profissional ja tem atendimento `IN_PROGRESS` **ou** `PAUSED`. Como cada teste deixa o seu atendimento vivo de proposito, o teste seguinte reprovava no `/start`, **por motivo alheio ao #38**; corrigido com um `@AfterEach` que libera a cadeira. `DoubleQueueEntryIntegrationTest` (8): os que provam o que **continua passando** (outro profissional da mesma loja, outro cliente) sao os que fixam a decisao, e os de `FINISHED`/`CANCELLED` provam que o bloqueio **libera** — sem eles seria banimento, nao invariante. |
 | 39 | **Convite para profissional que AINDA NAO TEM CONTA — hoje o dono nao tem caminho nenhum** (Partner S30, achado de 2026-08-21) | ⬜ aberto (**posicao provisoria — Andre reordena**) | O unico caminho e `GET /professional?name=` → `ProfessionalRepository.searchByNameAndSpecialty`, e a query e mais estreita do que o handoff supoe: casa **so `firstName`** (`LOWER(u.firstName) LIKE`), e ainda filtra `p.establishment IS NULL` **e** ausencia de `AffiliationRequest` PENDING. **Ou seja, some da busca quem ja tem loja e quem tem convite pendente** — tres motivos diferentes produzem a MESMA tela "Nenhum profissional encontrado", e nenhum deles e "nao tem conta". ⚠️ **O caso mais provavel do dono e o unico que nao funciona:** o barbeiro que ja trabalha com ele e nao usa o app. **Precisa de endpoint novo, e a escolha e do Andre:** **(A)** convite por contato — `POST /establishment/{id}/invitations` com e-mail/telefone, gera convite PENDENTE que se resolve quando a pessoa se cadastra com aquele contato; **(B)** link/codigo — o dono gera o link, a pessoa se cadastra por ele e ja nasce vinculada. **(B) e mais barata**; a objecao historica contra (A) era depender de e-mail, e ela **caiu com o #1 fechado em 29/08** — entao hoje a escolha e so de produto. Ver tambem o **#28** (busca nao casa apelido), que piora o mesmo fluxo. |
 | 40 | **Documentar o mapa endpoint x papel — 69 matchers no codigo, ~7 no contrato** (Partner S31, recorte corrigido em 2026-08-29) | ⬜ aberto (**posicao provisoria**; virou **so documentacao** — as duas premissas do enunciado cairam) | ⚠️ **O enunciado do partner esta errado na premissa** — 403 por papel **ja existe e ja tem `code` proprio** (`ACCESS_DENIED`, vindo dos **69** matchers `hasRole`/`hasAnyRole` do `SecurityConfig` via `AccessDeniedException`), distinto dos 403 de propriedade (`ESTABLISHMENT_ACCESS_DENIED`, `AFFILIATION_ACCESS_DENIED`, `ATTENDANCE_CANCEL_NOT_ALLOWED`) e de uma **terceira familia que o item nao viu**: estado/capacidade (`NOT_A_PROFESSIONAL`, `PROFESSIONAL_NOT_AFFILIATED`). Detalhamento na secao **29/08**. ⚠️ **A segunda premissa tambem caiu:** a pergunta (2) do item — *"papel ganho agora + token antigo, o backend manda refazer o refresh?"* — descreve um cenario que **nao existe no servidor**. A autorizacao nao le o claim: o `JwtAuthenticationConverter` carrega o usuario a cada request e monta as authorities do banco, entao **papel novo ja vale no request seguinte, sem refresh**. Quem precisa do refresh e o **app**, que le o papel do token — e esse fluxo ja esta documentado. *(Este item expos, de quebra, um registro obsoleto no topo do PRD, corrigido na secao 1.)* **O que sobra e SO documentacao, sem mudanca de contrato:** publicar o mapa endpoint x papel — hoje **69** matchers no codigo contra ~7 anotados aqui — e a tabela das tres familias de 403 (papel / propriedade / estado). |
-| 41 | **Papel e por PESSOA e nao diz DE QUAL LOJA — decisao de modelo antes de virar codigo** (Partner S32) | ⛔ **BLOQUEIA OS DOIS FRONTS** — decisao do Andre, ver **D10** (secao 20b) | Hoje `BaseUser -> {Client, Professional, Owner}`, um de cada, sem escopo; papel nasce como efeito de criar a entidade (`add*Profile()` em 4 pontos) e o JWT nao diz em que contexto a pessoa age. Com multi-loja — que o Andre disse estar "para ser feito" — `"e OWNER"` deixa de responder **OWNER de qual**, e a taxa por atendimento tem o mesmo furo (ela nasce numa loja, e quem absorve ou repassa e o profissional **naquela** loja). **Os fronts declararam que nao codam troca de papel antes da resposta.** Pergunta completa e o que ja existe pronto para as duas hipoteses: **D10**. |
-| 42 | **Nao existe caminho para PERDER papel, so para ganhar** (Partner S33) | ⛔ **BLOQUEIA OS DOIS FRONTS** — decisao do Andre, ver **D11** (secao 20b) | Confirmado no codigo em 29/08: ha `BaseUser.addRole` e **nao ha** `removeRole`, nao ha `DELETE /professional`, e o unico `revoke*` do repo e de refresh token. Tres casos ja em producao: quem sai da loja (`LeaveEstablishmentUseCase:52` desfaz o **vinculo** e mantem o papel), quem se arrependeu do "Eu tambem vou atender", e o dono que fechou a loja. 🔑 **O item e muito mais barato do que parece: o mecanismo de revogacao JA EXISTE fim-a-fim** — o `JwtAuthenticationConverter` carrega o usuario a cada request e o `UserDetailsImpl:47-51` filtra `UserRole::getIsActive`, entao **`is_active=false` derruba o papel no request seguinte**, sem esperar o token expirar e sem migration. **O unico buraco e que nada escreve `false`.** A decisao deixa de ser "da para revogar?" e vira "QUANDO revogar?" — produto, nao engenharia. Deve ser respondido **junto com o D10**. |
+| 41 | ~~**Papel e por PESSOA e nao diz DE QUAL LOJA**~~ (Partner S32) | ✅ **DECIDIDO 2026-08-29 — ver D10** (secao 20b). **Os fronts estao DESBLOQUEADOS**; zero codigo de backend | Hoje `BaseUser -> {Client, Professional, Owner}`, um de cada, sem escopo; papel nasce como efeito de criar a entidade (`add*Profile()` em 4 pontos) e o JWT nao diz em que contexto a pessoa age. Com multi-loja — que o Andre disse estar "para ser feito" — `"e OWNER"` deixa de responder **OWNER de qual**, e a taxa por atendimento tem o mesmo furo (ela nasce numa loja, e quem absorve ou repassa e o profissional **naquela** loja). ✅ **Resposta:** o modelo por pessoa **fica como esta** (vinculo e a direcao provavel, mas so quando multi-loja existir de verdade — nao se paga migration por loja que nao existe); e a regra permanente e que **o escopo NUNCA entra no JWT** — contexto vem do `establishmentId` na rota, conferido no banco a cada request, senao perder acesso a uma loja so teria efeito quando o token vencesse. **Handoff aos fronts:** nao descubram "de qual loja sou dono" lendo o token — leiam de `/establishment/mine` / `/professional/me` e mandem o id na rota; quando a 2a loja existir muda o **seletor na UI**, nao o formato do papel, entao **nada do que codarem agora sera jogado fora**. |
+| 42 | ~~**Nao existe caminho para PERDER papel, so para ganhar**~~ (Partner S33) | ✅ **DECIDIDO 2026-08-29 — ver D11** (secao 20b). **Os fronts estao DESBLOQUEADOS**; zero codigo de backend | Confirmado no codigo em 29/08: ha `BaseUser.addRole` e **nao ha** `removeRole`, nao ha `DELETE /professional`, e o unico `revoke*` do repo e de refresh token. Tres casos ja em producao: quem sai da loja (`LeaveEstablishmentUseCase:52` desfaz o **vinculo** e mantem o papel), quem se arrependeu do "Eu tambem vou atender", e o dono que fechou a loja. 🔑 **O item e muito mais barato do que parece: o mecanismo de revogacao JA EXISTE fim-a-fim** — o `JwtAuthenticationConverter` carrega o usuario a cada request e o `UserDetailsImpl:47-51` filtra `UserRole::getIsActive`, entao **`is_active=false` derruba o papel no request seguinte**, sem esperar o token expirar e sem migration. **O unico buraco e que nada escreve `false`.** ✅ **Resposta: papel e "o que a pessoa JA FOI"; o vinculo diz o que ela e hoje** — sair da loja **nao** tira o `PROFESSIONAL`, e o `LeaveEstablishmentUseCase` fica como esta. 🔒 **O argumento que fechou:** `POST /professional/affiliate` e `hasRole("PROFESSIONAL")` (`SecurityConfig:187`) — revogar no `leave` **trancaria o profissional do lado de fora**, sem conseguir se afiliar a proxima loja. Sobra como revogacao legitima so o **arrependimento explicito** ("nao quero mais atender"), que vira item pequeno usando o `is_active` que ja existe. ⚠️ **Registrado para nao voltar:** papel so muda quando a pessoa **pede** — nenhuma transicao automatica. |
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
 **Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging. ⚠️ **O Partner pediu o encerramento destes dois em 2026-07-29** (reportados por eles em 2026-06-09): do lado deles o `/attendances` consta resolvido desde 2026-07-09 e a adicao de servico ja funciona pelo caminho do profissional ("Meus Servicos"). **Confirmar em staging e encerrar** — nao ha codigo a escrever, so a confirmacao.
