@@ -73,9 +73,58 @@
 - **Refresh token:** rotativo — cada uso invalida o anterior e gera novo par access+refresh
 - **Roles:** carregadas do banco a cada request (NAO usa claims do JWT para autorizacao)
 
-### Fluxo de refresh obrigatorio
+### Contrato do claim `roles` (confirmado no codigo em 2026-08-29 — Partner **S34**)
 
-Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PROFESSIONAL), o frontend **DEVE** chamar `POST /auth/refresh` para obter um novo token que inclua as novas roles. Sem isso, os endpoints protegidos por ROLE_OWNER ou ROLE_PROFESSIONAL retornarao 403.
+⚠️ **O `roles` do JWT e uma STRING separada por virgula, COM o prefixo `ROLE_`** — nao um array:
+
+```
+"roles": "ROLE_OWNER,ROLE_CLIENT"
+```
+
+Vem de `JwtTokenProvider:44-46` (`Collectors.joining(",")` sobre `GrantedAuthority::getAuthority`). E a
+`GrantedAuthority` do Spring **vazando** para o contrato: nao foi decisao de desenho, mas **e o contrato
+de fato** e nao muda sem aviso previo aos fronts. O front-partner ja normaliza na fronteira.
+
+⚠️ **O CORPO do `/auth/login` tem OUTRA forma, e outra CHAVE.** A resposta e
+`{ user: {...}, tokens: {...} }` e dentro de `user` o campo e **`user_roles`** — **array de objetos**,
+sem prefixo:
+
+```json
+"user_roles": [ { "role_type": "OWNER", "is_active": true } ]
+```
+
+**Um front que declare `user.roles: string[]` le `undefined` sempre** — chave errada e forma errada.
+As duas formas coexistem de proposito? Nao: e historico. Ate haver unificacao, **as duas valem**.
+
+**`is_active` ja viaja no corpo** (`user_roles[].is_active`), no login, no registro e no perfil, e
+**nao esta no JWT** — deliberadamente. O servidor decide a cada request (abaixo); o front recebe o flag
+**so para a UI** (esconder area, explicar por que sumiu), nunca como autorizacao. Colocar o flag dentro
+do token o transformaria em retrato congelado ate expirar, que e o problema classico de revogacao
+com JWT.
+
+### Quem autoriza e o BANCO, nao o token
+
+`JwtAuthenticationConverter:34-52` carrega o `BaseUser` **a cada request** e monta as authorities em
+`UserDetailsImpl:47-51`, filtrando **`UserRole::getIsActive`**. Tres consequencias que valem contrato:
+
+1. **Papel desativado deixa de valer no request seguinte** — nao espera o token expirar. O mecanismo de
+   revogacao ja existe fim-a-fim; o que nao existe e quem escreva `is_active=false` (ver **D11**).
+2. **Conta desativada/apagada mata o access token na hora** (`DisabledException` no converter), em vez
+   de ele seguir valido por ate 1h.
+3. **Papel recem-ganho ja vale no request seguinte, sem refresh** — a autorizacao le do banco.
+
+### Fluxo de refresh — o que ele resolve de verdade
+
+Apos criar um establishment (ganha OWNER) ou criar perfil profissional (ganha PROFESSIONAL), o frontend
+**DEVE** chamar `POST /auth/refresh`.
+
+⚠️ **CORRECAO 2026-08-29 — o MOTIVO registrado aqui estava errado.** Este PRD dizia *"sem isso, os
+endpoints protegidos por ROLE_OWNER ou ROLE_PROFESSIONAL retornarao 403"*. **Nao retornam:** a
+autorizacao nao le o claim, le o banco (acima), entao o papel novo ja vale no request seguinte. O
+refresh continua **obrigatorio na pratica**, mas por outra razao: **os apps leem o papel DO TOKEN**
+(o partner via `getRolesFromToken`) para decidir navegacao e o que exibir — sem refresh o **app** nao
+sabe que a pessoa virou dona, ainda que o **servidor** ja saiba. Nenhum teste cobria a afirmacao
+antiga, que e do mesmo genero dos tres registros falsos corrigidos em 26/08.
 
 ---
 
@@ -2322,7 +2371,7 @@ o pedido pode ser recusado e nunca virar atendimento, entao **nunca aparece em r
 
 **Body:** `{ "professionalId": UUID, "establishmentId": UUID, "serviceItemIds": [UUID] }`
 
-**Response (201):** `CutRequestResponse` (`id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`).
+**Response (201):** `CutRequestResponse` (`id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `client_name` (pode ser `null` — ver nota no GET), `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`).
 
 **Erros:** `409 CUT_REQUEST_NOT_ALLOWED` (loja **aberta agora** — deve entrar via `POST /attendances`) · `422 SERVICE_ITEM_NOT_OF_PROFESSIONAL` (servico de outro profissional) · `404` profissional/servico/loja inexistente · `401` sem token.
 
@@ -2337,13 +2386,19 @@ BUG5 **C2 — desbloqueio da UI do Partner.** Lista os pedidos **`PENDING`** dir
 
 **Acesso:** PROFESSIONAL (por JWT).
 
-**Response (200):** lista de `CutRequestResponse` (vazia se nenhum); cada item traz `id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`. So o proprio profissional ve seus pedidos — pedidos de outra loja/prof nao aparecem.
+**Response (200):** lista de `CutRequestResponse` (vazia se nenhum); cada item traz `id`, `status=PENDING`, `professional_id`, `establishment_id`, `client_id`, **`client_name`**, `service_item_ids`, `expires_at`, `created_at`, `resulting_attendance_id=null`. So o proprio profissional ve seus pedidos — pedidos de outra loja/prof nao aparecem.
+
+> **`client_name` (2026-08-29, Partner nice-to-have).** Nome do cliente que pediu, no proprio read-model — o card do Partner deixa de precisar de um GET a mais so para descobrir de quem e o pedido. Presente em **todas** as respostas de `CutRequestResponse` (create, list, accept, refuse).
+>
+> ⚠️ **Pode vir `null`, e isso e normal — o fallback do card CONTINUA necessario.** `POST /auth/register` recebe **so e-mail e senha**: quem nunca preencheu o perfil (`PATCH /profile/general-infos`) tem `first_name` nulo no banco, e o campo reflete isso. O nome so e escrito nos fluxos de profissional e na atualizacao de perfil — nao no cadastro do cliente. **Front-Partner: mantenha o "Cliente" como fallback.**
+>
+> Custo zero de query: o `findByProfessionalIdAndStatusOrderByCreatedAtAsc` ganhou `@EntityGraph({"client","client.baseUser"})`. Sem ele seriam **dois** SELECTs por linha da lista — `Client.getFirstName()` le do `BaseUser`, que e `@OneToOne(LAZY)` com `@MapsId`.
 
 **Erros:** `403` sem role PROFESSIONAL (ex.: cliente) · `401` sem token.
 
 > **Handoff fronts:** Front-Partner: ao abrir a tela de fila/pedidos (e ao voltar do background), chamar `GET /attendances/cut-requests` para montar a lista de pendentes; ao receber o WS `CUT_REQUESTED` ao vivo, pode usar o `cutRequestId` do envelope (ver nota abaixo) direto ou re-consultar este GET.
 
-**Testes:** Integracao (`CutRequestListPendingIntegrationTest` — 2 pendentes ordenados / outro prof ve vazio / some apos aceitar / cliente 403)
+**Testes:** Integracao (`CutRequestListPendingIntegrationTest` — 2 pendentes ordenados **+ `client_id`/`client_name`** / **`client_name` vazio quando o cliente nunca preencheu o perfil** / outro prof ve vazio / some apos aceitar / cliente 403)
 
 > **⚠️ Envelope do WS `CUT_REQUESTED` (corrigido no desbloqueio C2).** O `cutRequestId` agora viaja num **campo proprio** `cutRequestId` do `QueueNotification` — antes ele vinha embutido no campo `attendanceId` (semanticamente errado: nao e um Attendance). Todos os eventos de corte (`CUT_REQUESTED`/`CUT_ACCEPTED`/`CUT_REFUSED`/`CUT_EXPIRED`) passaram a preencher `cutRequestId`; o `CUT_ACCEPTED` traz **ambos** (`attendanceId` = o atendimento gerado, `cutRequestId` = o pedido que fechou). Os demais eventos (nao-corte) seguem com `cutRequestId=null`. **Front-Partner:** ler `cutRequestId` do envelope (nao mais `attendanceId`). O push ja carregava `cutRequestId` correto — inalterado.
 
@@ -3209,7 +3264,26 @@ Config responsavel (prod + staging): `management.endpoint.health.probes.enabled=
 
 Snippet de referencia (`waitForBackend`) entregue ao Front-Client em 2026-06-22. Aplica igual ao Front-Partner.
 
-**Pendente fora do codigo (Andre):** no painel do Render, setar **Health Check Path = `/actuator/health/readiness`** (1 campo). Keep-warm: pinger externo gratuito, **5 min, em janela** — desenho e a conta das 750h na **secao 18e**.
+### ✅ STATUS 2026-08-29 — o portao esta IMPLEMENTADO NOS DOIS FRONTS (conferido nos repos)
+
+A regra do `CLAUDE.md` pede que o front **avise** ao ligar o portao, para o backend revisar o
+alinhamento. O Front-Partner avisou no `HANDOFF_BACKEND.md` de 27/08 (item 5, *"ja esta implementado
+aqui e nunca avisamos"*) e a checagem de alinhamento de 29/08 confirmou os dois lados:
+
+| front | onde | estado |
+|---|---|---|
+| **Partner** | `src/lib/readiness.ts` (`waitForBackend`) + `src/components/ServerWarmup.tsx` | ✅ implementado e montado |
+| **Client** | `src/services/healthService.ts`, consumido em `AppBoot` / `ForgotPassword` / `QueueStatus` | ✅ implementado, com testes (`healthService.test.ts`, `AppBoot.test.tsx`) |
+
+⚠️ **A secao acima ("O QUE OS FRONTS PRECISAM FAZER") deixa de ser pedido e passa a ser
+ESPECIFICACAO do que ja existe** — vale como contrato para quem for mexer, nao como pendencia. O que
+segue pendente e so a linha de painel abaixo, que e do Andre.
+
+⚠️ **Keep-warm nao substitui o portao** e o portao nao substitui o keep-warm: deploy, restart, falha do
+cron, fora da janela e teto de cota produzem instancia fria de novo, e ai quem segura o usuario e o
+portao.
+
+**~~Pendente fora do codigo (Andre)~~ ✅ FEITO:** o **Health Check Path = `/actuator/health/readiness`** ja esta setado no painel do Render (**P4**, confirmado em 29/08). Keep-warm: pinger externo gratuito, **5 min, em janela** (**P3**) — desenho e a conta das 750h na **secao 18e**. ➡️ **Os dois estao rastreados na lista "Pendencias de PAINEL" da secao 22**, com valor exato e estado.
 
 ⚠️ **O keep-warm NAO dispensa este portao.** Ele reduz a *frequencia* de instancia fria; o portao garante que, quando ela estiver fria assim mesmo (deploy, restart, falha do cron, fora da janela, teto de cota), o cadastro nao dispare antes da hora. Um e probabilidade e mora num servico de terceiro; o outro e correcao e mora no app. Com o pinger ativo o portao custa ~0,5s e ninguem ve a tela.
 
@@ -3359,7 +3433,11 @@ BUG2b.
 
 ## 18e. Acesso por link (build web) — CORS, WebSocket e keep-warm — HANDOFF PARA OS FRONTS
 
-> **Status em 2026-08-26 (atualizado no mesmo dia):** CORS ✅ **implementado** · WebSocket ✅ **ja aberto, nada a fazer** · `/actuator/metrics` ✅ **fechado** · pinger externo 🟠 = configuracao do Andre (painel). Falta **1 passo fora do codigo** para a build web subir: a env var `CORS_ALLOWED_ORIGINS` no Render.
+> **Status em 2026-08-29 (era 2026-08-26):** CORS ✅ **implementado E LIGADO** · WebSocket ✅ **ja aberto, nada a fazer** · `/actuator/metrics` ✅ **fechado** · pinger externo 🟠 = configuracao do Andre (painel).
+>
+> ✅ **29/08 — a env var `CORS_ALLOWED_ORIGINS` foi criada no Render e a liberacao esta MEDIDA no ar.** Era o ultimo passo fora do codigo: `OPTIONS /auth/login` com `Origin: https://vupth-partner.pages.dev` responde **200** com `access-control-allow-origin: https://vupth-partner.pages.dev`. **A build web do Cloudflare Pages esta desbloqueada.**
+>
+> ⚠️ **Como NAO testar (custou uma medicao errada aqui):** um `OPTIONS` **sem** o header `Origin` nao e preflight — cai no `anyRequest().authenticated()` e volta **401 `www-authenticate: Bearer`**, que se parece com "o CORS nao funciona" e nao e. Os tres `vary:` (`Origin`, `Access-Control-Request-Method`, `Access-Control-Request-Headers`) aparecem de qualquer jeito, porque o `CorsFilter` os escreve **antes** de decidir se a requisicao e CORS — entao **`vary` presente nao prova liberacao**. A unica linha que prova e o `access-control-allow-origin`.
 
 **Contexto.** Os testadores nao instalam APK: abrem o app por **link**, numa build web publicada no Cloudflare Pages (`https://vupth-partner.pages.dev`, com previews da branch `dev` em `https://<hash>.vupth-partner.pages.dev`). Isso muda o cliente de *app nativo* para *navegador* — e navegador aplica CORS.
 
@@ -3994,6 +4072,120 @@ tende a produzir tres modelos que nao conversam.
 
 ---
 
+### D10 · Papel e por PESSOA ou por VINCULO pessoa↔loja? — ✅ **DECIDIDO 2026-08-29**
+
+**Contexto.** Hoje o modelo e `BaseUser -> {Client, Professional, Owner}` — **um de cada, sem escopo**.
+O papel nasce como **efeito** de criar a entidade: `addClientProfile()` no registro,
+`addProfessionalProfile()` no `/professional/register` e `/professional/quick-create`,
+`addOwnerProfile()` no `/establishment/quick-create` e na transferencia de propriedade
+(`BaseUser:287-305`). O JWT carrega `roles` e **nao diz em que contexto a pessoa esta agindo**.
+
+**A pergunta.** (a) O modelo continua **um perfil de cada por pessoa**, ou vira **vinculo
+pessoa↔estabelecimento** (N vinculos, cada um com papel e status)? (b) Com multi-loja, o token ganha
+**escopo**, ou o backend resolve tudo por `establishmentId` no path — e o app carrega um seletor de
+loja em toda tela? (c) A **taxa por atendimento** e atribuida ao profissional, a loja, ou ao vinculo?
+
+**Por que a pergunta ficou urgente.** Duas coisas que voce mesmo respondeu ao Partner: **multi-loja
+"esta para ser feito"** e **OWNER/PROFESSIONAL tambem sao CLIENT por definicao**. A segunda torna o
+acumulo dos tres papeis o caso **normal**, o que faz `roles` dizer cada vez menos sobre contexto; a
+primeira quebra a pergunta que importa — no instante em que existir a segunda loja, `"e OWNER"` nao
+responde **OWNER de qual**. ⚠️ O argumento anterior do Partner (24/08) apoiava tudo em **assinatura**,
+que voce descartou; **a conclusao sobreviveu ao fundamento**, agora por multi-loja e pela taxa, que
+nasce de um atendimento — e atendimento acontece **numa** loja.
+
+**O que ja existe e serve as duas respostas.** O trilho "criar entidade → `refreshToken()` → papel novo
+no JWT" roda em 4 pontos e **nao muda** em nenhuma das hipoteses; o que muda e o que vem depois dele.
+`Professional.establishment` ja e o vinculo (hoje **um so**, nulavel) — a hipotese (a)-vinculo e
+promove-lo a entidade com papel e status, nao inventar do zero.
+
+⚠️ **Os fronts declararam que NAO codam troca de papel antes desta resposta.** A UI e barata nas duas
+hipoteses; o caro e o modelo, e escolher errado se paga duas vezes. Decidido junto com o **D11**.
+
+---
+
+#### ✅ DECISAO (Andre, 2026-08-29): **o contexto vem do `establishmentId` no PATH, nunca do token** — e o modelo de vinculo fica ADIADO, nao descartado
+
+**(a) O modelo continua `User -> {Client, Professional, Owner}` por enquanto.** Promover para vinculo
+pessoa↔loja e a direcao provavel no dia em que multi-loja for construida de verdade, mas **nao se paga
+migration + mexida na autenticacao por uma segunda loja que ainda nao existe**. O que se decide hoje e
+o **contrato**, para que a migracao futura seja aditiva em vez de quebrar tudo.
+
+**(b) 🔒 O ESCOPO NUNCA ENTRA NO JWT.** Esta e a parte que vale como regra permanente, mesmo depois de
+multi-loja: **quem sabe de qual loja se esta falando e o `establishmentId` da rota**, e o servidor
+autoriza conferindo o vinculo no banco a cada request. Escopo dentro do token recriaria exatamente o
+problema que este projeto acabou de evitar ao manter o `is_active` fora dele: **retrato congelado ate
+expirar** — perder o acesso a uma loja nao teria efeito ate o token vencer. E o mesmo raciocinio,
+aplicado uma vez a papel e outra a escopo.
+
+**(c) Consequencia pratica para os fronts, que podem voltar a codar:** o app **nao** deve tentar
+descobrir "de qual loja eu sou dono" lendo o token — le do proprio recurso (`/establishment/mine`,
+`/professional/me`) e manda o `establishmentId` na rota. Quando a segunda loja existir, o que muda e o
+**seletor de loja na UI**, nao o formato do papel. **Nada do que eles codarem agora sera jogado fora.**
+
+**(d) A taxa por atendimento fica atribuida ao ATENDIMENTO** (que ja carrega profissional e loja), nao
+ao papel nem ao vinculo — assim ela nao depende desta decisao e nao trava quando o modelo evoluir.
+
+---
+
+### D11 · Papel deve ser REVOGAVEL? — ✅ **DECIDIDO 2026-08-29**
+
+**Contexto — confirmado no codigo em 2026-08-29.** Existe caminho para **ganhar** papel
+(`BaseUser.addRole`, chamado pelos tres `add*Profile()`) e **nenhum para perder**: nao ha `removeRole`,
+nao ha `DELETE /professional`, e o unico `revoke*` do repositorio e de **refresh token**, nao de papel.
+
+**Os tres casos concretos, todos ja em producao:**
+1. O profissional que sai da loja (`DELETE /professional/me/establishment` →
+   `LeaveEstablishmentUseCase:52`) tem o **vinculo** desfeito (`setEstablishment(null)`) e **mantem o
+   papel `PROFESSIONAL` para sempre**. Deixou de atender ali e segue profissional do sistema, sem loja.
+2. Quem tocou "Eu tambem vou atender" e se arrependeu **nao tem como desfazer**.
+3. O dono que fecha a loja continua `OWNER`.
+
+**A pergunta.** (a) Papel deve ser revogavel? Se sim, por **endpoint proprio** ou como **efeito de
+apagar a entidade** (o espelho exato de como ele nasce)? (b) Sair da loja deve tirar o `PROFESSIONAL`,
+ou **papel e "o que a pessoa JA FOI" e o vinculo e que diz o que ela E hoje**? (c) Se a resposta for
+(b)-vinculo, e a mesma decisao do **D10** — e as duas devem ser respondidas juntas.
+
+**Por que importa mesmo sem assinatura.** Papel que so acumula vira ruido: em pouco tempo todo usuario
+antigo e OWNER+PROFESSIONAL+CLIENT sem que isso descreva o que ele faz hoje, e qualquer regra futura
+que dependa de papel (roteamento, cobranca da taxa, permissao) passa a decidir por **dado que
+envelheceu**.
+
+🔑 **O ITEM E MUITO MAIS BARATO DO QUE O ENUNCIADO SUGERE — o mecanismo de revogacao JA EXISTE
+fim-a-fim.** Conferido em 29/08: `JwtAuthenticationConverter` carrega o usuario **a cada request** e
+`UserDetailsImpl:47-51` monta as authorities filtrando **`UserRole::getIsActive`**. Ou seja,
+**`is_active=false` faz o papel sumir no request seguinte**, sem esperar o token expirar e sem
+migration — a coluna existe, o filtro existe, e ate o `DisabledException` para conta inteira ja esta
+la. **O que NAO existe e o unico buraco: nada escreve `false`.** `UserRole.activate()` e chamado no
+nascimento e nunca ha o inverso.
+
+**Logo, a decisao nao e "da para revogar?" — e "QUANDO revogar?", que e produto, nao engenharia.**
+
+---
+
+#### ✅ DECISAO (Andre, 2026-08-29): **papel e "o que a pessoa JA FOI"; o VINCULO diz o que ela e hoje**
+
+**Sair da loja NAO tira o `PROFESSIONAL`.** O `LeaveEstablishmentUseCase` continua exatamente como
+esta: desfaz o vinculo, preserva o papel. **Custo da decisao: zero linha de codigo.**
+
+🔒 **O argumento que fechou a questao e uma armadilha concreta, nao preferencia de modelo:**
+`POST /professional/affiliate` e `hasRole("PROFESSIONAL")` (`SecurityConfig:187`), assim como
+`/professional/me/affiliations` (188-190). **Se sair da loja revogasse o papel, o profissional ficaria
+trancado do lado de fora** — sairia de uma barbearia e nao conseguiria se afiliar a proxima, porque o
+endpoint de afiliacao exige justamente o papel que a saida acabou de tirar. Revogar no `leave`
+transformaria "trocar de loja" em "perder a conta profissional".
+
+**O que continua valendo como revogacao legitima:** o **arrependimento explicito** — "nao quero mais
+atender", "nao quero mais ser dono". Esse caso e real (o `also-professional` sem volta) e vira um item
+**pequeno**, porque o mecanismo ja existe: basta um endpoint que escreva `is_active=false` no
+`UserRole`, e as authorities param de incluir o papel **no request seguinte**. Nao ha migration, nao ha
+mudanca de contrato, e o papel fica **auditavel** (a linha continua na tabela) em vez de sumir.
+
+⚠️ **O que NAO fazer, registrado para nao voltar:** revogar papel como efeito colateral de sair da
+loja, fechar a loja ou qualquer outra transicao automatica. **Papel so muda quando a pessoa pede.**
+Toda transicao automatica esbarra na mesma classe de armadilha do `affiliate`.
+
+---
+
 ## 21. Pendente de Implementacao no Backend
 
 ### Funcionalidades faltantes
@@ -4040,7 +4232,7 @@ tende a produzir tres modelos que nao conversam.
 | Item | Descricao |
 |------|-----------|
 | Rate limiting | Nenhum rate limit nos endpoints publicos |
-| ~~CORS ausente~~ | ✅ **ENTREGUE 26/08** — `CorsConfigurationSource` + `.cors()` no `SecurityConfig`, origens por `CORS_ALLOWED_ORIGINS`. Resta a env var no painel. Ver **secao 18e** |
+| ~~CORS ausente~~ | ✅ **ENTREGUE 26/08 e LIGADO 29/08** — `CorsConfigurationSource` + `.cors()` no `SecurityConfig`, origens por `CORS_ALLOWED_ORIGINS`; a env var foi criada no Render e a liberacao esta medida no ar. Ver **secao 18e** |
 | ~~`/actuator/metrics` publico~~ | ✅ **ENTREGUE 26/08** — `metrics` fora da exposicao de staging/prod + `denyAll` no que nao e `health`/`info`. Ver **secao 18e** |
 | Paginacao | Endpoints de listagem (GET /establishment, GET /users) nao tem paginacao |
 | Upload de imagem | `profile_image_url` e `urlImage` aceitam URL, nao ha upload real |
@@ -4055,6 +4247,50 @@ tende a produzir tres modelos que nao conversam.
 > - **Backend** — API Spring Boot
 > - **Front-Client** — app React Native do cliente final
 > - **Front-Partner** — app React Native do profissional/owner
+
+### 🎛️ Pendencias de PAINEL — fora do codigo (FONTE UNICA)
+
+> **Por que esta lista existe (2026-08-29).** A lista de codigo abaixo rastreia **so codigo**, e por
+> isso tarefas de painel viviam soltas na prosa. Foi exatamente assim que o PRD **afirmou por meses**
+> haver um `keep-alive.yml` rodando, deletado em `363019d` — ninguem conferia porque nao havia onde.
+> Mesma regra da lista de codigo: **fecha, sai, renumera**. Commits referenciam o NOME, nao o numero.
+
+| # | Tarefa | Painel | Valor exato | Estado |
+|---|--------|--------|-------------|--------|
+| P1 | Transporte de e-mail em prod | **Railway** | `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key **v3**, nao a SMTP key do `MAIL_PASS`) | ✅ **FEITO 2026-08-29** |
+| P2 | Origens do CORS | **Render** ✅ / **Railway** ⬜ | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | 🟡 **Render FEITO 29/08; Railway pendente** (so depois do merge `dev`->`main`, que leva o codigo do CORS pra la) |
+| P3 | Keep-warm — pinger externo | **cron-job.org** | `GET https://vupth-backend-ia.onrender.com/actuator/health/readiness`, **5 min**, **em janela** (08–22 dias uteis) | ⬜ **aberto** — desenho e a conta das 750h na secao **18e.3** |
+| P4 | Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ✅ **JA ESTAVA FEITO** (confirmado por Andre em 29/08). O PRD e que estava desatualizado: a secao 18c seguia pedindo o campo como pendente — ver a licao abaixo |
+
+**P4 — o que o campo resolve, e por que este path e nao o outro.** Com o campo **vazio** (estado de
+hoje) o Render considera o servico no ar assim que a **porta abre** — e numa app Spring Boot a porta
+abre **antes** de o Liquibase terminar. Ha portanto, **a cada deploy**, uma janela em que o Render
+roteia trafego real para uma instancia cujo banco ainda nao esta pronto: o usuario toma 500. Com o
+path preenchido, o Render so manda trafego depois do `200` e marca o deploy como falho se ele nunca vier.
+
+⚠️ **Tem de ser `/actuator/health/readiness`, NAO `/actuator/health`.** O agregado carrega todos os
+indicadores: em 17/08 o de `mail` devolvia **503 em 10,7s** com a API perfeitamente utilizavel. Apontar
+o health check para o agregado faria o Render reprovar **deploys saudaveis**. O grupo `readiness` foi
+recortado justamente para isso — `management.endpoint.health.group.readiness.include=readinessState,db`
+nos dois profiles: Postgres respondendo + migrations rodadas, nada mais. O path e **publico**
+(`SecurityConfig:82`, `permitAll` em `/actuator/health/**`), entao o checador do Render alcanca sem token.
+
+⚠️ **P4 nao e keep-warm — nao impede a hibernacao.** Quem reduz a frequencia de instancia fria e o
+**P3**. Sao coisas diferentes que so parecem parecidas: P4 diz *"nao me mande trafego antes de eu estar
+pronto"* (mata os 500 de cada deploy); P3 diz *"nao me deixe dormir"* (mata a espera de ~50s). E
+nenhum dos dois dispensa o portao `waitForBackend()` dos fronts — ver secao **18c**.
+
+> ⚠️ **A licao do P4 (29/08): esta lista nasceu ja com um registro errado.** O P4 entrou como aberto
+> porque a secao 18c dizia *"pendente fora do codigo"* — e ele **ja estava feito**. E o mesmo defeito do
+> `keep-alive.yml` fantasma, na direcao contraria: **prosa que ninguem reconfere envelhece nos dois
+> sentidos**, inventando pendencia tanto quanto escondendo. Config de painel nao e verificavel por
+> `curl` de fora (o health check so aparece no log de deploy do Render), entao **o unico jeito de esta
+> lista nao apodrecer e conferir no painel antes de afirmar** — nao herdar o estado do texto anterior.
+
+> 📌 **Nao ha `render.yaml` no repositorio** — o servico foi criado a mao pelo painel, entao estes
+> campos **nao podem ser versionados hoje**. Converter para Blueprint resolveria isso, mas arrisca
+> recriar o servico com **outra URL**, e a atual esta cravada nos builds dos dois fronts
+> (`EXPO_PUBLIC_API_ENV`). Nao vale o risco pelo ganho; por isso a lista acima e o registro possivel.
 
 ### 🎯 Pendencias abertas do BACKEND — por prioridade (FONTE UNICA)
 
@@ -4325,6 +4561,159 @@ env var × bean ficando visivel; `credentials` por transporte (incluindo a chave
 nao contando); `none` como `n/a` e nao `MISSING`; comparacao sem diferenciar caixa (igual ao
 `@ConditionalOnProperty`); e os dois guards de vazamento. O campo novo **nao cega o grep do `ci.yml`**
 (`"startedAtEpochMs":[0-9]*`): o bloco `mail` e irmao do `app`, nao entra dentro dele.
+
+#### 29/08 — #1 FECHADO em staging: o e-mail chegou, e o diagnostico foi por AMBIENTE, nao por codigo
+
+**O item #1 estava aberto desde 11/08 e passou por tres causas diferentes, todas fora do repositorio:**
+a 587 bloqueada no Render (17/08), a confusao entre SMTP key e API key v3, e — a ultima, que custou
+dois dias — **o teste rodando no ambiente errado**.
+
+**A chegada confirmada (o criterio que o item sempre exigiu):**
+
+```
+[MAIL:brevo] reset code enviado para andrericao@hotmail.com
+             (messageId=<202608290007.82986159144@smtp-relay.mailin.fr>)
+```
+
+E o e-mail **chegou na caixa** — que e o unico veredito que vale: o `200` do endpoint nao prova nada
+(anti-enumeracao) e o `messageId` prova entrega **ao Brevo**, nao **ao destinatario**.
+
+**O erro de 27/08 nao era regressao — era outro processo.** O log `[MAIL:smtp] ... Connect timed out`
+das 23:11Z veio de **prod/Railway**, nao do staging. A prova foi a **ausencia** do bloco `mail` no
+`/actuator/info` de prod: o `MailInfoContributor` nasceu em `7eb6001`, que so existe em `dev`, entao o
+processo que emitiu aquele log so podia ser o de `273c5d5`. Como `SmtpEmailSender` e
+`BrevoApiEmailSender` sao mutuamente exclusivos (`@ConditionalOnProperty havingValue`), um mesmo
+processo nunca teria os dois comportamentos — **eram ambientes diferentes, nao condicao quebrada.**
+Efeito colateral util: **a 587 tambem nao abre do Railway**, mesmo sintoma medido no Render em 17/08.
+
+| | commit no ar | bloco `mail` no `/actuator/info` | classe que envia |
+|---|---|---|---|
+| **staging** Render/`dev` | `4320108` | `provider=brevo, sender=BrevoApiEmailSender, credentials=present` | `BrevoApiEmailSender` ✅ |
+| **prod** Railway/`main` | `273c5d5` | **ausente** | `SmtpEmailSender` ❌ |
+
+⚠️ **A licao que sobrevive ao item:** *antes de julgar um envio, provar em QUAL processo ele rodou.* O
+`/actuator/info` por ambiente (26/08) foi construido para responder "o deploy pegou a env var?" e
+acabou respondendo uma pergunta maior — "qual host o app do device esta chamando?". Sem ele, o log de
+27/08 teria sido lido como o codigo novo falhando.
+
+**O que resta e so PROD, e nao e codigo:** `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (**API key v3**, nao
+a SMTP key da `MAIL_PASS`) no painel do **Railway**. Depois do merge `dev`->`main`, prod passa a ser
+conferivel por curl exatamente como o staging ja e.
+
+#### 29/08 (fim do dia) — dois itens fechados: o `client_name` saiu, e o **S12 ja existia** (5a vez)
+
+**#15 (S12, filtro de periodo no `GET /attendances`) fechou sem uma linha de codigo.** O
+`AttendanceController:46-47` **ja declara** `dateFrom`/`dateTo` com `@DateTimeFormat(ISO.DATE)`, e o
+`AttendanceServiceImpl.listAttendances` os converte com `BusinessClock.startOfDay/endOfDayExclusive`
+antes de `findByFilters`. O pedido do partner era *"aceitar `dateFrom`/`dateTo` como o
+`/professional/me/reports` ja faz"* — o endpoint nao so aceita como **entrega mais**: o recorte e o
+dia da **LOJA**, nao o dia UTC (residuo do BUG2b, corrigido em 11/08). O mesmo vale para
+`/attendances/client/me`. **A tela "Meu dia" do partner pode ligar hoje.**
+
+🔁 **Esta e a QUINTA vez** (05/08 S20 · 07/08 S19 · 26/08 `cors.allowed-origins` · 29/08 S31+S34+`is_active`
+· agora o S12) que um pedido de front ja estava respondido pelo codigo. **O padrao nao e coincidencia
+e o custo e sempre o mesmo: tempo de dois times.** O antidoto barato continua sendo o **#40** — publicar
+o mapa do que existe, em vez de responder um a um quando alguem pergunta.
+
+**#13 (`client_name` no `CutRequestResponse`) entregue.** Campo no read-model, seguindo o padrao que
+ja existia em cinco DTOs de attendance (`AttendanceListResponse`, `AttendanceInQueueResponse`, etc.),
+mais `@EntityGraph({"client","client.baseUser"})` na query de pendentes — sem ele seriam **dois**
+SELECTs por linha, porque `Client.getFirstName()` le do `BaseUser`, que e `@OneToOne(LAZY)` com `@MapsId`.
+
+⚠️ **Achado que o item nao previa, e que muda o handoff: `client_name` vem `null` com frequencia.**
+`POST /auth/register` recebe **so e-mail e senha** — `setFirstName` so acontece nos fluxos de
+profissional (`RegisterProfessionalUseCase`, `QuickCreateProfessionalUseCase`) e no
+`UpdateMyProfileUseCase`. **Cliente que nunca preencheu o perfil nao tem nome no banco**, entao o
+campo reflete um vazio real, nao um bug. O handoff honesto para o Partner e: *o nome chega quando
+existe, e **o fallback "Cliente" continua necessario***. Coberto por teste dedicado
+(`listPending_clientWithoutProfileName_returnsEmptyName`).
+
+#### 29/08 — reconciliacao com o Partner: **S30 a S34 chegaram ao backend**, e tres ja tinham resposta no codigo
+
+**Os cinco itens nunca tinham chegado aqui** — `grep` de `S30`..`S34` neste PRD voltava **zero** ate
+hoje. Nasceram na branch de design do partner e so entraram na `dev` deles com o merge do PR #18
+(27/08); o handoff registra o efeito com todas as letras: *"quem tem de responder ainda nao sabe que
+existem"* e **"nada sera codado nos fronts antes desta resposta"**. Ou seja: **dois times parados
+esperando o backend**, sem que o backend soubesse. Incorporados agora como **#39 a #42** + **D10/D11**.
+
+⚠️ **Colisao de numeracao a nao confundir:** existem **dois `S30`** no handoff do partner — o novo
+(*convite para quem nao tem conta*, 21/08, que virou o **#39**) e um antigo (*canal de recuperacao de
+senha*, 12/08, que e o nosso **#1**, ja fechado). Ao citar, usar o **nome**, como combinado.
+
+**Tres deles se responderam lendo o codigo — e o padrao ja e conhecido.** Pela **quarta** vez (05/08 o
+S20, 07/08 o S19, 26/08 o `cors.allowed-origins`, agora estes) um front descreveu como ausencia de
+backend algo que ja existe. **Vale para as duas pontas** — nos so descobrimos indo ao codigo tambem.
+
+**(1) ✅ S34 — o contrato do `roles` esta CONFIRMADO, e o front tinha razao no diagnostico.**
+`JwtTokenProvider:44-46` monta o claim com `Collectors.joining(",")` sobre
+`GrantedAuthority::getAuthority` → o `roles` do JWT e **string separada por virgula, COM o prefixo
+`ROLE_`** (`"ROLE_OWNER,ROLE_CLIENT"`). E a `GrantedAuthority` do Spring vazando para o contrato —
+**nao e proposital, mas e o contrato de fato**, e nao muda sem aviso. **Respostas as tres perguntas:**
+(1) sim, string CSV, definitivo por ora; (2) o prefixo e vazamento, nao decisao — se um dia sair, sai
+com aviso previo; (3) **nao, o corpo tem outra forma.**
+
+⚠️ **A terceira resposta e a que corrige o front-client, e o problema e maior do que "array vs
+string": a CHAVE tambem e outra.** O `/auth/login` devolve `UserProfileGeneralInfosAndToken` →
+`{ user: {...}, tokens: {...} }`, e dentro de `user` o campo e **`user_roles`** (`@JsonProperty`), um
+**array de objetos** `[{role_type, is_active}]` (`UserRoleResponse`) — sem prefixo. O client declara
+`user.roles: string[]`: **chave errada e forma errada**, por isso le `undefined` sempre. Nao ha nada a
+mudar no backend; ha o que corrigir no client.
+
+**(2) ✅ A PERGUNTA DO ANDRE sobre `is_active` — ja esta exposto, e no lugar certo.** A pergunta era
+*"da para expor `is_active` no campo que o front consome, e isso tem efeito colateral ou custo?"*.
+**Ja esta:** `UserRoleResponse` tem `@JsonProperty("is_active")` e viaja no `user_roles` do login, do
+registro e do perfil. **Custo zero** (booleano ja persistido no agregado que ja e carregado, sem
+consulta nova) e **efeito colateral zero**, porque ele **nao esta no JWT** — que e exatamente a
+separacao proposta pelo partner e que este PRD assina: **o servidor decide a cada request** (fonte da
+verdade) e o front recebe `is_active` **so para a UI**, nunca como autorizacao. Colocar o flag dentro
+do token o transformaria em **retrato congelado** ate expirar, que e o problema classico de revogacao
+com JWT. **Nada a implementar; o que faltava era o front saber que o campo existe.**
+
+**(3) 🔧 S31 — o enunciado esta ERRADO no ponto principal: 403 por papel NAO e teoria, e ja tem `code`
+proprio.** O handoff afirma que *"todo 403 que existe hoje e de propriedade do recurso, nunca de
+papel"*. **Nao e o caso.** O `SecurityConfig` tem **69 matchers** `hasRole`/`hasAnyRole` (nao 7), e
+quando um deles recusa, o Spring lanca `AccessDeniedException` → o `GlobalExceptionHandler:451-455`
+responde **`403 ACCESS_DENIED`**. Ou seja, **o 403 por PAPEL e justamente o generico**, e ja e
+distinguivel dos outros. Hoje existem **tres familias** de 403, cada uma com codigo proprio:
+
+| familia | `code` | quando |
+|---|---|---|
+| **papel** | `ACCESS_DENIED` | o matcher `hasRole` recusou — o papel nao esta no token |
+| **propriedade** | `ESTABLISHMENT_ACCESS_DENIED` · `AFFILIATION_ACCESS_DENIED` · `ATTENDANCE_CANCEL_NOT_ALLOWED` | o recurso existe e nao e seu |
+| **estado/capacidade** | `NOT_A_PROFESSIONAL` · `PROFESSIONAL_NOT_AFFILIATED` | o papel esta certo, falta o vinculo |
+
+⚠️ **A terceira familia e o achado real do item** — ela nao aparece no enunciado do partner e e a que
+mais confunde na tela, porque "voce e profissional mas nao esta em loja nenhuma" nao e nem papel nem
+propriedade. ⚠️ **E a pergunta (2) do item — "papel recem-ganho + token antigo" — tem uma resposta que surpreende:
+esse cenario NAO existe no servidor.** A autorizacao **nao le o claim**: o `JwtAuthenticationConverter`
+carrega o usuario a cada request e monta as authorities do banco. **Papel novo ja vale no request
+seguinte, sem refresh nenhum.** O 403 por token velho e um caso imaginario — o que existe e o **app**
+nao saber do papel novo, porque ele le do token; e isso um `refreshToken()` resolve, e ja e o fluxo
+documentado. *(Isto expos um registro obsoleto no topo deste PRD, corrigido na secao 1 — ver abaixo.)*
+
+**O que de fato falta** (e vira o **#40**): documentar o mapa endpoint × papel — hoje sao **69**
+matchers no codigo contra ~7 anotados no contrato. *(A frase de contorno que o partner ja usa — "se
+acabou de mudar algo na sua conta, feche e abra o app" — continua honesta.)*
+
+**(4) 🔴 ACHADO NAO PEDIDO, e o mais valioso da rodada: o topo deste PRD estava MENTINDO ha meses.** A
+secao "Fluxo de refresh obrigatorio" afirmava que *"sem o refresh, os endpoints protegidos por
+ROLE_OWNER ou ROLE_PROFESSIONAL retornarao 403"*. **Nao retornam** — a autorizacao le do banco, como
+a linha logo acima dela ja dizia ("NAO usa claims do JWT para autorizacao"). **Duas afirmacoes
+contraditorias convivendo na mesma secao**, e nenhum teste cobrindo a errada. Corrigido: o refresh
+segue obrigatorio na pratica, mas **pelo motivo certo** (o app le o papel do token e sem refresh nao
+sabe que virou dono). Mesma familia dos tres registros falsos de 26/08 — e o segundo achado da semana
+que so apareceu porque alguem foi ao codigo conferir uma pergunta de front.
+
+🔑 **E o mesmo caminho de codigo barateia o D11:** `UserDetailsImpl:47-51` ja filtra
+`UserRole::getIsActive` ao montar as authorities, entao **desativar um papel ja o derruba no request
+seguinte**. O mecanismo de revogacao existe fim-a-fim; falta so **quem escreva `false`**.
+
+**(5) ⬜ S30 (convite) e S32/S33 seguem abertos, e sao decisao sua.** O **#39** (convite para
+quem ainda nao tem conta) precisa de endpoint novo e da escolha entre convite por contato e link/codigo
+— com o #1 fechado, a dependencia de e-mail deixou de ser argumento contra a opcao por contato, mas o
+link segue mais barato. **S32 e S33 viraram D10 e D11** na secao 20b: sao decisao de **modelo**, nao
+implementacao, e devem ser respondidas **juntas** — a resposta "papel e o vinculo" responde as duas.
+
 > - ⚖️ **#32 (diferenciar e-mail nao cadastrado) ganhou uma TENSAO que so o Andre resolve.** O
 >   Partner argumenta que consertar o S21 **sozinho** ja melhora muito; este PRD registra o **rate
 >   limit como pre-requisito** (sem ele o endpoint vira verificador de contas aberto). Os dois estao
@@ -4428,7 +4817,7 @@ nao contando); `none` como `n/a` e nao `MISSING`; comparacao sem diferenciar cai
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | Esqueci minha senha — **fatia 2: envio real (API HTTP do Brevo)** | 🟠 **CODIGO PRONTO 2026-08-22 — falta LIGAR no Render** (era 🔴 quebrado em producao desde 11/08) | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**. ✅ **22/08 — o transporte trocou: `BrevoApiEmailSender` (HTTPS 443).** Se a 587 nao abre, nenhuma configuracao de SMTP resolve — o envio passou para a **API HTTP do mesmo provedor**, com `MAIL_PROVIDER=brevo`. **O que falta e do Andre, e nao e codigo:** (1) gerar a **API key v3** no painel do Brevo (*SMTP & API → API keys* — **NAO** e a SMTP key do `MAIL_PASS`); (2) setar `MAIL_PROVIDER=brevo` e `BREVO_API_KEY` no Render (o `MAIL_FROM` ja esta la e o remetente ja foi verificado em 22/07); (3) pedir um reset em device e conferir a chegada. O log de boot (`[MAIL] provider=brevo — url=...`) confirma o provider ANTES de qualquer teste, e `[MAIL:brevo] ... HTTP 401 — {corpo}` separa chave errada de remetente nao verificado. **O item so fecha com a chegada confirmada em device** — o teste automatizado cobre a forma da requisicao, nao a conta. Detalhes: secao **22/08** logo acima.
+| 1 | ~~Esqueci minha senha — **fatia 2: envio real (API HTTP do Brevo)**~~ | ✅ **ENTREGUE 2026-08-29 — o e-mail CHEGOU** (staging/Render). 🟠 **prod/Railway segue em `smtp`** — falta env var, nao codigo | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**. ✅ **22/08 — o transporte trocou: `BrevoApiEmailSender` (HTTPS 443).** Se a 587 nao abre, nenhuma configuracao de SMTP resolve — o envio passou para a **API HTTP do mesmo provedor**, com `MAIL_PROVIDER=brevo`. **O que falta e do Andre, e nao e codigo:** (1) gerar a **API key v3** no painel do Brevo (*SMTP & API → API keys* — **NAO** e a SMTP key do `MAIL_PASS`); (2) setar `MAIL_PROVIDER=brevo` e `BREVO_API_KEY` no Render (o `MAIL_FROM` ja esta la e o remetente ja foi verificado em 22/07); (3) pedir um reset em device e conferir a chegada. O log de boot (`[MAIL] provider=brevo — url=...`) confirma o provider ANTES de qualquer teste, e `[MAIL:brevo] ... HTTP 401 — {corpo}` separa chave errada de remetente nao verificado. **O item so fecha com a chegada confirmada em device** — o teste automatizado cobre a forma da requisicao, nao a conta. Detalhes: secao **22/08** logo acima. ✅ **29/08 — FECHADO em staging, com a chegada confirmada em caixa (o criterio que o item exigia).** Log do Render: `[MAIL:brevo] reset code enviado para andrericao@hotmail.com (messageId=<202608290007.82986159144@smtp-relay.mailin.fr>)`, e o `/actuator/info` do mesmo processo respondendo `provider=brevo / sender=BrevoApiEmailSender / credentials=present`. ⚠️ **O teste de 27/08 que "falhou" tinha batido em PROD/Railway, nao no staging** — a prova foi a AUSENCIA do bloco `mail` no `/actuator/info` de prod (o `MailInfoContributor` nasceu em `7eb6001`, que so existe em `dev`), somada ao `[MAIL:smtp] Connect timed out` na 587: **a 587 tambem nao abre do Railway**. Licao que vale alem deste item: **antes de julgar um envio, provar em QUAL processo ele rodou**. ➡️ **O que resta e so prod:** `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key v3) no painel do **Railway**; o merge `dev`->`main` leva o `/actuator/info` pra la e prod passa a ser conferivel por curl como o staging ja e.
 | 2 | ~~**Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)**~~ | ✅ **ENTREGUE 2026-08-18 — fatias A, A2, B e C completas** (a C saiu como `?city=&uf=`, junto do #29) — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
@@ -4440,9 +4829,9 @@ nao contando); `none` como `n/a` e nao `MISSING`; comparacao sem diferenciar cai
 | 10 | **ETA com buffer de −10min (regra GLOBAL) — Partner S10** | ⬜ aberto (pedido 2026-07-14) | O tempo de espera EXIBIDO = ETA calculado **−10min (piso 0)**, p/ o cliente chegar antes. Decisao Andre: regra GLOBAL — **o backend calcula** e client+partner so exibem o MESMO numero (nada de cada front subtrair por conta). Definir: buffer embutido no valor exposto do read-model vs campo separado (`display_wait` vs `raw_eta`). |
 | 11 | **Listar TODOS os profissionais do estabelecimento (incl. sem servico) — Partner S8** | ⬜ aberto (pedido 2026-07-09) | `professionals-with-queue` ESCONDE profissional sem servico (#31). Falta `GET /establishment/{id}/professionals` (ou count) com **todos os vinculados** + flag/contagem de servicos. Desbloqueia: owner ver o profissional recem-vinculado que ainda nao cadastrou servico; checklist de prontidao separar "1+ vinculado" de "1+ com servico". |
 | 12 | **Melhorias de rating (Client §3 — nao bloqueiam o front)** | ⬜ aberto | (a) **`rated: boolean`** no `GET /attendances/client/me` — fonte da verdade p/ esconder o "Avaliar"; hoje o front usa `ratedStore` local (SecureStore) que nao sincroniza entre aparelhos nem sobrevive a reinstalar; (b) **rollup por ESTABELECIMENTO** em `GET /establishment` — media ponderada = Σ`ratingSum` ÷ Σ`ratingCount` dos profissionais, p/ os cards da Home; (c) **`rating_best`** (maior nota entre os profissionais) no card + considerar rating como desempate na ordenacao (#11); (d) **`establishmentName`** no `client/me` (hoje so `establishmentId`). |
-| 13 | **`client_name` no `CutRequestResponse` (Partner nice-to-have)** | ⬜ aberto (pequeno) | O `GET /attendances/cut-requests` traz so `client_id` — o partner monta o card com fallback "Cliente". O front JA consome o campo opcional: adicionar `client_name` (e avaliar `service_names`) faz o nome aparecer **sem nenhuma mudanca no front**. |
+| 13 | ~~**`client_name` no `CutRequestResponse`** (Partner nice-to-have)~~ | ✅ **ENTREGUE 2026-08-29** | Campo no read-model + `@EntityGraph({"client","client.baseUser"})` na query de pendentes (sem ele, 2 SELECTs por linha). ⚠️ **Vem `null` para quem nunca preencheu o perfil** — `POST /auth/register` so recebe e-mail+senha, entao **o fallback "Cliente" do card segue necessario**. Ver `GET /attendances/cut-requests`. |
 | 14 | Expediente (inicio/fim) nos relatorios | ⬜ aberto | **Partner "Expediente (inicio/fim) nos relatorios"** — registrar eventos reais de abrir/fechar (timestamp) ou expor `opening/closing` + eventos num endpoint de relatorio; front exibe "Expediente: HH:MM–HH:MM". Ligado ao item Fechamento (BUG5, #1). |
-| 15 | **Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`) — Partner S12** | ⬜ aberto (nice-to-have, pedido 2026-07-22) | Aceitar `dateFrom`/`dateTo` como o `/professional/me/reports` ja faz. Motivo: a tela "Meu dia" do partner unificou resumo+historico — o resumo filtra por periodo e o historico nao consegue acompanhar (hoje so filtros de STATUS). |
+| 15 | ~~**Filtro de periodo no `GET /attendances` (`dateFrom`/`dateTo`)** — Partner S12~~ | ✅ **JA EXISTIA — fechado sem codigo em 2026-08-29** | `AttendanceController:46-47` ja declara os dois `@RequestParam` com `@DateTimeFormat(ISO.DATE)`, e `AttendanceServiceImpl.listAttendances` os converte com `BusinessClock.startOfDay/endOfDayExclusive` antes de `findByFilters` — ou seja, **entrega mais do que o S12 pediu**: o recorte e o dia da **LOJA**, nao o dia UTC. O mesmo vale para `/attendances/client/me`. **Nada a implementar; o Partner pode ligar hoje.** |
 | 16 | Transferencia de atendimento entre profissionais | ⬜ aberto | `PATCH /attendances/{id}/transfer?toProfessionalId=` |
 | 17 | Dashboard do owner / metricas | ⬜ aberto | agregacoes (dia/semana/mes, pico) |
 | 18 | Paginacao no GET /establishment | ⬜ aberto | Pageable |
@@ -4466,6 +4855,10 @@ nao contando); `none` como `n/a` e nao `MISSING`; comparacao sem diferenciar cai
 | 36 | **Profissional abrir o PROPRIO estabelecimento — o onboarding nao tem essa porta** (Partner S23, reforcado no teste manual do Andre 2026-08-11) | ⬜ aberto (**posicao provisoria**) — ⚠️ **mas a pergunta que eles dizem ser o bloqueio JA TEM RESPOSTA: SIM, aceita** | ✅ **CONFERIDO NO CODIGO** (a licao de 05/08 e 07/08, agora aplicada ANTES de aceitar o enunciado): o Partner pergunta *"o `POST /establishment/quick-create` aceita um usuario que ja e PROFESSIONAL?"* e trata isso como o bloqueio. **Aceita hoje, sem uma linha de codigo nova:** o `QuickCreateEstablishmentUseCase` **nao tem barreira nenhuma** contra perfil profissional (so checa `hasRole(OWNER)` e **adiciona** o papel se faltar, linhas ~53), e o matcher `hasRole("CLIENT")` do `SecurityConfig` (linha 120) **nao barra ninguem**, porque o `RegisterUseCase` chama `addClientProfile()` para **todo** usuario que se cadastra — entao todo profissional carrega `ROLE_CLIENT` junto. Papeis sao **acumulativos**, como o PRD ja dizia. **E a reputacao acompanha a pessoa:** `rating_average`/`rating_count` vivem no `Professional`, nao no vinculo — a leitura do Partner esta certa e **nao ha migracao de dado a fazer**. **O que sobra de trabalho REAL, e e decisao de produto (Andre), nao codigo:** (1) ele pode abrir a propria loja **enquanto afiliado a outra**, ou tem de se desafiliar antes? (leitura do Partner: desafiliar antes, senao fica na fila de duas casas — e o `PROFESSIONAL_ALREADY_AFFILIATED` ja existe para o caso inverso); (2) o historico na casa antiga continua no `/professional/me/reports` dele apos a troca? (hoje **continua**, porque o atendimento aponta para o `Professional`); (3) ao abrir a loja, ele se **auto-afilia** como profissional dela? 🆕 **Caso novo e mais urgente (11/08) — o ONBOARDING:** quem escolhe "sou profissional" cria o perfil no 1o passo e cai **direto em "Buscar Estabelecimento"**; nao existe a pergunta *"vai abrir a sua propria loja ou se afiliar a uma?"*. O dono de barbearia que se identifica como profissional fica **preso no fluxo de afiliacao**. ⚠️ **Isso e UI do Partner e ja esta destravado pelo backend** — responder (1)(2)(3) fecha o item |
 | 37 | **Dono permite o GPS DEPOIS do cadastro — nada corrige a coordenada da loja** (identificado por Andre, 2026-08-13) | ⬜ aberto (**posicao provisoria — Andre reordena**) | A fatia A2 usa o GPS do dono como fonte mais precisa da coordenada da LOJA, porque ele esta *dentro dela* ao cadastrar (o CEP resolve faixa de logradouro, nao a porta). **Mas se ele cadastrou sem permitir e concede depois, nada reofereceu a correcao.** A loja fica com a coordenada do CEP — presente, porem imprecisa, e ninguem sabe. O `PATCH /establishments/{id}/addresses/{addressId}` **ja aceita** `lat`/`lng`, entao o backend pode nao ter codigo novo nenhum: falta decidir **quem oferece a correcao e quando** (o Partner detecta a permissao recem-concedida e pergunta "quer usar sua posicao atual para a loja?"). ⚠️ **Irmao do #34** — os dois sao "a loja esta no mapa no lugar errado e ninguem avisa"; avaliar entregar juntos. Ver a secao do GPS: "BURACO ABERTO — o dono que permite o GPS DEPOIS do cadastro". Decisao de modelo relacionada (mesma data): a coordenada persistida e **do estabelecimento, nunca do cliente**.
 | 38 | ~~Mesmo cliente entra DUAS vezes na fila~~ | ✅ **ENTREGUE 2026-08-15** (Client §4.2, device 07/08) | Portao novo no `createAttendance`, **depois da validacao dos serviceItems e antes da primeira escrita** (precedencia fixada em 17/08 — ver contrato do `POST /attendances`): cliente com atendimento em `SCHEDULED`/`LATE`/`IN_PROGRESS`/`PAUSED` no **mesmo profissional** recebe **409 `CLIENT_ALREADY_IN_QUEUE`**. Raio estreito por decisao [D1](#d1--duplo-ingresso-na-fila-qual-e-o-alcance-do-bloqueio--decidido-2026-08-15) — **`INTENTION` NAO conta** (compromisso fora da fila; conta-la trancaria quem tem intencao para sabado o resto da semana), e por isso a lista **nao** e a `ACTIVE_STATUSES` do apagar-conta. ⚠️ **Achado no Newman de homolog (17/08):** a invariante reprovou **3 pastas da collection** (`08d`, `08e`, `08k`) que usavam **um unico cliente para representar uma fila inteira** — encaixar alguem atras de si mesmo, promover-se a frente de si mesmo. Nao era teste quebrado: eram cenarios impossiveis que o servidor aceitava antes. Quem so enchia fila virou **convidado** (`add-quest-attendance`); quem precisa ser outra pessoa ganhou usuario proprio. ⚠️ Os dois casos de erro da `08e` (422 `QUEUE_TARGET_NOT_FEASIBLE` e 400) receberiam **409 antes da regra que testam** — passariam a afirmar outra coisa. ⚠️ **Achado ao rodar a suite completa (17/08):** a classe de teste reusa um profissional e ignorava uma invariante que **ja existia** — `startAttendance` recusa com **409 `ATTENDANCE_ALREADY_IN_PROGRESS`** quando o profissional ja tem atendimento `IN_PROGRESS` **ou** `PAUSED`. Como cada teste deixa o seu atendimento vivo de proposito, o teste seguinte reprovava no `/start`, **por motivo alheio ao #38**; corrigido com um `@AfterEach` que libera a cadeira. `DoubleQueueEntryIntegrationTest` (8): os que provam o que **continua passando** (outro profissional da mesma loja, outro cliente) sao os que fixam a decisao, e os de `FINISHED`/`CANCELLED` provam que o bloqueio **libera** — sem eles seria banimento, nao invariante. |
+| 39 | **Convite para profissional que AINDA NAO TEM CONTA — hoje o dono nao tem caminho nenhum** (Partner S30, achado de 2026-08-21) | ⬜ aberto (**posicao provisoria — Andre reordena**) | O unico caminho e `GET /professional?name=` → `ProfessionalRepository.searchByNameAndSpecialty`, e a query e mais estreita do que o handoff supoe: casa **so `firstName`** (`LOWER(u.firstName) LIKE`), e ainda filtra `p.establishment IS NULL` **e** ausencia de `AffiliationRequest` PENDING. **Ou seja, some da busca quem ja tem loja e quem tem convite pendente** — tres motivos diferentes produzem a MESMA tela "Nenhum profissional encontrado", e nenhum deles e "nao tem conta". ⚠️ **O caso mais provavel do dono e o unico que nao funciona:** o barbeiro que ja trabalha com ele e nao usa o app. **Precisa de endpoint novo, e a escolha e do Andre:** **(A)** convite por contato — `POST /establishment/{id}/invitations` com e-mail/telefone, gera convite PENDENTE que se resolve quando a pessoa se cadastra com aquele contato; **(B)** link/codigo — o dono gera o link, a pessoa se cadastra por ele e ja nasce vinculada. **(B) e mais barata**; a objecao historica contra (A) era depender de e-mail, e ela **caiu com o #1 fechado em 29/08** — entao hoje a escolha e so de produto. Ver tambem o **#28** (busca nao casa apelido), que piora o mesmo fluxo. |
+| 40 | **Documentar o mapa endpoint x papel — 69 matchers no codigo, ~7 no contrato** (Partner S31, recorte corrigido em 2026-08-29) | ⬜ aberto (**posicao provisoria**; virou **so documentacao** — as duas premissas do enunciado cairam) | ⚠️ **O enunciado do partner esta errado na premissa** — 403 por papel **ja existe e ja tem `code` proprio** (`ACCESS_DENIED`, vindo dos **69** matchers `hasRole`/`hasAnyRole` do `SecurityConfig` via `AccessDeniedException`), distinto dos 403 de propriedade (`ESTABLISHMENT_ACCESS_DENIED`, `AFFILIATION_ACCESS_DENIED`, `ATTENDANCE_CANCEL_NOT_ALLOWED`) e de uma **terceira familia que o item nao viu**: estado/capacidade (`NOT_A_PROFESSIONAL`, `PROFESSIONAL_NOT_AFFILIATED`). Detalhamento na secao **29/08**. ⚠️ **A segunda premissa tambem caiu:** a pergunta (2) do item — *"papel ganho agora + token antigo, o backend manda refazer o refresh?"* — descreve um cenario que **nao existe no servidor**. A autorizacao nao le o claim: o `JwtAuthenticationConverter` carrega o usuario a cada request e monta as authorities do banco, entao **papel novo ja vale no request seguinte, sem refresh**. Quem precisa do refresh e o **app**, que le o papel do token — e esse fluxo ja esta documentado. *(Este item expos, de quebra, um registro obsoleto no topo do PRD, corrigido na secao 1.)* **O que sobra e SO documentacao, sem mudanca de contrato:** publicar o mapa endpoint x papel — hoje **69** matchers no codigo contra ~7 anotados aqui — e a tabela das tres familias de 403 (papel / propriedade / estado). |
+| 41 | ~~**Papel e por PESSOA e nao diz DE QUAL LOJA**~~ (Partner S32) | ✅ **DECIDIDO 2026-08-29 — ver D10** (secao 20b). **Os fronts estao DESBLOQUEADOS**; zero codigo de backend | Hoje `BaseUser -> {Client, Professional, Owner}`, um de cada, sem escopo; papel nasce como efeito de criar a entidade (`add*Profile()` em 4 pontos) e o JWT nao diz em que contexto a pessoa age. Com multi-loja — que o Andre disse estar "para ser feito" — `"e OWNER"` deixa de responder **OWNER de qual**, e a taxa por atendimento tem o mesmo furo (ela nasce numa loja, e quem absorve ou repassa e o profissional **naquela** loja). ✅ **Resposta:** o modelo por pessoa **fica como esta** (vinculo e a direcao provavel, mas so quando multi-loja existir de verdade — nao se paga migration por loja que nao existe); e a regra permanente e que **o escopo NUNCA entra no JWT** — contexto vem do `establishmentId` na rota, conferido no banco a cada request, senao perder acesso a uma loja so teria efeito quando o token vencesse. **Handoff aos fronts:** nao descubram "de qual loja sou dono" lendo o token — leiam de `/establishment/mine` / `/professional/me` e mandem o id na rota; quando a 2a loja existir muda o **seletor na UI**, nao o formato do papel, entao **nada do que codarem agora sera jogado fora**. |
+| 42 | ~~**Nao existe caminho para PERDER papel, so para ganhar**~~ (Partner S33) | ✅ **DECIDIDO 2026-08-29 — ver D11** (secao 20b). **Os fronts estao DESBLOQUEADOS**; zero codigo de backend | Confirmado no codigo em 29/08: ha `BaseUser.addRole` e **nao ha** `removeRole`, nao ha `DELETE /professional`, e o unico `revoke*` do repo e de refresh token. Tres casos ja em producao: quem sai da loja (`LeaveEstablishmentUseCase:52` desfaz o **vinculo** e mantem o papel), quem se arrependeu do "Eu tambem vou atender", e o dono que fechou a loja. 🔑 **O item e muito mais barato do que parece: o mecanismo de revogacao JA EXISTE fim-a-fim** — o `JwtAuthenticationConverter` carrega o usuario a cada request e o `UserDetailsImpl:47-51` filtra `UserRole::getIsActive`, entao **`is_active=false` derruba o papel no request seguinte**, sem esperar o token expirar e sem migration. **O unico buraco e que nada escreve `false`.** ✅ **Resposta: papel e "o que a pessoa JA FOI"; o vinculo diz o que ela e hoje** — sair da loja **nao** tira o `PROFESSIONAL`, e o `LeaveEstablishmentUseCase` fica como esta. 🔒 **O argumento que fechou:** `POST /professional/affiliate` e `hasRole("PROFESSIONAL")` (`SecurityConfig:187`) — revogar no `leave` **trancaria o profissional do lado de fora**, sem conseguir se afiliar a proxima loja. Sobra como revogacao legitima so o **arrependimento explicito** ("nao quero mais atender"), que vira item pequeno usando o `is_active` que ja existe. ⚠️ **Registrado para nao voltar:** papel so muda quando a pessoa **pede** — nenhuma transicao automatica. |
 > **Nota de recorte (BUG5, 2026-07-05):** o antigo item "openStatus real" empacotava 3 coisas. A **parte A** — filtro `?includeAll=true` na listagem publica (`GET /establishment` default so `OPEN`) — foi **concluida** (ver Concluidos). Restam a **parte B** (`is_open` efetivo por horario) e a **parte C** (bloquear entrada fora do horario + "solicitar corte"), consolidadas no **#1** acima. A descricao antiga ("auto-fechar no `closing_time`") foi corrigida em 2026-07-05 para "NAO se auto-fecha" — e essa correcao **foi por sua vez SUPERSEDIDA em 2026-07-14**: volta a haver auto-fechamento, agora com **prompt + carencia de 15min** (nao no `closing_time` seco). ✅ **ENTREGUE** como a fatia 5 do S1 (ver Concluidos: `EstablishmentAutoCloseScheduler`).
 
 **Verificacao pendente (nao sao features, so confirmar no staging):** Partner **BUG2/BUG3 ANTIGOS** (numeracao de 2026-07-09; a vaga "BUG2" foi REUSADA pelo Partner p/ o caso do fuso — item proprio na tabela) — `POST /establishment/{id}/service-items` (lado owner) e `GET /attendances` funcionando em staging. ⚠️ **O Partner pediu o encerramento destes dois em 2026-07-29** (reportados por eles em 2026-06-09): do lado deles o `/attendances` consta resolvido desde 2026-07-09 e a adicao de servico ja funciona pelo caminho do profissional ("Meus Servicos"). **Confirmar em staging e encerrar** — nao ha codigo a escrever, so a confirmacao.

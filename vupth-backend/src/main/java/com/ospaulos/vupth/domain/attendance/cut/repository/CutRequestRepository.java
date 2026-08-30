@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.attendance.cut.repository;
 
 import com.ospaulos.vupth.domain.attendance.cut.CutRequestStatus;
 import com.ospaulos.vupth.domain.attendance.cut.model.CutRequest;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,7 +13,14 @@ import java.util.UUID;
 
 public interface CutRequestRepository extends JpaRepository<CutRequest, UUID> {
 
-    /** Pedidos de um profissional num dado estado (ex.: PENDING para a tela do Partner). */
+    /**
+     * Pedidos de um profissional num dado estado (ex.: PENDING para a tela do Partner).
+     *
+     * <p>O grafo traz {@code client.baseUser} junto porque o read-model expoe {@code client_name},
+     * e {@code Client.getFirstName()} le do {@code BaseUser} (LAZY, {@code @MapsId}) — sem isso
+     * seriam dois SELECTs por linha da lista.
+     */
+    @EntityGraph(attributePaths = {"client", "client.baseUser"})
     List<CutRequest> findByProfessionalIdAndStatusOrderByCreatedAtAsc(UUID professionalId, CutRequestStatus status);
 
     /** Pedidos PENDING ja vencidos — base do auto-nega por timer (fatia 3). */

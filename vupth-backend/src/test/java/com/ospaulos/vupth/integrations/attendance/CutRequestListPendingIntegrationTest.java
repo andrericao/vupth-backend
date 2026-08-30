@@ -47,6 +47,7 @@ class CutRequestListPendingIntegrationTest {
 
     String clientToken, ownerProfToken, professionalId, establishmentId, serviceItemId;
     String anotherProfToken; // PROFESSIONAL de outra loja (sem pedidos)
+    String clientId, clientFirstName; // o nome so existe porque o cliente preencheu o perfil
 
     @BeforeAll
     void setup() throws Exception {
@@ -62,6 +63,15 @@ class CutRequestListPendingIntegrationTest {
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientToken = client.token();
+        this.clientId = client.id();
+        // POST /auth/register so recebe email+senha: quem nao preenche o perfil fica com firstName
+        // NULO. Preenchemos aqui de proposito para o client_name ter o que devolver.
+        this.clientFirstName = faker.name().firstName();
+        mvc.perform(patch("/profile/general-infos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content("{\"first_name\":\"" + clientFirstName + "\"}"))
+                .andExpect(status().isOk());
 
         var another = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var anotherEstab = TestUserUtils.becomeOwner(mvc, mapper, faker, another.token());
@@ -79,11 +89,16 @@ class CutRequestListPendingIntegrationTest {
 
     /** Cliente cria um pedido de corte (loja fechada) e devolve o id. */
     private String createRequest() throws Exception {
+        return createRequestAs(clientToken);
+    }
+
+    /** Mesma criacao, mas por um cliente qualquer — usado para o caso do perfil sem nome. */
+    private String createRequestAs(String token) throws Exception {
         String body = "{\"professionalId\":\"" + professionalId + "\",\"establishmentId\":\"" + establishmentId
                 + "\",\"serviceItemIds\":[\"" + serviceItemId + "\"]}";
         MvcResult r = mvc.perform(post("/attendances/cut-requests")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .header("Authorization", clientToken)
+                        .header("Authorization", token)
                         .content(body))
                 .andExpect(status().isCreated())
                 .andReturn();
@@ -104,7 +119,24 @@ class CutRequestListPendingIntegrationTest {
                 .andExpect(jsonPath("$[1].id").value(second))
                 .andExpect(jsonPath("$[0].status").value("PENDING"))
                 .andExpect(jsonPath("$[0].professional_id").value(professionalId))
+                .andExpect(jsonPath("$[0].client_id").value(clientId))
+                .andExpect(jsonPath("$[0].client_name").value(clientFirstName))
                 .andExpect(jsonPath("$[0].service_item_ids[0]").value(serviceItemId));
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("client_name vem VAZIO quando o cliente nunca preencheu o perfil — o fallback do card continua necessario")
+    void listPending_clientWithoutProfileName_returnsEmptyName() throws Exception {
+        var nameless = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        String id = createRequestAs(nameless.token());
+
+        mvc.perform(get("/attendances/cut-requests").header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(id))
+                .andExpect(jsonPath("$[0].client_id").value(nameless.id()))
+                .andExpect(jsonPath("$[0].client_name").isEmpty());
     }
 
     @Test
