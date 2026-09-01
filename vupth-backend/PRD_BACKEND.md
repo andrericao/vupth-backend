@@ -23,10 +23,12 @@
 > `vupth-backend/ping.sh`, um `while true` que roda **no terminal do Andre** — morre quando o
 > terminal fecha ou a maquina suspende.
 >
-> **Direcao decidida (ver secao 18e):** pinger **externo** gratuito (cron-job.org), em
-> `GET /actuator/health/readiness`, intervalo de **5 min**, restrito a uma **janela de teste**.
-> A janela e o que protege as **750h/mes** de instancia do free tier — o intervalo nao afeta a
-> cota, porque a hora conta enquanto a instancia esta **acordada**, nao por requisicao.
+> **~~Direcao decidida~~ ❌ CANCELADA POR DECISAO DO ANDRE (2026-08-31).** O pinger externo chegou a
+> ser desenhado (cron-job.org, `GET /actuator/health/readiness`, 5 min, em janela) e o desenho fica
+> registrado na secao **18e.3** como memoria da conta das 750h — mas **o job nao sera criado**.
+> **Consequencia, dita de frente:** nao ha, e nao havera, nenhum atenuante para a hibernacao do Render.
+> O cold start de ~50s passa a ser o caso **comum**, nao a excecao, e quem segura o usuario e **so** o
+> portao `waitForBackend()` dos fronts (secao **18c**) — que ja esta implementado nos dois.
 >
 > ⚠️ **Keep-warm nao substitui o portao `waitForBackend()` da secao 18c.** Deploy, restart,
 > falha do cron, fora da janela e teto de cota produzem instancia fria de novo.
@@ -3279,13 +3281,15 @@ aqui e nunca avisamos"*) e a checagem de alinhamento de 29/08 confirmou os dois 
 ESPECIFICACAO do que ja existe** — vale como contrato para quem for mexer, nao como pendencia. O que
 segue pendente e so a linha de painel abaixo, que e do Andre.
 
-⚠️ **Keep-warm nao substitui o portao** e o portao nao substitui o keep-warm: deploy, restart, falha do
-cron, fora da janela e teto de cota produzem instancia fria de novo, e ai quem segura o usuario e o
-portao.
+⚠️ **Nao ha keep-warm — o portao esta sozinho (2026-08-31).** O pinger externo foi **cancelado**, entao
+a instancia hiberna sem atenuante e a tela "preparando servidor..." deixa de ser caminho raro: ela e o
+caminho **normal** da primeira abertura depois de um periodo parado. Isso nao pede mudanca nenhuma nos
+fronts (o portao ja aguenta ~90s), mas muda o que se espera dele em UX — vale os fronts saberem que a
+tela vai aparecer de verdade, e nao por ~0,5s.
 
-**~~Pendente fora do codigo (Andre)~~ ✅ FEITO:** o **Health Check Path = `/actuator/health/readiness`** ja esta setado no painel do Render (**P4**, confirmado em 29/08). Keep-warm: pinger externo gratuito, **5 min, em janela** (**P3**) — desenho e a conta das 750h na **secao 18e**. ➡️ **Os dois estao rastreados na lista "Pendencias de PAINEL" da secao 22**, com valor exato e estado.
+**~~Pendente fora do codigo (Andre)~~ ✅ NADA PENDENTE AQUI:** o **Health Check Path = `/actuator/health/readiness`** ja esta setado no painel do Render (confirmado em 29/08). O **keep-warm foi CANCELADO em 31/08** (secao **18e.3**) — nao ha pinger, e nao ha tarefa de painel associada a cold start. ➡️ A lista "Pendencias de PAINEL" da secao 22 tem hoje **uma unica linha aberta**, e ela e de e-mail em prod, nao de readiness.
 
-⚠️ **O keep-warm NAO dispensa este portao.** Ele reduz a *frequencia* de instancia fria; o portao garante que, quando ela estiver fria assim mesmo (deploy, restart, falha do cron, fora da janela, teto de cota), o cadastro nao dispare antes da hora. Um e probabilidade e mora num servico de terceiro; o outro e correcao e mora no app. Com o pinger ativo o portao custa ~0,5s e ninguem ve a tela.
+⚠️ **Este portao virou o unico anteparo (31/08).** Antes o argumento era "o keep-warm nao dispensa o portao"; com o pinger **cancelado**, nem existe o outro lado. A instancia vai estar fria em toda primeira abertura depois de um periodo parado — deploy, restart ou simples ociosidade —, entao o portao nao e mais a rede de seguranca de um caso raro: **e o mecanismo principal**, e a tela "preparando servidor..." aparece de verdade, por ~50s, e nao pelos ~0,5s que o cenario com pinger prometia. Um mora no app e e correcao; o que morava num servico de terceiro deixou de existir.
 
 > **Status de alinhamento:** backend ✅ pronto (config aplicada). **Fronts:** implementar o portao `waitForBackend()` no splash. Quando um front concluir, ele avisa e o backend revisa o alinhamento. Backlog #35 (broker externo) **so** quando escalar pra multi-instancia — readiness/cold start e independente dele.
 
@@ -3426,14 +3430,14 @@ BUG2b.
 >    correto do que homolog. Alinhar as duas esperas em `readiness` e decisao de CI, nao de aplicacao.
 > 2. ✅ **RESOLVIDO EM 26/08 (documentalmente).** O topo deste PRD descrevia um `keep-alive.yml`
 >    pingando `/actuator/health` a cada 14 min; o workflow **nao existe** (deletado em `363019d`).
->    O topo foi corrigido e a direcao — pinger externo, 5 min, em janela — esta na **secao 18e**.
->    Falta so a criacao do job no cron-job.org, que e painel, nao codigo.
+>    O topo foi corrigido e a direcao — pinger externo, 5 min, em janela — ficou na **secao 18e**.
+>    ❌ **Encerrado em 31/08:** o Andre **cancelou** o pinger. Nao ha job a criar; nao ha keep-warm.
 
 ---
 
 ## 18e. Acesso por link (build web) — CORS, WebSocket e keep-warm — HANDOFF PARA OS FRONTS
 
-> **Status em 2026-08-29 (era 2026-08-26):** CORS ✅ **implementado E LIGADO** · WebSocket ✅ **ja aberto, nada a fazer** · `/actuator/metrics` ✅ **fechado** · pinger externo 🟠 = configuracao do Andre (painel).
+> **Status em 2026-08-31 (era 2026-08-29):** CORS ✅ **implementado, LIGADO E TESTADO nos dois ambientes** (Render e Railway) · WebSocket ✅ **ja aberto, nada a fazer** · `/actuator/metrics` ✅ **fechado** · pinger externo ❌ **CANCELADO por decisao do Andre** — ver 18e.3.
 >
 > ✅ **29/08 — a env var `CORS_ALLOWED_ORIGINS` foi criada no Render e a liberacao esta MEDIDA no ar.** Era o ultimo passo fora do codigo: `OPTIONS /auth/login` com `Origin: https://vupth-partner.pages.dev` responde **200** com `access-control-allow-origin: https://vupth-partner.pages.dev`. **A build web do Cloudflare Pages esta desbloqueada.**
 >
@@ -3500,9 +3504,16 @@ mais `.requestMatchers("/ws/**").permitAll()` no `SecurityConfig`. O handshake a
 
 ⚖️ **Decisao registrada, nao executada:** com o WS em `*`, um site qualquer consegue assinar `/topic/establishment/{id}/queue`, que e **publico e sem token** (as notificacoes pessoais em `/user/queue/**` seguem exigindo JWT no CONNECT). Baixo impacto — e o mesmo dado da vitrine publica REST — mas da para alinhar com a lista do HTTP depois, em commit separado.
 
-### 3. Keep-warm — pinger externo (configuracao, nao codigo)
+### 3. ~~Keep-warm — pinger externo~~ ❌ CANCELADO (2026-08-31)
 
-Ver o topo deste PRD para a correcao historica. O desenho:
+> **Decisao do Andre em 31/08: o pinger nao sera criado.** O desenho abaixo fica como **registro**, nao
+> como pendencia — util se um dia a decisao mudar, e util para nao ser redescoberto do zero. Nao ha
+> tarefa de painel associada a ele: ele saiu da lista da secao 22.
+>
+> ⚠️ **O que isso deixa em pe:** a hibernacao do Render segue inteira. O unico anteparo ao cold start de
+> ~50s e o portao `waitForBackend()` dos fronts (secao **18c**).
+
+O desenho que foi cancelado:
 
 | Parametro | Valor | Por que |
 |---|---|---|
@@ -4257,13 +4268,34 @@ Toda transicao automatica esbarra na mesma classe de armadilha do `affiliate`.
 
 | # | Tarefa | Painel | Valor exato | Estado |
 |---|--------|--------|-------------|--------|
-| P1 | Transporte de e-mail em prod | **Railway** | `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key **v3**, nao a SMTP key do `MAIL_PASS`) | ✅ **FEITO 2026-08-29** |
-| P2 | Origens do CORS | **Render** ✅ / **Railway** ⬜ | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | 🟡 **Render FEITO 29/08; Railway pendente** (so depois do merge `dev`->`main`, que leva o codigo do CORS pra la) |
-| P3 | Keep-warm — pinger externo | **cron-job.org** | `GET https://vupth-backend-ia.onrender.com/actuator/health/readiness`, **5 min**, **em janela** (08–22 dias uteis) | ⬜ **aberto** — desenho e a conta das 750h na secao **18e.3** |
-| P4 | Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ✅ **JA ESTAVA FEITO** (confirmado por Andre em 29/08). O PRD e que estava desatualizado: a secao 18c seguia pedindo o campo como pendente — ver a licao abaixo |
+| P1 | **Confirmar a CHEGADA do e-mail de reset em PROD** | **Railway** | `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key **v3**, nao a SMTP key do `MAIL_PASS`) — **ja setadas** | ⬜ **ABERTO — a UNICA pendencia de painel viva.** As duas env vars estao la e **medidas em 31/08**; o que falta e o mesmo criterio que fechou o staging: pedir um reset contra prod e o e-mail **chegar na caixa** |
 
-**P4 — o que o campo resolve, e por que este path e nao o outro.** Com o campo **vazio** (estado de
-hoje) o Render considera o servico no ar assim que a **porta abre** — e numa app Spring Boot a porta
+**O que exatamente esta medido no P1, e o que nao esta** (curl de 2026-08-31 contra `https://vupth-backend-ia-production.up.railway.app/actuator/info`):
+
+```json
+{"mail":{"provider":"brevo","sender":"BrevoApiEmailSender","from":"andrericao49@gmail.com","credentials":"present"}}
+```
+
+Isso prova **tres** coisas e **nao prova a quarta**: as env vars chegaram na JVM de prod, o transporte
+escolhido e a **API HTTP** (nao a 587, que nao abre nem do Render nem do Railway), e a chave esta
+presente. **Nao prova que a Brevo aceita essa chave nem que o e-mail sai** — `credentials=present` le o
+campo, nao a conta. So o `POST /auth/forgot-password` contra prod + a caixa de entrada fecham o item,
+exatamente como em 29/08 no staging. ⚠️ Lembrar que o endpoint responde **200 sempre** (anti-enumeracao)
+e o use case **engole** a falha de envio: **a resposta HTTP nao diz nada sobre a entrega**. Quem diz e o
+log do Railway — `[MAIL:brevo] reset code enviado ... (messageId=...)` no caminho feliz, ou
+`[MAIL:brevo] ... HTTP 401 — {corpo}` separando chave errada de remetente nao verificado.
+
+**Fechadas e canceladas** — ficam registradas para ninguem reabrir por engano:
+
+| Tarefa | Painel | Valor exato | Desfecho |
+|--------|--------|-------------|----------|
+| Origens do CORS | **Render** + **Railway** | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | ✅ **FEITO E TESTADO NOS DOIS** (Render 29/08; **Railway confirmado pelo Andre em 31/08**). A ressalva antiga *"so depois do merge `dev`->`main`"* estava **errada**: o codigo do CORS e o `4320108`, que **ja e ancestral de `main`** — conferido em 31/08 |
+| Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ✅ **JA ESTAVA FEITO** (confirmado pelo Andre em 29/08) |
+| Keep-warm — pinger externo | ~~cron-job.org~~ | ~~`GET .../actuator/health/readiness`, 5 min, em janela~~ | ❌ **CANCELADO por decisao do Andre em 2026-08-31.** O desenho e a conta das 750h ficam na secao **18e.3** como registro. **Consequencia:** nao ha atenuante para a hibernacao; o portao `waitForBackend()` dos fronts vira o unico anteparo |
+
+**Health Check Path — o que o campo resolve, e por que este path e nao o outro.** (Registro: o campo
+**esta preenchido**; o paragrafo explica o que ele evita, nao uma pendencia.) Com o campo **vazio** o
+Render considera o servico no ar assim que a **porta abre** — e numa app Spring Boot a porta
 abre **antes** de o Liquibase terminar. Ha portanto, **a cada deploy**, uma janela em que o Render
 roteia trafego real para uma instancia cujo banco ainda nao esta pronto: o usuario toma 500. Com o
 path preenchido, o Render so manda trafego depois do `200` e marca o deploy como falho se ele nunca vier.
@@ -4275,17 +4307,36 @@ recortado justamente para isso — `management.endpoint.health.group.readiness.i
 nos dois profiles: Postgres respondendo + migrations rodadas, nada mais. O path e **publico**
 (`SecurityConfig:82`, `permitAll` em `/actuator/health/**`), entao o checador do Render alcanca sem token.
 
-⚠️ **P4 nao e keep-warm — nao impede a hibernacao.** Quem reduz a frequencia de instancia fria e o
-**P3**. Sao coisas diferentes que so parecem parecidas: P4 diz *"nao me mande trafego antes de eu estar
-pronto"* (mata os 500 de cada deploy); P3 diz *"nao me deixe dormir"* (mata a espera de ~50s). E
-nenhum dos dois dispensa o portao `waitForBackend()` dos fronts — ver secao **18c**.
+⚠️ **O Health Check Path nao e keep-warm — nao impede a hibernacao.** Sao coisas diferentes que so
+parecem parecidas: o health check diz *"nao me mande trafego antes de eu estar pronto"* (mata os 500 de
+cada deploy); o keep-warm diria *"nao me deixe dormir"* (mataria a espera de ~50s). ❌ **O keep-warm foi
+cancelado em 31/08, entao a segunda frase nao tem mais dono:** a espera de ~50s fica, e o unico anteparo
+e o portao `waitForBackend()` dos fronts — ver secao **18c**. Confundir os dois e o erro classico aqui:
+ter o health check preenchido **nao** torna o app quente.
 
-> ⚠️ **A licao do P4 (29/08): esta lista nasceu ja com um registro errado.** O P4 entrou como aberto
-> porque a secao 18c dizia *"pendente fora do codigo"* — e ele **ja estava feito**. E o mesmo defeito do
-> `keep-alive.yml` fantasma, na direcao contraria: **prosa que ninguem reconfere envelhece nos dois
-> sentidos**, inventando pendencia tanto quanto escondendo. Config de painel nao e verificavel por
-> `curl` de fora (o health check so aparece no log de deploy do Render), entao **o unico jeito de esta
-> lista nao apodrecer e conferir no painel antes de afirmar** — nao herdar o estado do texto anterior.
+📌 **Prova de que os dois sao mesmo distintos, colhida sem querer em 31/08:** o primeiro curl ao
+`/actuator/info` de **prod (Railway)** devolveu **502 "Application failed to respond"**; o seguinte
+devolveu 200 com `startedAt` de minutos antes e `bootMillis=30640`. Ou seja, peguei a janela de boot de
+~30s — o mesmo fenomeno que o health check corrige no Render, num painel onde ninguem tinha olhado para
+isso. Nao virou tarefa porque nao foi investigado; fica como observacao para quando prod for revisado.
+
+> ⚠️ **A licao (29/08, ampliada em 31/08): esta lista nasceu com DOIS registros errados, um em cada
+> direcao.** O **Health Check Path** entrou como aberto porque a secao 18c dizia *"pendente fora do
+> codigo"* — e ele **ja estava feito**: pendencia **inventada**. E o **e-mail em prod** entrou como
+> ✅ fechado em 29/08 sem que ninguem tivesse visto um e-mail chegar de prod — pendencia **escondida**.
+> O `keep-alive.yml` fantasma foi o mesmo defeito uma terceira vez. **Prosa que ninguem reconfere
+> envelhece nos dois sentidos.**
+>
+> 🔑 **O que 31/08 acrescenta e o antidoto, e ele nao e "conferir com mais cuidado":** o e-mail em prod
+> so se resolveu porque havia **como medir de fora** — o `MailInfoContributor` (`7eb6001`) expoe o
+> provider efetivo no `/actuator/info`, e um curl encerrou a discussao em segundos. O Health Check Path
+> **nao** tem esse equivalente (so aparece no log de deploy do Render), e foi justamente ele que ficou
+> mais de um mes errado no texto. **Quando um estado de painel importa, vale o custo de expo-lo por
+> endpoint** — foi o que transformou "eu acho que setei" em fato verificavel.
+>
+> ⚠️ **E o corolario, que e o que segurou o P1 aberto hoje:** medir **presenca de configuracao** nao e
+> medir **funcionamento**. O `credentials=present` prova que a chave chegou na JVM, nao que a Brevo a
+> aceita. Config de painel se confere por curl; **entrega se confere na caixa de entrada.**
 
 > 📌 **Nao ha `render.yaml` no repositorio** — o servico foi criado a mao pelo painel, entao estes
 > campos **nao podem ser versionados hoje**. Converter para Blueprint resolveria isso, mas arrisca
@@ -4817,7 +4868,7 @@ implementacao, e devem ser respondidas **juntas** — a resposta "papel e o vinc
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
-| 1 | ~~Esqueci minha senha — **fatia 2: envio real (API HTTP do Brevo)**~~ | ✅ **ENTREGUE 2026-08-29 — o e-mail CHEGOU** (staging/Render). 🟠 **prod/Railway segue em `smtp`** — falta env var, nao codigo | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**. ✅ **22/08 — o transporte trocou: `BrevoApiEmailSender` (HTTPS 443).** Se a 587 nao abre, nenhuma configuracao de SMTP resolve — o envio passou para a **API HTTP do mesmo provedor**, com `MAIL_PROVIDER=brevo`. **O que falta e do Andre, e nao e codigo:** (1) gerar a **API key v3** no painel do Brevo (*SMTP & API → API keys* — **NAO** e a SMTP key do `MAIL_PASS`); (2) setar `MAIL_PROVIDER=brevo` e `BREVO_API_KEY` no Render (o `MAIL_FROM` ja esta la e o remetente ja foi verificado em 22/07); (3) pedir um reset em device e conferir a chegada. O log de boot (`[MAIL] provider=brevo — url=...`) confirma o provider ANTES de qualquer teste, e `[MAIL:brevo] ... HTTP 401 — {corpo}` separa chave errada de remetente nao verificado. **O item so fecha com a chegada confirmada em device** — o teste automatizado cobre a forma da requisicao, nao a conta. Detalhes: secao **22/08** logo acima. ✅ **29/08 — FECHADO em staging, com a chegada confirmada em caixa (o criterio que o item exigia).** Log do Render: `[MAIL:brevo] reset code enviado para andrericao@hotmail.com (messageId=<202608290007.82986159144@smtp-relay.mailin.fr>)`, e o `/actuator/info` do mesmo processo respondendo `provider=brevo / sender=BrevoApiEmailSender / credentials=present`. ⚠️ **O teste de 27/08 que "falhou" tinha batido em PROD/Railway, nao no staging** — a prova foi a AUSENCIA do bloco `mail` no `/actuator/info` de prod (o `MailInfoContributor` nasceu em `7eb6001`, que so existe em `dev`), somada ao `[MAIL:smtp] Connect timed out` na 587: **a 587 tambem nao abre do Railway**. Licao que vale alem deste item: **antes de julgar um envio, provar em QUAL processo ele rodou**. ➡️ **O que resta e so prod:** `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` (API key v3) no painel do **Railway**; o merge `dev`->`main` leva o `/actuator/info` pra la e prod passa a ser conferivel por curl como o staging ja e.
+| 1 | ~~Esqueci minha senha — **fatia 2: envio real (API HTTP do Brevo)**~~ | ✅ **ENTREGUE 2026-08-29 — o e-mail CHEGOU** (staging/Render). 🟡 **prod/Railway ja esta em `brevo`** (medido em 31/08: `provider=brevo`, `credentials=present`) — **falta so ver um e-mail chegar de prod**, que e a linha P1 da lista de painel | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**. ✅ **22/08 — o transporte trocou: `BrevoApiEmailSender` (HTTPS 443).** Se a 587 nao abre, nenhuma configuracao de SMTP resolve — o envio passou para a **API HTTP do mesmo provedor**, com `MAIL_PROVIDER=brevo`. **O que falta e do Andre, e nao e codigo:** (1) gerar a **API key v3** no painel do Brevo (*SMTP & API → API keys* — **NAO** e a SMTP key do `MAIL_PASS`); (2) setar `MAIL_PROVIDER=brevo` e `BREVO_API_KEY` no Render (o `MAIL_FROM` ja esta la e o remetente ja foi verificado em 22/07); (3) pedir um reset em device e conferir a chegada. O log de boot (`[MAIL] provider=brevo — url=...`) confirma o provider ANTES de qualquer teste, e `[MAIL:brevo] ... HTTP 401 — {corpo}` separa chave errada de remetente nao verificado. **O item so fecha com a chegada confirmada em device** — o teste automatizado cobre a forma da requisicao, nao a conta. Detalhes: secao **22/08** logo acima. ✅ **29/08 — FECHADO em staging, com a chegada confirmada em caixa (o criterio que o item exigia).** Log do Render: `[MAIL:brevo] reset code enviado para andrericao@hotmail.com (messageId=<202608290007.82986159144@smtp-relay.mailin.fr>)`, e o `/actuator/info` do mesmo processo respondendo `provider=brevo / sender=BrevoApiEmailSender / credentials=present`. ⚠️ **O teste de 27/08 que "falhou" tinha batido em PROD/Railway, nao no staging** — a prova foi a AUSENCIA do bloco `mail` no `/actuator/info` de prod (o `MailInfoContributor` nasceu em `7eb6001`, que so existe em `dev`), somada ao `[MAIL:smtp] Connect timed out` na 587: **a 587 tambem nao abre do Railway**. Licao que vale alem deste item: **antes de julgar um envio, provar em QUAL processo ele rodou**. ➡️ **O que resta e so prod — e encolheu em 31/08.** As env vars `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` **ja estao no Railway**: o `/actuator/info` de prod respondeu `{"mail":{"provider":"brevo","sender":"BrevoApiEmailSender","credentials":"present"}}` num curl de 31/08 — o `MailInfoContributor` (`7eb6001`) **ja e ancestral de `main`**, entao prod era conferivel por curl havia mais tempo do que este PRD supunha. **Falta o unico passo que nenhum curl da:** pedir um `POST /auth/forgot-password` contra prod e o e-mail **chegar na caixa**, com o `messageId` no log do Railway. E o mesmo criterio que fechou o staging em 29/08, e e a linha **P1** da lista de painel (secao 22).
 | 2 | ~~**Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)**~~ | ✅ **ENTREGUE 2026-08-18 — fatias A, A2, B e C completas** (a C saiu como `?city=&uf=`, junto do #29) — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
 | 4 | Validacao do alvo do reschedule (janela + refeicao) | ⬜ aberto | **Client (barreiras de horario)** — rejeitar `targetTime` apos `closing_time` ou durante refeicao/intervalo (novo erro); hoje `422 QUEUE_TARGET_NOT_FEASIBLE` so olha a fila |
