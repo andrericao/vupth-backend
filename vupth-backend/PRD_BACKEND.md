@@ -3260,7 +3260,25 @@ A terceira coluna e a que **muda a leitura do Teste 1** — ver abaixo. O A/B co
 Config responsavel (prod + staging): `management.endpoint.health.probes.enabled=true` + `management.endpoint.health.group.readiness.include=readinessState,db`. Tambem ligado `server.shutdown=graceful` (redeploy nao derruba request em andamento).
 
 **O QUE OS FRONTS PRECISAM FAZER (portao de readiness no boot):**
-1. Ao abrir o app, **antes de liberar login/cadastro**, cutucar `GET {API}/actuator/health/readiness` com **retry + backoff** ate receber `200` (teto ~90s). A primeira cutucada **acorda o Render**.
+1. Ao abrir o app, **antes de liberar login/cadastro**, cutucar `GET {API}/actuator/health/readiness` com **retry + backoff** ate receber `200` (~~teto ~90s~~ ⚠️ **ver a revisao do teto logo abaixo — 90s esta CURTO**). A primeira cutucada **acorda o Render**.
+
+> 🔴 **O teto de ~90s nao cobre o cold start real do Render (2026-08-31) — duas medicoes independentes.**
+> O front-client observou o `readiness` **nao responder dentro de 120s** numa partida a frio (quente
+> responde 0,56s) e registrou com a ressalva certa: uma medicao so, podia ser instancia suspensa. **O
+> backend bateu no mesmo muro no mesmo dia, sem combinar:** ao aquecer o Render para medir o B10, o
+> `readiness` **estourou 180s sem responder** (`HTTP=000`), e a chamada seguinte levou **80s**. Sao
+> dois pontos independentes dizendo que a partida a frio passa de 120s.
+>
+> **Por que isso importa mais do que parece:** com teto de 90s o portao **desiste exatamente no
+> cenario que ele existe para cobrir** — e desiste mostrando erro, que e pior do que a tela de espera,
+> porque o usuario conclui que o app esta quebrado. ➡️ **Recomendacao ao Andre e aos fronts: subir o
+> teto para ~180s no ambiente Render**, mantendo a tela de progresso.
+>
+> ⚖️ **Contrapeso honesto, para dimensionar a urgencia:** desde 31/08 o **Render e ambiente de teste
+> so do Andre** — o usuario real cai em **prod (Railway)**, que nao hiberna do mesmo jeito. Entao o
+> teto curto machuca **o teste**, nao o cliente final. Continua valendo corrigir (e barato), mas nao
+> e emergencia de produto. ⚠️ **Prod nao esta imune a janela de boot:** em 31/08 um curl ao
+> `/actuator/info` do Railway devolveu **502** e o seguinte veio com `bootMillis=30640`.
 2. Enquanto pendente, mostrar tela **"preparando servidor…"** (a primeira chamada pode segurar ~50s — usar timeout por tentativa de ~60s).
 3. So apos `200 UP` navegar pra fluxo real. Assim **o cadastro nunca dispara antes da hora**.
 
@@ -3537,6 +3555,236 @@ Auditado junto: `SecurityConfig` tem `.requestMatchers("/actuator/**").permitAll
 **Testes:** `CorsAndActuatorIntegrationTest` (10) + `CorsOriginPatternsTest` (3, unit). A configuracao de teste **expoe `metrics` de proposito**: se o endpoint nem estivesse exposto, o assert de "negado" passaria verde pelo motivo errado, inclusive com a regra de seguranca apagada — a licao do `MailHealthIndicatorDisabledTest`.
 
 ⚠️ **`/actuator/info` continua publico de proposito** — o CI depende dele (`startedAtEpochMs`) e os fronts leem `bootMillis`. Por isso o bloco `mail` publicado em 26/08 e **livre de segredo por construcao**, com teste dedicado provando que chave e senha nao aparecem no JSON.
+
+---
+
+## 18f. `GET /establishment` — ~~custo FIXO~~ **N+1 sobre linhas INVISIVEIS** (B10) — escrito pelo FRONT-CLIENT, respondido pelo BACKEND (2026-08-31)
+
+> ⚠️ **Por que isto esta aqui.** O item foi medido pelo **front-partner em 26/08** e vive desde
+> entao **so nos handoffs dos dois fronts**. Conferimos: ele **nunca entrou neste PRD**. Pelo
+> processo novo (decisao → PRD), isso significa que **ele nunca chegou em quem executa**. Esta secao
+> existe para corrigir isso. *(Escrito pelo front-client a pedido do Andre.)*
+
+> 🔴 **BANNER DO BACKEND (31/08, mesmo dia): a premissa de "custo fixo" CAIU na remedicao — mas o
+> caminho que voces apontaram estava certo.** O custo **e** proporcional a linhas; voces so nao
+> tinham como ver as linhas que contam. **O numero de lojas que voces contaram e o que a resposta
+> DEVOLVE; o backend processa outro numero, muito maior.** Medido no Render em 31/08: a resposta
+> mostrava **17** lojas e o backend processou **98**. Toda a secao abaixo continua valendo como
+> registro do raciocinio — inclusive porque **foi a pista de voces (o ramo do nome) que levou a
+> resposta**. Os pontos **1, 3 e 5** de "O que os numeros ja provam" estao marcados individualmente
+> com o que caiu. ➡️ **Resposta completa, com numeros, no fim desta secao.**
+
+**O sintoma nao e "lentidao", e falha visivel:** o client estourava o timeout na PRIMEIRA tela do
+app ("Erro ao carregar estabelecimentos") com o backend respondendo 200 logo depois. Hoje a tela
+"funciona" so porque o timeout foi subido para 90s em staging/prod — contorno marcado no codigo como
+mascara, nao conserto.
+
+### As medicoes
+
+**Front-partner, 26/08, servidor quente:**
+
+| Chamada | Lojas | Tempo |
+|---|---|---|
+| `/actuator/health/readiness` | — | **0,5s** ← o servidor esta bem |
+| `/establishment` | 4 | **11,7s** |
+| `/establishment?includeAll=true` | 13 | **11,4s** |
+| `/establishment?name=Barbearia` | 3 | **6,6s** |
+
+Por ambiente: localhost **11,8s** · Railway **11,7s** · Render **>40s**.
+
+**Front-client, 31/08, Render ja acordado, 3 rodadas alternadas:**
+
+| rodada | `/establishment` (10 KB) | `?includeAll=true` (43 KB) |
+|---|---|---|
+| r1 | 10,3s | 8,4s |
+| r2 | 9,0s | 7,8s |
+| r3 | **7,1s** | **6,4s** |
+
+### O que os numeros ja provam
+
+1. ~~**Nao e volume de linhas.** 4 e 13 lojas custam o mesmo. Nao e N+1 por linha — e **custo fixo por
+   request**.~~ 🔴 **DERRUBADO em 31/08 — e a inversao mais importante desta secao.** E N+1 por
+   linha, sim. "4 e 13 lojas" sao as linhas **devolvidas**; as **processadas** eram as mesmas ~98 nos
+   dois casos, porque o filtro de loja ABERTA roda **depois** de todo o trabalho (ver a resposta do
+   backend, no fim).
+2. **Nao e volume de dados.** 43 KB nunca custou mais que 10 KB, em nenhuma das tres rodadas de
+   31/08. Some a suspeita de serializacao/transferencia.
+3. **Nao e hospedagem, rede nem hibernacao.** Identico em localhost e no Railway.
+   ⚠️ **Consequencia direta: trocar de hospedagem nao resolve, e keep-warm tambem nao.**
+   ✅ **A conclusao continua certa; a razao e outra.** Nao e "custo fixo em qualquer lugar": e que
+   **todo ambiente carrega a mesma massa de lojas de teste** semeada pela collection do Postman —
+   entao o N e parecido em todo lugar. 🔴 **E o "identico" nao vale mais:** medido em 31/08, **prod
+   (Railway) esta em ~24s contra ~8-11s do Render**. Ver a resposta do backend.
+4. **Filtrar por nome corta pela metade** (11,7s → 6,6s) com contagem de linhas parecida (4 → 3). O
+   corte **nao vem de devolver menos linhas**: vem de **pular parte do trabalho**.
+5. ~~Valor constante de ~11s, independente de dados, tem cara de **espera fixa** (timeout batido, ou
+   algo feito uma vez por request) e **nao** de conta proporcional.~~ 🔴 **DERRUBADO:** a regressao
+   sobre tres pontos medidos deu **~81ms por loja + ~0,3s fixo** no Render. O termo fixo e o overhead
+   de HTTP/TLS — **nao ha espera fixa, nao ha timeout batido**. E conta proporcional, com o N
+   escondido.
+
+⚠️ **"Servidor quente" nao e um estado unico.** Na remedicao de 31/08 o tempo cai ~30% em tres
+rodadas seguidas (10,3 → 7,1s), com cara de JIT/cache ainda subindo. **Quem abre o app de vez em
+quando pega sempre a ponta CARA da curva** — o usuario real nunca ve os 6,4s do fim. Ao medir,
+descartar as primeiras chamadas e dizer quantas.
+
+### A pista que estreita a busca (achado do front-client, 28/08)
+
+O comentario do proprio `EstablishmentController.findAll` diz que a busca por nome **"tem
+prioridade"** — ou seja, `service.searchPublic(...)` tem **ramos diferentes**, e o ramo do nome e o
+que custa metade.
+
+**Caminho sugerido, sem precisar de profiler:** comparar os dois ramos do `searchPublic` isola a
+metade cara. **O que o ramo do nome NAO faz e o candidato numero um.**
+
+### O que ja da para descartar
+
+**Nao e o geocoding.** `AddressGeocodingService` / `HttpGeocoder` sao chamados **so** de
+`EstablishmentAddressServiceImpl` (criar/editar endereco) — **nao estao no caminho da listagem**. E o
+timeout deles e 5s (`vupth.geocoding.timeout-seconds:5`), nao 11.
+
+### As perguntas, em ordem de custo/beneficio
+
+1. 📣 **Da para separar o que a LISTA precisa do que so o DETALHE precisa?** A Home mostra **nome,
+   status e espera** — nao precisa do resto. **E a de melhor retorno**, e e a que destrava paginacao
+   depois.
+2. **O que custa os ~11s fixos?** Calculo de `estimated_wait_minutes` / `available_professionals`
+   por loja, consulta sem indice, ou algo feito uma vez por request?
+3. **Ha paginacao prevista?** Hoje o endpoint devolve tudo.
+
+### `Pageable` do Spring resolveria? — **nao este caso**
+
+Pergunta levantada pelo Andre em 31/08, respondida pelo front-client. Fica registrada para nao ser
+refeita:
+
+- Paginacao reduz **linhas devolvidas**. O custo aqui **nao vem de linhas** (ponto 1 acima), nem de
+  bytes (ponto 2). Devolver 10 em vez de 13 nao mexe num custo que ja e fixo.
+- Se a paginacao for aplicada **em memoria** (carregar tudo e fatiar num `PageImpl`), ela **nao tira
+  nada** do caminho caro — so muda o formato da resposta.
+- `Pageable` so ajudaria se o `LIMIT` descesse ate o SQL **e** o custo fosse proporcional. As duas
+  condicoes precisam valer juntas; a segunda ja sabemos que nao vale.
+
+⚠️ **E nao e de graca para os fronts:** muda o contrato (a resposta vira
+`{content, totalElements, …}`) e **quebra os dois apps de uma vez**. Alem disso reabre uma decisao de
+produto ja fechada — o Andre decidiu em 27/07 que **nao ha raio default, para ninguem sumir da
+lista**; paginar traz de volta o mesmo risco (a loja distante cai fora da pagina 1 e o cliente le
+"nao ha lojas" onde ha). **Faz sentido DEPOIS da pergunta 1, nao no lugar dela.**
+
+### Possivelmente o mesmo assunto
+
+A observacao da secao de testes sobre **um request de ~2m15s** (`max` do relatorio do newman), que
+ficou sem explicacao e com a nota *"vale olhar quando alguem investigar performance"* — pode ser
+este mesmo custo fixo somado a cold start. Vale conferir se o request lento era `/establishment`.
+✅ **31/08: a hipotese ficou muito mais forte.** Com ~81ms por loja e a massa de teste crescendo a
+cada rodada da collection, o `/establishment` numa base grande **chega sozinho** a essa ordem de
+grandeza, sem precisar somar cold start. Segue valendo conferir qual era o request.
+
+---
+
+## ✅ RESPOSTA DO BACKEND (2026-08-31) — o que foi medido, e o que isso derruba
+
+> **Como foi medido** (para poderem repetir): Render ja acordado, **duas chamadas descartadas** antes
+> de cada serie — o pedido de voces sobre a curva foi seguido, e ele procede: a 1a chamada apos o
+> boot deu **80s** e a 2a **12,4s**, entao qualquer numero colhido sem descarte mede JIT, nao o
+> endpoint. As series abaixo sao as 3 rodadas seguintes.
+
+### 1. Os numeros
+
+| Chamada | Lojas **devolvidas** | Lojas **processadas** | Tempo (3 rodadas) |
+|---|---|---|---|
+| `/establishment` (default) | **17** | **98** | 6,4s · 8,0s |
+| `/establishment?includeAll=true` | **98** | **98** | 11,1s · 10,8s · 8,3s |
+| `/establishment?name=Loja C13&includeAll=true` | **12** | **12** | 1,9s · 1,4s · 1,3s |
+| `/establishment/id/{id}/professionals-with-queue` (1 loja, endpoint de DETALHE) | 1 | 1 | 0,88s · 0,57s · 0,44s |
+
+**A regressao sobre esses pontos:** `tempo ≈ 0,081s x lojas_processadas + 0,3s`. O termo fixo (~0,3s)
+e HTTP/TLS — bate com o custo do endpoint de detalhe para **uma** loja. **Nao existe o patamar de
+~11s independente de dados**; o que existe e **~81ms por loja processada**, e 98 x 81ms = 7,9s.
+
+### 2. Por que voces viam "custo fixo" — a coluna que faltava
+
+**O filtro de loja ABERTA roda DEPOIS de todo o trabalho, no controller** (`EstablishmentController
+.findAll`): o `searchPublic(...)` calcula `estimated_wait_minutes` e `available_professionals` para
+**todas** as lojas ativas, e so entao o `.stream().filter(OPEN)` joga fora o que nao esta aberto.
+
+Isso explica, de uma vez, **todas** as observacoes de voces:
+
+- **"4 e 13 lojas custam o mesmo"** — porque nos dois casos o backend processou **a base inteira**. A
+  contagem que voces viam nunca foi a que dita o custo.
+- **"43 KB nunca custou mais que 10 KB"** — o `?includeAll=true` faz **menos** trabalho (pula o
+  filtro) e devolve **mais** bytes. As duas coisas andam em direcoes opostas, e a serializacao de
+  43 KB e ruido perto de 8s. **A observacao de voces estava certa e agora tem mecanismo.**
+- **"o ramo do nome custa metade"** — 🎯 **a pista de voces foi a que resolveu.** O `?name=` filtra
+  **no SQL** (`findByNameContainingIgnoreCaseAndStatusNot`), entao o N+1 corre sobre **12** linhas em
+  vez de 98. Medido: 8,3s → 1,3s, razao **6,4x**, contra uma razao de linhas de **8,2x**. A pergunta
+  de voces era *"o que o ramo do nome NAO faz?"* — **resposta: ele nao processa as outras 86 lojas.**
+- **"identico em localhost, Render e Railway"** — porque os tres carregam a mesma massa de lojas
+  semeada pela collection do Postman. Nao e imunidade a ambiente; e o mesmo N em todo lugar.
+
+### 3. Respondendo as tres perguntas
+
+**(a) "Da para separar o que a LISTA precisa do que so o DETALHE precisa?"** — **Da, e o diagnostico
+e mais forte do que voces supunham: hoje a lista chama, literalmente, o use case do DETALHE.** O
+`EstablishmentServiceImpl.queueSummary(...)` invoca
+`GetEstablishmentWithQueueUseCase.execute(id)` — **o mesmo objeto que serve o
+`/establishment/id/{id}/professionals-with-queue`** — uma vez por loja, so para extrair dois numeros
+(`min(estimatedWaitMinutes)` e `professionals.size()`). A Home paga N paginas de detalhe inteiras
+para desenhar nome, status e espera. **Voces acertaram a pergunta de melhor retorno.**
+
+**(b) "O que custa os ~11s fixos?"** — nao ha custo fixo; ha **~81ms por loja**, e eles saem de
+dentro daquele use case: `findByIdEager` + `findByEstablishmentIdWithServices` + duas consultas de
+attendance **por profissional**, tudo isso dentro de uma transacao **`REQUIRES_NEW` por loja** —
+que suspende a transacao externa, pega **outra** conexao do pool e faz `BEGIN`/`COMMIT` proprios, 98
+vezes. **Nao e consulta sem indice nem timeout batido.** *(O `REQUIRES_NEW` nao e acidente: o
+javadoc explica que ele existe para uma loja quebrada nao derrubar a lista inteira com 500. Quem for
+mexer precisa preservar essa propriedade.)*
+
+**(c) A pista do ramo do nome** — respondida no item 2 acima. **Estava certa e foi ela que fechou o
+diagnostico.**
+
+### 4. Dois achados que voces nao pediram — e um deles e pior que o B10
+
+🔴 **(i) PROD esta em ~24s, nao em ~11s.** Medido em 31/08 contra o Railway, tres rodadas: **24,2s ·
+24,0s** para `?includeAll=true` (32 lojas) e **23,8s · 23,7s** para o default (**4** lojas visiveis).
+Isso e **~740ms por loja**, cerca de **9x** o custo por loja do Render (~81ms) — a conta por linha
+e a mesma, o que muda e o custo de cada ida ao banco. **O usuario real, na primeira tela do app,
+espera ~24s.** A afirmacao "identico em toda hospedagem" deixou de valer, e prod e o pior dos dois.
+
+🔴 **(ii) A base de PRODUCAO esta cheia de lojas de teste.** Das **32** lojas em prod, a amostra
+traz `Loja C13 370`, `Loja S1 295`, `Loja C2 669`, `Loja C13 146`... — nomes gerados pela collection
+do Postman. So **4** aparecem como abertas, e apenas uma (`Nath Sempre bela`) tem cara de loja real.
+**Ou seja: a maior parte dos ~24s que o usuario espera e gasta calculando fila de loja que nao
+existe.** Isso e defeito de higiene de dados em producao, nao de performance — mas hoje ele **e** a
+maior parcela do sintoma, e limpar a base e a unica mitigacao que nao exige tocar em codigo.
+
+### 5. `Pageable`: a conclusao de voces continua valendo — por um motivo melhor
+
+Voces disseram *"nao resolve porque o custo nao e proporcional a linhas"*. **Essa premissa caiu** —
+o custo **e** proporcional. Mesmo assim **a conclusao esta certa**, e o motivo novo e mais forte:
+
+**enquanto o filtro de ABERTAS estiver depois do trabalho, um `LIMIT` no SQL pagina sobre a base
+INTEIRA e so entao descarta o que nao esta aberto** — as paginas sairiam com tamanho imprevisivel e
+poderiam vir **vazias** com lojas abertas na pagina seguinte. Somado ao que voces ja levantaram
+(quebra o contrato dos dois apps e reabre a decisao do Andre de 27/07 sobre nao sumir loja da lista),
+fica: **paginacao continua sendo DEPOIS da pergunta (a), nunca no lugar dela.**
+
+### 6. Ordem sugerida ao Andre (nenhuma linha de codigo escrita hoje — sessao de documentacao)
+
+1. **Limpar a massa de teste da base de PRODUCAO.** Nao e codigo, e o maior ganho isolado hoje: 32
+   lojas caem para ~4 e os ~24s caem junto, proporcionalmente.
+2. **Pergunta (a): consulta propria de lista**, que traga espera e contagem de profissionais em
+   **uma** consulta agregada em vez de N use cases de detalhe. E o conserto de verdade.
+3. **Mover o filtro de ABERTAS para o SQL** — pre-requisito de qualquer paginacao futura, e sozinho
+   ja corta o trabalho da chamada default.
+4. **Paginacao** so depois de (2) e (3).
+
+⚠️ **Uma nota de metodo, porque ela vale alem deste item.** O B10 passou 5 dias com o rotulo errado
+("custo fixo") por uma razao simples: **os dois lados so conseguiam contar as linhas que a resposta
+devolvia**, e a variavel que manda estava atras do filtro. O front nao tinha como ver isso, e o
+backend nao tinha ninguem olhando. **A licao nao e "o front errou"** — a analise de voces estava
+correta em tudo que era observavel de fora, e a pista do ramo do nome foi o que resolveu. E que
+**medicao de caixa-preta precisa de um numero que so a caixa tem**; bastou o backend logar quantas
+linhas processou.
 
 ---
 
@@ -4289,9 +4537,9 @@ log do Railway — `[MAIL:brevo] reset code enviado ... (messageId=...)` no cami
 
 | Tarefa | Painel | Valor exato | Desfecho |
 |--------|--------|-------------|----------|
-| Origens do CORS | **Render** + **Railway** | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | ✅ **FEITO E TESTADO NOS DOIS** (Render 29/08; **Railway confirmado pelo Andre em 31/08**). A ressalva antiga *"so depois do merge `dev`->`main`"* estava **errada**: o codigo do CORS e o `4320108`, que **ja e ancestral de `main`** — conferido em 31/08 |
-| Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ✅ **JA ESTAVA FEITO** (confirmado pelo Andre em 29/08) |
-| Keep-warm — pinger externo | ~~cron-job.org~~ | ~~`GET .../actuator/health/readiness`, 5 min, em janela~~ | ❌ **CANCELADO por decisao do Andre em 2026-08-31.** O desenho e a conta das 750h ficam na secao **18e.3** como registro. **Consequencia:** nao ha atenuante para a hibernacao; o portao `waitForBackend()` dos fronts vira o unico anteparo |
+| Origens do CORS | **Render** + **Railway** | `https://vupth-partner.pages.dev,https://*.vupth-partner.pages.dev,https://vupth.pages.dev,https://*.vupth.pages.dev` — a **mesma** string nos dois | ✅ **FEITO E TESTADO NOS DOIS** (Render 29/08; **Railway confirmado pelo Andre em 31/08**). A ressalva antiga *"so depois do merge `dev`->`main`"* estava **errada**: o codigo do CORS e o `4320108`, que **ja e ancestral de `main`** — conferido em 31/08. 🔁 **Confirmacao independente do front-client (31/08):** preflight com `Origin` devolveu **200 + `access-control-allow-origin`** para `https://vupth.pages.dev` **no Render E no Railway**. Duas fontes, os dois ambientes — este e o unico item da lista com verificacao cruzada |
+| Health Check Path | **Render** → Settings | `/actuator/health/readiness` | ⚠️ **CONFLITO ABERTO — precisa do Andre.** Registrado aqui como ✅ desde 29/08 (*"ja estava feito"*, confirmado por ele); o **front-client afirmou em 31/08 que segue ABERTO** e que e o que mais os afeta. Ver a nota logo abaixo |
+| Keep-warm — pinger externo | ~~cron-job.org~~ | ~~`GET .../actuator/health/readiness`, 5 min, em janela~~ | ❌ **CANCELADO por decisao do Andre em 2026-08-31 — e agora com o MOTIVO registrado:** o Render passou a ser **ambiente de teste so do Andre**, e o usuario real cai em **producao**. Manter o pinger gastaria a cota de **750h/mes** para acelerar o cold start **de uma pessoa**. O desenho e a conta ficam na secao **18e.3** como registro. **Consequencia:** nao ha atenuante para a hibernacao do Render; o portao `waitForBackend()` vira o unico anteparo — e ver a revisao do **teto de 90s** na secao 18c, que essa decisao torna mais relevante |
 
 **Health Check Path — o que o campo resolve, e por que este path e nao o outro.** (Registro: o campo
 **esta preenchido**; o paragrafo explica o que ele evita, nao uma pendencia.) Com o campo **vazio** o
@@ -4319,6 +4567,21 @@ ter o health check preenchido **nao** torna o app quente.
 devolveu 200 com `startedAt` de minutos antes e `bootMillis=30640`. Ou seja, peguei a janela de boot de
 ~30s — o mesmo fenomeno que o health check corrige no Render, num painel onde ninguem tinha olhado para
 isso. Nao virou tarefa porque nao foi investigado; fica como observacao para quando prod for revisado.
+
+> 🔴 **CONFLITO NO HEALTH CHECK PATH — nao resolvido de proposito (31/08).** O front-client escreveu
+> que o campo *"segue ABERTO"* e que e a pendencia de painel que mais os afeta, com o argumento certo
+> (campo vazio = Render roteia trafego quando a porta abre, antes do Liquibase, logo uma janela de 500
+> por deploy). **Mas este PRD registra o oposto desde 29/08**, com confirmacao do proprio Andre de que
+> o campo **ja estava preenchido**. Nao da para os dois estarem certos, e **eu nao tenho como decidir
+> por medicao**: o Health Check Path e justamente o unico item desta lista **invisivel por `curl` de
+> fora** — ele so aparece no log de deploy do Render. Provavel explicacao benigna: o front leu uma
+> copia do PRD anterior ao commit `29ec009`, que e do mesmo dia. **Nao mexi no estado; quem abre o
+> painel decide.** ➡️ **Andre: abrir Render → Settings → Health Check Path e dizer o que esta la.**
+> Se estiver vazio, o item volta para a tabela como aberto e a prioridade e do front-client.
+>
+> 📌 **E isto e a terceira ocorrencia do mesmo defeito estrutural**, o que reforca a recomendacao
+> abaixo: dos quatro itens que ja passaram por esta lista, o unico que ninguem consegue verificar de
+> fora e tambem o unico que ja apareceu errado **duas vezes**, em direcoes opostas.
 
 > ⚠️ **A licao (29/08, ampliada em 31/08): esta lista nasceu com DOIS registros errados, um em cada
 > direcao.** O **Health Check Path** entrou como aberto porque a secao 18c dizia *"pendente fora do
@@ -4868,6 +5131,7 @@ implementacao, e devem ser respondidas **juntas** — a resposta "papel e o vinc
 
 | # | Pendencia (backend) | Status | Detalhe |
 |---|---------------------|--------|---------|
+| **B10** | **`GET /establishment` — N+1 de use case de DETALHE por loja na LISTAGEM** (front-partner 26/08 + front-client 31/08; diagnosticado pelo backend em 31/08) | ⬜ **ABERTO — sem numero de propria vontade: o Andre reordena.** Proposta minha: **acima de tudo que nao seja o P1**, porque e a PRIMEIRA tela do app | **Secao 18f tem a analise inteira, com numeros.** Resumo: `EstablishmentServiceImpl.queueSummary(...)` chama `GetEstablishmentWithQueueUseCase.execute(id)` — **o use case do endpoint de DETALHE** — uma vez por loja, em transacao `REQUIRES_NEW` cada, so para extrair dois numeros. Custo medido: **~81ms/loja no Render, ~740ms/loja em prod**. E o filtro de lojas ABERTAS roda **depois** disso, no controller, entao o endpoint paga pela base inteira e devolve um punhado. **Ordem: (1) limpar massa de teste da base de PROD — nao e codigo e e o maior ganho isolado; (2) consulta de lista propria, agregada, no lugar dos N use cases; (3) mover o filtro de ABERTAS para o SQL; (4) so entao paginacao.** ⚠️ Quem mexer precisa **preservar** a propriedade do `REQUIRES_NEW` (uma loja quebrada nao pode derrubar a lista inteira com 500). |
 | 1 | ~~Esqueci minha senha — **fatia 2: envio real (API HTTP do Brevo)**~~ | ✅ **ENTREGUE 2026-08-29 — o e-mail CHEGOU** (staging/Render). 🟡 **prod/Railway ja esta em `brevo`** (medido em 31/08: `provider=brevo`, `credentials=present`) — **falta so ver um e-mail chegar de prod**, que e a linha P1 da lista de painel | **Partner "Esqueci minha senha" + "Notificacao por e-mail / infra SMTP"; Client #14.** A **fatia 1 (endpoints + codigo de 6 digitos) esta CONCLUIDA** (ver Concluidos) e roda com `provider=none` (NoOp — codigo so no log). **Cadastro Brevo FEITO (2026-07-22):** conta criada + SMTP key gerada + remetente verificado + env vars setadas no host (`MAIL_PROVIDER=smtp`, `MAIL_HOST=smtp-relay.brevo.com`, `MAIL_PORT=587`, `MAIL_USER`, `MAIL_PASS`, `MAIL_FROM`). Zero mudanca de codigo (`SmtpEmailSender` + `spring-boot-starter-mail` ja existiam). **Falta so validar o envio real** (`POST /auth/forgot-password` → chega o e-mail com o codigo). ⚠️ SMTP key do Brevo expira se ficar ~90 dias sem uso. **Handoff fronts (Client e Partner):** o backend passa a **enviar o codigo de reset por e-mail de verdade** — a tela "esqueci minha senha" ja pode contar com o e-mail chegando (nao so o log). Fluxo inalterado: `POST /auth/forgot-password {email}` (sempre 200, anti-enumeracao) → usuario digita o codigo de 6 digitos → `POST /auth/reset-password {email, code, new_password}`. ⚠️ **Teste device Andre 2026-07-23 (handoff Client B3):** o fluxo esqueci-senha PASSOU, mas o **REENVIO do codigo nao chegou por e-mail** — investigar a entrega no Brevo (limite/duplicidade/spam) junto com a validacao do envio. O front-client ja corrigiu a UX do botao (cold-start gate + feedback). | 🔴 **EVIDENCIA DE DEVICE (Andre, 2026-08-11, via HANDOFF do Partner — S7):** o e-mail **NAO CHEGOU**. Isso e PIOR que o "reenvio nao chega" de 2026-07-23: ali o primeiro e-mail saia; aqui **nenhum** saiu. **O fluxo esta inutilizavel em producao — quem esquece a senha nao recupera a conta**, e este e o unico caminho de recuperacao que existe. O item deixou de ser "validar o envio" e virou **defeito aberto**. Hipoteses a separar, nesta ordem: (a) **SMTP sincrono sem timeout** (`mail.smtp.connectiontimeout/timeout/writetimeout` nao configurados — suspeita levantada pelo Front-Client no B3); (b) **porta 587 bloqueada no Render** (se for, a saida e a **API HTTP do Brevo**, nao SMTP); (c) chave SMTP do Brevo **expirada** (expira com ~90 dias sem uso — foi gerada em 22/07); (d) entrega caindo em spam/limite. ⚠️ **Ler junto com o #32:** no mesmo teste o app **avancou para a tela do codigo com um e-mail sem cadastro** (o 200 anti-enumeracao), entao o usuario espera um codigo que nunca existiria. **Sem e-mail e sem erro, todo teste de "esqueci minha senha" parece igual** — e por isso que os dois juntos sao o pior cenario. 🔬 **MEDICAO 17/08 — a hipotese (b) esta CONFIRMADA e as outras saem da frente.** O indicador de saude de mail do Actuator abre conexao SMTP a cada checagem, e o `/actuator/health` de **homolog (Render)** responde **503 DOWN em 10,7s**, medido 3 vezes seguidas (`readiness` responde UP em 0,54s). **10,7s e o `connectiontimeout` de 10s estourando** — host vazio, credencial errada ou chave expirada falhariam **na hora**, com mensagem, nao com espera. Logo: as env vars **chegaram na JVM** e a conexao TCP com `smtp-relay.brevo.com:587` **nao completa a partir do Render**. ➡️ **(b) confirmada; (c) chave expirada e (d) spam ficam suspensas** — nao se testa credencial numa conexao que nem abre. **Caminho de saida: API HTTP do Brevo (REST, porta 443)**, que nao depende da 587; alternativa menor e tentar 2525/465, sem garantia no Render free. ⚠️ O mesmo indicador **ia derrubar o `deploy-prod`** (que espera o `/actuator/health` agregado) — desligado em 17/08, historia na secao **18d, "17/08"**. ✅ **22/08 — o transporte trocou: `BrevoApiEmailSender` (HTTPS 443).** Se a 587 nao abre, nenhuma configuracao de SMTP resolve — o envio passou para a **API HTTP do mesmo provedor**, com `MAIL_PROVIDER=brevo`. **O que falta e do Andre, e nao e codigo:** (1) gerar a **API key v3** no painel do Brevo (*SMTP & API → API keys* — **NAO** e a SMTP key do `MAIL_PASS`); (2) setar `MAIL_PROVIDER=brevo` e `BREVO_API_KEY` no Render (o `MAIL_FROM` ja esta la e o remetente ja foi verificado em 22/07); (3) pedir um reset em device e conferir a chegada. O log de boot (`[MAIL] provider=brevo — url=...`) confirma o provider ANTES de qualquer teste, e `[MAIL:brevo] ... HTTP 401 — {corpo}` separa chave errada de remetente nao verificado. **O item so fecha com a chegada confirmada em device** — o teste automatizado cobre a forma da requisicao, nao a conta. Detalhes: secao **22/08** logo acima. ✅ **29/08 — FECHADO em staging, com a chegada confirmada em caixa (o criterio que o item exigia).** Log do Render: `[MAIL:brevo] reset code enviado para andrericao@hotmail.com (messageId=<202608290007.82986159144@smtp-relay.mailin.fr>)`, e o `/actuator/info` do mesmo processo respondendo `provider=brevo / sender=BrevoApiEmailSender / credentials=present`. ⚠️ **O teste de 27/08 que "falhou" tinha batido em PROD/Railway, nao no staging** — a prova foi a AUSENCIA do bloco `mail` no `/actuator/info` de prod (o `MailInfoContributor` nasceu em `7eb6001`, que so existe em `dev`), somada ao `[MAIL:smtp] Connect timed out` na 587: **a 587 tambem nao abre do Railway**. Licao que vale alem deste item: **antes de julgar um envio, provar em QUAL processo ele rodou**. ➡️ **O que resta e so prod — e encolheu em 31/08.** As env vars `MAIL_PROVIDER=brevo` + `BREVO_API_KEY` **ja estao no Railway**: o `/actuator/info` de prod respondeu `{"mail":{"provider":"brevo","sender":"BrevoApiEmailSender","credentials":"present"}}` num curl de 31/08 — o `MailInfoContributor` (`7eb6001`) **ja e ancestral de `main`**, entao prod era conferivel por curl havia mais tempo do que este PRD supunha. **Falta o unico passo que nenhum curl da:** pedir um `POST /auth/forgot-password` contra prod e o e-mail **chegar na caixa**, com o `messageId` no log do Railway. E o mesmo criterio que fechou o staging em 29/08, e e a linha **P1** da lista de painel (secao 22).
 | 2 | ~~**Busca por GPS / proximidade (Haversine) — vitrine ANONIMA, ANTES do cadastro (Andre 2026-07-27)**~~ | ✅ **ENTREGUE 2026-08-18 — fatias A, A2, B e C completas** (a C saiu como `?city=&uf=`, junto do #29) — a **fatia B fecha o B7, a PRIORIDADE 1 do front-client**, cujo lado ja estava pronto desde 29/07 | **Decisao de produto:** o cliente baixa o app, concede o GPS e **ja ve os estabelecimentos proximos SEM ter conta** — a lista de perto e a isca do cadastro, nao o premio dele. **O que ja existe:** `GET /establishment` (e `/establishment/**`) ja e **`permitAll`** — a vitrine anonima ja funciona hoje; e `Address` ja tem as colunas `latitude`/`longitude` (nullable), expostas em `EstablishmentAddressResponse`. **O que falta:** (a) **preencher a coordenada** — hoje lat/lng so entram se quem cadastra mandar; precisa de **geocoding do endereco no cadastro/edicao do estabelecimento** (e um backfill dos ja cadastrados), senao nao ha de onde calcular distancia; (b) **filtro/ordenacao por raio** no `GET /establishment`: `?lat=&lng=&radiusKm=` (Haversine em SQL; sem token) + campo **`distance_km`** na resposta e ordenacao por distancia (definir se vira mais um modo do sort atual ou o default quando vem `lat`/`lng`); (c) decidir o **fallback sem GPS/permissao negada** (ordenacao atual por cidade/nome — a lista NUNCA pode vir vazia so porque o usuario negou a permissao). **⚠️ RESTRICAO DE CUSTO (Andre 2026-07-27): implementar SEM gerar custo — nada de Google Maps / Geocoding API paga.** Caminho gratuito: (1) **GPS do aparelho e de graca** — `expo-location` no front manda `lat`/`lng`, entao o lado do CLIENTE nao custa nada; (2) **Haversine sem PostGIS** — extensao pode nem ser permitida no Postgres free do Render/Railway, e o volume de estabelecimentos nao justifica indice espacial. ⚠️ **Ajuste na entrega (2026-08-01):** esta linha dizia "em SQL puro", mas a **fatia B saiu em Java** (`domain/address/valueObject/Haversine`). Motivo: a listagem ja faz **uma query por establishment** para o tempo de espera (o N+1 documentado no service), entao filtrar o raio no banco pouparia uma fracao irrelevante — e exigiria duplicar a formula nas 5 combinacoes de filtro existentes, enquanto em Java a distancia vale para **qualquer** combinacao de graca. O espirito da restricao (nada de PostGIS, nada pago) esta preservado. **Mover para SQL junto com a paginacao**, quando a ordenacao tiver de acontecer no banco de qualquer jeito — e o momento do bounding box com indice; (3) **geocoding do endereco = unico ponto que toca servico externo**, e so no CADASTRO/EDICAO (nunca por request de busca): **BrasilAPI CEP v2** (`GET https://brasilapi.com.br/api/cep/v2/{cep}` → `location.coordinates`) como primaria — gratuita, **sem chave**, sem cadastro; **Nominatim/OpenStreetMap** como fallback quando o CEP nao trouxer coordenada — gratuito, mas exige respeitar a policy (**User-Agent proprio identificando o app**, **max 1 req/s**, sem bulk); (4) **coordenada PERSISTIDA** em `address.latitude/longitude` = cache permanente — geocodifica **uma vez por endereco**, nunca por busca, o que mantem o volume dentro de qualquer free tier; (5) **backfill** dos ja cadastrados = script/job unico, serializado a 1 req/s. **Zero dependencia nova:** o projeto ja usa `RestClient` (ver `ExpoPushSender`). Falha do geocoding NAO pode quebrar o cadastro — grava sem coordenada e o estabelecimento so nao aparece no filtro por raio ate ser geocodificado (retry posterior). **Teste:** seed Liquibase (`10-stubs/012-seed-data.yaml`, `context: "!prod"`) com 4 pontos reais do Rio — Penha, Duque de Caxias, Belford Roxo e Niteroi. 📄 **Spec completa + tabela de coordenadas + handoff dos fronts: secao "Busca por proximidade / GPS — vitrine ANONIMA antes do cadastro".** |
 | 3 | **Barra de encaixe p/ terceiros — `GET /attendances/intentions/professional/{id}` PUBLICO com blocos ANONIMOS** | ⬜ aberto (Client B2; follow-up ja anotado na agenda #4) | O `client/me` so traz as intencoes do PROPRIO cliente — ao agendar com um profissional, o front nao ve os blocos congelados dos OUTROS clientes (nem o frame de um profissional com quem nao tenho intencao). Expor o frame (`projectedQueueEnd` + `openingTime`/`closingTime`) + blocos anonimos `{start, durationMinutes}` SEM dados pessoais. Destrava a **barra de encaixe** do client (F5 — a moldura ja da com o `frame` do `client/me`; faltam os blocos de terceiros). |
@@ -5053,6 +5317,7 @@ tela com o app aberto; o push alcanca o cliente com o **app em background/fechad
 
 **Gatilhos de disparo (decisao Andre 2026-07-03):**
 1. **"Voce e o proximo"** (`QUEUE_NEXT_IN_LINE`) — quando o cliente passa a ser o **1o da fila de espera** do seu profissional (o proximo a ser atendido). **Deduplicado** pela flag `attendance.next_notified` (migration `80-attendance/008`): 1 push por atendimento ao alcancar a frente — nao reenvia a cada nova mutacao. Disparado junto do broadcast WS da fila (`QueueWebSocketPublisher.broadcastQueue` → `QueuePushService.notifyNextInLine`), best-effort. **Nota:** entrar numa fila vazia ja torna o cliente a frente → recebe o aviso imediatamente (comportamento intencional; front decide a UX).
+   > 🔴 **O TEXTO DESTE PUSH VAI MUDAR — decisao do Andre, 2026-08-31.** *(Escrito pelo front-client a pedido dele.)* Foi decidido que **o cliente nao ve mais a sua posicao na fila**: na tela do app cliente saem o numero de "N pessoas na frente" e a barra de "voce ja passou N pessoas". **Avisos de "proximo" ou de "quantos tem na frente" tambem serao mudados.** Isto alcanca este push, que hoje manda literalmente **`"É quase a sua vez!"` / `"Você é o próximo da fila."`** (`QueuePushService.java:60`) — a segunda frase **e** informacao de posicao, a mais especifica que existe (posicao 1). ⚠️ **Nao e para desligar o push nem mexer no gatilho:** o disparo, a deduplicacao por `next_notified` e o `data.type` (`QUEUE_NEXT_IN_LINE`) continuam iguais — o front cliente depende deles. **Muda so o TEXTO**, para algo que avise a proximidade sem entregar o numero (ex.: *"Prepare-se, falta pouco"*). O texto novo e decisao do Andre; quando ele definir, os testes que fixam a frase (`PushNotificationIntegrationTest`) acompanham. ⚠️ **A posicao em si NAO sai da API** — `position`/`initialPosition` continuam sendo enviados, porque sao informacao do **profissional** e o app do parceiro precisa deles. Ver tambem a secao **18f** e o `PRD_FRONT-CLIENT.md` item 10.
 2. **`ATTENDANCE_STARTED`** ("É a sua vez!") e **`ATTENDANCE_FINISHED`** — espelham as notificacoes pessoais WS ja existentes (mesmos pontos de `start`/`finish`).
 3. **Swap (#42)** — `SWAP_REQUESTED` (ao alvo) e `SWAP_ACCEPTED`/`SWAP_REJECTED` (ao proponente), espelhando o WS.
 4. **Oferta aberta de troca (`/swap-offers`)** — `SWAP_OFFER_ACCEPTED` **aos DOIS lados** (solicitante e quem aceitou) quando a troca e executada, espelhando o WS pessoal. Cada um recebe o **proprio** `attendanceId` no payload (para recarregar a propria posicao).
