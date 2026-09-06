@@ -277,3 +277,9 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/023-add-deleted_at-to-base_user.yaml
       relativeToChangeLogFile: true
+
+  # Indices do caminho quente (B10, 2a metade) — attendance/professional/service_item/intervals/
+  # enderecos nao tinham indice nenhum alem da PK. Ver o comentario no proprio changeset.
+  - include:
+      file: changesets/99-performance/001-create-hot-path-indexes.yaml
+      relativeToChangeLogFile: true
