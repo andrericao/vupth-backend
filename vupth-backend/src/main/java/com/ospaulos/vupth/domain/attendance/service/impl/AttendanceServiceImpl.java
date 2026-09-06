@@ -1465,8 +1465,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
 
         // Dia da LOJA, nao dia UTC (backlog #33) — ver BusinessClock.startOfDay/endOfDayExclusive.
-        OffsetDateTime from = dateFrom != null ? BusinessClock.startOfDay(dateFrom) : null;
-        OffsetDateTime to = dateTo != null ? BusinessClock.endOfDayExclusive(dateTo) : null;
+        // Sem filtro, sentinelas de passado/futuro remotos — as mesmas de listClientAttendances. A
+        // consulta compara a data SEMPRE; um nulo aqui viraria parametro sem tipo no Postgres.
+        OffsetDateTime from = dateFrom != null
+                ? BusinessClock.startOfDay(dateFrom)
+                : OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
+        OffsetDateTime to = dateTo != null
+                ? BusinessClock.endOfDayExclusive(dateTo)
+                : OffsetDateTime.of(2100, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
 
         // Uma consulta so: o findByFilters traz cliente, profissional, loja e servicos por JOIN FETCH.
         // Antes vinha tudo preguicoso de uma query nativa e o laco abaixo pagava ate 5 idas ao banco

@@ -378,13 +378,23 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
      * ~200 consultas para um dia de 40 atendimentos. Em JPQL o {@code JOIN FETCH} traz tudo na
      * mesma consulta, e o laco de inicializacao sai junto.</p>
      *
-     * <p>Os filtros nulos continuam significando "sem filtro" — o {@code :param IS NULL OR ...} e o
-     * mesmo padrao do {@link #findByClientFilters}. <b>Os {@code CAST(... AS uuid)} da versao antiga
-     * nao voltam:</b> eles existiam porque em consulta NATIVA o Postgres nao consegue inferir o tipo
-     * de um parametro que so aparece num {@code IS NULL}. Em JPQL quem infere e o Hibernate, pelo uso
-     * do mesmo parametro na comparacao ao lado. O {@code status} deixou de viajar como
-     * {@code String}: em JPQL ele e o proprio enum, entao um valor invalido para de virar
-     * comparacao silenciosa que nao casa com nada.</p>
+     * <p><b>Filtro nulo = "sem filtro", e o jeito de dizer isso importa.</b> A forma obvia,
+     * {@code (:id IS NULL OR a.establishment.id = :id)}, <b>nao funciona</b> — nem aqui nem na versao
+     * nativa que esta consulta substituiu. O Hibernate emite o {@code IS NULL} como um placeholder
+     * <b>separado</b> da comparacao, e um {@code ?} sozinho nao da ao Postgres de onde inferir tipo:
+     * {@code ERRO: nao foi possivel determinar o tipo de dados do parametro $3} (SQLState 42P18).
+     * Era essa a razao dos {@code CAST(... AS uuid)} da consulta nativa antiga — o CAST dava o tipo
+     * na mao. Tentar reproduzir o padrao sem eles quebrou os 10 testes de listagem em 06/09.</p>
+     *
+     * <p>A saida e nao ter parametro solto: {@code coluna = COALESCE(:param, coluna)} mantem
+     * <b>todo</b> parametro dentro de uma comparacao tipada, e nulo vira "coluna igual a ela mesma"
+     * — sempre verdade, porque as tres colunas sao {@code NOT NULL}. As datas seguem o outro caminho,
+     * o do {@link #findByClientFilters}: sentinelas de passado/futuro remotos montadas no service,
+     * porque no limite superior o truque do COALESCE se inverteria ({@code scheduledTime <
+     * scheduledTime} e sempre falso).</p>
+     *
+     * <p>O {@code status} tambem deixou de viajar como {@code String}: em JPQL ele e o proprio enum,
+     * entao valor invalido para de virar comparacao silenciosa que nao casa com nada.</p>
      */
     @Query("""
         SELECT DISTINCT a FROM Attendance a
@@ -394,11 +404,11 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
         LEFT JOIN FETCH p.baseUser
         LEFT JOIN FETCH a.establishment
         LEFT JOIN FETCH a.serviceItems
-        WHERE (:establishmentId IS NULL OR a.establishment.id = :establishmentId)
-          AND (:professionalId IS NULL OR a.professional.id = :professionalId)
-          AND (:status IS NULL OR a.status = :status)
-          AND (:dateFrom IS NULL OR a.scheduledTime >= :dateFrom)
-          AND (:dateTo IS NULL OR a.scheduledTime < :dateTo)
+        WHERE a.establishment.id = COALESCE(:establishmentId, a.establishment.id)
+          AND a.professional.id = COALESCE(:professionalId, a.professional.id)
+          AND a.status = COALESCE(:status, a.status)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
         ORDER BY a.scheduledTime DESC
     """)
     List<Attendance> findByFilters(
