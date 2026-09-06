@@ -367,24 +367,44 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     """)
     long countActiveByEstablishment(@Param("establishmentId") UUID establishmentId);
 
-    @Query(value = """
-        SELECT DISTINCT a.* FROM attendance a
-        LEFT JOIN client c ON c.id = a.client_id
-        LEFT JOIN base_user bu1 ON bu1.id = c.id
-        LEFT JOIN professional p ON p.id = a.professional_id
-        LEFT JOIN base_user bu2 ON bu2.id = p.id
-        LEFT JOIN establishment e ON e.id = a.establishment_id
-        WHERE (CAST(:establishmentId AS uuid) IS NULL OR a.establishment_id = CAST(:establishmentId AS uuid))
-          AND (CAST(:professionalId AS uuid) IS NULL OR a.professional_id = CAST(:professionalId AS uuid))
-          AND (CAST(:status AS varchar) IS NULL OR a.status = CAST(:status AS varchar))
-          AND (CAST(:dateFrom AS timestamptz) IS NULL OR a.scheduled_time >= CAST(:dateFrom AS timestamptz))
-          AND (CAST(:dateTo AS timestamptz) IS NULL OR a.scheduled_time < CAST(:dateTo AS timestamptz))
-        ORDER BY a.scheduled_time DESC
-    """, nativeQuery = true)
+    /**
+     * Listagem filtrada do PARTNER (agenda do dia da loja/profissional).
+     *
+     * <p><b>Era uma consulta nativa, e isso custava caro de um jeito invisivel.</b> Consulta nativa
+     * nao hidrata associacao: os {@code LEFT JOIN} que ela tinha serviam ao filtro, nunca ao
+     * mapeamento, e cada atendimento voltava com {@code client}, {@code professional},
+     * {@code establishment} e {@code serviceItems} preguicosos. O service compensava com um
+     * {@code Hibernate.initialize(...)} por atendimento — <b>ate 5 idas ao banco por linha</b>, ou
+     * ~200 consultas para um dia de 40 atendimentos. Em JPQL o {@code JOIN FETCH} traz tudo na
+     * mesma consulta, e o laco de inicializacao sai junto.</p>
+     *
+     * <p>Os filtros nulos continuam significando "sem filtro" — o {@code :param IS NULL OR ...} e o
+     * mesmo padrao do {@link #findByClientFilters}. <b>Os {@code CAST(... AS uuid)} da versao antiga
+     * nao voltam:</b> eles existiam porque em consulta NATIVA o Postgres nao consegue inferir o tipo
+     * de um parametro que so aparece num {@code IS NULL}. Em JPQL quem infere e o Hibernate, pelo uso
+     * do mesmo parametro na comparacao ao lado. O {@code status} deixou de viajar como
+     * {@code String}: em JPQL ele e o proprio enum, entao um valor invalido para de virar
+     * comparacao silenciosa que nao casa com nada.</p>
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE (:establishmentId IS NULL OR a.establishment.id = :establishmentId)
+          AND (:professionalId IS NULL OR a.professional.id = :professionalId)
+          AND (:status IS NULL OR a.status = :status)
+          AND (:dateFrom IS NULL OR a.scheduledTime >= :dateFrom)
+          AND (:dateTo IS NULL OR a.scheduledTime < :dateTo)
+        ORDER BY a.scheduledTime DESC
+    """)
     List<Attendance> findByFilters(
             @Param("establishmentId") UUID establishmentId,
             @Param("professionalId") UUID professionalId,
-            @Param("status") String status,
+            @Param("status") AttendanceStatus status,
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo
     );

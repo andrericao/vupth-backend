@@ -1468,11 +1468,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         OffsetDateTime from = dateFrom != null ? BusinessClock.startOfDay(dateFrom) : null;
         OffsetDateTime to = dateTo != null ? BusinessClock.endOfDayExclusive(dateTo) : null;
 
-        String statusStr = status != null ? status.name() : null;
+        // Uma consulta so: o findByFilters traz cliente, profissional, loja e servicos por JOIN FETCH.
+        // Antes vinha tudo preguicoso de uma query nativa e o laco abaixo pagava ate 5 idas ao banco
+        // POR atendimento — o custo crescia com o tamanho do dia, nao com o da resposta.
         List<Attendance> attendances = attendanceRepository.findByFilters(
-                resolvedEstablishmentId, professionalId, statusStr, from, to);
-
-        attendances.forEach(this::initializeLazyAssociations);
+                resolvedEstablishmentId, professionalId, status, from, to);
 
         return attendances.stream()
                 .map(AttendanceListResponse::fromEntity)
