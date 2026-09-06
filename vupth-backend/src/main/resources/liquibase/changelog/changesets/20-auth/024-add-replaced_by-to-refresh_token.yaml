@@ -1,0 +1,44 @@
+databaseChangeLog:
+
+  # Janela de graca no refresh (2026-09-06).
+  #
+  # O backend ROTACIONA o refresh token: usar revoga o antigo e emite outro. Quando o app dispara
+  # duas ou mais chamadas de refresh ao mesmo tempo — foi o que o log de PROD mostrou em 06/09, com
+  # quatro POST /auth/refresh no mesmo instante — no maximo UMA pode ganhar. As outras chegam com um
+  # token ja revogado e, sem este elo, so podem levar 401: o usuario e deslogado por uma corrida que
+  # ele nao causou.
+  #
+  # Com replaced_by, o servidor sabe QUAL token substituiu aquele e devolve o sucessor durante uma
+  # janela curta. E o elo por sessao, nao "um token valido qualquer do usuario": a conta pode ter
+  # varias sessoes vivas (dois aparelhos, ou o Client e o Partner juntos) e devolver o token de outra
+  # sessao entregaria o aparelho errado.
+  #
+  # ON DELETE SET NULL de proposito: a limpeza apaga tokens vencidos, e um deles pode ser o sucessor
+  # de uma linha ainda guardada. Perder o elo e aceitavel — ele so vale por segundos; quebrar a
+  # limpeza com violacao de FK, nao.
+
+  - changeSet:
+      id: 024-add-replaced_by-to-refresh_token
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: refresh_token
+                columnName: replaced_by
+      changes:
+        - addColumn:
+            tableName: refresh_token
+            columns:
+              - column:
+                  name: replaced_by
+                  type: uuid
+                  constraints:
+                    nullable: true
+        - addForeignKeyConstraint:
+            baseTableName: refresh_token
+            baseColumnNames: replaced_by
+            constraintName: fk_refresh_token_replaced_by
+            referencedTableName: refresh_token
+            referencedColumnNames: id
+            onDelete: SET NULL

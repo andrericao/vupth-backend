@@ -60,4 +60,9 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
     public void deleteOldRevokedTokens(UUID userId, OffsetDateTime limit){
         jpaRepository.deleteOldRevokedTokens(userId, limit);
     }
+
+    @Override
+    public void deletePrunableByUserId(UUID userId, OffsetDateTime now, OffsetDateTime revokedBefore){
+        jpaRepository.deletePrunableByUserId(userId, now, revokedBefore);
+    }
 }
