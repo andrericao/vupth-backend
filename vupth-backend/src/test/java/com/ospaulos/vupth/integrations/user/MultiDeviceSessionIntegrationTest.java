@@ -145,6 +145,32 @@ class MultiDeviceSessionIntegrationTest {
     }
 
     @Test
+    @Order(35)
+    @DisplayName("logout com token JA ROTACIONADO tambem encerra a sessao (nao vira no-op)")
+    void logoutWithStaleTokenStillEndsTheSession() throws Exception {
+        Sessao aparelho = login();
+
+        // O app rotacionou e, logo depois, mandou sair com o token ANTIGO — o caso que a corrida de
+        // refresh produz sozinha. Antes disso ser tratado, o logout revogava "por token" numa linha
+        // ja revogada: nao fazia nada, e o sucessor seguia vivo. O usuario pedia para sair e nao saia.
+        String sucessor = new JSONObject(refresh(aparelho.refreshToken()).getResponse().getContentAsString())
+                .getString("refresh_token");
+
+        mvc.perform(post("/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", "Bearer " + aparelho.accessToken())
+                        .content("{\"refresh_token\":\"" + aparelho.refreshToken() + "\"}"))
+                .andExpect(status().is2xxSuccessful());
+
+        assertThat(refresh(sucessor).getResponse().getStatus())
+                .as("o sucessor cai junto — logout encerra a SESSAO, nao um token")
+                .isEqualTo(401);
+        assertThat(refresh(aparelho.refreshToken()).getResponse().getStatus())
+                .as("e o velho tambem nao ressuscita pela janela de graca")
+                .isEqualTo(401);
+    }
+
+    @Test
     @Order(40)
     @DisplayName("logout derruba SO a sessao daquele aparelho")
     void logoutOnlyEndsThatDevice() throws Exception {

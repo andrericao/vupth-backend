@@ -27,6 +27,9 @@ public class RefreshTokenProvider {
     @Value("${jwt.refresh-token.expiration:P7D}")
     private Duration expirationTime;
 
+    /** Teto de saltos ao encerrar uma sessao — protege contra cadeia de tokens malformada. */
+    private static final int MAX_SESSION_CHAIN = 50;
+
     /**
      * Emite um refresh token novo <b>sem derrubar as sessoes que ja existem</b>.
      *
@@ -78,19 +81,45 @@ public class RefreshTokenProvider {
 
     }
 
+    /**
+     * Encerra a SESSAO a que o token pertence, e nao apenas aquele token.
+     *
+     * <p><b>Por que nao basta revogar o token apresentado.</b> Com rotacao, o app pode mandar sair
+     * com um token que ja foi trocado — e ai o {@code revokeByToken} (que so age em linha nao
+     * revogada) nao faz nada, o sucessor continua vivo e <b>o usuario pediu para sair e nao saiu</b>.
+     * Com a janela de graca isso ficou pior: o token velho ainda devolveria o sucessor por alguns
+     * segundos. Foi um teste antigo de logout que expos o buraco — ele afirmava a coisa certa
+     * ("depois do logout, aquele refresh token nao funciona") e passou a falhar quando a janela
+     * entrou.</p>
+     *
+     * <p>Entao se caminha pelo elo {@code replacedBy} ate o fim da cadeia, revogando o que ainda
+     * estiver vivo. O limite de saltos existe so para nao depender de os dados estarem sempre
+     * sadios: cadeia com ciclo (que nao deveria existir) para de rodar em vez de travar o logout.</p>
+     */
     @Transactional
-    public void revokeToken(String refreshToken) {
+    public void revokeSession(String refreshToken) {
 
-        int updated = refreshTokenRepository.revokeByToken(refreshToken);
+        RefreshToken node = refreshTokenRepository.findByToken(refreshToken).orElse(null);
 
-        if(updated == 0) {
-            log.warn("Refresh token already revoked or not found");
+        if (node == null) {
+            log.warn("Logout com refresh token desconhecido — nada a encerrar");
+            return;
+        }
+
+        int hops = 0;
+        while (node != null && hops++ < MAX_SESSION_CHAIN) {
+            if (!node.isRevoked()) {
+                node.revoke();
+                refreshTokenRepository.saveRefreshToken(node);
+            }
+            node = node.getReplacedBy();
         }
     }
 
     /**
-     * Fecha a sessao antiga apontando para a que a substituiu. E a rotacao completa: sem o elo, a
-     * segunda chamada de um refresh concorrente nao teria como receber o sucessor e levaria 401.
+     * Fecha o token apresentado apontando para o que o substituiu. E a rotacao completa: sem o elo,
+     * a segunda chamada de um refresh concorrente nao teria como receber o sucessor e levaria 401 —
+     * e o {@link #revokeSession} nao teria como achar a sessao viva a partir de um token velho.
      */
     @Transactional
     public void revokeReplacedBy(RefreshToken oldToken, RefreshToken replacement) {

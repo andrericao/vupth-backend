@@ -87,8 +87,6 @@ class RefreshTokenUseCaseTest {
         // cleanupOlderTokens: lastTokenCleanupAt == null → refreshTokenProvider.cleanupOldTokens + userRepository.save
         doNothing().when(refreshTokenProvider).cleanupOldTokens(user);
         when(userRepository.save(user)).thenReturn(user);
-        // revokeToken is void
-        doNothing().when(refreshTokenProvider).revokeToken("old-refresh-token");
 
         RefreshTokenResponse result = refreshTokenUseCase.execute(
                 new RefreshTokenRequest("old-refresh-token"));
@@ -98,7 +96,9 @@ class RefreshTokenUseCaseTest {
         assertThat(result.refreshToken()).isEqualTo("new-refresh-token");
 
         verify(refreshTokenProvider).verifyExpiration(oldToken);
-        verify(refreshTokenProvider).revokeToken("old-refresh-token");
+        // O apresentado continua sendo revogado; o que mudou e que agora ele aponta para o sucessor
+        // — e esse elo e o que sustenta a janela de graca da corrida de refresh.
+        verify(refreshTokenProvider).revokeReplacedBy(oldToken, newToken);
         verify(refreshTokenProvider).createRefreshToken(user);
         verify(jwtTokenProvider).createTokenFromUser(user);
     }
@@ -127,7 +127,7 @@ class RefreshTokenUseCaseTest {
                 refreshTokenUseCase.execute(new RefreshTokenRequest("expired-token")))
                 .isInstanceOf(RefreshTokenInvalidException.class);
 
-        verify(refreshTokenProvider, never()).revokeToken(any());
+        verify(refreshTokenProvider, never()).revokeReplacedBy(any(), any());
         verify(refreshTokenProvider, never()).createRefreshToken(any());
     }
 }

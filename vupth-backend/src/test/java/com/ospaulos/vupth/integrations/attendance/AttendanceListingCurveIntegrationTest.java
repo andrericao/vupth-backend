@@ -156,19 +156,16 @@ class AttendanceListingCurveIntegrationTest {
         // Antes desta mudanca cada atendimento a mais custava ate 5 idas ao banco (loja, profissional,
         // o baseUser dele, os servicos e o baseUser do cliente): tres a mais custavam ~15 statements.
         //
-        // ⚠️ O limite abaixo NAO e 0 por um motivo que nao pertence a esta consulta: sobraram 2 por
-        // atendimento, e elas vem do `@OneToOne(mappedBy=..., fetch=LAZY)` de BaseUser para owner /
-        // professional / client. LAZY no lado INVERSO de um one-to-one nao existe sem bytecode
-        // enhancement — o Hibernate precisa consultar para saber se e null. Como cada atendimento
-        // traz um cliente diferente, cada linha carrega um BaseUser novo e paga o pedagio. E defeito
-        // GLOBAL (todo BaseUser do sistema paga), registrado a parte.
-        //
-        // Quando aquele item fechar, este limite vira 2 — constante, independente do numero de
-        // linhas. Ate la ele ainda guarda o que importa aqui: se alguem reintroduzir o laco de
-        // Hibernate.initialize por atendimento, a conta volta para ~5/linha e o teste cai.
+        // O limite e 2 e nao 15: e uma folga pequena para variacao de cache do contexto, nao espaco
+        // para custo por linha. Em 06/09 este numero ainda era 2 POR atendimento, e a causa nao era
+        // esta consulta: `BaseUser` tem tres @OneToOne(mappedBy=..., LAZY) e no lado INVERSO de um
+        // one-to-one o LAZY nao existe sem bytecode enhancement — o Hibernate consulta para saber se
+        // o campo e null. Como cada atendimento traz um cliente diferente, cada linha carregava um
+        // BaseUser novo e pagava o pedagio. O enhancement entrou no mesmo dia e o custo por linha
+        // zerou; se alguem desligar o plugin do pom, este teste cai — e essa e a intencao.
         assertThat(comQuatro - comUm)
-                .as("tres atendimentos a mais podem custar no maximo o pedagio conhecido do BaseUser")
-                .isLessThanOrEqualTo(3 * 2);
+                .as("tres atendimentos a mais nao podem custar idas ao banco proporcionais")
+                .isLessThanOrEqualTo(2);
     }
 
     @Test
