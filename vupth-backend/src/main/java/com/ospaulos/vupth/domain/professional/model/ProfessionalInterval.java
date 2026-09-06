@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.professional.model;
 
 import com.ospaulos.vupth.domain.interval.valueObject.IntervalType;
 import com.ospaulos.vupth.domain.shared.BusinessClock;
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -87,7 +88,11 @@ public class ProfessionalInterval {
      * O skip e por (intervalo, data): a recorrencia continua intacta para os outros dias.
      * Consumido por {@link #isSkippedOn} para derrubar a refeicao do ETA so naquele dia.
      */
+    // @BatchSize (B10): isSkippedOn() e chamado para CADA refeicao recorrente na estimativa, e a
+    // listagem publica estima a fila de todas as lojas da pagina. Sem o lote, cada refeicao
+    // custava uma consulta so para responder "foi pulada hoje?".
     @ElementCollection(fetch = FetchType.LAZY)
+    @BatchSize(size = 200)
     @CollectionTable(name = "professional_interval_skips",
             joinColumns = @JoinColumn(name = "interval_id"))
     @Column(name = "skip_date", nullable = false)

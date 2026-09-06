@@ -198,6 +198,49 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
+     * Filas de espera (SCHEDULED + LATE) de VARIOS profissionais de uma vez — segunda consulta do
+     * resumo em lote da listagem publica (B10). Substitui uma chamada de
+     * {@link #findWaitingQueueByProfessionalAndEstablishment} por loja.
+     *
+     * <p><b>Sem JOIN FETCH de proposito.</b> O ETA le so colunas escalares do proprio atendimento
+     * ({@code estimatedMinutes}, marcas de inicio/pausa, {@code isFit}); {@code client},
+     * {@code serviceItems} e companhia so existem para <b>serializar</b> o snapshot de detalhe, e
+     * este caminho nao serializa atendimento nenhum — devolve dois numeros por loja.</p>
+     *
+     * <p>Devolve tuplas {@code [professionalId, establishmentId, attendance]} porque o resumo agrupa
+     * pelo <b>par</b>: e o mesmo alcance da consulta por profissional+loja que ela substitui.
+     * A ordem por {@code scheduledTime} e o que faz a fila ser fila — o calculo do ETA depende dela.</p>
+     */
+    @Query("""
+        SELECT a.professional.id, a.establishment.id, a
+        FROM Attendance a
+        WHERE a.professional.id IN :professionalIds
+          AND a.status IN ('SCHEDULED', 'LATE')
+        ORDER BY a.scheduledTime ASC
+    """)
+    List<Object[]> findWaitingQueuesByProfessionalIds(
+            @Param("professionalIds") java.util.Collection<UUID> professionalIds
+    );
+
+    /**
+     * Atendimentos em curso (IN_PROGRESS ou PAUSED) de VARIOS profissionais — terceira consulta do
+     * resumo em lote (B10). O desempate entre os dois status fica em Java, como no snapshot de
+     * detalhe: IN_PROGRESS manda; PAUSED so entra na falta dele (Partner BUG7).
+     *
+     * <p>Tuplas {@code [professionalId, attendance]} — o corrente NAO e escopado por loja, exatamente
+     * como em {@link #findCurrentAttendanceByProfessional}.</p>
+     */
+    @Query("""
+        SELECT a.professional.id, a
+        FROM Attendance a
+        WHERE a.professional.id IN :professionalIds
+          AND a.status IN ('IN_PROGRESS', 'PAUSED')
+    """)
+    List<Object[]> findCurrentAttendancesByProfessionalIds(
+            @Param("professionalIds") java.util.Collection<UUID> professionalIds
+    );
+
+    /**
      * Find o attendance atualmente em progresso — JOIN FETCH para serialização segura.
      */
     @Query("""

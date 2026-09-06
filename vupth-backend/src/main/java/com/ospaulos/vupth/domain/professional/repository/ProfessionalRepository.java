@@ -31,6 +31,24 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
         """)
     List<Professional> findByEstablishmentIdWithServices(@Param("establishmentId") UUID establishmentId);
 
+    /**
+     * Profissionais COM ao menos um servico (#31), de VARIAS lojas de uma vez — a primeira das
+     * quatro consultas do resumo em lote da listagem publica (B10).
+     *
+     * <p>Devolve so os dois ids ({@code [establishmentId, professionalId]}) porque e tudo o que o
+     * resumo precisa: quem entra na contagem de {@code available_professionals} e de quem se busca
+     * a fila. Trazer a entidade aqui reintroduziria o custo que este caminho existe para tirar —
+     * {@code baseUser} e {@code services} inteiros para extrair dois numeros.</p>
+     */
+    @Query("""
+        SELECT p.establishment.id, p.id
+        FROM Professional p
+        WHERE p.establishment.id IN :establishmentIds
+          AND SIZE(p.services) > 0
+        """)
+    List<Object[]> findWithServiceByEstablishmentIds(
+            @Param("establishmentIds") Collection<UUID> establishmentIds);
+
     // Find available professionals in an establishment
     @Query("SELECT p FROM Professional p WHERE p.establishment.id = :establishmentId AND p.isAvailable = true")
     List<Professional> findAvailableByEstablishmentId(@Param("establishmentId") UUID establishmentId);

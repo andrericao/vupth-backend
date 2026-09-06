@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ospaulos.vupth.api.address.dto.response.AddressResponse;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
-import com.ospaulos.vupth.api.establishment.dto.response.ProfessionalWithQueueResponse;
-import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentsQueueSummaryUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentsQueueSummaryUseCase.QueueSummary;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -44,7 +45,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final OwnerRepository ownerRepository;
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
-    private final GetEstablishmentWithQueueUseCase getWithQueueUseCase;
+    private final GetEstablishmentsQueueSummaryUseCase queueSummaryUseCase;
     private final AttendanceRepository attendanceRepository;
 
     @Override
@@ -95,10 +96,16 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
         LocationFilter scope = hasText(name) ? null : location;
 
-        List<EstablishmentResponse> responses = inLocation(
-                findByFilters(name, serviceType, neighborhood), scope).stream()
+        List<Establishment> found = inLocation(findByFilters(name, serviceType, neighborhood), scope);
+
+        // B10: UM resumo para a lista inteira. Antes era uma chamada ao use case de DETALHE por
+        // loja — ver GetEstablishmentsQueueSummaryUseCase para o que mudou e o que foi preservado.
+        Map<UUID, QueueSummary> summaries = queueSummaryUseCase.execute(
+                found.stream().map(Establishment::getId).toList());
+
+        List<EstablishmentResponse> responses = found.stream()
                 .map(e -> {
-                    QueueSummary summary = queueSummary(e.getId());
+                    QueueSummary summary = summaries.getOrDefault(e.getId(), QueueSummary.EMPTY);
                     return EstablishmentResponse.fromEntity(
                             e, summary.minWaitMinutes(), summary.availableProfessionals());
                 })
@@ -223,30 +230,6 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
     /** Par temporario resposta+distancia crua, para filtrar e ordenar antes de arredondar. */
     private record Located(EstablishmentResponse response, Double distanceKm) {}
-
-    /**
-     * Resumo da fila usado pela listagem publica: menor tempo de espera + quantos
-     * profissionais afiliados COM servico a loja tem. Ambos derivam do mesmo snapshot
-     * ({@code professionals-with-queue}, que ja filtra profissional sem servico — #31),
-     * entao uma unica chamada do use case alimenta os dois campos.
-     */
-    private QueueSummary queueSummary(UUID establishmentId) {
-        try {
-            List<ProfessionalWithQueueResponse> professionals =
-                    getWithQueueUseCase.execute(establishmentId).professionals();
-            Integer minWait = professionals.stream()
-                    .map(ProfessionalWithQueueResponse::estimatedWaitMinutes)
-                    .min(Integer::compareTo)
-                    .orElse(null);
-            return new QueueSummary(minWait, professionals.size());
-        } catch (Exception e) {
-            log.warn("[Establishment] queueSummary falhou para {}: {}", establishmentId, e.getMessage());
-            return new QueueSummary(null, 0);
-        }
-    }
-
-    /** Menor tempo de espera (min, null se nenhum) + nº de profissionais com servico da loja. */
-    private record QueueSummary(Integer minWaitMinutes, int availableProfessionals) {}
 
     @Override
     public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus) {
