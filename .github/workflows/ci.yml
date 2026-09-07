@@ -24,6 +24,14 @@ concurrency:
 permissions:
   contents: write
 
+# O alvo de cada ambiente fica AQUI, versionado, e nao em secret. Nenhuma das duas URLs
+# e segredo — a de PROD ja esta commitada em postman/collection-prod.json e a de HOMOLOG
+# no PRD. Em secret elas derivam sem ninguem ver (foi o que apontou o teste de PROD para
+# o Render) e ainda mascaram o log justamente no passo em que se precisa ler o alvo.
+env:
+  HOMOLOG_URL: https://vupth-backend-ia.onrender.com
+  PROD_URL: https://vupth-backend-ia-production.up.railway.app
+
 jobs:
 
   # =========================
@@ -103,6 +111,14 @@ jobs:
       - name: Install Newman
         run: npm install -g newman
 
+      - name: Confere o alvo de HOMOLOG
+        run: |
+          echo "Alvo de HOMOLOG: $HOMOLOG_URL"
+          case "$HOMOLOG_URL" in
+            https://*.onrender.com) ;;
+            *) echo "::error::HOMOLOG_URL aponta para '$HOMOLOG_URL', e HOMOLOG e o Render. Testar outro host reprova por dado de outra base e dispara o rollback de um deploy que estava bom."; exit 1 ;;
+          esac
+
       - name: Wait for Render deploy with commit verification
         run: |
           EXPECTED_COMMIT=$(git rev-parse --short HEAD)
@@ -111,7 +127,7 @@ jobs:
           for i in {1..60}; do
             echo "Tentativa $i/60..."
 
-            INFO=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/info || true)
+            INFO=$(curl --connect-timeout 5 --max-time 10 -s "$HOMOLOG_URL/actuator/info" || true)
             echo "Info: $INFO"
 
             DEPLOYED_COMMIT=$(echo "$INFO" | grep -o '"commit":{[^}]*}' | grep -o '"id":"[^"]*"' | cut -d'"' -f4 || true)
@@ -119,7 +135,7 @@ jobs:
             if [ "$DEPLOYED_COMMIT" = "$EXPECTED_COMMIT" ]; then
               echo "Commit correto deployado! ($DEPLOYED_COMMIT)"
 
-              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s ${{ secrets.HOMOLOG_URL }}/actuator/health/readiness || true)
+              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "$HOMOLOG_URL/actuator/health/readiness" || true)
               if echo "$HEALTH" | grep -q '"status":"UP"'; then
                 echo "App PRONTA com commit correto!"
                 exit 0
@@ -137,7 +153,7 @@ jobs:
         working-directory: vupth-backend
         run: |
           newman run postman/collection-homolog.json \
-            --env-var "base_url=${{ secrets.HOMOLOG_URL }}" \
+            --env-var "base_url=$HOMOLOG_URL" \
             --reporters cli \
             --verbose \
             --bail
@@ -185,7 +201,6 @@ jobs:
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-          HOMOLOG_URL: ${{ secrets.HOMOLOG_URL }}
           GOOD_SHA: ${{ steps.lastgood.outputs.sha }}
         run: |
           if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
@@ -272,13 +287,21 @@ jobs:
       #
       # Nao usamos o commit porque o railway up nao carrega contexto de git: la o
       # valor fica "unknown". No Render, onde ele existe, o test-homolog ja o usa.
+      - name: Confere o alvo de PROD
+        run: |
+          echo "Alvo de PROD: $PROD_URL"
+          case "$PROD_URL" in
+            https://*.up.railway.app) ;;
+            *) echo "::error::PROD_URL aponta para '$PROD_URL', e PROD e o Railway. Testar outro host reprova por dado de outra base e dispara o rollback de um deploy que estava bom."; exit 1 ;;
+          esac
+
       - name: Wait for Railway (instancia NOVA, nao so healthy)
         run: |
           DEPLOY_AT=${{ needs.deploy-prod.outputs.deploy_started_at }}
           echo "Corte: instancias iniciadas antes de $DEPLOY_AT (epoch ms) nao servem."
 
           for i in $(seq 1 60); do
-            INFO=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/info" || true)
+            INFO=$(curl --connect-timeout 5 --max-time 10 -s "$PROD_URL/actuator/info" || true)
             STARTED_MS=$(echo "$INFO" | grep -o '"startedAtEpochMs":[0-9]*' | cut -d: -f2 || true)
 
             if [ -z "$STARTED_MS" ]; then
@@ -286,7 +309,7 @@ jobs:
               # instancia nova da velha. Seguir esperando e melhor que testar as cegas.
               echo "Tentativa $i/60 — /actuator/info ainda sem startedAtEpochMs."
             elif [ "$STARTED_MS" -gt "$DEPLOY_AT" ]; then
-              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "${{ secrets.PROD_URL }}/actuator/health" || true)
+              HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "$PROD_URL/actuator/health" || true)
               if echo "$HEALTH" | grep -q '"status":"UP"'; then
                 echo "Instancia NOVA no ar (startedAtEpochMs=$STARTED_MS) e saudavel."
                 exit 0
@@ -304,14 +327,14 @@ jobs:
 
       - name: Debug API
         run: |
-         curl -v ${{ secrets.PROD_URL }}/actuator/health
-         curl -v ${{ secrets.PROD_URL }}/actuator/health/readiness
+         curl -v "$PROD_URL/actuator/health"
+         curl -v "$PROD_URL/actuator/health/readiness"
 
       - name: Run Postman (PROD)
         working-directory: vupth-backend
         run: |
           newman run postman/collection-prod.json \
-            --env-var "base_url=${{ secrets.PROD_URL }}" \
+            --env-var "base_url=$PROD_URL" \
             --reporters cli \
             --verbose \
             --bail
@@ -407,7 +430,7 @@ jobs:
         if: steps.lastgood.outputs.have == 'true'
         run: |
           for i in {1..30}; do
-            H=$(curl -s --connect-timeout 5 --max-time 10 "${{ secrets.PROD_URL }}/actuator/health" || true)
+            H=$(curl -s --connect-timeout 5 --max-time 10 "$PROD_URL/actuator/health" || true)
             if echo "$H" | grep -q '"status":"UP"'; then
               echo "PROD restaurado no last-good (${{ steps.lastgood.outputs.sha }})!"
               exit 0
