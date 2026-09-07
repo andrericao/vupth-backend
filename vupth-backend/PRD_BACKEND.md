@@ -889,11 +889,11 @@ Lista establishments ativos com filtros opcionais.
 | city | String | **Novo 2026-08-18 (#29 / fatia C).** Cidade do endereco, parcial, sem caixa e **sem acento** ("sao goncalo" acha "São Gonçalo"). E o escopo de quem esta **sem coordenada** |
 | uf | String | **Novo 2026-08-18 (#29 / fatia C).** Sigla do estado, 2 letras, por **igualdade** (sigla nao tem parcial). Fora do formato -> `422 ADDRESS_INVALID_UF` |
 | serviceType | Enum | Filtra por categoria (`BARBER`, etc.) |
-| includeAll | Boolean | Default `false`. Se `false`, a listagem devolve **apenas lojas `open_status == OPEN`**. `true` devolve todas as ativas (inclui `CLOSED`/`TEMPORARILY_CLOSED`), p/ o Front-Partner/gestao |
+| includeAll | Boolean | **OBSOLETO desde 2026-09-06** — aceito e inocuo. O default ja devolve todas as ativas. Ver a pagina Backend do vupth-docs |
 | lat, lng | Double | **Novo 2026-08-01 (GPS fatia B).** Coordenada do aparelho do cliente. Presentes, a lista passa a ser **ordenada por distancia** e cada item ganha `distance_km`. Tem de vir **o par** |
 | radiusKm | Double | **Opcional e explicito** — filtra ate X km. **NAO ha raio default** |
 
-> **Filtro de open-status (BUG5):** por padrao (`includeAll` ausente ou `false`) a listagem publica so mostra lojas **abertas** (`open_status == OPEN`) — o cliente nao ve loja fechada. `?includeAll=true` inclui as fechadas. **NAO muda o open-status persistido nem mexe na fila** — e so filtro de leitura, aplicado a **todas** as variantes do `GET /establishment` (com ou sem `name`/`neighborhood`/`serviceType`). O front nao precisa mais filtrar localmente.
+> **Filtro de open-status:** removido em 2026-09-06 — a listagem devolve loja aberta E fechada, abertas primeiro, e os filtros viraram parametro (`sort`, `openNow`, `hasAvailability`, `maxWaitMinutes`). Fonte unica: pagina Backend do vupth-docs.
 
 > **Combinacao e precedencia:**
 > - `serviceType` + `neighborhood` **combinam** (caso de uso "barbearia no Centro"): retorna so quem tem a categoria E endereco no bairro.
@@ -901,7 +901,6 @@ Lista establishments ativos com filtros opcionais.
 > - `city` e `uf` **combinam entre si e com `neighborhood`/`serviceType`**, e tambem com `lat`/`lng` (o escopo corta, a distancia ordena).
 > - `neighborhood` sozinho ou `serviceType` sozinho funcionam normalmente.
 > - Sem filtro, lista todos os ativos.
-> - `includeAll` e ortogonal aos demais: o filtro de open-status roda **por cima** do resultado de qualquer combinacao acima.
 >
 > **Ordenacao (#11):** resultados ordenados por **menor fila** — `estimated_wait_minutes` ascendente (lojas sem disponibilidade, `null`, vao por ultimo). `estimated_wait_minutes` = **menor** tempo de espera (em minutos) entre os profissionais com servico da loja. **Com `lat`/`lng`, essa ordenacao e SUBSTITUIDA pela distancia** (ver abaixo).
 
@@ -987,7 +986,7 @@ mas **aquela** loja ainda nao tem coordenada resolvida.
 
 > **`available_professionals` (Client Home).** Quantidade de profissionais **afiliados COM ao menos um servico** — o mesmo conjunto que alimenta `estimated_wait_minutes` (deriva do snapshot `professionals-with-queue`, que ja filtra profissional sem servico — #31), calculado numa **unica** passada. Preenchido **apenas na listagem** (`null` fora dela, igual ao `estimated_wait_minutes`). Independe do `open_status` e de o profissional estar ocupado agora. O front-client usa pra decidir exibir uma loja **FECHADA** na Home: mostra so as fechadas com `available_professionals > 0` (ha profissional pra agendar a reabertura). Uma loja com profissional afiliado mas **sem servico** vem `0`.
 >
-> **Handoff Front-Client (pronto p/ ligar):** na Home, ao listar `GET /establishment` (com `?includeAll=true` para tambem trazer as fechadas), **filtrar as lojas `open_status != OPEN` por `available_professionals > 0`** — as fechadas sem profissional-com-servico somem (nao ha o que agendar). Loja aberta segue exibida normalmente. O campo vem `null` fora da listagem (detalhe/`/mine`), entao so confie nele na tela de listagem.
+> **Handoff Front-Client:** desatualizado desde 2026-09-06 — o corte por `available_professionals > 0` virou `?hasAvailability=true`, e `includeAll` deixou de ser necessario. Ver a pagina Backend do vupth-docs.
 
 > **`address` (Partner BUG4):** endereco principal embutido em **todo** `EstablishmentResponse` (read-back do owner em `GET /establishment/mine`, `GET /establishment/id/{id}`, listagem publica etc.). E o endereco marcado `isMain`; sem marcador, o primeiro cadastrado; **`null`** quando a loja ainda nao tem endereco. `zipCode` = **8 digitos puros** (o front formata). No path `GET /establishment/mine` (mapeado fora de transacao, OSIV off) o endereco vem por `JOIN FETCH` — nunca dispara `LazyInitializationException`.
 
