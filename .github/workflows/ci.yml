@@ -178,6 +178,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Mesmo teto do rollback-prod, e pela mesma razao. Sem ele o rollback de homolog
+    # e um laco: a tag so avanca quando o Newman passa, um Newman que falha a congela,
+    # e cada push seguinte reinstala a build congelada. Foi o que aconteceu — staging
+    # ficou 13 commits atras em 07/09, no 29ec009, e ninguem viu.
+    env:
+      MAX_ROLLBACK_DISTANCE: 20
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -195,6 +202,24 @@ jobs:
           echo "Ultimo commit bom de HOMOLOG: $SHA"
           echo "have=true" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Confere a distancia antes de reverter
+        if: steps.lastgood.outputs.have == 'true'
+        run: |
+          SHA=${{ steps.lastgood.outputs.sha }}
+          DISTANCE=$(git rev-list --count "$SHA"..HEAD)
+          AGE_DAYS=$(( ( $(date -u +%s) - $(git show -s --format=%ct "$SHA") ) / 86400 ))
+
+          echo "homolog-last-good: $SHA ($DISTANCE commits atras, $AGE_DAYS dias)"
+
+          if [ "$DISTANCE" -gt "$MAX_ROLLBACK_DISTANCE" ]; then
+            echo "::error::ROLLBACK RECUSADO — homolog-last-good esta $DISTANCE commits atras (teto: $MAX_ROLLBACK_DISTANCE), com $AGE_DAYS dias."
+            echo "::error::Reverter reinstalaria uma build de $AGE_DAYS dias atras e deixaria o staging mentindo para o QA e para os dois apps, que testam contra ele."
+            echo "::error::A build recem-deployada FICA NO AR. Investigue a falha do Newman acima: o mais provavel e a tag ter congelado, nao o codigo novo estar quebrado."
+            exit 1
+          fi
+
+          echo "Distancia dentro do teto — rollback autorizado."
 
       - name: Redeploy do last-good no Render (API)
         if: steps.lastgood.outputs.have == 'true'
