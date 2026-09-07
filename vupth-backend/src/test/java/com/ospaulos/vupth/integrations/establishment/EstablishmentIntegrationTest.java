@@ -664,7 +664,8 @@ class EstablishmentIntegrationTest {
         // busca por parte do bairro, em minúsculas, para validar LIKE + case-insensitive
         String partial = testNeighborhood.substring(0, 12).toLowerCase();
 
-        // includeAll=true: o filtro por bairro é independente do gate BUG5 (só-OPEN);
+        // includeAll=true e inocuo desde 06/09 (o default ja traz as fechadas); fica aqui porque o
+        // que este teste afirma — o filtro por bairro — sempre foi independente do open-status;
         // establishmentId não pode abrir (sem profissional+serviço), então incluímos os não-OPEN.
         MvcResult result = mvc.perform(get("/establishment")
                         .param("neighborhood", partial)
@@ -714,7 +715,8 @@ class EstablishmentIntegrationTest {
         // establishmentId é BARBER (quick-create) e tem endereço em testNeighborhood (Order 55)
         String partial = testNeighborhood.substring(0, 12).toLowerCase();
 
-        // includeAll=true: valida a combinação categoria+bairro independente do gate BUG5 (só-OPEN).
+        // includeAll=true e inocuo desde 06/09; a combinacao categoria+bairro nunca dependeu do
+        // open-status, e o parametro fica para o teste continuar dizendo isso de forma explicita.
         MvcResult result = mvc.perform(get("/establishment")
                         .param("serviceType", "BARBER")
                         .param("neighborhood", partial)

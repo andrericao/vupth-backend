@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
 import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
+import com.ospaulos.vupth.domain.establishment.valueObject.Showcase;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 
@@ -34,12 +35,16 @@ public interface EstablishmentService {
      *                 implementacao.
      * @param geo criterio de proximidade, ou {@code null} quando a busca nao mandou coordenada —
      *            nesse caso a ordenacao continua sendo por menor tempo de espera.
+     * @param showcase o que o usuario escolheu na tela: ordenacao e os filtros de prontidao
+     *                 (aberta agora, tem profissional, teto de espera). Nunca {@code null} —
+     *                 {@link Showcase#NONE} e a vitrine sem pedido nenhum.
      */
     List<EstablishmentResponse> searchPublic(String name,
                                              ServiceType serviceType,
                                              String neighborhood,
                                              LocationFilter location,
-                                             GeoSearch geo);
+                                             GeoSearch geo,
+                                             Showcase showcase);
 
     EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus);
 

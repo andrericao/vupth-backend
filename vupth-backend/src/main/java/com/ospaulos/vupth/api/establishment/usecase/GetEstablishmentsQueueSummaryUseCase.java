@@ -30,7 +30,10 @@ import java.util.UUID;
  * A listagem chamava {@link GetEstablishmentWithQueueUseCase} — o use case do <b>detalhe</b> —
  * <b>uma vez por loja</b>, cada uma em transacao propria, para extrair esses dois numeros. O custo
  * nao era de partida: era <b>proporcional as linhas</b>, e as linhas que pagavam nem chegavam na
- * resposta (o filtro de lojas ABERTAS roda depois, no controller: 98 processadas para devolver 17).
+ * resposta: o filtro de lojas ABERTAS rodava depois, no controller — 98 processadas para devolver
+ * 17. (Esse filtro <b>saiu</b> em 06/09: a vitrine devolve tambem as fechadas, porque quem quer
+ * AGENDAR precisa acha-las. O custo por loja, que e o assunto aqui, era anterior a ele e
+ * independente dele.)
  * Medido antes desta mudanca: <b>~81 ms/loja no Render</b> e <b>~740 ms/loja em producao</b>, que
  * punha a primeira tela do app em ~24s.
  *

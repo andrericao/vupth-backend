@@ -26,8 +26,8 @@ import com.ospaulos.vupth.domain.establishment.service.EstablishmentService;
 import com.ospaulos.vupth.domain.establishment.service.impl.EstablishmentServiceImpl;
 import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
 import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
-import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
+import com.ospaulos.vupth.domain.establishment.valueObject.Showcase;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
@@ -114,7 +114,33 @@ public class EstablishmentController {
      *   ?city=Niteroi&uf=RJ                  — escopo de localidade p/ quem esta SEM coordenada
      *   ?lat=-22.84&lng=-43.27               — ordena por PROXIMIDADE e devolve distance_km
      *   ?lat=..&lng=..&radiusKm=10           — + filtra ate 10km (opcional; NAO ha raio default)
-     * Sem filtro, lista todos os ativos, ordenados por menor tempo de espera.
+     *   ?sort=wait|distance|name             — ordenacao explicita (default: distance com lat/lng, wait sem)
+     *   ?openNow=true                        — so as ABERTAS AGORA (is_open efetivo)
+     *   ?hasAvailability=true                — so quem tem profissional disponivel
+     *   ?maxWaitMinutes=20                   — teto de espera ("espero ate 20 min")
+     *   ?includeAll=true                     — OBSOLETO, aceito e inocuo (ver abaixo)
+     * Sem filtro, lista todos os ativos — ABERTOS E FECHADOS — com os abertos primeiro.
+     *
+     * <p><b>A listagem devolve loja FECHADA de proposito (decisao do Andre, 06/09).</b> Ate aqui o
+     * default cortava tudo que nao fosse {@code OPEN} e cada front desarmava isso mandando
+     * {@code ?includeAll=true} — o Client na Home ("o cliente pode querer agendar para a
+     * reabertura") e o Partner na busca de afiliacao (loja recem-criada nasce {@code CLOSED}, e sem
+     * isso um dono novo nunca era achado). Ou seja: <b>nenhum chamador real queria o corte</b>, e
+     * quem o herdava era so quem esquecesse o parametro. O {@code includeAll} continua aceito para
+     * os apps em campo nao dependerem de deploy, mas <b>nao faz mais nada</b> — nao voltar a filtrar
+     * aqui.</p>
+     *
+     * <p><b>Os filtros de prontidao sao o caminho de volta</b> (06/09). Devolver a fechada e o
+     * default; quem quiser a vitrine de antes pede <code>?openNow=true</code> — e recebe algo
+     * melhor do que o corte antigo, porque o {@code is_open} <b>efetivo</b> tambem exclui a loja
+     * marcada {@code OPEN} cujo expediente ja acabou, coisa que o filtro por {@code open_status}
+     * deixava passar. A diferenca que importa: agora e <b>escolha do usuario na tela</b>, nao
+     * default escondido que cada app tinha de desarmar.</p>
+     *
+     * <p><b>Fechada nao some, mas tambem nao disputa o topo:</b> a ordenacao poe os abertos
+     * primeiro e so entao aplica a ordem de sempre (espera, ou distancia quando veio lat/lng) —
+     * ver {@code EstablishmentServiceImpl.sortedByWait/sortedByDistance}. Sem isso uma loja fechada
+     * de fila vazia (espera 0) subiria para o topo da Home.</p>
      *
      * <p><b>Endpoint publico</b> (`permitAll`) de proposito: a vitrine de lojas proximas e a isca do
      * cadastro, nao o premio dele — o cliente baixa o app, concede o GPS e ja ve o que tem perto sem
@@ -127,14 +153,22 @@ public class EstablishmentController {
             @RequestParam(required = false) String city,
             @RequestParam(required = false) String uf,
             @RequestParam(required = false) ServiceType serviceType,
+            // OBSOLETO (06/09): o default ja devolve tudo. Continua declarado porque os dois apps
+            // em campo o enviam — aceitar e ignorar e o que faz a transicao nao pedir deploy deles.
             @RequestParam(required = false, defaultValue = "false") boolean includeAll,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
-            @RequestParam(required = false) Double radiusKm) {
+            @RequestParam(required = false) Double radiusKm,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false, defaultValue = "false") boolean openNow,
+            @RequestParam(required = false, defaultValue = "false") boolean hasAvailability,
+            @RequestParam(required = false) Integer maxWaitMinutes) {
 
         log.info("[Establishment] findAll — name={} neighborhood={} city={} uf={} serviceType={}"
-                        + " includeAll={} lat={} lng={} radiusKm={}",
-                name, neighborhood, city, uf, serviceType, includeAll, lat, lng, radiusKm);
+                        + " includeAll={} lat={} lng={} radiusKm={} sort={} openNow={}"
+                        + " hasAvailability={} maxWaitMinutes={}",
+                name, neighborhood, city, uf, serviceType, includeAll, lat, lng, radiusKm,
+                sort, openNow, hasAvailability, maxWaitMinutes);
 
         // null quando nao veio coordenada — a listagem cai na ordenacao por tempo de espera.
         // Coordenada invalida (meia, fora do globo, (0,0)) ou raio <= 0 param aqui, com 422.
@@ -143,18 +177,12 @@ public class EstablishmentController {
         // null quando nao veio nem cidade nem UF. `uf` fora do formato de sigla para aqui, com 422.
         LocationFilter location = LocationFilter.from(city, uf);
 
-        List<EstablishmentResponse> result =
-                service.searchPublic(name, serviceType, neighborhood, location, geo);
+        // O que o usuario escolheu na tela. `sort` desconhecido e maxWaitMinutes negativo param
+        // aqui, com 422 — ver Showcase.
+        Showcase showcase = Showcase.from(sort, openNow, hasAvailability, maxWaitMinutes);
 
-        // BUG5: por padrão a listagem pública só devolve lojas ABERTAS (OPEN).
-        // ?includeAll=true devolve todas as ativas (inclui CLOSED/TEMPORARILY_CLOSED),
-        // p/ o Front-Partner/gestão. Filtro pós-fetch: preserva a ordenação que o service
-        // aplicou — por distância quando veio lat/lng, por tempo de espera caso contrário.
-        if (!includeAll) {
-            result = result.stream()
-                    .filter(e -> OpenStatus.OPEN.name().equals(e.openStatus()))
-                    .toList();
-        }
+        List<EstablishmentResponse> result =
+                service.searchPublic(name, serviceType, neighborhood, location, geo, showcase);
 
         return ResponseEntity.ok(result);
     }
