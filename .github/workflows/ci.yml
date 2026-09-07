@@ -25,7 +25,7 @@ permissions:
   contents: write
 
 # O alvo de cada ambiente fica AQUI, versionado, e nao em secret. Nenhuma das duas URLs
-# e segredo — a de PROD ja esta commitada em postman/collection-prod.json e a de HOMOLOG
+# e segredo — a de PROD ja esteve commitada na collection do Postman e a de HOMOLOG
 # no PRD. Em secret elas derivam sem ninguem ver (foi o que apontou o teste de PROD para
 # o Render) e ainda mascaram o log justamente no passo em que se precisa ler o alvo.
 env:
@@ -152,7 +152,7 @@ jobs:
       - name: Run Postman (HOMOLOG)
         working-directory: vupth-backend
         run: |
-          newman run postman/collection-homolog.json \
+          newman run postman/collection.json \
             --env-var "base_url=$HOMOLOG_URL" \
             --reporters cli \
             --verbose \
@@ -333,7 +333,7 @@ jobs:
       - name: Run Postman (PROD)
         working-directory: vupth-backend
         run: |
-          newman run postman/collection-prod.json \
+          newman run postman/collection.json \
             --env-var "base_url=$PROD_URL" \
             --reporters cli \
             --verbose \

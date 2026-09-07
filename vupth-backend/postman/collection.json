@@ -1,7 +1,7 @@
 {
  "info": {
   "_postman_id": "df5b99ea-e196-41c5-a4ff-994c7bdf6e3e",
-  "name": "Vupth backend prod (v16 - bug fixes affiliations + service-items + ownership)",
+  "name": "Vupth backend (v16 - bug fixes affiliations + service-items + ownership)",
   "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
   "_exporter_id": "51940681"
  },
@@ -22460,7 +22460,7 @@
  "variable": [
   {
    "key": "base_url",
-   "value": "https://vupth-backend-ia-production.up.railway.app"
+   "value": "http://localhost:8080"
   },
   {
    "key": "owner_token",
