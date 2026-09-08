@@ -34,6 +34,22 @@ public interface RefreshTokenJpaRepository extends JpaRepository<RefreshToken, U
       """)
     void deleteOldRevokedTokens(UUID userId, OffsetDateTime limit);
 
+    /**
+     * Higiene por usuario: vencidos e revogados antigos saem; sessao viva de outro aparelho FICA.
+     * O {@code replaced_by} tem ON DELETE SET NULL, entao apagar um sucessor ja morto nao explode
+     * a FK — so desfaz um elo que ja nao valia mais nada.
+     */
+    @Modifying
+    @Query("""
+    DELETE FROM RefreshToken rt
+    WHERE rt.user.id = :userId
+      AND (rt.expiryDate < :now
+           OR (rt.revokedAt IS NOT NULL AND rt.revokedAt < :revokedBefore))
+    """)
+    void deletePrunableByUserId(@Param("userId") UUID userId,
+                                @Param("now") OffsetDateTime now,
+                                @Param("revokedBefore") OffsetDateTime revokedBefore);
+
     @Query("SELECT COUNT(rt) FROM RefreshToken rt WHERE rt.user.id = :userId AND rt.revokedAt IS NULL AND rt.expiryDate > :now")
     long countActiveTokensByUserId(UUID userId, OffsetDateTime now);
 

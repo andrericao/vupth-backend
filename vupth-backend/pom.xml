@@ -158,6 +158,49 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 
+			<!-- Bytecode enhancement das entidades (2026-09-06).
+
+			     POR QUE: `BaseUser` tem tres referencias DE VOLTA — owner, professional e client —
+			     mapeadas como @OneToOne(mappedBy=..., fetch=LAZY). No lado INVERSO de um one-to-one o
+			     LAZY nao existe sem isto: a tabela `base_user` nao tem coluna dizendo se aquela pessoa
+			     e profissional, entao o Hibernate PRECISA consultar para saber se o campo e null — e
+			     nao da para criar proxy de algo que talvez nao exista. Resultado: ate 3 SELECTs a mais
+			     por BaseUser carregado, em TODO lugar (login, perfil, fila, cada broadcast do
+			     WebSocket, cada linha de listagem que traz gente). A anotacao dizia LAZY e cobrava
+			     EAGER; e por isso que ninguem via.
+
+			     Este plugin reescreve as entidades no build para interceptar o acesso ao campo — e ai
+			     o LAZY passa a ser verdade.
+
+			     ⚠️ O QUE MUDA DE RISCO: campo que antes vinha preenchido "de graca" agora so carrega
+			     no acesso. Ler um desses campos FORA da transacao passa a estourar
+			     LazyInitializationException onde antes devolvia o valor. Nao e o plugin quebrando
+			     nada — e ele expondo dependencia que ja existia (com OSIV desligado em staging/prod,
+			     esse tipo de leitura ja era ilegal na pratica). Por isso a suite inteira e o criterio
+			     de aceite desta mudanca, nao os testes da frente que a motivou.
+
+			     enableAssociationManagement fica DESLIGADO de proposito: ele mexe em como os dois
+			     lados de uma associacao se mantem em sincronia e muda semantica de gravacao, o que
+			     nao tem nada a ver com o problema que estamos resolvendo. -->
+			<plugin>
+				<groupId>org.hibernate.orm.tooling</groupId>
+				<artifactId>hibernate-enhance-maven-plugin</artifactId>
+				<version>${hibernate.version}</version>
+				<executions>
+					<execution>
+						<id>enhance</id>
+						<goals>
+							<goal>enhance</goal>
+						</goals>
+						<configuration>
+							<enableLazyInitialization>true</enableLazyInitialization>
+							<enableDirtyTracking>true</enableDirtyTracking>
+							<enableAssociationManagement>false</enableAssociationManagement>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
 			<!-- reuseForks=true: uma unica JVM roda todas as classes, deixando o CACHE DE
 			     CONTEXTO do Spring reusar o mesmo ApplicationContext entre elas. As ~53 classes
 			     de integracao compartilham a mesma assinatura de contexto (@SpringBootTest

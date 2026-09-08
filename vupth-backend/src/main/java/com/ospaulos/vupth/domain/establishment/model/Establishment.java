@@ -11,6 +11,7 @@ import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.user.model.UserAddress;
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -100,7 +101,14 @@ public class Establishment implements Serializable {
     @OneToMany(mappedBy = "establishment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Professional> professionals = new ArrayList<>();
 
+    /**
+     * <b>{@code @BatchSize} (B10):</b> o endereco e lido no mapeamento de TODA loja da listagem
+     * publica ({@code getMainAddress}), e as consultas de lista nao dao {@code JOIN FETCH} nele.
+     * Sem o lote, era mais uma ida ao banco <b>por loja</b> — o mesmo N+1 do resumo de fila, so que
+     * escondido no DTO. Com ele, as colecoes de ate 100 lojas vem numa consulta so.
+     */
     @JsonManagedReference
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "establishment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<EstablishmentAddress> addresses = new ArrayList<>();
 

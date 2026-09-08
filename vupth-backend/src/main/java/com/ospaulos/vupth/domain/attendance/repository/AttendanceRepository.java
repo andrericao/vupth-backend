@@ -198,6 +198,49 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     );
 
     /**
+     * Filas de espera (SCHEDULED + LATE) de VARIOS profissionais de uma vez — segunda consulta do
+     * resumo em lote da listagem publica (B10). Substitui uma chamada de
+     * {@link #findWaitingQueueByProfessionalAndEstablishment} por loja.
+     *
+     * <p><b>Sem JOIN FETCH de proposito.</b> O ETA le so colunas escalares do proprio atendimento
+     * ({@code estimatedMinutes}, marcas de inicio/pausa, {@code isFit}); {@code client},
+     * {@code serviceItems} e companhia so existem para <b>serializar</b> o snapshot de detalhe, e
+     * este caminho nao serializa atendimento nenhum — devolve dois numeros por loja.</p>
+     *
+     * <p>Devolve tuplas {@code [professionalId, establishmentId, attendance]} porque o resumo agrupa
+     * pelo <b>par</b>: e o mesmo alcance da consulta por profissional+loja que ela substitui.
+     * A ordem por {@code scheduledTime} e o que faz a fila ser fila — o calculo do ETA depende dela.</p>
+     */
+    @Query("""
+        SELECT a.professional.id, a.establishment.id, a
+        FROM Attendance a
+        WHERE a.professional.id IN :professionalIds
+          AND a.status IN ('SCHEDULED', 'LATE')
+        ORDER BY a.scheduledTime ASC
+    """)
+    List<Object[]> findWaitingQueuesByProfessionalIds(
+            @Param("professionalIds") java.util.Collection<UUID> professionalIds
+    );
+
+    /**
+     * Atendimentos em curso (IN_PROGRESS ou PAUSED) de VARIOS profissionais — terceira consulta do
+     * resumo em lote (B10). O desempate entre os dois status fica em Java, como no snapshot de
+     * detalhe: IN_PROGRESS manda; PAUSED so entra na falta dele (Partner BUG7).
+     *
+     * <p>Tuplas {@code [professionalId, attendance]} — o corrente NAO e escopado por loja, exatamente
+     * como em {@link #findCurrentAttendanceByProfessional}.</p>
+     */
+    @Query("""
+        SELECT a.professional.id, a
+        FROM Attendance a
+        WHERE a.professional.id IN :professionalIds
+          AND a.status IN ('IN_PROGRESS', 'PAUSED')
+    """)
+    List<Object[]> findCurrentAttendancesByProfessionalIds(
+            @Param("professionalIds") java.util.Collection<UUID> professionalIds
+    );
+
+    /**
      * Find o attendance atualmente em progresso — JOIN FETCH para serialização segura.
      */
     @Query("""
@@ -324,24 +367,54 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     """)
     long countActiveByEstablishment(@Param("establishmentId") UUID establishmentId);
 
-    @Query(value = """
-        SELECT DISTINCT a.* FROM attendance a
-        LEFT JOIN client c ON c.id = a.client_id
-        LEFT JOIN base_user bu1 ON bu1.id = c.id
-        LEFT JOIN professional p ON p.id = a.professional_id
-        LEFT JOIN base_user bu2 ON bu2.id = p.id
-        LEFT JOIN establishment e ON e.id = a.establishment_id
-        WHERE (CAST(:establishmentId AS uuid) IS NULL OR a.establishment_id = CAST(:establishmentId AS uuid))
-          AND (CAST(:professionalId AS uuid) IS NULL OR a.professional_id = CAST(:professionalId AS uuid))
-          AND (CAST(:status AS varchar) IS NULL OR a.status = CAST(:status AS varchar))
-          AND (CAST(:dateFrom AS timestamptz) IS NULL OR a.scheduled_time >= CAST(:dateFrom AS timestamptz))
-          AND (CAST(:dateTo AS timestamptz) IS NULL OR a.scheduled_time < CAST(:dateTo AS timestamptz))
-        ORDER BY a.scheduled_time DESC
-    """, nativeQuery = true)
+    /**
+     * Listagem filtrada do PARTNER (agenda do dia da loja/profissional).
+     *
+     * <p><b>Era uma consulta nativa, e isso custava caro de um jeito invisivel.</b> Consulta nativa
+     * nao hidrata associacao: os {@code LEFT JOIN} que ela tinha serviam ao filtro, nunca ao
+     * mapeamento, e cada atendimento voltava com {@code client}, {@code professional},
+     * {@code establishment} e {@code serviceItems} preguicosos. O service compensava com um
+     * {@code Hibernate.initialize(...)} por atendimento — <b>ate 5 idas ao banco por linha</b>, ou
+     * ~200 consultas para um dia de 40 atendimentos. Em JPQL o {@code JOIN FETCH} traz tudo na
+     * mesma consulta, e o laco de inicializacao sai junto.</p>
+     *
+     * <p><b>Filtro nulo = "sem filtro", e o jeito de dizer isso importa.</b> A forma obvia,
+     * {@code (:id IS NULL OR a.establishment.id = :id)}, <b>nao funciona</b> — nem aqui nem na versao
+     * nativa que esta consulta substituiu. O Hibernate emite o {@code IS NULL} como um placeholder
+     * <b>separado</b> da comparacao, e um {@code ?} sozinho nao da ao Postgres de onde inferir tipo:
+     * {@code ERRO: nao foi possivel determinar o tipo de dados do parametro $3} (SQLState 42P18).
+     * Era essa a razao dos {@code CAST(... AS uuid)} da consulta nativa antiga — o CAST dava o tipo
+     * na mao. Tentar reproduzir o padrao sem eles quebrou os 10 testes de listagem em 06/09.</p>
+     *
+     * <p>A saida e nao ter parametro solto: {@code coluna = COALESCE(:param, coluna)} mantem
+     * <b>todo</b> parametro dentro de uma comparacao tipada, e nulo vira "coluna igual a ela mesma"
+     * — sempre verdade, porque as tres colunas sao {@code NOT NULL}. As datas seguem o outro caminho,
+     * o do {@link #findByClientFilters}: sentinelas de passado/futuro remotos montadas no service,
+     * porque no limite superior o truque do COALESCE se inverteria ({@code scheduledTime <
+     * scheduledTime} e sempre falso).</p>
+     *
+     * <p>O {@code status} tambem deixou de viajar como {@code String}: em JPQL ele e o proprio enum,
+     * entao valor invalido para de virar comparacao silenciosa que nao casa com nada.</p>
+     */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.establishment.id = COALESCE(:establishmentId, a.establishment.id)
+          AND a.professional.id = COALESCE(:professionalId, a.professional.id)
+          AND a.status = COALESCE(:status, a.status)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+        ORDER BY a.scheduledTime DESC
+    """)
     List<Attendance> findByFilters(
             @Param("establishmentId") UUID establishmentId,
             @Param("professionalId") UUID professionalId,
-            @Param("status") String status,
+            @Param("status") AttendanceStatus status,
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo
     );

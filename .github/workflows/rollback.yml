@@ -21,6 +21,12 @@ on:
 permissions:
   contents: read
 
+# Mesmo alvo versionado do ci.yml: nenhuma das duas URLs e segredo, e em secret elas
+# derivam sem ninguem ver — um rollback que espera o host errado nunca ve o app voltar.
+env:
+  HOMOLOG_URL: https://vupth-backend-ia.onrender.com
+  PROD_URL: https://vupth-backend-ia-production.up.railway.app
+
 jobs:
   rollback:
     runs-on: ubuntu-latest
@@ -55,7 +61,6 @@ jobs:
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
-          HOMOLOG_URL: ${{ secrets.HOMOLOG_URL }}
           GOOD_SHA: ${{ steps.r.outputs.sha }}
         run: |
           if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
@@ -78,7 +83,6 @@ jobs:
         if: inputs.environment == 'prod'
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          PROD_URL: ${{ secrets.PROD_URL }}
         run: |
           git checkout ${{ steps.r.outputs.sha }}
           npm install -g @railway/cli

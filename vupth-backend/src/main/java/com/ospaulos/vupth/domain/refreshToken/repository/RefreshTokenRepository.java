@@ -18,6 +18,13 @@ public interface RefreshTokenRepository {
 
     void deleteByUserId(UUID userId);
 
+    /**
+     * Apaga os tokens MORTOS de um usuario: os vencidos e os revogados ha mais tempo que o limite.
+     * Substitui o {@code deleteByUserId} que rodava a cada emissao — aquele apagava tambem as
+     * sessoes VIVAS dos outros aparelhos, que e o defeito que este metodo existe para nao repetir.
+     */
+    void deletePrunableByUserId(UUID userId, OffsetDateTime now, OffsetDateTime revokedBefore);
+
     int deleteExpiredAndRevokedTokens(OffsetDateTime now);
 
     long countActiveTokensByUserId(UUID userId, OffsetDateTime now);

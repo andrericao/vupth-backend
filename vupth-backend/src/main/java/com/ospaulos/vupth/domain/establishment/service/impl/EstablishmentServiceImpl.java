@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ospaulos.vupth.api.address.dto.response.AddressResponse;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
-import com.ospaulos.vupth.api.establishment.dto.response.ProfessionalWithQueueResponse;
-import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentsQueueSummaryUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentsQueueSummaryUseCase.QueueSummary;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
@@ -20,7 +20,9 @@ import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
 import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
+import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentSort;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
+import com.ospaulos.vupth.domain.establishment.valueObject.Showcase;
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
@@ -30,9 +32,12 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.text.Collator;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -44,7 +49,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final OwnerRepository ownerRepository;
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
-    private final GetEstablishmentWithQueueUseCase getWithQueueUseCase;
+    private final GetEstablishmentsQueueSummaryUseCase queueSummaryUseCase;
     private final AttendanceRepository attendanceRepository;
 
     @Override
@@ -89,22 +94,50 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     @Override
     public List<EstablishmentResponse> searchPublic(String name, ServiceType serviceType,
                                                     String neighborhood, LocationFilter location,
-                                                    GeoSearch geo) {
-        log.info("[Establishment] searchPublic — name={} type={} neighborhood={} location={} geo={}",
-                name, serviceType, neighborhood, location, geo);
+                                                    GeoSearch geo, Showcase showcase) {
+        log.info("[Establishment] searchPublic — name={} type={} neighborhood={} location={} geo={} showcase={}",
+                name, serviceType, neighborhood, location, geo, showcase);
 
         LocationFilter scope = hasText(name) ? null : location;
 
-        List<EstablishmentResponse> responses = inLocation(
-                findByFilters(name, serviceType, neighborhood), scope).stream()
+        List<Establishment> found = inLocation(findByFilters(name, serviceType, neighborhood), scope);
+
+        // B10: UM resumo para a lista inteira. Antes era uma chamada ao use case de DETALHE por
+        // loja — ver GetEstablishmentsQueueSummaryUseCase para o que mudou e o que foi preservado.
+        Map<UUID, QueueSummary> summaries = queueSummaryUseCase.execute(
+                found.stream().map(Establishment::getId).toList());
+
+        List<EstablishmentResponse> responses = found.stream()
                 .map(e -> {
-                    QueueSummary summary = queueSummary(e.getId());
+                    QueueSummary summary = summaries.getOrDefault(e.getId(), QueueSummary.EMPTY);
                     return EstablishmentResponse.fromEntity(
                             e, summary.minWaitMinutes(), summary.availableProfessionals());
                 })
                 .toList();
 
-        return geo == null ? sortedByWait(responses) : sortedByDistance(responses, geo);
+        return sortedShowcase(responses.stream().filter(r -> accepts(r, showcase)).toList(), geo, showcase);
+    }
+
+    /**
+     * Os filtros de <b>prontidao</b> da vitrine (06/09). Rodam em Java, e nao em SQL, pelo mesmo
+     * motivo do {@link #inLocation}: os tres campos que eles olham — {@code is_open} efetivo,
+     * {@code available_professionals} e {@code estimated_wait_minutes} — <b>nao existem no banco</b>.
+     * Os dois ultimos vem do resumo de fila (B10) e o primeiro cruza {@code open_status} com o
+     * relogio de parede da loja; filtrar antes exigiria recalcular tudo isso em SQL, criando uma
+     * <b>segunda fonte</b> para numeros que o produto ja mostra na tela.
+     */
+    private boolean accepts(EstablishmentResponse r, Showcase showcase) {
+        if (showcase.openNow() && !r.isOpen()) {
+            return false;
+        }
+        if (showcase.hasAvailability()
+                && (r.availableProfessionals() == null || r.availableProfessionals() <= 0)) {
+            return false;
+        }
+        // Espera null = loja sem profissional com servico. Sai: "desconhecida" nao cabe em "ate N".
+        return showcase.maxWaitMinutes() == null
+                || (r.estimatedWaitMinutes() != null
+                        && r.estimatedWaitMinutes() <= showcase.maxWaitMinutes());
     }
 
     /**
@@ -157,58 +190,114 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     /**
-     * Ordenacao padrao da listagem: menor tempo de espera primeiro (asc, nulls last). E o que vale
-     * quando a busca nao mandou coordenada — inclusive quando o usuario NEGOU a permissao de
-     * localizacao, caso em que a lista tem de continuar util em vez de vir vazia.
+     * Ordena a pagina inteira e so entao arredonda a distancia exposta.
      *
-     * @apiNote O tempo de espera vem de uma query por establishment (reusa o snapshot da fila), o
-     *          que gera varias queries em listas grandes. Aceitavel no MVP — ver backlog de
-     *          performance. E tambem o motivo de a distancia ser calculada aqui e nao em SQL:
-     *          filtrar o raio no banco pouparia uma fracao irrelevante perto deste N+1.
-     */
-    private List<EstablishmentResponse> sortedByWait(List<EstablishmentResponse> responses) {
-        return responses.stream()
-                .sorted(Comparator.comparing(EstablishmentResponse::estimatedWaitMinutes,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
-    }
-
-    /**
-     * Ordenacao por proximidade (backlog #2, fatia B). Tres regras de produto moram aqui:
-     *
+     * <p><b>A ordem tem tres degraus, nesta ordem:</b></p>
      * <ol>
-     *   <li><b>Sem raio, ninguem some.</b> Sem {@code radiusKm} a lista devolve TUDO, so reordenado
-     *       — a loja sem coordenada vai para o FIM com {@code distance_km: null} em vez de sumir.
-     *       Um raio default deixaria a tela vazia para quem esta numa regiao sem loja, e o usuario
-     *       nao distingue isso de "o app quebrou".</li>
-     *   <li><b>Com raio, a loja sem coordenada sai</b> — pediram explicitamente "ate X km", e nao
-     *       da para afirmar que uma loja sem ponto no mapa cabe nisso.</li>
-     *   <li><b>Ordem ESTAVEL:</b> distancia e, no empate, {@code id}. Sem o desempate, duas lojas
-     *       equidistantes trocariam de lugar entre requests e a paginacao (backlog) repetiria ou
-     *       pularia item.</li>
+     *   <li><b>Aberta antes de fechada</b> — ver {@link #openFirst()}. Vale <b>sempre</b>, inclusive
+     *       com {@code sort} explicito (decisao do Andre, 06/09): o {@code sort} ordena
+     *       <b>dentro</b> de cada bloco. Sem isso, {@code sort=wait} poria no topo a loja fechada,
+     *       que tem fila vazia e portanto a menor espera possivel;</li>
+     *   <li>o criterio pedido — ver {@link #within};</li>
+     *   <li><b>{@code id} como desempate</b>, em <b>todas</b> as ordenacoes. Sem ele, duas lojas
+     *       empatadas (mesma espera, mesma distancia arredondada) trocariam de lugar entre requests
+     *       e a paginacao (backlog #18) repetiria ou pularia item.</li>
      * </ol>
      *
-     * <p><b>O desempate compara o id como TEXTO, nao como {@link java.util.UUID}, de proposito.</b>
-     * {@code UUID.compareTo} compara os dois metades como {@code long} <b>com sinal</b>, entao um id
-     * que comeca em {@code 8}-{@code f} (bit alto ligado = long negativo) ordena ANTES de um que
-     * comeca em {@code 0}-{@code 7} — o oposto do que qualquer um espera lendo o hexadecimal. O
-     * Postgres compara {@code uuid} byte a byte, <b>sem sinal</b>. Usar o texto faz esta ordenacao
-     * bater com a que o {@code ORDER BY distancia, id} vai produzir quando ela migrar para SQL junto
-     * com a paginacao; com {@code UUID.compareTo}, a lista mudaria de ordem no dia da migracao.</p>
+     * <p><b>O raio (e so ele) filtra aqui</b>, e pela distancia <b>crua</b>: arredondar antes
+     * deixaria entrar uma loja a 10,004 km num raio de 10 km. Sem {@code radiusKm} ninguem some —
+     * a loja ainda sem coordenada vai para o FIM com {@code distance_km: null} em vez de sumir, e a
+     * tela nunca vem vazia para quem esta numa regiao sem loja geocodificada.</p>
      *
-     * <p>O filtro do raio usa a distancia CRUA e so o valor exposto e arredondado: arredondar antes
-     * deixaria entrar uma loja a 10,004km num raio de 10km.</p>
+     * @apiNote O tempo de espera da pagina inteira vem em quatro consultas fixas desde o B10 (ver
+     *          {@code GetEstablishmentsQueueSummaryUseCase}); antes era uma chamada ao use case de
+     *          detalhe por loja. A distancia continua calculada aqui, e nao em SQL: sao contas
+     *          sobre linhas que ja estao na memoria.
      */
-    private List<EstablishmentResponse> sortedByDistance(List<EstablishmentResponse> responses, GeoSearch geo) {
+    private List<EstablishmentResponse> sortedShowcase(List<EstablishmentResponse> responses,
+                                                       GeoSearch geo, Showcase showcase) {
+        EstablishmentSort sort = effectiveSort(showcase.sort(), geo);
+
         return responses.stream()
-                .map(r -> new Located(r, distanceKm(r, geo)))
-                .filter(l -> !geo.hasRadius() || (l.distanceKm != null && l.distanceKm <= geo.radiusKm()))
-                .sorted(Comparator.comparing((Located l) -> l.distanceKm,
-                                Comparator.nullsLast(Comparator.naturalOrder()))
+                .map(r -> new Located(r, geo == null ? null : distanceKm(r, geo)))
+                .filter(l -> geo == null || !geo.hasRadius()
+                        || (l.distanceKm != null && l.distanceKm <= geo.radiusKm()))
+                .sorted(openFirst()
+                        .thenComparing(within(sort))
                         .thenComparing(l -> l.response.id().toString()))
                 .map(l -> l.response.withDistanceKm(
                         l.distanceKm == null ? null : Haversine.roundKm(l.distanceKm)))
                 .toList();
+    }
+
+    /**
+     * Qual ordenacao vale de fato.
+     *
+     * <p><b>Sem {@code sort}, nada muda em relacao a antes destes parametros:</b> distancia quando
+     * veio coordenada, espera quando nao veio — inclusive quando o usuario NEGOU a permissao de
+     * localizacao, caso em que a lista tem de continuar util em vez de vir vazia.</p>
+     *
+     * <p><b>{@code sort=distance} sem coordenada cai no {@code WAIT} sem erro</b>, pela mesma regra
+     * de produto que faz o {@code radiusKm} sem origem ser ignorado: o app pode ter guardado o
+     * "mais perto" da sessao passada e chegar aqui sem fix de GPS (permissao concedida e ter
+     * coordenada <b>agora</b> sao coisas diferentes). Recusar deixaria a tela vazia por uma escolha
+     * que o usuario nao refez. Sai em {@code WARN} porque, se aparecer sempre, e o app pedindo
+     * ordem por distancia sem nunca mandar {@code lat}/{@code lng} — isso ai e defeito dele.</p>
+     */
+    private EstablishmentSort effectiveSort(EstablishmentSort requested, GeoSearch geo) {
+        if (requested == null) {
+            return geo == null ? EstablishmentSort.WAIT : EstablishmentSort.DISTANCE;
+        }
+        if (requested == EstablishmentSort.DISTANCE && geo == null) {
+            log.warn("[Establishment] sort=distance sem lat/lng — caindo para sort=wait");
+            return EstablishmentSort.WAIT;
+        }
+        return requested;
+    }
+
+    /**
+     * Primeiro criterio das duas ordenacoes da vitrine: <b>aberta antes de fechada</b>.
+     *
+     * <p>A listagem devolve loja fechada desde 06/09 (decisao do Andre: quem quer <b>agendar</b>
+     * precisa achar a loja que nao esta atendendo agora). Sem este criterio, uma loja fechada
+     * chegaria ao <b>topo</b> da Home: com ninguem na fila, o {@code estimated_wait_minutes} dela e
+     * <b>0</b> — o menor possivel — e "espera zero" numa loja que nao vai atender e a informacao
+     * mais enganosa que a tela pode dar. O mesmo vale para a busca por proximidade: a loja fechada
+     * da esquina nao ganha da aberta a dois quarteiroes.</p>
+     *
+     * <p>Compara o {@code is_open} <b>efetivo</b>, e nao o {@code open_status} persistido: e o
+     * mesmo campo que o app usa para escrever "Aberta"/"Fechada" no card, entao a ordem da lista
+     * nunca contradiz o rotulo. Uma loja {@code OPEN} cujo horario ja passou aparece como fechada e
+     * ordena como fechada.</p>
+     */
+    private static Comparator<Located> openFirst() {
+        return Comparator.comparingInt(l -> l.response.isOpen() ? 0 : 1);
+    }
+
+    /**
+     * O criterio pedido, aplicado <b>dentro</b> de cada bloco (aberta / fechada).
+     *
+     * <p>{@code WAIT} e {@code DISTANCE} sao {@code nullsLast}: loja sem disponibilidade (espera
+     * {@code null}) e loja ainda sem coordenada ({@code distance_km: null}) vao para o fim da
+     * <b>sua</b> metade em vez de sumir — sumir e coisa de filtro explicito
+     * ({@code maxWaitMinutes}, {@code radiusKm}), nunca de ordenacao.</p>
+     *
+     * <p>{@code NAME} usa {@link Collator} pt-BR e nao {@code String.CASE_INSENSITIVE_ORDER}:
+     * comparando texto cru, "Ácia" cai <b>depois</b> de "Zulu" (o acento tem code point alto), e
+     * numa lista de nomes brasileiros isso aparece na primeira tela.</p>
+     */
+    private static Comparator<Located> within(EstablishmentSort sort) {
+        return switch (sort) {
+            case WAIT -> Comparator.comparing(l -> l.response.estimatedWaitMinutes(),
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case DISTANCE -> Comparator.comparing(l -> l.distanceKm,
+                    Comparator.nullsLast(Comparator.naturalOrder()));
+            case NAME -> {
+                Collator collator = Collator.getInstance(Locale.forLanguageTag("pt-BR"));
+                collator.setStrength(Collator.PRIMARY); // ignora acento e caixa
+                yield Comparator.comparing(l -> l.response.name(), collator);
+            }
+        };
     }
 
     /** Distancia crua ate a loja, ou {@code null} quando ela nao tem coordenada resolvida ainda. */
@@ -223,30 +312,6 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
     /** Par temporario resposta+distancia crua, para filtrar e ordenar antes de arredondar. */
     private record Located(EstablishmentResponse response, Double distanceKm) {}
-
-    /**
-     * Resumo da fila usado pela listagem publica: menor tempo de espera + quantos
-     * profissionais afiliados COM servico a loja tem. Ambos derivam do mesmo snapshot
-     * ({@code professionals-with-queue}, que ja filtra profissional sem servico — #31),
-     * entao uma unica chamada do use case alimenta os dois campos.
-     */
-    private QueueSummary queueSummary(UUID establishmentId) {
-        try {
-            List<ProfessionalWithQueueResponse> professionals =
-                    getWithQueueUseCase.execute(establishmentId).professionals();
-            Integer minWait = professionals.stream()
-                    .map(ProfessionalWithQueueResponse::estimatedWaitMinutes)
-                    .min(Integer::compareTo)
-                    .orElse(null);
-            return new QueueSummary(minWait, professionals.size());
-        } catch (Exception e) {
-            log.warn("[Establishment] queueSummary falhou para {}: {}", establishmentId, e.getMessage());
-            return new QueueSummary(null, 0);
-        }
-    }
-
-    /** Menor tempo de espera (min, null se nenhum) + nº de profissionais com servico da loja. */
-    private record QueueSummary(Integer minWaitMinutes, int availableProfessionals) {}
 
     @Override
     public EstablishmentResponse updateOpenStatus(UUID establishmentId, UUID requesterId, OpenStatus newStatus) {

@@ -1,0 +1,176 @@
+databaseChangeLog:
+
+  # Indices do caminho quente (B10, 2a metade).
+  #
+  # O banco tinha 9 indices no total, todos em tabelas perifericas (refresh_token,
+  # password_reset_code, device_token, cut_request, swap_offer). As tabelas que a fila le a cada
+  # request e a cada broadcast — attendance, professional, service_item, professional_intervals,
+  # establishment_addresses — nao tinham nenhum: so a PK.
+  #
+  # Duas crencas erradas mantiveram isso invisivel:
+  #   1. "FK ja e indexada". Nao no Postgres: ele indexa PK e UNIQUE, nunca a coluna que aponta.
+  #   2. "as entidades declaram @Index". Declaram (BaseUser, UserRole, Client, ProfessionalInterval),
+  #      mas com `ddl-auto=none` quem cria schema e o Liquibase — essas anotacoes nunca rodaram.
+  #      Elas parecem cobertura e nao sao.
+  #
+  # Enquanto a base e pequena, seq scan e barato e o defeito nao aparece — a mesma forma do B10:
+  # custo por linha que ninguem ve. E `attendance` so cresce: atendimento terminado nunca sai.
+  #
+  # Como se verifica: `EXPLAIN ANALYZE` na fila de um profissional deve trocar
+  # `Seq Scan on attendance` por `Index Scan using idx_attendance_professional_status`.
+  #
+  # Sem CONCURRENTLY de proposito: o Liquibase roda changeset em transacao, e `CREATE INDEX
+  # CONCURRENTLY` nao pode. Nas tabelas atuais o lock e de milissegundos. Se um dia `attendance`
+  # ficar grande a ponto de o lock doer, o indice novo entra em changeset com `runInTransaction: false`.
+
+  - changeSet:
+      id: 99-perf-001-attendance-professional-status
+      author: andrericao
+      comment: >-
+        Fila do profissional e atendimento em curso. Cobre findWaitingQueueByProfessionalAndEstablishment,
+        findCurrentAttendanceByProfessional e as duas consultas em lote da listagem publica
+        (findWaitingQueuesByProfessionalIds / findCurrentAttendancesByProfessionalIds). scheduled_time
+        entra no fim porque a fila SEMPRE sai ordenada por ele — com a coluna no indice, o ORDER BY
+        vem de graca.
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: attendance
+                indexName: idx_attendance_professional_status
+      changes:
+        - createIndex:
+            tableName: attendance
+            indexName: idx_attendance_professional_status
+            columns:
+              - column:
+                  name: professional_id
+              - column:
+                  name: status
+              - column:
+                  name: scheduled_time
+
+  - changeSet:
+      id: 99-perf-002-attendance-establishment-status
+      author: andrericao
+      comment: >-
+        Recorte por loja: countActiveByEstablishment (gate de fechar loja, BUG6),
+        findWaitingQueueByEstablishment (push do proximo da fila) e os relatorios.
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: attendance
+                indexName: idx_attendance_establishment_status
+      changes:
+        - createIndex:
+            tableName: attendance
+            indexName: idx_attendance_establishment_status
+            columns:
+              - column:
+                  name: establishment_id
+              - column:
+                  name: status
+
+  - changeSet:
+      id: 99-perf-003-attendance-client-status
+      author: andrericao
+      comment: >-
+        "Onde eu estou na fila" — findByClientFilters e o guarda de duplo ingresso
+        (existsByClient_IdAndStatusIn, item #38), que roda em TODO ingresso na fila.
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: attendance
+                indexName: idx_attendance_client_status
+      changes:
+        - createIndex:
+            tableName: attendance
+            indexName: idx_attendance_client_status
+            columns:
+              - column:
+                  name: client_id
+              - column:
+                  name: status
+
+  - changeSet:
+      id: 99-perf-004-professional-establishment
+      author: andrericao
+      comment: >-
+        Profissionais de uma loja — findByEstablishmentIdWithServices (snapshot de detalhe, chamado
+        a cada broadcast) e findWithServiceByEstablishmentIds (resumo em lote da listagem).
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: professional
+                indexName: idx_professional_establishment
+      changes:
+        - createIndex:
+            tableName: professional
+            indexName: idx_professional_establishment
+            columns:
+              - column:
+                  name: establishment_id
+
+  - changeSet:
+      id: 99-perf-005-service-item-professional
+      author: andrericao
+      comment: >-
+        Servicos do profissional. Alem da leitura direta, e o que sustenta o `SIZE(p.services) > 0`
+        do filtro #31 — sem indice, cada loja da listagem varre a tabela inteira de servicos.
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: service_item
+                indexName: idx_service_item_professional
+      changes:
+        - createIndex:
+            tableName: service_item
+            indexName: idx_service_item_professional
+            columns:
+              - column:
+                  name: professional_id
+
+  - changeSet:
+      id: 99-perf-006-professional-intervals-professional
+      author: andrericao
+      comment: >-
+        Refeicoes e pausas do profissional — entram na estimativa meal-aware de toda fila, e agora
+        tambem em lote (findByProfessionalIds). A entidade ja declarava tres @Index nestas colunas;
+        com ddl-auto=none, nenhum existia no banco.
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: professional_intervals
+                indexName: idx_professional_intervals_professional
+      changes:
+        - createIndex:
+            tableName: professional_intervals
+            indexName: idx_professional_intervals_professional
+            columns:
+              - column:
+                  name: professional_id
+
+  - changeSet:
+      id: 99-perf-007-establishment-addresses-establishment
+      author: andrericao
+      comment: >-
+        Endereco da loja — lido no mapeamento de TODA loja da listagem (getMainAddress), agora em
+        lote via @BatchSize. O lote troca N consultas por uma; o indice faz essa uma ser barata.
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: establishment_addresses
+                indexName: idx_establishment_addresses_establishment
+      changes:
+        - createIndex:
+            tableName: establishment_addresses
+            indexName: idx_establishment_addresses_establishment
+            columns:
+              - column:
+                  name: establishment_id

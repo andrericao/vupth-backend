@@ -39,6 +39,21 @@ public class RefreshToken {
     @Column(name = "revoked_at")
     private OffsetDateTime revokedAt;
 
+    /**
+     * O token que substituiu este na rotacao. E o elo que sustenta a <b>janela de graca</b>: quando
+     * duas chamadas do app disparam refresh ao mesmo tempo, a primeira rotaciona e as outras chegam
+     * com um token ja revogado — sem este campo, a unica resposta possivel seria 401 e o usuario
+     * seria deslogado por uma corrida que ele nao causou.
+     *
+     * <p><b>Por que o elo, e nao "qualquer token valido do usuario":</b> desde que uma conta pode ter
+     * varias sessoes (um celular e um tablet, ou o Client e o Partner ao mesmo tempo), devolver um
+     * token valido qualquer entregaria a sessao de OUTRO aparelho a quem perguntou. O elo devolve
+     * exatamente o sucessor daquela sessao.</p>
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "replaced_by")
+    private RefreshToken replacedBy;
+
     public boolean isExpired() {
         return OffsetDateTime.now(ZoneOffset.UTC).isAfter(expiryDate);
     }

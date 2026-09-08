@@ -32,6 +32,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenExc
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
+import com.ospaulos.vupth.domain.establishment.exception.InvalidShowcaseFilterException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalNotFoundException;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
@@ -161,6 +162,13 @@ public class GlobalExceptionHandler {
             InvalidCoordinatesException ex, HttpServletRequest req) {
         log.warn("[422] InvalidCoordinates | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ADDRESS_INVALID_COORDINATES");
+    }
+
+    @ExceptionHandler(InvalidShowcaseFilterException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidShowcaseFilter(
+            InvalidShowcaseFilterException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidShowcaseFilter | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_INVALID_FILTER");
     }
 
     @ExceptionHandler(InvalidUfException.class)

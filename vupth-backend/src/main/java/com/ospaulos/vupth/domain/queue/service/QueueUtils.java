@@ -62,6 +62,39 @@ public class QueueUtils {
     /** Resultado da simulacao: minutos totais + ids das refeicoes recorrentes contadas. */
     private record Sim(int minutes, Set<UUID> countedMealIds) {}
 
+    /**
+     * <b>Tempo estimado exibido de um profissional</b> = espera da fila inteira (meal-aware) +
+     * o que resta do atendimento em curso.
+     *
+     * <p><b>Fonte comum do numero, de proposito.</b> Duas telas mostram este mesmo tempo: o
+     * snapshot de DETALHE ({@code professionals-with-queue}, via
+     * {@code ProfessionalWithQueueResponse}) e o resumo da LISTAGEM ({@code GET /establishment},
+     * via {@code GetEstablishmentsQueueSummaryUseCase}). Enquanto a listagem chamava o use case de
+     * detalhe 1x por loja, os dois liam a mesma conta por construcao — e era esse acoplamento que
+     * custava a ida-e-volta ao banco por loja (B10). Ao separar o caminho da listagem, a conta
+     * precisou virar funcao unica: se cada lado somasse por conta propria, a mesma loja mostraria
+     * <b>dois tempos diferentes em duas telas</b>, e o tempo estimado e o produto.</p>
+     *
+     * @param waiting   fila de espera ordenada por {@code scheduledTime} (SCHEDULED + LATE)
+     * @param intervals intervalos do profissional (refeicoes previstas/iniciadas e pausas)
+     * @param current   atendimento em curso (IN_PROGRESS ou, na falta dele, PAUSED); pode ser null
+     * @param now       instante de referencia — o mesmo para a fila e para o restante do corrente
+     */
+    public static int professionalEta(
+            List<Attendance> waiting,
+            List<ProfessionalInterval> intervals,
+            Attendance current,
+            OffsetDateTime now
+    ) {
+        List<Attendance> queue = waiting != null ? waiting : List.of();
+        List<ProfessionalInterval> meals = intervals != null ? intervals : List.of();
+        int eta = calculateWaitingTimeForPosition(queue, meals, now, queue.size());
+        if (current != null) {
+            eta += current.getRemainingMinutes(now);
+        }
+        return eta;
+    }
+
     public static int calculateWaitingTimeForPosition(
             List<Attendance> queue,
             List<ProfessionalInterval> intervals,

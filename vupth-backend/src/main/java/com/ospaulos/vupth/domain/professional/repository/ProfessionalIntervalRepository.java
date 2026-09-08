@@ -89,6 +89,23 @@ public interface ProfessionalIntervalRepository extends JpaRepository<Profession
     List<ProfessionalInterval> findByProfessional_Id(UUID professionalId);
 
     /**
+     * Intervalos de VARIOS profissionais de uma vez — quarta consulta do resumo em lote da listagem
+     * publica (B10). Devolve tuplas {@code [professionalId, interval]}.
+     *
+     * <p><b>Todos os intervalos, sem filtro de dia</b>, porque e exatamente o que o snapshot de
+     * detalhe entrega ao calculo ({@code professional.getIntervals()}): quem decide o que conta hoje
+     * e o {@code QueueUtils} (iniciado / previsto / pulado). Filtrar aqui daria um ETA diferente do
+     * da outra tela — e o numero tem de ser o mesmo nas duas.</p>
+     */
+    @Query("""
+            SELECT pi.professional.id, pi
+            FROM ProfessionalInterval pi
+            WHERE pi.professional.id IN :professionalIds
+            """)
+    List<Object[]> findByProfessionalIds(
+            @Param("professionalIds") java.util.Collection<UUID> professionalIds);
+
+    /**
      * True se a refeicao (item #41) esta marcada como pulada na data — consulta o join
      * da {@code skippedDates} sem materializar a colecao lazy (util fora de transacao).
      */

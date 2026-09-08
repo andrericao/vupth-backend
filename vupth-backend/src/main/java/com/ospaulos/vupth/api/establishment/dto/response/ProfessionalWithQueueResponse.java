@@ -119,11 +119,10 @@ public record ProfessionalWithQueueResponse(
 
         // Tempo estimado = espera da fila inteira (meal-aware, item #37 pre-req: inclui as
         // refeicoes previstas/iniciadas do profissional via QueueUtils) + restante do em progresso.
-        int estimatedWait = QueueUtils.calculateWaitingTimeForPosition(
-                waitingList, intervals, now, waitingList.size());
-        if (currentAttendance != null) {
-            estimatedWait += currentAttendance.getRemainingMinutes();
-        }
+        // A conta mora no QueueUtils porque a LISTAGEM publica calcula o mesmo numero por outro
+        // caminho (B10 — resumo em lote, sem passar por este snapshot): fonte unica ou as duas
+        // telas divergem.
+        int estimatedWait = QueueUtils.professionalEta(waitingList, intervals, currentAttendance, now);
 
         List<ServiceItemSummary> serviceItemDtos = professional.getServices().stream()
                 .map(ServiceItemSummary::fromEntity)

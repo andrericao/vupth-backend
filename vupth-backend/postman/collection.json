@@ -1,7 +1,7 @@
 {
  "info": {
   "_postman_id": "df5b99ea-e196-41c5-a4ff-994c7bdf6e3e",
-  "name": "Vupth backend homolog (v16 - bug fixes affiliations + service-items + ownership)",
+  "name": "Vupth backend (v16 - bug fixes affiliations + service-items + ownership)",
   "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
   "_exporter_id": "51940681"
  },
@@ -1016,11 +1016,13 @@
          "    pm.expect(e.available_professionals).to.be.at.least(0);",
          "  });",
          "});",
-         "pm.test(\"BUG5: default so devolve lojas OPEN\", () => {",
+         "// 06/09: o corte de \"so OPEN\" SAIU. Era ele que esta linha afirmava, e os dois apps ja o",
+         "// desarmavam com includeAll=true — quem quer AGENDAR precisa achar a loja fechada.",
+         "pm.test(\"o default NAO filtra por open_status (fechada aparece se existir)\", () => {",
          "  const list = pm.response.json();",
-         "  list.forEach(e => pm.expect(e.open_status).to.eql(\"OPEN\"));",
+         "  list.forEach(e => pm.expect([\"OPEN\", \"CLOSED\", \"TEMPORARILY_CLOSED\"]).to.include(e.open_status));",
          "});",
-         "// guarda a contagem de abertas p/ comparar com includeAll",
+         "// guarda a contagem do default p/ comparar com includeAll (que agora tem de ser IGUAL)",
          "pm.collectionVariables.set(\"estab_open_count\", pm.response.json().length);"
         ],
         "type": "text/javascript"
@@ -1038,7 +1040,7 @@
      "response": []
     },
     {
-     "name": "list includeAll=true — inclui fechados (BUG5)",
+     "name": "list includeAll=true — OBSOLETO, aceito e inocuo (06/09)",
      "event": [
       {
        "listen": "test",
@@ -1048,10 +1050,12 @@
          "pm.test(\"Schema: array de establishments\", () => {",
          "  pm.expect(pm.response.json()).to.be.an(\"array\");",
          "});",
-         "pm.test(\"BUG5: includeAll devolve pelo menos as abertas (superset)\", () => {",
+         "// 06/09: includeAll ficou INOCUO. Segue aqui porque os dois apps em campo o mandam — se um dia",
+         "// ele voltar a mudar o resultado, e regressao, e e este teste que cai.",
+         "pm.test(\"includeAll nao muda mais nada: mesma contagem do default\", () => {",
          "  const all = pm.response.json().length;",
-         "  const openCount = Number(pm.collectionVariables.get(\"estab_open_count\"));",
-         "  pm.expect(all).to.be.at.least(openCount);",
+         "  const doDefault = Number(pm.collectionVariables.get(\"estab_open_count\"));",
+         "  pm.expect(all).to.eql(doDefault);",
          "});"
         ],
         "type": "text/javascript"
@@ -2059,6 +2063,529 @@
        }
       ]
      }
+    }
+   ]
+  },
+  {
+   "name": "02d - vitrine: ordem e filtros (06/09)",
+   "description": "A vitrine publica passou a devolver loja FECHADA (decisao do Andre, 06/09): quem quer AGENDAR precisa achar a loja que nao esta atendendo agora. O ?includeAll=true, que era como se pedia isso, ficou inocuo — os dois apps ja o mandavam, entao o corte so pegava quem esquecesse o parametro.\n\nO que estas requisicoes guardam: (1) a fechada NAO lidera a lista — aberta primeiro, sempre, inclusive com sort explicito; (2) o caminho de volta agora e ESCOLHA de quem olha: openNow, hasAvailability, maxWaitMinutes e sort; (3) filtro impossivel e 422, nao lista ordenada de outro jeito em silencio.",
+   "item": [
+    {
+     "name": "ordem: nenhuma ABERTA aparece depois de uma FECHADA",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"aberta antes de fechada — a fechada tem fila vazia (espera 0) e lideraria a Home\", () => {",
+         "  const list = pm.response.json();",
+         "  let viFechada = false;",
+         "  list.forEach(e => {",
+         "    if (!e.is_open) { viFechada = true; return; }",
+         "    pm.expect(viFechada, `loja aberta ${e.id} veio depois de uma fechada`).to.eql(false);",
+         "  });",
+         "});",
+         "pm.collectionVariables.set(\"vitrine_total\", pm.response.json().length);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": []
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?openNow=true — repoe a vitrine antiga, agora como ESCOLHA",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"toda loja devolvida esta aberta AGORA (is_open efetivo, nao open_status cru)\", () => {",
+         "  pm.response.json().forEach(e => pm.expect(e.is_open, `loja ${e.id}`).to.eql(true));",
+         "});",
+         "pm.test(\"e um subconjunto do default\", () => {",
+         "  pm.expect(pm.response.json().length)",
+         "    .to.be.at.most(Number(pm.collectionVariables.get(\"vitrine_total\")));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?openNow=true",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "openNow",
+         "value": "true"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?hasAvailability=true — so quem tem profissional com servico",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"available_professionals > 0 em todas — e o corte que o Front-Client fazia no app\", () => {",
+         "  pm.response.json().forEach(e => pm.expect(e.available_professionals, `loja ${e.id}`).to.be.above(0));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?hasAvailability=true",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "hasAvailability",
+         "value": "true"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?maxWaitMinutes=30 — teto de espera (espera NULL sai junto)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"ninguem acima do teto, e ninguem com espera desconhecida\", () => {",
+         "  pm.response.json().forEach(e => {",
+         "    pm.expect(e.estimated_wait_minutes, `loja ${e.id} tem espera null`).to.not.eql(null);",
+         "    pm.expect(e.estimated_wait_minutes).to.be.at.most(30);",
+         "  });",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?maxWaitMinutes=30",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "maxWaitMinutes",
+         "value": "30"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?maxWaitMinutes=0 — o ZERO e pedido legitimo (\"so quem atende na hora\")",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"200, nao 422 — zero filtra, negativo e que nao existe\", () => {",
+         "  pm.response.json().forEach(e => pm.expect(e.estimated_wait_minutes).to.eql(0));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?maxWaitMinutes=0",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "maxWaitMinutes",
+         "value": "0"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?sort=name — alfabetica DENTRO do bloco das abertas",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"nomes em ordem entre as abertas (Collator pt-BR: acento nao joga pro fim)\", () => {",
+         "  const abertas = pm.response.json().filter(e => e.is_open).map(e => e.name);",
+         "  const ordenado = [...abertas].sort((a, b) => a.localeCompare(b, \"pt-BR\", { sensitivity: \"base\" }));",
+         "  pm.expect(abertas).to.eql(ordenado);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?sort=name",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "sort",
+         "value": "name"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?sort=wait — explicito, e a fechada continua depois",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"sort explicito NAO desmancha o aberta-primeiro (ordena dentro do bloco)\", () => {",
+         "  const list = pm.response.json();",
+         "  let viFechada = false;",
+         "  list.forEach(e => {",
+         "    if (!e.is_open) { viFechada = true; return; }",
+         "    pm.expect(viFechada).to.eql(false);",
+         "  });",
+         "});",
+         "pm.test(\"espera nao-decrescente entre as abertas (null por ultimo)\", () => {",
+         "  const esperas = pm.response.json().filter(e => e.is_open)",
+         "    .map(e => e.estimated_wait_minutes === null ? Number.MAX_SAFE_INTEGER : e.estimated_wait_minutes);",
+         "  for (let i = 1; i < esperas.length; i++) pm.expect(esperas[i]).to.be.at.least(esperas[i - 1]);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?sort=wait",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "sort",
+         "value": "wait"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?sort=distance SEM lat/lng — cai no wait, nao quebra",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"quem negou o GPS continua recebendo lista (mesma regra do radiusKm sem origem)\", () => {",
+         "  pm.response.json().forEach(e => pm.expect(e.distance_km).to.eql(null));",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?sort=distance",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "sort",
+         "value": "distance"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?sort=WAIT — a caixa nao e erro de intencao",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?sort=WAIT",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "sort",
+         "value": "WAIT"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "?openNow=true&hasAvailability=true — os filtros COMBINAM",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: array\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));",
+         "pm.test(\"as duas condicoes valem ao mesmo tempo\", () => {",
+         "  pm.response.json().forEach(e => {",
+         "    pm.expect(e.is_open).to.eql(true);",
+         "    pm.expect(e.available_professionals).to.be.above(0);",
+         "  });",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?openNow=true&hasAvailability=true",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "openNow",
+         "value": "true"
+        },
+        {
+         "key": "hasAvailability",
+         "value": "true"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] ?sort desconhecido -> 422 ESTABLISHMENT_INVALID_FILTER",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ESTABLISHMENT_INVALID_FILTER\", () => {",
+         "  pm.expect(pm.response.json().code).to.eql(\"ESTABLISHMENT_INVALID_FILTER\");",
+         "});",
+         "pm.test(\"a mensagem diz quais valores existem\", () => {",
+         "  pm.expect(pm.response.json().message).to.include(\"WAIT\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?sort=melhores",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "sort",
+         "value": "melhores"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] ?maxWaitMinutes negativo -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ESTABLISHMENT_INVALID_FILTER\", () => {",
+         "  pm.expect(pm.response.json().code).to.eql(\"ESTABLISHMENT_INVALID_FILTER\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?maxWaitMinutes=-1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "maxWaitMinutes",
+         "value": "-1"
+        }
+       ]
+      }
+     },
+     "response": []
     }
    ]
   },
@@ -19907,15 +20434,31 @@
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "const lista = pm.response.json();",
-         "pm.test(\"distancias em ordem nao-decrescente\", () => {",
-         "  const comDist = lista.filter(e => e.distance_km != null).map(e => e.distance_km);",
-         "  for(let i=1;i<comDist.length;i++) pm.expect(comDist[i]).to.be.at.least(comDist[i-1]);",
+         "// 06/09: a vitrine tem DOIS blocos — as abertas e, depois delas, as fechadas (a loja fechada",
+         "// nao lidera a Home). A distancia ordena DENTRO de cada bloco, entao no limite entre eles ela",
+         "// REINICIA. Foi esta requisicao que denunciou a mudanca no Newman (\"expected +0 to be at least",
+         "// 351.98\"): o 0 era a loja fechada mais proxima, comecando o segundo bloco.",
+         "const blocos = [lista.filter(e => e.is_open), lista.filter(e => !e.is_open)];",
+         "pm.test(\"distancias em ordem nao-decrescente DENTRO de cada bloco\", () => {",
+         "  blocos.forEach(bloco => {",
+         "    const comDist = bloco.filter(e => e.distance_km != null).map(e => e.distance_km);",
+         "    for (let i = 1; i < comDist.length; i++) pm.expect(comDist[i]).to.be.at.least(comDist[i-1]);",
+         "  });",
          "});",
-         "pm.test(\"as SEM coordenada ficam no FIM (nao somem — nao ha raio default)\", () => {",
-         "  const primeiroSemDist = lista.findIndex(e => e.distance_km == null);",
-         "  if(primeiroSemDist >= 0){",
-         "    lista.slice(primeiroSemDist).forEach(e => pm.expect(e.distance_km == null).to.be.true);",
-         "  }",
+         "pm.test(\"as SEM coordenada ficam no FIM do SEU bloco (nao somem — nao ha raio default)\", () => {",
+         "  blocos.forEach(bloco => {",
+         "    const primeiroSemDist = bloco.findIndex(e => e.distance_km == null);",
+         "    if (primeiroSemDist >= 0) {",
+         "      bloco.slice(primeiroSemDist).forEach(e => pm.expect(e.distance_km == null).to.be.true);",
+         "    }",
+         "  });",
+         "});",
+         "pm.test(\"nenhuma ABERTA aparece depois de uma FECHADA\", () => {",
+         "  let viFechada = false;",
+         "  lista.forEach(e => {",
+         "    if (!e.is_open) { viFechada = true; return; }",
+         "    pm.expect(viFechada, `loja aberta ${e.id} veio depois de uma fechada`).to.eql(false);",
+         "  });",
          "});"
         ],
         "type": "text/javascript"

@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.address.model;
 
 import com.ospaulos.vupth.api.address.dto.request.UpdateAddressRequest;
 import com.ospaulos.vupth.api.address.dto.request.UpdateEstablishmentAddressRequest;
+import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -36,6 +37,11 @@ import java.util.UUID;
 @Entity
 @NoArgsConstructor
 @Table(name = "ADDRESSES")
+// @BatchSize (B10): EstablishmentAddress.address e LAZY, e a listagem publica le o endereco de
+// cada loja para montar a resposta. Sem o lote, cada proxy vira uma consulta — N+1 por tras de
+// getMainAddress(). No nivel da CLASSE porque quem se resolve em lote aqui e o proxy da entidade,
+// nao uma colecao.
+@BatchSize(size = 100)
 public class Address {
 
     @Id
