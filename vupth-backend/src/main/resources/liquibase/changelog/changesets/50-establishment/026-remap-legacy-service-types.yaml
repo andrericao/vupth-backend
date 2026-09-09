@@ -1,0 +1,67 @@
+databaseChangeLog:
+  # Remapeia valores legados de ServiceType que NAO existem mais no enum. E o mesmo
+  # defeito do 022 (service_item_type), so que na outra coluna — e por isso ele
+  # sobreviveu: o 022 limpou service_item e ninguem olhou establishment.
+  #
+  # O enum nasceu (49ea120..8e3d4e2) como:
+  #   BARBER, SALON_BEAUTY("salaoBeleza"), EYEBROW, MANICURE("manicure")
+  # e o 6ec4c04 ("adicionar campo serviceType na entity Establishment") renomeou dois
+  # sem migrar as linhas ja gravadas:
+  #   SALON_BEAUTY -> BEAUTY_SALON   (mesmo label "salaoBeleza")
+  #   MANICURE     -> NAIL_SALON     (mesmo label "manicure")
+  # O label identico e o que torna o mapeamento inequivoco — nao ha escolha a fazer.
+  #
+  # Em producao o Hibernate estourava ao materializar o Establishment:
+  #   InvalidDataAccessApiUsageException: No enum constant ...ServiceType.MANICURE
+  # derrubando GET /establishment com 500 (medido no Railway em 2026-09-09; staging,
+  # de banco mais novo, respondia 200 com o MESMO commit f4af194 — e banco, nao codigo).
+  #
+  # Duas colunas guardam ServiceType e as duas precisam do remap: a categoria unica
+  # (establishment.service_type) e a colecao (establishment_services.service).
+  # Idempotente: o WHERE so casa os valores antigos; no-op em banco ja limpo.
+  #
+  # ⚠️ Na colecao o remap NAO pode ser so UPDATE: a PK e (establishment_id, service),
+  # entao uma loja que ja tenha as DUAS formas ('MANICURE' e 'NAIL_SALON') faria o
+  # UPDATE colidir com a PK — e um changeset que estoura deixa o app sem subir, que e
+  # pior que o 500 que viemos consertar. Por isso a linha legada e APAGADA quando a
+  # nova ja existe (o Set do Hibernate nao perde nada: seria o mesmo elemento) e so
+  # depois as restantes sao renomeadas.
+  - changeSet:
+      id: 026-remap-legacy-service-types
+      author: andrericao
+      comment: "SALON_BEAUTY -> BEAUTY_SALON e MANICURE -> NAIL_SALON nas duas colunas de ServiceType"
+      changes:
+        - sql:
+            sql: >
+              UPDATE establishment
+              SET service_type = 'BEAUTY_SALON'
+              WHERE service_type = 'SALON_BEAUTY';
+        - sql:
+            sql: >
+              UPDATE establishment
+              SET service_type = 'NAIL_SALON'
+              WHERE service_type = 'MANICURE';
+        - sql:
+            sql: >
+              DELETE FROM establishment_services legado
+              WHERE legado.service = 'SALON_BEAUTY'
+                AND EXISTS (SELECT 1 FROM establishment_services atual
+                            WHERE atual.establishment_id = legado.establishment_id
+                              AND atual.service = 'BEAUTY_SALON');
+        - sql:
+            sql: >
+              DELETE FROM establishment_services legado
+              WHERE legado.service = 'MANICURE'
+                AND EXISTS (SELECT 1 FROM establishment_services atual
+                            WHERE atual.establishment_id = legado.establishment_id
+                              AND atual.service = 'NAIL_SALON');
+        - sql:
+            sql: >
+              UPDATE establishment_services
+              SET service = 'BEAUTY_SALON'
+              WHERE service = 'SALON_BEAUTY';
+        - sql:
+            sql: >
+              UPDATE establishment_services
+              SET service = 'NAIL_SALON'
+              WHERE service = 'MANICURE';
