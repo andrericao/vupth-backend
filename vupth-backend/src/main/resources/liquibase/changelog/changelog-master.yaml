@@ -288,3 +288,9 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/024-add-replaced_by-to-refresh_token.yaml
       relativeToChangeLogFile: true
+
+  # ServiceType legado (SALON_BEAUTY/MANICURE) derrubando GET /establishment com 500 em prod —
+  # o mesmo defeito do 022, na outra coluna. Ver o comentario no proprio changeset.
+  - include:
+      file: changesets/50-establishment/026-remap-legacy-service-types.yaml
+      relativeToChangeLogFile: true
