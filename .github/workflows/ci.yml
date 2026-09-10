@@ -178,12 +178,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Mesmo teto do rollback-prod, e pela mesma razao. Sem ele o rollback de homolog
-    # e um laco: a tag so avanca quando o Newman passa, um Newman que falha a congela,
-    # e cada push seguinte reinstala a build congelada. Foi o que aconteceu — staging
-    # ficou 13 commits atras em 07/09, no 29ec009, e ninguem viu.
+    # Mesma razao do rollback-prod — sem teto o rollback e um laco: a tag so avanca
+    # quando o Newman passa, um Newman que falha a congela, e cada push seguinte
+    # reinstala a build congelada. Foi o que aconteceu — staging ficou 13 commits atras
+    # em 07/09, no 29ec009, e ninguem viu.
+    #
+    # ⚠️ Mas a UNIDADE aqui NAO e a de prod, e copiar de la seria copiar o erro. Em prod
+    # o deploy nasce de um merge, entao merge = deploy. Aqui ele nasce de um PUSH na dev,
+    # que nao deixa marca nenhuma no git: `--merges` daria 0 para sempre e o freio ficaria
+    # cego. O que sobra e a IDADE da tag, e ela e boa aqui justamente porque staging
+    # deploya toda hora — tag saudavel tem horas, nao dias.
+    #
+    # Calibrado na historia real da dev: o maior intervalo entre commits nos ultimos 15 e
+    # de 2,0 dias, e nenhum passa disso. 5 dias e o dobro da folga observada e ainda assim
+    # pega o caso de 07/09, em que a tag tinha 8 dias. O teto de commits fica como rede
+    # (o incidente tambem estourava 10), e desceu de 20 porque 20 nunca disparava.
+    #
+    # ⚠️ Recusar demais aqui e barato: o erro sai alto no CI e a build nova FICA no ar.
+    # Reverter demais e o caro — staging congelado nao derruba ninguem, ele MENTE para o
+    # QA e para os dois apps, que testam contra ele.
     env:
-      MAX_ROLLBACK_DISTANCE: 20
+      MAX_ROLLBACK_AGE_DAYS: 5
+      MAX_ROLLBACK_DISTANCE: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -210,10 +226,12 @@ jobs:
           DISTANCE=$(git rev-list --count "$SHA"..HEAD)
           AGE_DAYS=$(( ( $(date -u +%s) - $(git show -s --format=%ct "$SHA") ) / 86400 ))
 
-          echo "homolog-last-good: $SHA ($DISTANCE commits atras, $AGE_DAYS dias)"
+          echo "homolog-last-good: $SHA — $AGE_DAYS dias e $DISTANCE commits atras"
+          echo "Tetos: $MAX_ROLLBACK_AGE_DAYS dias, $MAX_ROLLBACK_DISTANCE commits. A idade manda aqui porque o deploy nasce de push, que nao deixa marca no git."
 
-          if [ "$DISTANCE" -gt "$MAX_ROLLBACK_DISTANCE" ]; then
-            echo "::error::ROLLBACK RECUSADO — homolog-last-good esta $DISTANCE commits atras (teto: $MAX_ROLLBACK_DISTANCE), com $AGE_DAYS dias."
+          if [ "$AGE_DAYS" -gt "$MAX_ROLLBACK_AGE_DAYS" ] || [ "$DISTANCE" -gt "$MAX_ROLLBACK_DISTANCE" ]; then
+            echo "::error::ROLLBACK RECUSADO — homolog-last-good tem $AGE_DAYS dias e esta $DISTANCE commits atras (tetos: $MAX_ROLLBACK_AGE_DAYS dias, $MAX_ROLLBACK_DISTANCE commits)."
+            echo "::error::Staging deploya a cada push, entao tag saudavel tem HORAS. Com $AGE_DAYS dias ela parou de avancar: e tag congelada, nao ponto de retorno."
             echo "::error::Reverter reinstalaria uma build de $AGE_DAYS dias atras e deixaria o staging mentindo para o QA e para os dois apps, que testam contra ele."
             echo "::error::A build recem-deployada FICA NO AR. Investigue a falha do Newman acima: o mais provavel e a tag ter congelado, nao o codigo novo estar quebrado."
             exit 1
@@ -384,13 +402,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Distancia maxima que o rollback aceita percorrer para tras. Acima disso ele
-    # RECUSA (ver o passo "Confere a distancia"). Um rollback existe para desfazer
-    # UM deploy ruim; quando a tag esta muito atras, ela nao e mais um ponto de
-    # retorno, e sim uma tag congelada — e reinstala-la joga fora trabalho que
-    # nunca foi provado ruim.
+    # Ate onde o rollback aceita voltar. Acima disso ele RECUSA (ver "Confere a
+    # distancia"). Um rollback desfaz UM deploy ruim; tag muito atras nao e ponto de
+    # retorno, e tag congelada — reinstala-la joga fora trabalho nunca provado ruim.
+    #
+    # ⚠️ O teto era 20 COMMITS, e a unidade estava errada. Em prod cada deploy nasce de
+    # um merge na main, e um merge da dev empurra ~10 commits de uma vez: 20 commits nao
+    # sao "20 protecoes", sao DUAS. Em 09/09 a distancia deu exatamente 20 — e como a
+    # comparacao era `-gt`, passou raspando: prod voltou para a build de 30/08, 10 dias
+    # atras, com o laco de 12/08 se repetindo inteiro.
+    #
+    # A conta certa e em MERGES, porque merge = deploy. A tag saudavel esta 1 merge
+    # atras: o merge que acabou de reprovar. 2 ja e tag congelada. Medido na propria
+    # historia: caso saudavel (fe55008..7a9d0ba) = 1 merge; o incidente de 09/09
+    # (5b85cef..7a9d0ba) = 2 merges, 20 commits, 10 dias.
+    #
+    # A idade e rede para o unico caso em que a conta de merges cega: squash-merge nao
+    # deixa merge commit, e ai MERGES da 0 para sempre. 14 dias nao atrapalha semana
+    # devagar e ainda assim pega tag esquecida.
     env:
-      MAX_ROLLBACK_DISTANCE: 20
+      MAX_ROLLBACK_MERGES: 1
+      MAX_ROLLBACK_AGE_DAYS: 14
 
     steps:
       - uses: actions/checkout@v4
@@ -424,20 +456,22 @@ jobs:
         if: steps.lastgood.outputs.have == 'true'
         run: |
           SHA=${{ steps.lastgood.outputs.sha }}
-          DISTANCE=$(git rev-list --count "$SHA"..HEAD)
+          COMMITS=$(git rev-list --count "$SHA"..HEAD)
+          MERGES=$(git rev-list --count --merges "$SHA"..HEAD)
           AGE_DAYS=$(( ( $(date -u +%s) - $(git show -s --format=%ct "$SHA") ) / 86400 ))
 
-          echo "prod-last-good: $SHA ($DISTANCE commits atras, $AGE_DAYS dias)"
+          echo "prod-last-good: $SHA — $MERGES merges, $COMMITS commits, $AGE_DAYS dias atras"
+          echo "Tetos: $MAX_ROLLBACK_MERGES merge(s), $MAX_ROLLBACK_AGE_DAYS dias. O merge conta porque merge = deploy; o commit e so informacao."
 
-          if [ "$DISTANCE" -gt "$MAX_ROLLBACK_DISTANCE" ]; then
-            echo "::error::ROLLBACK RECUSADO — prod-last-good esta $DISTANCE commits atras (teto: $MAX_ROLLBACK_DISTANCE), com $AGE_DAYS dias."
-            echo "::error::Reverter reinstalaria uma build de $AGE_DAYS dias atras e apagaria de producao trabalho que nunca foi provado ruim."
+          if [ "$MERGES" -gt "$MAX_ROLLBACK_MERGES" ] || [ "$AGE_DAYS" -gt "$MAX_ROLLBACK_AGE_DAYS" ]; then
+            echo "::error::ROLLBACK RECUSADO — prod-last-good esta $MERGES merge(s) e $AGE_DAYS dias atras (tetos: $MAX_ROLLBACK_MERGES merge, $MAX_ROLLBACK_AGE_DAYS dias), somando $COMMITS commits."
+            echo "::error::Mais de um merge atras significa que a tag PAROU DE AVANCAR — ela virou tag congelada, nao ponto de retorno. Reverter reinstalaria uma build de $AGE_DAYS dias e apagaria de producao trabalho que nunca foi provado ruim."
             echo "::error::A build recem-deployada FICA NO AR. Investigue a falha do Newman acima: o mais provavel e a tag ter congelado, nao o codigo novo estar quebrado."
             echo "::error::Se o codigo novo estiver mesmo ruim, reverta pelo painel do Railway. Se estiver bom, corrija o que reprovou e deixe a tag avancar."
             exit 1
           fi
 
-          echo "Distancia dentro do teto — rollback autorizado."
+          echo "Dentro dos tetos — rollback autorizado."
 
       - name: Checkout do last-good
         if: steps.lastgood.outputs.have == 'true'
