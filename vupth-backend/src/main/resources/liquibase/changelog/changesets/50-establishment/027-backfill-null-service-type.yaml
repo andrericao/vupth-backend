@@ -1,0 +1,33 @@
+databaseChangeLog:
+  # Preenche a categoria principal (establishment.service_type) das lojas que ficaram
+  # com ela NULA. E residuo de dois changesets: o 017 CRIOU a coluna, e o 018 — o
+  # backfill — preencheu dois UUIDs escritos a mao, que eram as lojas que existiam no
+  # banco de quem escreveu. Todo o resto ficou nulo, e so apareceu em producao.
+  #
+  # Medido em prod em 10/09: 5 lojas ACTIVE com service_type nulo e services preenchido.
+  # O sintoma e silencioso — os apps recebem serviceType: null e mostram a loja sem
+  # categoria. Nao derruba nada, e por isso durou.
+  #
+  # ⚠️ So preenche quem tem UM servico. Com um servico so a categoria principal nao
+  # tem escolha a fazer: e aquele. Com varios, ela e uma decisao do DONO — "Espaco
+  # Beleza Total" faz BEAUTY_SALON, NAIL_SALON e EYEBROW, e nenhuma consulta ao banco
+  # diz qual e a principal. Chutar (o primeiro alfabetico, o mais antigo) gravaria um
+  # palpite com cara de dado. Essas ficam nulas, e o PATCH general-infos ja deixa o
+  # dono escolher — que e o unico lugar onde a resposta existe.
+  #
+  # ⚠️ Nao ha relacao com o 026: la o valor era INVALIDO (enum renomeado) e derrubava a
+  # listagem com 500; aqui o valor esta AUSENTE e a listagem responde normalmente.
+  # Idempotente: o WHERE so casa linha nula; no-op em banco ja preenchido.
+  - changeSet:
+      id: 027-backfill-null-service-type
+      author: andrericao
+      comment: "service_type nulo recebe o unico service da loja; quem tem varios fica para o dono decidir"
+      changes:
+        - sql:
+            sql: >
+              UPDATE establishment e
+              SET service_type = (SELECT s.service FROM establishment_services s
+                                  WHERE s.establishment_id = e.id)
+              WHERE e.service_type IS NULL
+                AND (SELECT COUNT(*) FROM establishment_services s
+                     WHERE s.establishment_id = e.id) = 1;

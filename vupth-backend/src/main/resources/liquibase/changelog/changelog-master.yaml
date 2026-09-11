@@ -294,3 +294,9 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/026-remap-legacy-service-types.yaml
       relativeToChangeLogFile: true
+
+  # Categoria principal ausente: o 018 backfillou dois UUIDs escritos a mao e o resto
+  # ficou nulo. Preenche quem tem UM servico; quem tem varios e decisao do dono.
+  - include:
+      file: changesets/50-establishment/027-backfill-null-service-type.yaml
+      relativeToChangeLogFile: true
