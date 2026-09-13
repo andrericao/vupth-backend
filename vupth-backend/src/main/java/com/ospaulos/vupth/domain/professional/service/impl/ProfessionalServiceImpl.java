@@ -394,8 +394,8 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         assertProfessionalOwnsAttendance(professional, attendance);
 
-        if (attendance.getStatus() != AttendanceStatus.IN_PROGRESS) {
-            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.IN_PROGRESS);
+        if (!attendance.getStatus().isFinishable()) {
+            throw AttendanceInvalidStatusException.notFinishable(attendance.getStatus());
         }
 
         attendanceService.finishAttendance(attendance);

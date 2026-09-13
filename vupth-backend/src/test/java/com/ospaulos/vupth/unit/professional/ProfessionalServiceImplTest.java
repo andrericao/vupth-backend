@@ -293,6 +293,19 @@ class ProfessionalServiceImplTest {
         }
 
         @Test
+        @DisplayName("D12: PAUSED → finalizacao delegada ao service, sem exigir resume")
+        void finish_fromPaused_success() {
+            attendance.setStatus(AttendanceStatus.PAUSED);
+            when(attendanceRepository.findByIdEager(attendanceId)).thenReturn(Optional.of(attendance));
+            when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
+            when(queueService.getQueueOverview(any(), any())).thenReturn(mock(QueueResponse.class));
+
+            professionalService.finishAttendance(professionalId, attendanceId);
+
+            verify(attendanceService).finishAttendance(attendance);
+        }
+
+        @Test
         @DisplayName("status SCHEDULED → throws AttendanceInvalidStatusException")
         void finish_wrongStatus_throws() {
             attendance.setStatus(AttendanceStatus.SCHEDULED);

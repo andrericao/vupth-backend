@@ -67,7 +67,8 @@ import static org.mockito.Mockito.*;
  *
  * finishAttendance:
  * - Sucesso: status IN_PROGRESS → FINISHED
- * - Invalid status (not IN_PROGRESS) → AttendanceInvalidStatusException
+ * - Sucesso: status PAUSED → FINISHED, a pausa aberta nao conta como servico (D12)
+ * - Invalid status (not IN_PROGRESS/PAUSED) → AttendanceInvalidStatusException
  * - Sem startTime → AttendanceInvalidStatusException
  *
  * cancelAttendance(UUID, UUID):
@@ -409,6 +410,27 @@ class AttendanceServiceImplTest {
             assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.FINISHED);
             assertThat(attendance.getEndTime()).isNotNull();
             assertThat(attendance.getIsTimerActive()).isFalse();
+        }
+
+        @Test
+        @DisplayName("D12: PAUSED → FINISHED direto, e a pausa aberta sai da duracao")
+        void finish_fromPaused_closesOpenPause() {
+            attendance.setStatus(AttendanceStatus.PAUSED);
+            attendance.setIsTimerActive(false);
+            attendance.setStartTime(OffsetDateTime.now().minusMinutes(30));
+            attendance.setLastPauseTime(OffsetDateTime.now().minusMinutes(10));
+            attendance.setPausedDurationInMinutes(0);
+            when(attendanceRepository.save(any())).thenReturn(attendance);
+
+            attendanceService.finishAttendance(attendance);
+
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.FINISHED);
+            assertThat(attendance.getEndTime()).isNotNull();
+            assertThat(attendance.getIsTimerActive()).isFalse();
+            assertThat(attendance.getLastPauseTime()).isNull();
+            // 30min desde o inicio, 10 deles parado: servico = 20 (±1 pelo truncamento de minuto)
+            assertThat(attendance.getPausedDurationInMinutes()).isBetween(9, 10);
+            assertThat(attendance.getDurationInMinutes()).isBetween(19, 21);
         }
 
         @Test

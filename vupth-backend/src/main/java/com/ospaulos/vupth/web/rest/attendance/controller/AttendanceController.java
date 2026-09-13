@@ -422,7 +422,7 @@ public class AttendanceController {
     /**
      * PATCH /attendances/{attendanceId}/finish
      *
-     * Finaliza um attendance IN_PROGRESS → FINISHED.
+     * Finaliza um attendance IN_PROGRESS ou PAUSED → FINISHED (D12: da pausa, retomar ou encerrar).
      * O profissional logado deve ser o dono do attendance.
      * Requer: Bearer token (PROFESSIONAL role).
      */
