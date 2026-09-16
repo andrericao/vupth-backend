@@ -530,4 +530,46 @@ class AttendanceServiceImplTest {
             verify(attendanceRepository, never()).save(any());
         }
     }
+
+    // ─────────────────────────────────────────────
+    // Respostas com a pausa EM CURSO (A4, metade backend)
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("respostas de atendimento pausado")
+    class PausedResponsesTests {
+
+        @BeforeEach
+        void pausedTwentyMinutesIn() {
+            OffsetDateTime now = OffsetDateTime.now();
+            attendance.setStatus(AttendanceStatus.PAUSED);
+            attendance.setIsTimerActive(false);
+            attendance.setEstimatedMinutes(40);
+            attendance.setPausedDurationInMinutes(0);
+            attendance.setStartTime(now.minusMinutes(30));
+            attendance.setLastPauseTime(now.minusMinutes(10));
+        }
+
+        @Test
+        @DisplayName("in-progress: servico parado na pausa, pausa aberta contada, restante congelado")
+        void inProgressResponse_countsOpenPause() {
+            var response = attendanceService.buildAttendanceInProgressResponse(attendance);
+
+            assertThat(response.isPaused()).isTrue();
+            assertThat(response.elapsedMinutes()).isEqualTo(20);
+            assertThat(response.pausedTimeMinutes()).isEqualTo(10);
+            assertThat(response.totalElapsedMinutes()).isEqualTo(30);
+            assertThat(response.remainingMinutes()).isEqualTo(20);
+        }
+
+        @Test
+        @DisplayName("paused: mesmos numeros da resposta in-progress")
+        void pausedResponse_countsOpenPause() {
+            var response = attendanceService.buildPausedAttendance(attendance);
+
+            assertThat(response.elapsedMinutes()).isEqualTo(20);
+            assertThat(response.pausedDurationInMinutes()).isEqualTo(10);
+            assertThat(response.remainingMinutes()).isEqualTo(20);
+        }
+    }
 }

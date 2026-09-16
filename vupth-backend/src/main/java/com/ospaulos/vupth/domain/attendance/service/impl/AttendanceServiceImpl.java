@@ -1299,11 +1299,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         OffsetDateTime now = OffsetDateTime.now();
 
         int totalElapsedMinutes = (int) Duration.between(startTime, now).toMinutes();
-        int estimatedMinutes = attendance.getEstimatedTotalMinutes();
-        int pausedMinutes = attendance.getPausedDurationInMinutes() != null
-                ? attendance.getPausedDurationInMinutes() : 0;
-        int elapsedOnlyServiceMinutes = Math.max(0, totalElapsedMinutes - pausedMinutes);
-        int remainingMinutes = Math.max(0, estimatedMinutes - elapsedOnlyServiceMinutes);
+        int pausedMinutes = attendance.getPausedMinutes(now);
+        int elapsedOnlyServiceMinutes = attendance.getServiceDurationInMinutes(now);
+        int remainingMinutes = attendance.getRemainingMinutes(now);
 
         List<AttendanceInQueueResponse.ServiceItemSummary> services = attendance.getServiceItems()
                 .stream()
@@ -1402,15 +1400,11 @@ public class AttendanceServiceImpl implements AttendanceService {
                 ? attendance.getClient().getFirstName()
                 : (attendance.getGuestName() != null ? attendance.getGuestName() : "anonymous");
 
-        OffsetDateTime startTime = attendance.getStartTime();
         OffsetDateTime now = OffsetDateTime.now();
 
-        int totalElapsedMinutes = (int) Duration.between(startTime, now).toMinutes();
-        int pausedMinutes = attendance.getPausedDurationInMinutes() != null
-                ? attendance.getPausedDurationInMinutes() : 0;
-        int elapsedOnlyServiceMinutes = Math.max(0, totalElapsedMinutes - pausedMinutes);
-        int estimatedMinutes = attendance.getEstimatedTotalMinutes();
-        int remainingMinutes = Math.max(0, estimatedMinutes - elapsedOnlyServiceMinutes);
+        int pausedMinutes = attendance.getPausedMinutes(now);
+        int elapsedOnlyServiceMinutes = attendance.getServiceDurationInMinutes(now);
+        int remainingMinutes = attendance.getRemainingMinutes(now);
 
         List<AttendancePausedResponse.ServiceItemSummary> services = attendance.getServiceItems()
                 .stream()
