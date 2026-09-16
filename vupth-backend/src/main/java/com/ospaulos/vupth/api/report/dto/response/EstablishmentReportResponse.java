@@ -24,13 +24,17 @@ public record EstablishmentReportResponse(
         double avgDurationMinutes,
         String topService,
         String topProfessional,
-        List<ProfessionalRevenue> professionals
+        List<ProfessionalRevenue> professionals,
+        // Receita LIQUIDA (ver ProfessionalReportResponse): total da loja e contagem dos sem divisao.
+        BigDecimal netRevenue,
+        long attendancesWithoutSplit
 ) {
 
     public record ProfessionalRevenue(
             UUID id,
             String name,
             BigDecimal revenue,
-            long attendances
+            long attendances,
+            BigDecimal netRevenue
     ) {}
 }

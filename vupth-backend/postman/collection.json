@@ -2953,7 +2953,17 @@
          "  pm.expect(r).to.have.property(\"totalRevenue\");",
          "  pm.expect(r).to.have.property(\"avgDurationMinutes\");",
          "  pm.expect(r).to.have.property(\"topService\");",
-         "});"
+         "});",
+         "",
+         "// Receita LIQUIDA (16/09): liquido do profissional e quantos atendimentos ficaram sem divisao.",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test('netRevenue e attendancesWithoutSplit presentes', () => {",
+         "    pm.expect(r).to.have.property('netRevenue');",
+         "    pm.expect(r).to.have.property('attendancesWithoutSplit');",
+         "  });",
+         "  pm.test('liquido nunca passa do total', () => pm.expect(Number(r.netRevenue)).to.be.at.most(Number(r.totalRevenue)));",
+         "}"
         ],
         "type": "text/javascript"
        }
@@ -9824,7 +9834,17 @@
          "    pm.expect(r).to.have.property('topService');",
          "    pm.expect(r).to.have.property('topProfessional');",
          "    pm.expect(r.professionals).to.be.an('array');",
-         "});"
+         "});",
+         "",
+         "// Receita LIQUIDA (16/09): liquido do profissional e quantos atendimentos ficaram sem divisao.",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test('netRevenue e attendancesWithoutSplit presentes', () => {",
+         "    pm.expect(r).to.have.property('netRevenue');",
+         "    pm.expect(r).to.have.property('attendancesWithoutSplit');",
+         "  });",
+         "  pm.test('liquido nunca passa do total', () => pm.expect(Number(r.netRevenue)).to.be.at.most(Number(r.totalRevenue)));",
+         "}"
         ],
         "type": "text/javascript"
        }
