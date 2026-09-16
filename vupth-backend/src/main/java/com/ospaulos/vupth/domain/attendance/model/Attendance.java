@@ -217,13 +217,32 @@ public class Attendance implements Serializable {
         return getServiceDurationInMinutes(OffsetDateTime.now());
     }
 
+    /**
+     * Tempo de SERVICO ate {@code referenceTime}: do inicio ao fim, menos as pausas encerradas.
+     * Com uma pausa em curso o servico para no instante da pausa ({@code lastPauseTime}) — o
+     * tempo parado nao e servico, e o que falta nao pode diminuir enquanto ninguem e atendido.
+     */
     @Transient
     public int getServiceDurationInMinutes(OffsetDateTime referenceTime) {
         if (startTime == null) return 0;
-        OffsetDateTime end = (endTime != null) ? endTime : referenceTime;
+        OffsetDateTime end = endTime != null ? endTime
+                : lastPauseTime != null ? lastPauseTime
+                : referenceTime;
         long totalMinutes = Duration.between(startTime, end).toMinutes();
-        int pausedMinutes = pausedDurationInMinutes != null ? pausedDurationInMinutes : 0;
-        return (int) Math.max(totalMinutes - pausedMinutes, 0);
+        return (int) Math.max(totalMinutes - accumulatedPausedMinutes(), 0);
+    }
+
+    /** Pausas encerradas mais a pausa em curso, ate {@code referenceTime}. */
+    @Transient
+    public int getPausedMinutes(OffsetDateTime referenceTime) {
+        int openPause = lastPauseTime != null
+                ? (int) Math.max(Duration.between(lastPauseTime, referenceTime).toMinutes(), 0)
+                : 0;
+        return accumulatedPausedMinutes() + openPause;
+    }
+
+    private int accumulatedPausedMinutes() {
+        return pausedDurationInMinutes != null ? pausedDurationInMinutes : 0;
     }
 
     public void pauseTimer() {
@@ -263,18 +282,6 @@ public class Attendance implements Serializable {
         int estimated = getEstimatedTotalMinutes(); // With intervals / pause
 
         return Math.max(0, estimated - serviceMinutes);
-    }
-
-    public int calculatePausedMinutes(Attendance attendance, OffsetDateTime referenceTime) {
-        int accumulatedPaused = attendance.getPausedDurationInMinutes() != null ?
-                attendance.getPausedDurationInMinutes() : 0;
-
-        if (attendance.getLastPauseTime() != null) {
-            int currentPauseMinutes = (int) Duration.between(attendance.getLastPauseTime(), referenceTime).toMinutes();
-            accumulatedPaused += Math.max(currentPauseMinutes, 0);
-        }
-
-        return accumulatedPaused;
     }
 
     @Transient
