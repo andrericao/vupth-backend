@@ -4873,6 +4873,94 @@
      "response": []
     },
     {
+     "name": "Receita LIQUIDA: PATCH preco + pro_receives → divisao do preco (#10)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// Politica de preco (16/09): o profissional recebe o que estipulou; 4% da empresa de pagamento",
+         "// sobre o preco do cliente; o app fica com o resto (>= 2%). As tres partes somam o preco.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"pro_receives exato\", () => pm.expect(Number(r.pro_receives)).to.eql(30));",
+         "  pm.test(\"intermediary_fee = 4% de 32,90 (1,316 -> 1,32)\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.32));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(1.58));",
+         "  pm.test(\"as tres partes somam o preco\", () => {",
+         "    const sum = Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100);",
+         "    pm.expect(sum).to.eql(Math.round(Number(r.price) * 100));",
+         "  });",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\":32.90,\"pro_receives\":30.00}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] Receita LIQUIDA: PATCH pro_receives acima de 94% do preco → 422 (#10)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// 31,00 de 32,90 deixa taxa de 1,90 (< 6%): o app ficaria com menos de 2%.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"pro_receives\":31.00}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "delete service item → DELETE (#10)",
      "event": [
       {

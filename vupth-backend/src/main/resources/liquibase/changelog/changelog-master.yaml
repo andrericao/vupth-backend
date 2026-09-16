@@ -300,3 +300,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/027-backfill-null-service-type.yaml
       relativeToChangeLogFile: true
+
+  # Receita LIQUIDA do profissional: pro_receives no service_item (nulo em servico legado)
+  - include:
+      file: changesets/50-establishment/028-add-pro_receives-to-service_item.yaml
+      relativeToChangeLogFile: true
