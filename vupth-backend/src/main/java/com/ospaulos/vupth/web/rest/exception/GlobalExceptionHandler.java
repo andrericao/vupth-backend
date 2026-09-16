@@ -47,6 +47,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundExce
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenNotFound;
+import com.ospaulos.vupth.domain.serviceItem.exception.InvalidPriceSplitException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlreadyExistsException;
@@ -155,6 +156,13 @@ public class GlobalExceptionHandler {
             ReverseGeocodeNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] ReverseGeocodeNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "GEOCODING_ADDRESS_NOT_FOUND");
+    }
+
+    @ExceptionHandler(InvalidPriceSplitException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidPriceSplit(
+            InvalidPriceSplitException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidPriceSplit | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "SERVICE_PRICE_SPLIT_INVALID");
     }
 
     @ExceptionHandler(InvalidCoordinatesException.class)
