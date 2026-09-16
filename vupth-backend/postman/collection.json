@@ -9509,7 +9509,22 @@
          "        pm.expect(item).to.have.property('totalValue');",
          "        pm.expect(item).to.have.property('scheduledTime');",
          "    }",
-         "});"
+         "});",
+         "",
+         "// Receita LIQUIDA (16/09): cada atendimento traz a divisao congelada. Nula em atendimento de",
+         "// servico legado; quando existe, as tres partes somam o totalValue centavo a centavo.",
+         "if (pm.response.code === 200) {",
+         "  const list = pm.response.json();",
+         "  pm.test('divisao do preco presente em cada atendimento (pode ser null)', () => {",
+         "    list.forEach(a => ['proReceives', 'intermediaryFee', 'platformFee'].forEach(k => pm.expect(a).to.have.property(k)));",
+         "  });",
+         "  pm.test('quando ha divisao, as tres partes somam o totalValue', () => {",
+         "    list.filter(a => a.proReceives !== null).forEach(a => {",
+         "      const sum = Math.round((Number(a.proReceives) + Number(a.intermediaryFee) + Number(a.platformFee)) * 100);",
+         "      pm.expect(sum).to.eql(Math.round(Number(a.totalValue) * 100));",
+         "    });",
+         "  });",
+         "}"
         ],
         "type": "text/javascript"
        }

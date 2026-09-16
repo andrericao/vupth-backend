@@ -22,7 +22,12 @@ public record AttendanceListResponse(
         OffsetDateTime scheduledTime,
         OffsetDateTime startTime,
         OffsetDateTime endTime,
-        Integer durationInMinutes
+        Integer durationInMinutes,
+        // Divisao do preco congelada na criacao (Receita LIQUIDA). Nulas em atendimento de servico
+        // legado ou anterior a 16/09. proReceives + intermediaryFee + platformFee = totalValue.
+        BigDecimal proReceives,
+        BigDecimal intermediaryFee,
+        BigDecimal platformFee
 ) {
     public static AttendanceListResponse fromEntity(Attendance attendance) {
         UUID clientId = attendance.getClient() != null ? attendance.getClient().getId() : null;
@@ -45,7 +50,10 @@ public record AttendanceListResponse(
                 attendance.getScheduledTime(),
                 attendance.getStartTime(),
                 attendance.getEndTime(),
-                attendance.getDurationInMinutes()
+                attendance.getDurationInMinutes(),
+                attendance.getProReceives(),
+                attendance.getIntermediaryFee(),
+                attendance.getPlatformFee()
         );
     }
 }
