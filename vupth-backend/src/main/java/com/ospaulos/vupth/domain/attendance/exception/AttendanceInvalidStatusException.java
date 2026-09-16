@@ -11,4 +11,10 @@ public class AttendanceInvalidStatusException extends RuntimeException {
     public AttendanceInvalidStatusException(String message) {
         super(message);
     }
+
+    public static AttendanceInvalidStatusException notFinishable(AttendanceStatus current) {
+        return new AttendanceInvalidStatusException(String.format(
+            "Invalid operation: current status is '%s' but required is '%s' or '%s'",
+            current, AttendanceStatus.IN_PROGRESS, AttendanceStatus.PAUSED));
+    }
 }

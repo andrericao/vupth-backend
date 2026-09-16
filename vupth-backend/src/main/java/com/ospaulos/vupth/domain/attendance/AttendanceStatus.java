@@ -20,5 +20,13 @@ public enum AttendanceStatus {
      * existir para a fila quando e <b>promovida a {@link #SCHEDULED}</b> ao se aproximar do horario
      * (~15min antes), pegando a posicao do ETA daquele instante (Modelo A — sem reserva de slot).
      */
-    INTENTION
+    INTENTION;
+
+    /**
+     * D12: finalizar aceita o atendimento em andamento E o pausado — da pausa, o profissional
+     * retoma ou encerra ali. Sem isso, quem pausou retomava so para poder finalizar.
+     */
+    public boolean isFinishable() {
+        return this == IN_PROGRESS || this == PAUSED;
+    }
 }

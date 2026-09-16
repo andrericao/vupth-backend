@@ -71,7 +71,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * F) removeFromQueue (PROFESSIONAL removes from queue)
  *
- * G) Pause / Resume
+ * G) Pause / Resume / Finish direto da pausa (D12)
  *    IMPORTANT: Order(69) ensures profissional has NO IN_PROGRESS attendance
  *    before the pause/resume flow starts. The fullFlow (Orders 30-33) finishes
  *    the attendance, but we add an extra guard to be safe.
@@ -889,16 +889,42 @@ class AttendanceIntegrationTest {
 
     @Test
     @Order(78)
-    @DisplayName("PATCH /attendances/{id}/finish — 200 finaliza o attendance (cleanup)")
-    void pauseResume_finish() throws Exception {
+    @DisplayName("PATCH /attendances/{id}/pause — 200 pausa de novo, depois de retomado")
+    void pauseResume_pauseAgain() throws Exception {
         Assumptions.assumeTrue(pauseAttendanceId != null, "Depende do resumeAttendance_success");
-        log.info("[Attendance] pauseResume_finish — id={}", pauseAttendanceId);
+        log.info("[Attendance] pauseResume_pauseAgain — id={}", pauseAttendanceId);
+
+        mvc.perform(patch("/attendances/{id}/pause", pauseAttendanceId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inAttendance.status").value("PAUSED"))
+                .andDo(print());
+    }
+
+    /**
+     * D12: da pausa o profissional retoma OU encerra ali. O resume ja foi provado no Order(75);
+     * aqui o finish sai direto de PAUSED, sem o resume que antes era obrigatorio.
+     */
+    @Test
+    @Order(79)
+    @DisplayName("PATCH /attendances/{id}/finish — 200 finaliza direto de PAUSED (D12)")
+    void pauseResume_finishFromPaused() throws Exception {
+        Assumptions.assumeTrue(pauseAttendanceId != null, "Depende do pauseResume_pauseAgain");
+        log.info("[Attendance] pauseResume_finishFromPaused — id={}", pauseAttendanceId);
 
         mvc.perform(patch("/attendances/{id}/finish", pauseAttendanceId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inAttendance.attendanceId").value(pauseAttendanceId))
+                .andExpect(jsonPath("$.inAttendance.status").value("FINISHED"))
                 .andDo(print());
+
+        var finished = attendanceRepository.findById(UUID.fromString(pauseAttendanceId)).orElseThrow();
+        assertThat(finished.getStatus()).isEqualTo(AttendanceStatus.FINISHED);
+        assertThat(finished.getEndTime()).isNotNull();
+        assertThat(finished.getLastPauseTime()).isNull();
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -711,10 +711,10 @@ public class AttendanceServiceImpl implements AttendanceService {
     public void finishAttendance(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
         log.info("[Attendance] finishAttendance — attendanceId={}", attendance.getId());
 
-        if (!attendance.getStatus().equals(AttendanceStatus.IN_PROGRESS)) {
-            log.warn("[Attendance] finishAttendance — invalid status: current={} required=IN_PROGRESS",
+        if (!attendance.getStatus().isFinishable()) {
+            log.warn("[Attendance] finishAttendance — invalid status: current={} required=IN_PROGRESS|PAUSED",
                     attendance.getStatus());
-            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.IN_PROGRESS);
+            throw AttendanceInvalidStatusException.notFinishable(attendance.getStatus());
         }
 
         if (attendance.getStartTime() == null) {
@@ -722,6 +722,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                     "Attendance cannot be finished without a recorded start time");
         }
 
+        // D12: da pausa o profissional pode retomar OU encerrar ali. Encerrar fecha a pausa aberta
+        // no acumulado, entao a duracao para no instante da pausa — o intervalo parado nao conta
+        // como servico, e ninguem precisa retomar so para poder finalizar.
         if (attendance.getStatus().equals(AttendanceStatus.PAUSED)) {
             attendance.resumeTimer();
         }
