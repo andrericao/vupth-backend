@@ -212,6 +212,22 @@ class GitCommitInfoContributorTest {
         }
 
         @Test
+        @DisplayName("railway up: o commit que o CI grava no pacote responde quando nao ha variavel")
+        void bundledCommit_isUsedWhenNoVariable() {
+            Info.Builder builder = new Info.Builder();
+            new GitCommitInfoContributor("", "", "069dc58f00b1c2d3e4f5\n", BOOT).contribute(builder);
+            assertThat(commitId(builder.build().getDetails())).isEqualTo("069dc58");
+        }
+
+        @Test
+        @DisplayName("variavel da hospedagem tem precedencia sobre o commit do pacote")
+        void variable_winsOverBundled() {
+            Info.Builder builder = new Info.Builder();
+            new GitCommitInfoContributor("", "9bca566f1e2d", "069dc58f00b1", BOOT).contribute(builder);
+            assertThat(commitId(builder.build().getDetails())).isEqualTo("9bca566");
+        }
+
+        @Test
         @DisplayName("sha mais curto que 7 nao estoura o substring")
         void shortSha_doesNotThrow() {
             assertThat(commitId(detailsOf("abc", ""))).isEqualTo("abc");

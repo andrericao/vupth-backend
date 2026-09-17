@@ -283,11 +283,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Marca o instante ANTES de disparar: e o corte que o test-prod usa para
-      # separar a instancia nova da que ainda esta respondendo.
-      - name: Marca o inicio do deploy
-        id: deploy_start
-        run: echo "at=$(date -u +%s)000" >> "$GITHUB_OUTPUT"
+      # O railway up nao leva contexto de git (o commit sairia "unknown"). O arquivo vai no upload e o
+      # /actuator/info o le: e o que deixa o test-prod reconhecer a build NOVA pelo commit.
+      - name: Grava o commit no pacote
+        run: echo "$GITHUB_SHA" > vupth-backend/src/main/resources/build-commit.txt
 
       - name: Deploy to Railway (PROD)
         run: |
@@ -295,9 +294,6 @@ jobs:
           railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-    outputs:
-      deploy_started_at: ${{ steps.deploy_start.outputs.at }}
 
 
   # =========================
@@ -323,13 +319,11 @@ jobs:
       # velho. Foi o que reprovou o deploy de 12/08 e disparou o rollback de um
       # deploy que estava correto.
       #
-      # O corte e o startedAtEpochMs do /actuator/info: so serve a instancia que
-      # subiu DEPOIS de o deploy ser disparado. Comparamos numero com numero de
-      # proposito — interpretar data em shell falharia para o lado errado (o loop
-      # estouraria o tempo e o rollback reverteria um deploy bom).
-      #
-      # Nao usamos o commit porque o railway up nao carrega contexto de git: la o
-      # valor fica "unknown". No Render, onde ele existe, o test-homolog ja o usa.
+      # O criterio e o COMMIT do /actuator/info (o deploy-prod grava o sha no pacote,
+      # porque o railway up nao carrega git). Ate 17/09 o criterio era "instancia
+      # iniciada depois do disparo" — e um RESTART da build antiga, 26s depois do
+      # deploy, passou por nova: o newman testou o codigo velho e reprovou o merge #63
+      # com 404 numa rota que so existia na build nova.
       - name: Confere o alvo de PROD
         run: |
           echo "Alvo de PROD: $PROD_URL"
@@ -338,34 +332,30 @@ jobs:
             *) echo "::error::PROD_URL aponta para '$PROD_URL', e PROD e o Railway. Testar outro host reprova por dado de outra base e dispara o rollback de um deploy que estava bom."; exit 1 ;;
           esac
 
-      - name: Wait for Railway (instancia NOVA, nao so healthy)
+      - name: Wait for Railway (instancia NOVA pelo commit, nao so healthy)
         run: |
-          DEPLOY_AT=${{ needs.deploy-prod.outputs.deploy_started_at }}
-          echo "Corte: instancias iniciadas antes de $DEPLOY_AT (epoch ms) nao servem."
+          EXPECTED_COMMIT=$(git rev-parse --short=7 HEAD)
+          echo "Esperando o Railway servir o commit $EXPECTED_COMMIT"
 
           for i in $(seq 1 60); do
             INFO=$(curl --connect-timeout 5 --max-time 10 -s "$PROD_URL/actuator/info" || true)
-            STARTED_MS=$(echo "$INFO" | grep -o '"startedAtEpochMs":[0-9]*' | cut -d: -f2 || true)
+            DEPLOYED_COMMIT=$(echo "$INFO" | grep -o '"commit":{[^}]*}' | grep -o '"id":"[^"]*"' | cut -d'"' -f4 || true)
 
-            if [ -z "$STARTED_MS" ]; then
-              # Build anterior a este ajuste: sem o campo nao da para distinguir a
-              # instancia nova da velha. Seguir esperando e melhor que testar as cegas.
-              echo "Tentativa $i/60 — /actuator/info ainda sem startedAtEpochMs."
-            elif [ "$STARTED_MS" -gt "$DEPLOY_AT" ]; then
+            if [ "$DEPLOYED_COMMIT" = "$EXPECTED_COMMIT" ]; then
               HEALTH=$(curl --connect-timeout 5 --max-time 10 -s "$PROD_URL/actuator/health" || true)
               if echo "$HEALTH" | grep -q '"status":"UP"'; then
-                echo "Instancia NOVA no ar (startedAtEpochMs=$STARTED_MS) e saudavel."
+                echo "Instancia NOVA no ar (commit $DEPLOYED_COMMIT) e saudavel."
                 exit 0
               fi
-              echo "Tentativa $i/60 — instancia nova subindo, ainda nao saudavel."
+              echo "Tentativa $i/60 — commit novo no ar, ainda nao saudavel."
             else
-              echo "Tentativa $i/60 — respondendo a instancia anterior ($STARTED_MS)."
+              echo "Tentativa $i/60 — respondendo o commit '$DEPLOYED_COMMIT' (esperado $EXPECTED_COMMIT)."
             fi
             sleep 15
           done
 
-          echo "::error::Timeout: nenhuma instancia iniciada apos o deploy respondeu em 15 min."
-          echo "::error::Se o /actuator/info nunca trouxe startedAtEpochMs, a build no ar e anterior a este ajuste."
+          echo "::error::Timeout: o commit $EXPECTED_COMMIT nao respondeu em 15 min."
+          echo "::error::Se o commit veio 'unknown', o build-commit.txt nao chegou ao pacote."
           exit 1
 
       - name: Debug API
@@ -476,6 +466,10 @@ jobs:
       - name: Checkout do last-good
         if: steps.lastgood.outputs.have == 'true'
         run: git checkout ${{ steps.lastgood.outputs.sha }}
+
+      - name: Grava o commit do last-good no pacote
+        if: steps.lastgood.outputs.have == 'true'
+        run: echo "${{ steps.lastgood.outputs.sha }}" > vupth-backend/src/main/resources/build-commit.txt
 
       - name: Redeploy do last-good no Railway
         if: steps.lastgood.outputs.have == 'true'
