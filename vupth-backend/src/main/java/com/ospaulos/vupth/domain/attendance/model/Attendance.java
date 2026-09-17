@@ -4,8 +4,10 @@ import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
+import com.ospaulos.vupth.domain.serviceItem.valueObject.PriceSplit;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -87,6 +89,24 @@ public class Attendance implements Serializable {
     private BigDecimal totalValue;
 
     /**
+     * Divisao do preco CONGELADA na criacao (Receita LIQUIDA): a soma, servico a servico, do que o
+     * profissional recebe, dos 4% da empresa de pagamento e da parte do app. As tres somam o
+     * {@code totalValue}. Nulas quando algum servico e legado (sem recebe) — meia soma seria um
+     * numero com cara de dado. So o {@link #onCreate} escreve aqui.
+     */
+    @Setter(AccessLevel.NONE)
+    @Column(name = "pro_receives", precision = 10, scale = 2)
+    private BigDecimal proReceives;
+
+    @Setter(AccessLevel.NONE)
+    @Column(name = "intermediary_fee", precision = 10, scale = 2)
+    private BigDecimal intermediaryFee;
+
+    @Setter(AccessLevel.NONE)
+    @Column(name = "platform_fee", precision = 10, scale = 2)
+    private BigDecimal platformFee;
+
+    /**
      * Encaixe (item #38): marca este atendimento como "encaixado" no meio da fila. Enquanto
      * espera (SCHEDULED), ele NAO contribui o tempo cheio (D) para o ETA dos clientes de tras —
      * contribui um valor RAMPADO que sobe de 0 ate D conforme a fila anda, para que o tempo do
@@ -159,19 +179,67 @@ public class Attendance implements Serializable {
     @Column(name = "last_pause_time")
     private OffsetDateTime lastPauseTime;
 
+    /**
+     * Na criacao o preco e CONGELADO: total e divisao saem dos servicos deste momento. Preco de
+     * servico muda; o que foi cobrado naquele dia nao pode mudar junto.
+     */
     @PrePersist
-    @PreUpdate
-    protected void calculateFields() {
+    public void onCreate() {
         if (this.scheduledTime == null) {
             this.scheduledTime = OffsetDateTime.now();
         }
         calculateEstimatedMinutes();
         calculateTotalValue();
+        freezePriceSplit();
+        assertTotalValue();
+    }
 
+    /**
+     * Na atualizacao NADA de preco e recalculado — antes o total era refeito a cada escrita a partir
+     * do preco ATUAL dos servicos, e um start depois de uma troca de preco reescrevia a historia.
+     * So um atendimento sem total (linha antiga) recebe o calculo.
+     */
+    @PreUpdate
+    public void onUpdate() {
+        if (this.scheduledTime == null) {
+            this.scheduledTime = OffsetDateTime.now();
+        }
+        calculateEstimatedMinutes();
+        if (this.totalValue == null) {
+            calculateTotalValue();
+        }
+        assertTotalValue();
+    }
+
+    private void assertTotalValue() {
         if (this.serviceItems != null && !this.serviceItems.isEmpty() &&
                 (this.totalValue == null || this.totalValue.compareTo(BigDecimal.ZERO) == 0)) {
             throw new IllegalStateException("Total attendance value cannot be zero when service items are associated.");
         }
+    }
+
+    private void freezePriceSplit() {
+        this.proReceives = null;
+        this.intermediaryFee = null;
+        this.platformFee = null;
+        if (this.serviceItems == null || this.serviceItems.isEmpty()) {
+            return;
+        }
+        BigDecimal pro = BigDecimal.ZERO;
+        BigDecimal intermediary = BigDecimal.ZERO;
+        BigDecimal platform = BigDecimal.ZERO;
+        for (ServiceItem item : this.serviceItems) {
+            PriceSplit split = item == null ? null : item.getPriceSplit();
+            if (split == null) {
+                return;
+            }
+            pro = pro.add(split.proReceives());
+            intermediary = intermediary.add(split.intermediaryFee());
+            platform = platform.add(split.platformFee());
+        }
+        this.proReceives = pro;
+        this.intermediaryFee = intermediary;
+        this.platformFee = platform;
     }
 
     protected void calculateEstimatedMinutes() {

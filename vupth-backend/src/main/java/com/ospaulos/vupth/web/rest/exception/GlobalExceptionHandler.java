@@ -31,6 +31,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveA
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
+import com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.exception.InvalidShowcaseFilterException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
@@ -47,6 +48,7 @@ import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundExce
 import com.ospaulos.vupth.domain.queue.exception.ClientNotInQueueException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenInvalidException;
 import com.ospaulos.vupth.domain.refreshToken.exception.RefreshTokenNotFound;
+import com.ospaulos.vupth.domain.serviceItem.exception.InvalidPriceSplitException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlreadyExistsException;
@@ -157,6 +159,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "GEOCODING_ADDRESS_NOT_FOUND");
     }
 
+    @ExceptionHandler(InvalidPriceSplitException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidPriceSplit(
+            InvalidPriceSplitException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidPriceSplit | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "SERVICE_PRICE_SPLIT_INVALID");
+    }
+
     @ExceptionHandler(InvalidCoordinatesException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCoordinates(
             InvalidCoordinatesException ex, HttpServletRequest req) {
@@ -183,6 +192,13 @@ public class GlobalExceptionHandler {
             EstablishmentNotReadyException ex, HttpServletRequest req) {
         log.warn("[422] EstablishmentNotReady | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_NOT_READY");
+    }
+
+    @ExceptionHandler(InvalidBusinessHoursException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidBusinessHours(
+            InvalidBusinessHoursException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidBusinessHours | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "BUSINESS_HOURS_INVALID");
     }
 
     @ExceptionHandler(EstablishmentHoursRequiredException.class)

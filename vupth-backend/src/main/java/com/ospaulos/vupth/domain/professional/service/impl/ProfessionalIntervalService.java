@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.professional.service.impl;
 
+import com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours;
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.interval.exception.InvalidIntervalTimeException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
@@ -317,27 +318,26 @@ public class ProfessionalIntervalService {
     }
 
     /**
-     * Valida que a refeicao recorrente cabe na janela de funcionamento do estabelecimento
-     * (spec #11g2): {@code fixedStartTime >= abertura} e {@code fixedStartTime + duracao <= fechamento}
-     * (ex.: janta de 60min nao inicia <60min antes de fechar). So valida quando o estabelecimento
-     * tem horario definido — sem horario (null), nao restringe (assume-se dia inteiro).
+     * Valida que a refeicao recorrente cabe no horario da loja (spec #11g2): ela precisa caber no
+     * expediente de PELO MENOS UM dia aberto da semana (#2 — com horario por dia, exigir todos
+     * recusaria um almoco as 12:00 so porque o sabado fecha ao meio-dia; nos dias em que nao cabe,
+     * a refeicao simplesmente nao acontece dentro do expediente). Loja sem horario definido nao
+     * restringe (assume-se dia inteiro).
      */
     private void validateWithinBusinessHours(Professional professional, LocalTime start, Integer durationMinutes) {
         if (professional == null || professional.getEstablishment() == null
                 || start == null || durationMinutes == null) {
             return;
         }
-        LocalTime opening = professional.getEstablishment().getOpeningTime();
-        LocalTime closing = professional.getEstablishment().getClosingTime();
-        if (opening == null || closing == null) {
+        BusinessHours hours = professional.getEstablishment().getBusinessHours();
+        if (!hours.isConfigured()) {
             return; // sem horario de funcionamento definido — nao valida
         }
-
-        LocalTime end = start.plusMinutes(durationMinutes);
-        if (start.isBefore(opening) || end.isAfter(closing)) {
+        boolean fitsSomeDay = hours.week().stream().anyMatch(w -> w.hours().fits(start, durationMinutes));
+        if (!fitsSomeDay) {
             throw new InvalidIntervalTimeException(
-                    "Interval must fit within business hours (" + opening + " to " + closing
-                            + "); requested " + start + " for " + durationMinutes + "min.");
+                    "Interval must fit within the business hours of at least one open day; requested "
+                            + start + " for " + durationMinutes + "min.");
         }
     }
 

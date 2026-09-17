@@ -4,7 +4,6 @@ import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
-import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
@@ -15,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalTime;
 import java.time.ZoneOffset;
@@ -44,6 +44,7 @@ class IsOpenEffectiveIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired TransactionTemplate tx;
 
     private final Faker faker = new Faker();
 
@@ -78,11 +79,7 @@ class IsOpenEffectiveIntegrationTest {
     }
 
     private void setHoursAndStatus(String id, OpenStatus status, LocalTime opening, LocalTime closing) {
-        Establishment e = establishmentRepository.findById(UUID.fromString(id)).orElseThrow();
-        e.setOpenStatus(status);
-        e.setOpeningTime(opening);
-        e.setClosingTime(closing);
-        establishmentRepository.save(e);
+        TestUserUtils.setStatusAndHours(tx, establishmentRepository, id, status, opening, closing);
     }
 
     @Test

@@ -18,9 +18,11 @@ import org.json.JSONObject;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.Set;
+import java.time.LocalTime;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -203,6 +205,22 @@ public class TestUserUtils {
         e.setOpenStatus(OpenStatus.OPEN);
         repository.save(e);
         log.debug("[TestUtils] openEstablishment estab={} -> OPEN", establishmentId);
+    }
+
+    /**
+     * Grava status + horario unico (vale para os 7 dias — #2) direto no banco, numa transacao: o
+     * horario por dia mora em colecoes lazy, e fora de transacao elas nao carregam.
+     * {@code opening}/{@code closing} nulos = loja volta a "nao configurada".
+     */
+    public static void setStatusAndHours(TransactionTemplate tx, EstablishmentRepository repository,
+                                         String establishmentId, OpenStatus status,
+                                         LocalTime opening, LocalTime closing) {
+        tx.executeWithoutResult(ignored -> {
+            Establishment e = repository.findById(UUID.fromString(establishmentId)).orElseThrow();
+            e.setOpenStatus(status);
+            e.applySingleWindow(opening, closing);
+            repository.save(e);
+        });
     }
 
     // ─────────────────────────────────────────────

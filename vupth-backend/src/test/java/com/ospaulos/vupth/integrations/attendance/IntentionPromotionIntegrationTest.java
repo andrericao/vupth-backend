@@ -8,7 +8,6 @@ import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
-import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
@@ -23,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -57,6 +57,7 @@ class IntentionPromotionIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired TransactionTemplate tx;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired AttendanceService attendanceService;
@@ -86,11 +87,7 @@ class IntentionPromotionIntegrationTest {
 
         // Expediente 24h (UTC) via opening == closing — "sempre aberto" no modelo. Evita a borda de
         // meia-noite (com [00:00, 23:59:59) desiredTimes à noite estouram o fechamento = 409 espúrio).
-        Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
-        e.setOpenStatus(OpenStatus.CLOSED);
-        e.setOpeningTime(LocalTime.MIDNIGHT);
-        e.setClosingTime(LocalTime.MIDNIGHT);
-        establishmentRepository.save(e);
+        TestUserUtils.setStatusAndHours(tx, establishmentRepository, establishmentId, OpenStatus.CLOSED, LocalTime.MIDNIGHT, LocalTime.MIDNIGHT);
     }
 
     /** Uma intenção criada + o userId do cliente dono. */

@@ -34,6 +34,8 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundEx
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAcceptingNewException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
@@ -411,8 +413,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 professional.getId(),
                 establishment != null ? establishment.getId() : null,
                 projectedQueueEnd(professional),
-                establishment != null ? establishment.getOpeningTime() : null,
-                establishment != null ? establishment.getClosingTime() : null);
+                establishment != null ? establishment.todayOpens() : null,
+                establishment != null ? establishment.todayCloses() : null);
     }
 
     @Override
@@ -462,7 +464,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (desiredTime.isAfter(now.plusDays(INTENTION_HORIZON_DAYS))) {
             throw new IntentionHorizonExceededException(desiredTime, INTENTION_HORIZON_DAYS);
         }
-        if (!establishment.isWithinBusinessHours(BusinessClock.timeAt(desiredTime))) {
+        if (!establishment.isWithinBusinessHours(desiredTime)) {
             throw new IntentionOutsideBusinessHoursException(desiredTime);
         }
 
@@ -515,29 +517,33 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * O encaixe {@code [start, start+duration)} cabe antes do fechamento do dia de {@code start}?
-     * Trata janela normal (fecha no mesmo dia) e janela que vira a meia-noite (fecha no dia seguinte).
-     * Sem janela (opening/closing nulos) ou 24h ({@code open == close}) sempre cabe.
+     * O encaixe {@code [start, start+duration)} cabe antes do fechamento do expediente em que
+     * {@code start} cai? O expediente e o do dia de {@code start} — ou o da vespera, se {@code start}
+     * esta na madrugada de uma virada de meia-noite (#2: horario por dia). Loja sem horario ou 24h
+     * sempre cabe; dia fechado nunca cabe.
      */
     private boolean fitsBeforeClosing(Establishment establishment, OffsetDateTime start, int durationMinutes) {
-        java.time.LocalTime open = establishment.getOpeningTime();
-        java.time.LocalTime close = establishment.getClosingTime();
-        if (open == null || close == null) {
+        BusinessHours hours = establishment.getBusinessHours();
+        if (!hours.isConfigured()) {
             return true;
         }
-        if (open.equals(close)) {
-            return true; // 24h
+        java.time.LocalDate day = BusinessClock.dateAt(start);
+        java.time.LocalTime time = BusinessClock.timeAt(start);
+        DayHours eve = hours.on(day.minusDays(1));
+        OffsetDateTime closing;
+        if (eve.crossesMidnight() && time.isBefore(eve.closes())) {
+            closing = BusinessClock.at(day, eve.closes());
+        } else {
+            DayHours today = hours.on(day);
+            if (today.closed()) {
+                return false;
+            }
+            if (today.isAllDay()) {
+                return true;
+            }
+            closing = BusinessClock.at(today.crossesMidnight() ? day.plusDays(1) : day, today.closes());
         }
-        // BUG2b: opening/closing sao relogio de parede — o fechamento do dia de `start` e o
-        // instante daquele dia (no fuso da loja) as `close` horas.
-        OffsetDateTime end = start.plusMinutes(durationMinutes);
-        java.time.LocalDate startDay = BusinessClock.dateAt(start);
-        OffsetDateTime closingDateTime = BusinessClock.at(startDay, close);
-        if (close.isBefore(open)) {
-            // janela que atravessa a meia-noite: o fechamento e no dia seguinte
-            closingDateTime = BusinessClock.at(startDay.plusDays(1), close);
-        }
-        return !end.isAfter(closingDateTime);
+        return !start.plusMinutes(durationMinutes).isAfter(closing);
     }
 
     @Override

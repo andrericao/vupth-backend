@@ -1,12 +1,14 @@
 package com.ospaulos.vupth.unit.serviceitem;
 
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
+import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.serviceItem.exception.InvalidPriceSplitException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.domain.serviceItem.service.impl.ServiceItemServiceImpl;
@@ -23,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
@@ -37,6 +40,12 @@ import static org.mockito.Mockito.*;
  * createServiceItem:
  * - Success: ServiceItem created and linked to the Professional
  * - ServiceItem is linked to Professional, not directly to Establishment
+ *
+ * precificacao (Receita LIQUIDA, 16/09):
+ * - pro_receives valido e gravado, e a resposta traz a divisao
+ * - pro_receives que viola a politica -> InvalidPriceSplitException, nada salvo
+ * - sem pro_receives: servico legado, divisao nula
+ * - PATCH preco + recebe; so recebe (valida contra o preco atual); so preco novo (apaga o recebe)
  *
  * avarageCalculateLastWeek:
  * - No FINISHED attendances this week → returns 0
@@ -213,6 +222,138 @@ class ServiceItemServiceImplTest {
             double result = serviceItemService.avarageCalculateLastWeek(serviceItemId);
 
             assertThat(result).isEqualTo(0.0);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // precificacao — pro_receives e a divisao do preco
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("precificacao (pro_receives)")
+    class PricingTests {
+
+        private ServiceItemRequest createRequest(String price, String proReceives) {
+            return new ServiceItemRequest(
+                    establishment.getId(), ServiceItemType.CORTE_MAQUINA, "Corte",
+                    new BigDecimal(price), 30, null, null,
+                    proReceives == null ? null : new BigDecimal(proReceives));
+        }
+
+        private ServiceItem existingItem(String price, String proReceives) {
+            ServiceItem item = new ServiceItem();
+            item.setId(serviceItemId);
+            item.setCustomName("Corte");
+            item.setServiceItemType(ServiceItemType.CORTE_MAQUINA);
+            item.setProfessional(professional);
+            item.reprice(new BigDecimal(price), proReceives == null ? null : new BigDecimal(proReceives));
+            return item;
+        }
+
+        private UpdateServiceItemRequest updateRequest(String price, String proReceives) {
+            return new UpdateServiceItemRequest(null,
+                    price == null ? null : new BigDecimal(price), null, null, null,
+                    proReceives == null ? null : new BigDecimal(proReceives));
+        }
+
+        @BeforeEach
+        void saveReturnsArgument() {
+            lenient().when(serviceItemRepository.save(any(ServiceItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("create com pro_receives valido: grava e devolve a divisao")
+        void create_withProReceives_returnsSplit() {
+            ServiceItemResponse result = serviceItemService.createServiceItem(professional, createRequest("32.90", "30.00"));
+
+            assertThat(result.proReceives()).isEqualByComparingTo("30.00");
+            assertThat(result.intermediaryFee()).isEqualByComparingTo("1.32");
+            assertThat(result.platformFee()).isEqualByComparingTo("1.58");
+            verify(serviceItemRepository).save(argThat(si -> new BigDecimal("30.00").compareTo(si.getProReceives()) == 0));
+        }
+
+        @Test
+        @DisplayName("create com pro_receives fora da politica: recusa e nao salva")
+        void create_invalidSplit_throwsAndDoesNotSave() {
+            assertThatThrownBy(() -> serviceItemService.createServiceItem(professional, createRequest("31.90", "30.00")))
+                    .isInstanceOf(InvalidPriceSplitException.class);
+            verify(serviceItemRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("create sem pro_receives: servico legado, sem divisao")
+        void create_withoutProReceives_hasNoSplit() {
+            ServiceItemResponse result = serviceItemService.createServiceItem(professional, createRequest("35.00", null));
+
+            assertThat(result.price()).isEqualByComparingTo("35.00");
+            assertThat(result.proReceives()).isNull();
+            assertThat(result.intermediaryFee()).isNull();
+            assertThat(result.platformFee()).isNull();
+        }
+
+        @Test
+        @DisplayName("PATCH preco + recebe: grava os dois")
+        void update_priceAndProReceives() {
+            ServiceItem item = existingItem("32.90", "30.00");
+            when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
+
+            ServiceItemResponse result = serviceItemService.updateServiceItem(
+                    professional.getId(), professional.getId(), serviceItemId, updateRequest("53.90", "50.00"));
+
+            assertThat(result.price()).isEqualByComparingTo("53.90");
+            assertThat(result.proReceives()).isEqualByComparingTo("50.00");
+            assertThat(result.platformFee()).isEqualByComparingTo("1.74");
+        }
+
+        @Test
+        @DisplayName("PATCH so recebe: valida contra o preco atual — legado entra na politica")
+        void update_onlyProReceives_validatesAgainstCurrentPrice() {
+            ServiceItem item = existingItem("32.90", null);
+            when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
+
+            ServiceItemResponse result = serviceItemService.updateServiceItem(
+                    professional.getId(), professional.getId(), serviceItemId, updateRequest(null, "30.00"));
+
+            assertThat(result.proReceives()).isEqualByComparingTo("30.00");
+        }
+
+        @Test
+        @DisplayName("PATCH so recebe acima dos 94% do preco atual: recusa, nada muda")
+        void update_onlyProReceives_invalid_throws() {
+            ServiceItem item = existingItem("32.90", "30.00");
+            when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
+
+            assertThatThrownBy(() -> serviceItemService.updateServiceItem(
+                    professional.getId(), professional.getId(), serviceItemId, updateRequest(null, "31.00")))
+                    .isInstanceOf(InvalidPriceSplitException.class);
+            assertThat(item.getProReceives()).isEqualByComparingTo("30.00");
+            verify(serviceItemRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("PATCH so preco NOVO: o recebe antigo nao vale mais e e apagado")
+        void update_onlyNewPrice_clearsProReceives() {
+            ServiceItem item = existingItem("32.90", "30.00");
+            when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
+
+            ServiceItemResponse result = serviceItemService.updateServiceItem(
+                    professional.getId(), professional.getId(), serviceItemId, updateRequest("40.90", null));
+
+            assertThat(result.price()).isEqualByComparingTo("40.90");
+            assertThat(result.proReceives()).isNull();
+            assertThat(result.platformFee()).isNull();
+        }
+
+        @Test
+        @DisplayName("PATCH com o MESMO preco e sem recebe: mantem o recebe")
+        void update_samePrice_keepsProReceives() {
+            ServiceItem item = existingItem("32.90", "30.00");
+            when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
+
+            ServiceItemResponse result = serviceItemService.updateServiceItem(
+                    professional.getId(), professional.getId(), serviceItemId, updateRequest("32.9", null));
+
+            assertThat(result.proReceives()).isEqualByComparingTo("30.00");
         }
     }
 }

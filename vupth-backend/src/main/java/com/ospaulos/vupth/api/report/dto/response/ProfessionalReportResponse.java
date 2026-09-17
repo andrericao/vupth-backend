@@ -17,5 +17,10 @@ public record ProfessionalReportResponse(
         long totalAttendances,
         BigDecimal totalRevenue,
         double avgDurationMinutes,
-        String topService
+        String topService,
+        // Receita LIQUIDA: soma do que o profissional recebe nos atendimentos com divisao congelada.
+        BigDecimal netRevenue,
+        // Atendimentos SEM divisao (servico legado / anteriores a 16/09): se > 0, o liquido esta
+        // incompleto e o app deve dizer isso em vez de mostrar o numero como o todo.
+        long attendancesWithoutSplit
 ) {}

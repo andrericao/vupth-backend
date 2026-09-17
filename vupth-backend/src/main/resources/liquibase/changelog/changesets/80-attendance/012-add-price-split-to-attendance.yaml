@@ -1,0 +1,26 @@
+databaseChangeLog:
+  # Receita LIQUIDA do profissional: a divisao do preco congelada no atendimento (recebe / 4% da
+  # empresa de pagamento / parte do app). Nulas nos atendimentos anteriores — ninguem sabe quanto
+  # da taxa foi absorvido, e o valor nao e estimado.
+  - changeSet:
+      id: 012-add-price-split-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: pro_receives
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: pro_receives
+                  type: DECIMAL(10,2)
+              - column:
+                  name: intermediary_fee
+                  type: DECIMAL(10,2)
+              - column:
+                  name: platform_fee
+                  type: DECIMAL(10,2)

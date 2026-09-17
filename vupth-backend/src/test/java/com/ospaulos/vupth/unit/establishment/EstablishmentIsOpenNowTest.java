@@ -27,8 +27,7 @@ class EstablishmentIsOpenNowTest {
     private Establishment estab(OpenStatus status, LocalTime opening, LocalTime closing) {
         Establishment e = new Establishment();
         e.setOpenStatus(status);
-        e.setOpeningTime(opening);
-        e.setClosingTime(closing);
+        e.applySingleWindow(opening, closing);
         return e;
     }
 

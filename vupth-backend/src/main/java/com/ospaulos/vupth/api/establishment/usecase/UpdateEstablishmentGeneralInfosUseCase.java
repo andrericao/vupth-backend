@@ -77,14 +77,11 @@ public class UpdateEstablishmentGeneralInfosUseCase {
             modified.add("instagram");
         }
 
-        if (request.openingTime() != null) {
-            establishment.setOpeningTime(request.openingTime());
-            modified.add("opening_time");
-        }
-
-        if (request.closingTime() != null) {
-            establishment.setClosingTime(request.closingTime());
-            modified.add("closing_time");
+        // #2: o horario unico do app antigo vale para os 7 dias (e mantem as excecoes por data).
+        if (request.openingTime() != null || request.closingTime() != null) {
+            establishment.applySingleWindow(request.openingTime(), request.closingTime());
+            if (request.openingTime() != null) modified.add("opening_time");
+            if (request.closingTime() != null) modified.add("closing_time");
         }
 
         return modified;

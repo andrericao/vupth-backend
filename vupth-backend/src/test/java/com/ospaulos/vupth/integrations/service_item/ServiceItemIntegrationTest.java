@@ -408,6 +408,98 @@ class ServiceItemIntegrationTest {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Receita LIQUIDA (16/09) — pro_receives e a divisao do preco
+    // ─────────────────────────────────────────────────────────────
+
+    private String pricedItemBody(String name, String price, String proReceives) {
+        return String.format("""
+                {
+                  "establishmentId": "%s",
+                  "serviceItemType": "CORTE_TESOURA",
+                  "customName": "%s %s",
+                  "price": %s,
+                  "estimatedMinutes": 30,
+                  "pro_receives": %s
+                }
+                """, establishmentId, name, faker.number().digits(5), price, proReceives);
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("Receita LIQUIDA: POST com pro_receives devolve a divisao, e o PATCH so do recebe revalida")
+    void createServiceItem_withProReceives_returnsSplit() throws Exception {
+        MvcResult result = mvc.perform(post("/establishment/{id}/service-items", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(pricedItemBody("Liquido", "32.90", "30.00")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.price").value(32.90))
+                .andExpect(jsonPath("$.pro_receives").value(30.00))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
+                .andExpect(jsonPath("$.platform_fee").value(1.58))
+                .andDo(print())
+                .andReturn();
+
+        String itemId = new JSONObject(result.getResponse().getContentAsString()).getString("id");
+        assertThat(serviceItemRepository.findById(UUID.fromString(itemId)).orElseThrow().getProReceives())
+                .isEqualByComparingTo("30.00");
+
+        // So o recebe, acima dos 94% do preco atual: recusado, nada muda
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"pro_receives\":31.00}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("SERVICE_PRICE_SPLIT_INVALID"))
+                .andDo(print());
+
+        // Preco novo sem recebe: o recebe antigo nao vale mais
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"price\":40.90}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.price").value(40.90))
+                .andExpect(jsonPath("$.pro_receives").doesNotExist())
+                .andExpect(jsonPath("$.platform_fee").doesNotExist())
+                .andDo(print());
+    }
+
+    @Test
+    @Order(18)
+    @DisplayName("Receita LIQUIDA: POST com a taxa abaixo de 6% (o 0% de hoje no app) -> 422, nada criado")
+    void createServiceItem_splitBelowPolicy_422() throws Exception {
+        long before = serviceItemRepository.count();
+
+        mvc.perform(post("/establishment/{id}/service-items", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content(pricedItemBody("Taxa curta", "31.90", "30.00")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("SERVICE_PRICE_SPLIT_INVALID"))
+                .andDo(print());
+
+        assertThat(serviceItemRepository.count()).isEqualTo(before);
+    }
+
+    @Test
+    @Order(19)
+    @DisplayName("Receita LIQUIDA: servico legado (sem pro_receives) entra na politica pelo PATCH")
+    void legacyServiceItem_getsProReceivesByPatch() throws Exception {
+        String itemId = createItem(establishmentId, ownerToken, "Legado " + faker.number().digits(5));
+
+        mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"price\":32.90,\"pro_receives\":30.00}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pro_receives").value(30.00))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
+                .andExpect(jsonPath("$.platform_fee").value(1.58))
+                .andDo(print());
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Backlog #1 — Editar/remover ServiceItem pela otica do establishment
     //   PUT/DELETE /establishment/{establishmentId}/service-items/{itemId}
     // ─────────────────────────────────────────────────────────────

@@ -198,6 +198,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
+                        // Horario por dia (#2): so o dono escreve; o GET cai no permitAll de /establishment/**
+                        .requestMatchers(HttpMethod.PUT, "/establishment/*/hours/**").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.DELETE, "/establishment/*/hours/**").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/open-status").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/owner").hasRole("OWNER")
 

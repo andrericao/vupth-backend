@@ -75,6 +75,13 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     @Override
+    public List<EstablishmentResponse> findMine(UUID ownerId) {
+        return establishmentRepository.findByOwnerId(ownerId).stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
     public List<EstablishmentResponse> findAll() {
         return establishmentRepository.findAll().stream()
                 .map(EstablishmentResponse::fromEntity)
@@ -334,7 +341,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 throw new EstablishmentNotReadyException(establishmentId);
             }
             // (#11g2c) horário de funcionamento definido (abertura + fechamento).
-            if (establishment.getOpeningTime() == null || establishment.getClosingTime() == null) {
+            if (!establishment.getBusinessHours().isConfigured()) {
                 throw new EstablishmentHoursRequiredException(establishmentId);
             }
         }

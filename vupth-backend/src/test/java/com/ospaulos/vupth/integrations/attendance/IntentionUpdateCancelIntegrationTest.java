@@ -10,7 +10,6 @@ import com.ospaulos.vupth.api.attendance.dto.request.UpdateIntentionRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
-import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
@@ -25,6 +24,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -62,6 +62,7 @@ class IntentionUpdateCancelIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired TransactionTemplate tx;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
     @Autowired AttendanceRepository attendanceRepository;
 
@@ -124,11 +125,7 @@ class IntentionUpdateCancelIntegrationTest {
     }
 
     private void setStatusAndHours(OpenStatus status, LocalTime opening, LocalTime closing) {
-        Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
-        e.setOpenStatus(status);
-        e.setOpeningTime(opening);
-        e.setClosingTime(closing);
-        establishmentRepository.save(e);
+        TestUserUtils.setStatusAndHours(tx, establishmentRepository, establishmentId, status, opening, closing);
     }
 
     /**

@@ -1,0 +1,20 @@
+databaseChangeLog:
+  # Receita LIQUIDA do profissional: o "Voce recebe" do cadastro do servico. Nulo de proposito em
+  # servico legado — nao da para saber quanto da taxa o profissional absorveu, e o valor nao e
+  # estimado; o app pede ao profissional que atualize o preco desses servicos.
+  - changeSet:
+      id: 028-add-pro_receives-to-service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: service_item
+                columnName: pro_receives
+      changes:
+        - addColumn:
+            tableName: service_item
+            columns:
+              - column:
+                  name: pro_receives
+                  type: DECIMAL(10,2)

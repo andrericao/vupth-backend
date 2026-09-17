@@ -72,8 +72,10 @@ public class ReportServiceImpl implements ReportService {
             var current = byProfessional.get(pid);
             BigDecimal revenue = (current != null ? current.revenue() : BigDecimal.ZERO).add(a.getTotalValue());
             long count = (current != null ? current.attendances() : 0L) + 1;
+            BigDecimal net = (current != null ? current.netRevenue() : BigDecimal.ZERO)
+                    .add(a.getProReceives() != null ? a.getProReceives() : BigDecimal.ZERO);
             byProfessional.put(pid,
-                    new EstablishmentReportResponse.ProfessionalRevenue(pid, p.getName(), revenue, count));
+                    new EstablishmentReportResponse.ProfessionalRevenue(pid, p.getName(), revenue, count, net));
         }
 
         List<EstablishmentReportResponse.ProfessionalRevenue> professionals = byProfessional.values().stream()
@@ -91,7 +93,9 @@ public class ReportServiceImpl implements ReportService {
                 avgDuration(finished),
                 topService(finished),
                 topProfessional,
-                professionals);
+                professionals,
+                netRevenue(finished),
+                withoutSplit(finished));
     }
 
     @Override
@@ -110,7 +114,9 @@ public class ReportServiceImpl implements ReportService {
                 finished.size(),
                 totalRevenue(finished),
                 avgDuration(finished),
-                topService(finished));
+                topService(finished),
+                netRevenue(finished),
+                withoutSplit(finished));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -134,6 +140,17 @@ public class ReportServiceImpl implements ReportService {
                 .map(Attendance::getTotalValue)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal netRevenue(List<Attendance> attendances) {
+        return attendances.stream()
+                .map(Attendance::getProReceives)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private long withoutSplit(List<Attendance> attendances) {
+        return attendances.stream().filter(a -> a.getProReceives() == null).count();
     }
 
     private double avgDuration(List<Attendance> attendances) {

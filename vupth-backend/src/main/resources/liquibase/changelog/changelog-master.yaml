@@ -300,3 +300,18 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/027-backfill-null-service-type.yaml
       relativeToChangeLogFile: true
+
+  # Receita LIQUIDA do profissional: pro_receives no service_item (nulo em servico legado)
+  - include:
+      file: changesets/50-establishment/028-add-pro_receives-to-service_item.yaml
+      relativeToChangeLogFile: true
+
+  # Receita LIQUIDA do profissional: divisao do preco congelada no attendance (nula nos anteriores)
+  - include:
+      file: changesets/80-attendance/012-add-price-split-to-attendance.yaml
+      relativeToChangeLogFile: true
+
+  # Horario por dia (#2): semana (7 linhas) + excecao por data; backfill do horario unico
+  - include:
+      file: changesets/50-establishment/029-create-establishment-hours-by-day.yaml
+      relativeToChangeLogFile: true

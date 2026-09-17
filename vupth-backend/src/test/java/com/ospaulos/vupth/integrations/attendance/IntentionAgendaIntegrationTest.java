@@ -5,7 +5,6 @@ import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.attendance.dto.request.CreateIntentionRequest;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
-import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
@@ -20,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.math.BigDecimal;
@@ -53,6 +53,7 @@ class IntentionAgendaIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired TransactionTemplate tx;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
     @Autowired AttendanceRepository attendanceRepository;
 
@@ -102,11 +103,7 @@ class IntentionAgendaIntegrationTest {
     }
 
     private void openFullDay(OpenStatus status) {
-        Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
-        e.setOpenStatus(status);
-        e.setOpeningTime(LocalTime.MIDNIGHT);
-        e.setClosingTime(LocalTime.MIDNIGHT);
-        establishmentRepository.save(e);
+        TestUserUtils.setStatusAndHours(tx, establishmentRepository, establishmentId, status, LocalTime.MIDNIGHT, LocalTime.MIDNIGHT);
     }
 
     private UUID createIntention(String token, OffsetDateTime desired) throws Exception {
