@@ -315,3 +315,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/029-create-establishment-hours-by-day.yaml
       relativeToChangeLogFile: true
+
+  # Regra de preco de 16/09: base_price (valor digitado) no service_item
+  - include:
+      file: changesets/50-establishment/030-add-base_price-to-service_item.yaml
+      relativeToChangeLogFile: true

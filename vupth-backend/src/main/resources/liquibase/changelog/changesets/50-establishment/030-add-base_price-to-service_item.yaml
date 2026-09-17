@@ -1,0 +1,20 @@
+databaseChangeLog:
+  # Regra de preco de 16/09: os 6% entram sobre o valor DIGITADO. Com o preco e o "recebe" sozinhos
+  # o digitado nao se reconstroi (o X,90 perde a informacao), entao ele e gravado. Nulo em servico
+  # legado — inclusive os que tem pro_receives da regra anterior: esses voltam a "a atualizar".
+  - changeSet:
+      id: 030-add-base_price-to-service_item
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: service_item
+                columnName: base_price
+      changes:
+        - addColumn:
+            tableName: service_item
+            columns:
+              - column:
+                  name: base_price
+                  type: DECIMAL(10,2)

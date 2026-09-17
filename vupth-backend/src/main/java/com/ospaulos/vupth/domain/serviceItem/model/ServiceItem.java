@@ -42,13 +42,21 @@ public class ServiceItem {
 
     /**
      * Quanto o profissional recebe por este servico ("Voce recebe"), ja descontada a parte da taxa
-     * que ele escolheu absorver. Null em servico legado (cadastrado antes de 16/09): ninguem sabe
-     * quanto ele absorveu, e o valor nao e estimado. So muda por {@link #reprice} /
-     * {@link #changeProReceives}, que passam pela politica de preco ({@link PriceSplit}).
+     * que ele escolheu absorver. Null em servico legado: ninguem sabe quanto ele absorveu, e o valor
+     * nao e estimado. So muda por {@link #reprice} / {@link #changeSplit}, que passam pela regra de
+     * preco ({@link PriceSplit}).
      */
     @Setter(AccessLevel.NONE)
     @Column(name = "pro_receives", precision = 10, scale = 2)
     private BigDecimal proReceives;
+
+    /**
+     * O valor que o profissional digitou no cadastro — a base dos 6% (regra de 16/09). Com ele e o
+     * {@code proReceives} a divisao do preco se reconstroi sem adivinhar. Null em servico legado.
+     */
+    @Setter(AccessLevel.NONE)
+    @Column(name = "base_price", precision = 10, scale = 2)
+    private BigDecimal basePrice;
 
     @Column(nullable = false)
     private Integer estimatedMinutes;
@@ -87,33 +95,38 @@ public class ServiceItem {
     }
 
     /**
-     * Troca o preco do cliente. Com {@code proReceives}, os dois passam juntos pela politica de preco.
-     * Sem ele, o recebe antigo so continua valendo se o preco nao mudou — preco novo sem recebe volta
-     * o servico ao estado "a atualizar" em vez de guardar um liquido que pode nao valer mais.
+     * Troca o preco do cliente. Com {@code proReceives} e {@code basePrice} (os dois juntos), o trio passa
+     * pela regra de preco. Sem eles, a divisao antiga so continua valendo se o preco nao mudou — preco novo
+     * sem divisao volta o servico ao estado "a atualizar" em vez de guardar um liquido que pode nao valer.
      */
-    public void reprice(BigDecimal newPrice, BigDecimal newProReceives) {
-        if (newProReceives != null) {
-            PriceSplit split = PriceSplit.of(newPrice, newProReceives);
+    public void reprice(BigDecimal newPrice, BigDecimal newProReceives, BigDecimal newBasePrice) {
+        if (newProReceives != null || newBasePrice != null) {
+            PriceSplit split = PriceSplit.of(newPrice, newProReceives, newBasePrice);
             this.price = split.clientPrice();
             this.proReceives = split.proReceives();
+            this.basePrice = split.basePrice();
             return;
         }
         boolean samePrice = this.price != null && newPrice != null && this.price.compareTo(newPrice) == 0;
         this.price = newPrice;
         if (!samePrice) {
             this.proReceives = null;
+            this.basePrice = null;
         }
     }
 
-    /** Troca so o recebe, validado contra o preco atual. */
-    public void changeProReceives(BigDecimal newProReceives) {
-        reprice(this.price, newProReceives);
+    /** Troca so a divisao (recebe + digitado), conferida contra o preco atual. */
+    public void changeSplit(BigDecimal newProReceives, BigDecimal newBasePrice) {
+        reprice(this.price, newProReceives, newBasePrice);
     }
 
-    /** A divisao do preco, ou {@code null} em servico legado (sem recebe). */
+    /**
+     * A divisao do preco, ou {@code null} em servico legado — inclusive o que tem {@code proReceives}
+     * gravado pela regra anterior (sem o digitado, a regra de 16/09 nao se reconstroi).
+     */
     @Transient
     public PriceSplit getPriceSplit() {
-        return proReceives == null ? null : PriceSplit.of(price, proReceives);
+        return proReceives == null || basePrice == null ? null : PriceSplit.of(price, proReceives, basePrice);
     }
 
     /** Registra uma nota (item #6): soma no total e incrementa a contagem de votos. */

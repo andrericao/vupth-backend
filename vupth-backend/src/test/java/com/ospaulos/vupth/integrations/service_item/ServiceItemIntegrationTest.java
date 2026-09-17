@@ -411,7 +411,7 @@ class ServiceItemIntegrationTest {
     // Receita LIQUIDA (16/09) — pro_receives e a divisao do preco
     // ─────────────────────────────────────────────────────────────
 
-    private String pricedItemBody(String name, String price, String proReceives) {
+    private String pricedItemBody(String name, String price, String proReceives, String basePrice) {
         return String.format("""
                 {
                   "establishmentId": "%s",
@@ -419,9 +419,10 @@ class ServiceItemIntegrationTest {
                   "customName": "%s %s",
                   "price": %s,
                   "estimatedMinutes": 30,
-                  "pro_receives": %s
+                  "pro_receives": %s,
+                  "base_price": %s
                 }
-                """, establishmentId, name, faker.number().digits(5), price, proReceives);
+                """, establishmentId, name, faker.number().digits(5), price, proReceives, basePrice);
     }
 
     @Test
@@ -431,12 +432,13 @@ class ServiceItemIntegrationTest {
         MvcResult result = mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content(pricedItemBody("Liquido", "32.90", "30.00")))
+                        .content(pricedItemBody("Liquido", "31.90", "30.00", "30.00")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.price").value(32.90))
+                .andExpect(jsonPath("$.price").value(31.90))
                 .andExpect(jsonPath("$.pro_receives").value(30.00))
-                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
-                .andExpect(jsonPath("$.platform_fee").value(1.58))
+                .andExpect(jsonPath("$.base_price").value(30.00))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.20))
+                .andExpect(jsonPath("$.platform_fee").value(0.70))
                 .andDo(print())
                 .andReturn();
 
@@ -448,7 +450,7 @@ class ServiceItemIntegrationTest {
         mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content("{\"pro_receives\":31.00}"))
+                        .content("{\"pro_receives\":31.00,\"base_price\":31.00}"))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("SERVICE_PRICE_SPLIT_INVALID"))
                 .andDo(print());
@@ -461,20 +463,21 @@ class ServiceItemIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.price").value(40.90))
                 .andExpect(jsonPath("$.pro_receives").doesNotExist())
+                .andExpect(jsonPath("$.base_price").doesNotExist())
                 .andExpect(jsonPath("$.platform_fee").doesNotExist())
                 .andDo(print());
     }
 
     @Test
     @Order(18)
-    @DisplayName("Receita LIQUIDA: POST com a taxa abaixo de 6% (o 0% de hoje no app) -> 422, nada criado")
+    @DisplayName("Receita LIQUIDA: POST com o preco da regra ANTERIOR (32,90 para 30 digitados) -> 422, nada criado")
     void createServiceItem_splitBelowPolicy_422() throws Exception {
         long before = serviceItemRepository.count();
 
         mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content(pricedItemBody("Taxa curta", "31.90", "30.00")))
+                        .content(pricedItemBody("Regra antiga", "32.90", "30.00", "30.00")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("SERVICE_PRICE_SPLIT_INVALID"))
                 .andDo(print());
@@ -484,18 +487,19 @@ class ServiceItemIntegrationTest {
 
     @Test
     @Order(19)
-    @DisplayName("Receita LIQUIDA: servico legado (sem pro_receives) entra na politica pelo PATCH")
+    @DisplayName("Receita LIQUIDA: servico legado (sem divisao) entra na regra pelo PATCH")
     void legacyServiceItem_getsProReceivesByPatch() throws Exception {
         String itemId = createItem(establishmentId, ownerToken, "Legado " + faker.number().digits(5));
 
         mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content("{\"price\":32.90,\"pro_receives\":30.00}"))
+                        .content("{\"price\":31.90,\"pro_receives\":30.00,\"base_price\":30.00}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pro_receives").value(30.00))
-                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
-                .andExpect(jsonPath("$.platform_fee").value(1.58))
+                .andExpect(jsonPath("$.base_price").value(30.00))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.20))
+                .andExpect(jsonPath("$.platform_fee").value(0.70))
                 .andDo(print());
     }
 

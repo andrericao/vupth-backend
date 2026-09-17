@@ -69,9 +69,10 @@ class AttendancePriceFreezeIntegrationTest {
                                   "establishmentId": "%s",
                                   "serviceItemType": "CORTE_MAQUINA",
                                   "customName": "Corte liquido",
-                                  "price": 32.90,
+                                  "price": 31.90,
                                   "estimatedMinutes": 30,
-                                  "pro_receives": 30.00
+                                  "pro_receives": 30.00,
+                                  "base_price": 30.00
                                 }
                                 """, establishmentId)))
                 .andExpect(status().isCreated())
@@ -99,10 +100,10 @@ class AttendancePriceFreezeIntegrationTest {
 
         mvc.perform(get("/attendances").param("establishmentId", establishmentId).header("Authorization", ownerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(32.90))
+                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(31.90))
                 .andExpect(jsonPath("$[?(@.id == '%s')].proReceives", attendanceId).value(30.00))
-                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.32))
-                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(1.58))
+                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.20))
+                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(0.70))
                 .andDo(print());
     }
 
@@ -115,7 +116,7 @@ class AttendancePriceFreezeIntegrationTest {
         mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, serviceItemId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content("{\"price\":53.90,\"pro_receives\":50.00}"))
+                        .content("{\"price\":53.90,\"pro_receives\":50.00,\"base_price\":50.00}"))
                 .andExpect(status().isOk());
 
         // Uma escrita no atendimento (start) dispara o @PreUpdate — era ai que o total era recalculado.
@@ -126,10 +127,10 @@ class AttendancePriceFreezeIntegrationTest {
 
         mvc.perform(get("/attendances").param("establishmentId", establishmentId).header("Authorization", ownerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(32.90))
+                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(31.90))
                 .andExpect(jsonPath("$[?(@.id == '%s')].proReceives", attendanceId).value(30.00))
-                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.32))
-                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(1.58))
+                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.20))
+                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(0.70))
                 .andDo(print());
     }
 }
