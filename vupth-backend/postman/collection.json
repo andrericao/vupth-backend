@@ -1832,6 +1832,297 @@
      }
     },
     {
+     "name": "horario por dia (#2): GET publico — o general-infos acima valeu para os 7 dias",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('Status 200', () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test('configurada, 7 dias e 14 proximos dias', () => {",
+         "  pm.expect(b.configured).to.eql(true);",
+         "  pm.expect(b.weekly).to.have.lengthOf(7);",
+         "  pm.expect(b.upcoming).to.have.lengthOf(14);",
+         "});",
+         "pm.test('o horario unico do general-infos esta nos 7 dias', () => {",
+         "  b.weekly.forEach(d => { pm.expect(d.opens).to.eql('08:30'); pm.expect(d.closes).to.eql('19:00'); });",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "horario por dia (#2): PUT semana 24h (dono)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// 24h de proposito: as pastas seguintes precisam da loja aberta a qualquer hora.",
+         "pm.test('Status 200', () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test('semana na ordem, segunda primeiro', () => pm.expect(b.weekly[0].day).to.eql('MONDAY'));",
+         "pm.test('os 7 dias 00:00-00:00 (24h)', () => b.weekly.forEach(d => { pm.expect(d.closed).to.eql(false); pm.expect(d.opens).to.eql('00:00'); }));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\": [{\"day\": \"MONDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"TUESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"WEDNESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"THURSDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"FRIDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SATURDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SUNDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}]}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/weekly",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "[ERRO] horario por dia (#2): semana sem os 7 dias → 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('Status 422', () => pm.response.to.have.status(422));",
+         "pm.test('code BUSINESS_HOURS_INVALID', () => pm.expect(pm.response.json().code).to.eql('BUSINESS_HOURS_INVALID'));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\": [{\"day\": \"MONDAY\", \"closed\": false, \"opens\": \"08:00\", \"closes\": \"18:00\"}, {\"day\": \"TUESDAY\", \"closed\": false, \"opens\": \"08:00\", \"closes\": \"18:00\"}, {\"day\": \"WEDNESDAY\", \"closed\": false, \"opens\": \"08:00\", \"closes\": \"18:00\"}, {\"day\": \"THURSDAY\", \"closed\": false, \"opens\": \"08:00\", \"closes\": \"18:00\"}, {\"day\": \"FRIDAY\", \"closed\": false, \"opens\": \"08:00\", \"closes\": \"18:00\"}, {\"day\": \"SATURDAY\", \"closed\": false, \"opens\": \"08:00\", \"closes\": \"18:00\"}]}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/weekly",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "horario por dia (#2): PUT excecao — data futura fechada (dono)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Datas no fuso da loja (America/Sao_Paulo, UTC-3): +30 e -30 dias ficam longe de qualquer borda.",
+         "const shift = (days) => {",
+         "  const d = new Date(Date.now() - 3 * 3600 * 1000 + days * 86400 * 1000);",
+         "  return d.toISOString().slice(0, 10);",
+         "};",
+         "pm.collectionVariables.set('hours_future_date', shift(30));",
+         "pm.collectionVariables.set('hours_past_date', shift(-30));"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('Status 200', () => pm.response.to.have.status(200));",
+         "const date = pm.collectionVariables.get('hours_future_date');",
+         "pm.test('a excecao aparece, fechada', () => {",
+         "  const e = pm.response.json().exceptions.find(x => x.date === date);",
+         "  pm.expect(e, 'excecao').to.be.an('object');",
+         "  pm.expect(e.closed).to.eql(true);",
+         "  pm.expect(e).to.not.have.property('opens');",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"closed\": true}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/dates/{{hours_future_date}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "[ERRO] horario por dia (#2): excecao no passado → 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// O passado e documento: nao se altera.",
+         "pm.test('Status 422', () => pm.response.to.have.status(422));",
+         "pm.test('code BUSINESS_HOURS_INVALID', () => pm.expect(pm.response.json().code).to.eql('BUSINESS_HOURS_INVALID'));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"closed\": true}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/dates/{{hours_past_date}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "horario por dia (#2): DELETE excecao → 204 (cleanup)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('Status 204', () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/dates/{{hours_future_date}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
      "name": "update general-infos → services",
      "event": [
       {

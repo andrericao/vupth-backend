@@ -29,6 +29,7 @@ import java.io.Serializable;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.util.*;
@@ -77,9 +78,17 @@ public class Establishment implements Serializable {
     // (sem timezone) e nao tem onde guardar offset; com OffsetTime o Hibernate normalizava para
     // UTC (08:00-03:00 gravava 11:00 e devolvia "11:00Z"). Comparacoes com "agora" usam
     // BusinessClock (fuso vupth.timezone).
+    //
+    // #2 (16/09): estas duas colunas viraram ESPELHO do horario unico antigo — ninguem mais le daqui.
+    // O horario vale pelo BusinessHours (semana + excecoes); o app antigo escreve por
+    // applySingleWindow, que aplica o mesmo horario aos 7 dias.
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
     @Column(name = "opening_time")
     private LocalTime openingTime;
 
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
     @Column(name = "closing_time")
     private LocalTime closingTime;
 
@@ -234,6 +243,42 @@ public class Establishment implements Serializable {
         hours.allExceptions().forEach((date, h) -> dateHours.put(date, DayHoursColumns.from(h)));
     }
 
+    /**
+     * O horario unico do app antigo (PATCH general-infos): vale para os 7 dias e mantem as excecoes.
+     * Um dos dois nulo = a loja volta a "nao configurada". {@code null} num argumento mantem o valor
+     * espelhado anterior (o app antigo podia mandar so um dos dois).
+     */
+    public void applySingleWindow(LocalTime opening, LocalTime closing) {
+        if (opening != null) this.openingTime = opening;
+        if (closing != null) this.closingTime = closing;
+        BusinessHours current = getBusinessHours();
+        if (this.openingTime == null || this.closingTime == null) {
+            applyBusinessHours(BusinessHours.of(List.of(), current.allExceptions()));
+            return;
+        }
+        DayHours single = DayHours.open(this.openingTime, this.closingTime);
+        applyBusinessHours(current.withWeek(Arrays.stream(DayOfWeek.values())
+                .map(day -> new WeekdayHours(day, single))
+                .toList()));
+    }
+
+    /** Horario de hoje (dia da loja), ou {@code null} se nao configurada. */
+    public DayHours todayHours() {
+        return getBusinessHours().on(BusinessClock.today());
+    }
+
+    /** Abertura de hoje — {@code null} se hoje fecha ou a loja nao configurou. */
+    public LocalTime todayOpens() {
+        DayHours today = todayHours();
+        return today == null ? null : today.opens();
+    }
+
+    /** Fechamento de hoje — {@code null} se hoje fecha ou a loja nao configurou. */
+    public LocalTime todayCloses() {
+        DayHours today = todayHours();
+        return today == null ? null : today.closes();
+    }
+
     public boolean isOpenNow() {
         return isOpenAt(BusinessClock.nowTime());
     }
@@ -251,31 +296,20 @@ public class Establishment implements Serializable {
     }
 
     /**
-     * A hora {@code t} cai dentro da janela de expediente {@code [openingTime, closingTime)}?
-     * <p>
-     * Diferente de {@link #isOpenAt(LocalTime)}, <b>ignora o {@code openStatus}</b> — olha somente
-     * o horario de funcionamento. Serve para validar uma intencao de atendimento (backlog #4) para
-     * um horario futuro <b>mesmo com a loja fechada agora</b> (ela abre depois). Trata janela normal
-     * {@code [open, close)}, 24h ({@code open == close}) e janela que vira a meia-noite ({@code close < open}).
-     * Sem janela definida (opening/closing nulos) qualquer hora e valida.
-     * <p>
-     * BUG2b: {@code t} e hora de PAREDE no fuso da loja — quem tem um instante converte com
-     * {@code BusinessClock.timeAt(instante)}, nao com {@code toOffsetTime()}.
+     * A hora de parede {@code t} de HOJE cai dentro do horario de hoje? Diferente de
+     * {@link #isOpenAt(LocalTime)}, <b>ignora o {@code openStatus}</b>. Para um instante de outro dia
+     * (intencao, carencia), use {@link #isWithinBusinessHours(OffsetDateTime)}, que resolve o dia certo.
+     * Nao configurada = qualquer hora vale.
      */
     public boolean isWithinBusinessHours(LocalTime t) {
-        if (openingTime == null || closingTime == null) {
-            return true; // sem janela definida
-        }
-        LocalTime n = t;
-        LocalTime open = openingTime;
-        LocalTime close = closingTime;
-        if (open.equals(close)) {
-            return true; // janela degenerada = 24h
-        }
-        if (open.isBefore(close)) {
-            return !n.isBefore(open) && n.isBefore(close); // [open, close)
-        }
-        // janela que atravessa a meia-noite: [open, 24h) U [0, close)
-        return !n.isBefore(open) || n.isBefore(close);
+        return getBusinessHours().isWithin(BusinessClock.today(), t);
+    }
+
+    /**
+     * O instante {@code at} cai dentro do horario DO DIA dele (excecao, senao o dia da semana; inclui a
+     * madrugada de uma virada aberta na vespera)? Nao configurada = sempre dentro.
+     */
+    public boolean isWithinBusinessHours(OffsetDateTime at) {
+        return getBusinessHours().isWithin(BusinessClock.dateAt(at), BusinessClock.timeAt(at));
     }
 }

@@ -36,6 +36,26 @@ public record DayHours(boolean closed, LocalTime opens, LocalTime closes) {
         return !closed && closes.isBefore(opens);
     }
 
+    /**
+     * O intervalo {@code [start, start+minutes)} cabe no expediente deste dia (a refeicao, #11g2)?
+     * Na virada da meia-noite vale antes, atravessando ou na madrugada ate fechar; nunca dar a volta
+     * no relogio fora do expediente.
+     */
+    public boolean fits(LocalTime start, int minutes) {
+        if (closed) return false;
+        if (isAllDay()) return true;
+        int from = start.toSecondOfDay() / 60;
+        int to = from + minutes;
+        int open = opens.toSecondOfDay() / 60;
+        int close = closes.toSecondOfDay() / 60;
+        if (!crossesMidnight()) {
+            return from >= open && to <= close;
+        }
+        return (from >= open && to <= close + MINUTES_PER_DAY) || (to <= close);
+    }
+
+    private static final int MINUTES_PER_DAY = 24 * 60;
+
     /** A hora {@code t} deste mesmo dia esta dentro? (a madrugada de uma virada e do dia seguinte) */
     boolean coversSameDay(LocalTime t) {
         if (closed) return false;

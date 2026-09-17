@@ -113,7 +113,7 @@ public class AutoCloseServiceImpl implements AutoCloseService {
 
             boolean autoOff = false;
             if (professional.getWorkStatus().countsAsOpen() && establishment != null) {
-                if (establishment.isWithinBusinessHours(BusinessClock.timeAt(now))) {
+                if (establishment.isWithinBusinessHours(now)) {
                     // Expediente foi ESTENDIDO (closing_time mudou) — auto-correcao, nada a fechar.
                     log.info("[AutoClose] grace — professional={} de volta DENTRO do expediente; carencia limpa",
                             professional.getId());

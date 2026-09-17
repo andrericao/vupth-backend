@@ -334,7 +334,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                 throw new EstablishmentNotReadyException(establishmentId);
             }
             // (#11g2c) horário de funcionamento definido (abertura + fechamento).
-            if (establishment.getOpeningTime() == null || establishment.getClosingTime() == null) {
+            if (!establishment.getBusinessHours().isConfigured()) {
                 throw new EstablishmentHoursRequiredException(establishmentId);
             }
         }

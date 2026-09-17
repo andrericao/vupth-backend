@@ -87,6 +87,41 @@ class BusinessHoursTest {
     }
 
     @Nested
+    @DisplayName("um intervalo cabe no dia (refeicao)")
+    class Fits {
+
+        @Test
+        @DisplayName("janela normal: comeca depois de abrir e termina ate fechar")
+        void normal() {
+            DayHours day = open("08:00", "18:00");
+            assertThat(day.fits(t("12:00"), 60)).isTrue();
+            assertThat(day.fits(t("17:00"), 60)).isTrue();
+            assertThat(day.fits(t("17:30"), 60)).isFalse();
+            assertThat(day.fits(t("07:30"), 60)).isFalse();
+            assertThat(day.fits(t("23:30"), 60)).isFalse(); // nao pode dar a volta no relogio
+        }
+
+        @Test
+        @DisplayName("fechado nao cabe nada; 24h cabe tudo")
+        void closedAndAllDay() {
+            assertThat(DayHours.closedDay().fits(t("12:00"), 30)).isFalse();
+            assertThat(open("00:00", "00:00").fits(t("23:30"), 60)).isTrue();
+        }
+
+        @Test
+        @DisplayName("virada da meia-noite: cabe antes, atravessando ou na madrugada ate fechar")
+        void overnight() {
+            DayHours day = open("22:00", "02:00");
+            assertThat(day.fits(t("22:30"), 60)).isTrue();
+            assertThat(day.fits(t("23:30"), 60)).isTrue();
+            assertThat(day.fits(t("01:00"), 60)).isTrue();
+            assertThat(day.fits(t("01:30"), 60)).isFalse();
+            assertThat(day.fits(t("21:30"), 60)).isFalse();
+            assertThat(day.fits(t("12:00"), 30)).isFalse();
+        }
+    }
+
+    @Nested
     @DisplayName("a semana: os 7 dias, sem repeticao")
     class Week {
 

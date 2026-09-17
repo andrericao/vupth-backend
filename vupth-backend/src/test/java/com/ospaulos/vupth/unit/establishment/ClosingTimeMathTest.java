@@ -2,16 +2,23 @@ package com.ospaulos.vupth.unit.establishment;
 
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.service.ClosingTimeMath;
+import com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.WeekdayHours;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,8 +36,7 @@ class ClosingTimeMathTest {
 
     private Establishment estab(LocalTime opening, LocalTime closing) {
         Establishment e = new Establishment();
-        e.setOpeningTime(opening);
-        e.setClosingTime(closing);
+        e.applySingleWindow(opening, closing);
         return e;
     }
 
@@ -151,6 +157,61 @@ class ClosingTimeMathTest {
         @DisplayName("madrugada dentro da janela = nao")
         void insideOvernightFalse() {
             assertThat(ClosingTimeMath.isJustAfterClosing(e, at(24, 1, 0), HORIZON)).isFalse();
+        }
+    }
+
+    /**
+     * Horario por dia (#2): seg-sex 08-18, sab 08-12, dom fechado. Julho/2026: 23 = quinta,
+     * 24 = sexta, 25 = sabado, 26 = domingo, 27 = segunda.
+     */
+    @Nested
+    @DisplayName("horario por dia")
+    class PerDay {
+
+        private Establishment weekly(Map<LocalDate, DayHours> exceptions) {
+            List<WeekdayHours> week = new ArrayList<>();
+            for (DayOfWeek day : DayOfWeek.values()) {
+                week.add(new WeekdayHours(day, switch (day) {
+                    case SATURDAY -> DayHours.open(wall(8, 0), wall(12, 0));
+                    case SUNDAY -> DayHours.closedDay();
+                    default -> DayHours.open(wall(8, 0), wall(18, 0));
+                }));
+            }
+            Establishment e = new Establishment();
+            e.applyBusinessHours(BusinessHours.of(week, exceptions));
+            return e;
+        }
+
+        @Test
+        @DisplayName("sabado fecha ao meio-dia: 12:30 e logo apos o fechamento; 19:00 ja nao e")
+        void saturdayClosesAtNoon() {
+            Establishment e = weekly(Map.of());
+            assertThat(ClosingTimeMath.isJustAfterClosing(e, at(25, 12, 30), HORIZON)).isTrue();
+            assertThat(ClosingTimeMath.isJustAfterClosing(e, at(25, 19, 0), HORIZON)).isFalse();
+            assertThat(ClosingTimeMath.mostRecentClosingInstant(e, at(25, 12, 30))).isEqualTo(at(25, 12, 0));
+        }
+
+        @Test
+        @DisplayName("domingo fechado: nao ha fechamento no domingo, e o proximo e segunda as 18:00")
+        void sundayClosed() {
+            Establishment e = weekly(Map.of());
+            assertThat(ClosingTimeMath.isJustAfterClosing(e, at(26, 10, 0), HORIZON)).isFalse();
+            assertThat(ClosingTimeMath.nextClosingInstant(e, at(25, 13, 0))).isEqualTo(at(27, 18, 0));
+        }
+
+        @Test
+        @DisplayName("excecao fechada na sexta: o proximo fechamento depois de quinta e o de sabado")
+        void closedException() {
+            Establishment e = weekly(Map.of(LocalDate.of(2026, 7, 24), DayHours.closedDay()));
+            assertThat(ClosingTimeMath.nextClosingInstant(e, at(23, 20, 0))).isEqualTo(at(25, 12, 0));
+        }
+
+        @Test
+        @DisplayName("excecao com horario proprio: fecha no horario da excecao")
+        void exceptionWithOwnHours() {
+            Establishment e = weekly(Map.of(LocalDate.of(2026, 7, 24), DayHours.open(wall(10, 0), wall(14, 0))));
+            assertThat(ClosingTimeMath.isJustAfterClosing(e, at(24, 14, 30), HORIZON)).isTrue();
+            assertThat(ClosingTimeMath.nextClosingInstant(e, at(24, 9, 0))).isEqualTo(at(24, 14, 0));
         }
     }
 }
