@@ -310,3 +310,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/012-add-price-split-to-attendance.yaml
       relativeToChangeLogFile: true
+
+  # Horario por dia (#2): semana (7 linhas) + excecao por data; backfill do horario unico
+  - include:
+      file: changesets/50-establishment/029-create-establishment-hours-by-day.yaml
+      relativeToChangeLogFile: true

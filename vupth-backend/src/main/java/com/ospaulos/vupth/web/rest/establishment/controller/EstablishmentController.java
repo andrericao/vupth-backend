@@ -2,15 +2,19 @@ package com.ospaulos.vupth.web.rest.establishment.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.ospaulos.vupth.api.establishment.dto.request.AddProfessionalToEstablishmentRequest;
+import com.ospaulos.vupth.api.establishment.dto.request.DateHoursRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentGeneralInfosRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.TransferOwnershipRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.UpdateOpenStatusRequest;
+import com.ospaulos.vupth.api.establishment.dto.request.WeeklyHoursRequest;
+import com.ospaulos.vupth.api.establishment.dto.response.BusinessHoursResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentGeneralInfosResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentWithProfessionalsResponse;
 import com.ospaulos.vupth.api.establishment.usecase.AddProfessionalToEstablishmentUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
+import com.ospaulos.vupth.api.establishment.usecase.ManageBusinessHoursUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.RemoveProfessionalFromEstablishmentUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.TransferEstablishmentOwnershipUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralInfosUseCase;
@@ -75,6 +79,7 @@ public class EstablishmentController {
     private final ProfessionalServiceImpl             professionalService;
     private final AddProfessionalToEstablishmentUseCase addProfessionalUseCase;
     private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
+    private final ManageBusinessHoursUseCase businessHoursUseCase;
     private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
     private final ReportService                          reportService;
@@ -205,6 +210,41 @@ public class EstablishmentController {
         log.info("[Establishment] findWithQueue — id={}", id);
         EstablishmentWithProfessionalsResponse response = getWithQueueUseCase.execute(id);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Horario por dia (#2). GET publico (o cliente tambem le); escritas so do dono da loja
+     * (outra loja → 404, como no general-infos). Modelo e regras: {@code BusinessHours}.
+     */
+    @GetMapping("/{id}/hours")
+    public ResponseEntity<BusinessHoursResponse> getHours(@PathVariable UUID id) {
+        return ResponseEntity.ok(businessHoursUseCase.get(id));
+    }
+
+    @PutMapping("/{id}/hours/weekly")
+    public ResponseEntity<BusinessHoursResponse> replaceWeeklyHours(
+            @PathVariable UUID id,
+            @RequestBody WeeklyHoursRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(businessHoursUseCase.replaceWeek(user.getUserId(), id, request));
+    }
+
+    @PutMapping("/{id}/hours/dates/{date}")
+    public ResponseEntity<BusinessHoursResponse> putDateHours(
+            @PathVariable UUID id,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestBody DateHoursRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(businessHoursUseCase.putDate(user.getUserId(), id, date, request));
+    }
+
+    @DeleteMapping("/{id}/hours/dates/{date}")
+    public ResponseEntity<Void> deleteDateHours(
+            @PathVariable UUID id,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        businessHoursUseCase.deleteDate(user.getUserId(), id, date);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/{id}/general-infos")

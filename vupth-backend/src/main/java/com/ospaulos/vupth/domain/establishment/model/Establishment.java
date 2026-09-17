@@ -5,14 +5,18 @@ import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
+import com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
+import com.ospaulos.vupth.domain.establishment.valueObject.WeekdayHours;
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.user.model.UserAddress;
 import org.hibernate.annotations.BatchSize;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,6 +26,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 
 import java.io.Serializable;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
@@ -76,6 +82,29 @@ public class Establishment implements Serializable {
 
     @Column(name = "closing_time")
     private LocalTime closingTime;
+
+    /**
+     * Horario por dia (#2): a semana (7 linhas, ou nenhuma = nao configurada) e as excecoes por data.
+     * So se le e escreve pelo {@link BusinessHours} ({@link #getBusinessHours} /
+     * {@link #applyBusinessHours}), que guarda as invariantes. {@code @BatchSize} pelo mesmo motivo do
+     * endereco (B10): a listagem le o horario de TODA loja.
+     */
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "establishment_weekly_hours", joinColumns = @JoinColumn(name = "establishment_id"))
+    @MapKeyEnumerated(EnumType.STRING)
+    @MapKeyColumn(name = "day_of_week")
+    @BatchSize(size = 100)
+    private Map<DayOfWeek, DayHoursColumns> weeklyHours = new EnumMap<>(DayOfWeek.class);
+
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "establishment_date_hours", joinColumns = @JoinColumn(name = "establishment_id"))
+    @MapKeyColumn(name = "hours_date")
+    @BatchSize(size = 100)
+    private Map<LocalDate, DayHoursColumns> dateHours = new HashMap<>();
 
     @CreationTimestamp
     @JsonProperty("created_at")
@@ -188,6 +217,23 @@ public class Establishment implements Serializable {
      * Sem janela definida ({@code openingTime}/{@code closingTime} nulos) so o
      * {@code openStatus} manda — nao ha como recortar por horario.
      */
+    public BusinessHours getBusinessHours() {
+        List<WeekdayHours> week = weeklyHours.entrySet().stream()
+                .map(e -> new WeekdayHours(e.getKey(), e.getValue().toDayHours()))
+                .toList();
+        Map<LocalDate, DayHours> exceptions = new HashMap<>();
+        dateHours.forEach((date, columns) -> exceptions.put(date, columns.toDayHours()));
+        return BusinessHours.of(week, exceptions);
+    }
+
+    /** Grava o horario por dia. As colecoes gerenciadas sao reaproveitadas (clear + put). */
+    public void applyBusinessHours(BusinessHours hours) {
+        weeklyHours.clear();
+        hours.week().forEach(w -> weeklyHours.put(w.day(), DayHoursColumns.from(w.hours())));
+        dateHours.clear();
+        hours.allExceptions().forEach((date, h) -> dateHours.put(date, DayHoursColumns.from(h)));
+    }
+
     public boolean isOpenNow() {
         return isOpenAt(BusinessClock.nowTime());
     }

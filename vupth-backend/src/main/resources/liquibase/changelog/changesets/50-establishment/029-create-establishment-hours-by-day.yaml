@@ -1,0 +1,102 @@
+databaseChangeLog:
+  # Horario por dia (#2 — modelo do Andre, 16/09). A semana vira 7 linhas por loja (cada dia com
+  # horario ou fechado) e a excecao vira uma linha por data. A coluna "hours_date" guarda o
+  # passado tambem: horario passado e documento e nao se apaga.
+  - changeSet:
+      id: 029-create-establishment_weekly_hours
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: establishment_weekly_hours
+            columns:
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: day_of_week
+                  type: VARCHAR(9)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: closed
+                  type: BOOLEAN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: opens
+                  type: TIME
+              - column:
+                  name: closes
+                  type: TIME
+        - addPrimaryKey:
+            tableName: establishment_weekly_hours
+            columnNames: establishment_id, day_of_week
+            constraintName: pk_establishment_weekly_hours
+        - addForeignKeyConstraint:
+            baseTableName: establishment_weekly_hours
+            baseColumnNames: establishment_id
+            constraintName: fk_weekly_hours_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  - changeSet:
+      id: 029-create-establishment_date_hours
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: establishment_date_hours
+            columns:
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: hours_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: closed
+                  type: BOOLEAN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: opens
+                  type: TIME
+              - column:
+                  name: closes
+                  type: TIME
+        - addPrimaryKey:
+            tableName: establishment_date_hours
+            columnNames: establishment_id, hours_date
+            constraintName: pk_establishment_date_hours
+        - addForeignKeyConstraint:
+            baseTableName: establishment_date_hours
+            baseColumnNames: establishment_id
+            constraintName: fk_date_hours_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  # A loja que JA tem o horario unico recebe esse horario nos 7 dias, sem acao de ninguem.
+  # A que nao tem fica sem linhas = "nao configurada": nenhum horario e inventado, e o app pede ao
+  # dono que defina. Idempotente: so preenche loja que ainda nao tem semana.
+  - changeSet:
+      id: 029-backfill-weekly-hours-from-single-window
+      author: andrericao
+      changes:
+        - sql:
+            sql: >
+              INSERT INTO establishment_weekly_hours (establishment_id, day_of_week, closed, opens, closes)
+              SELECT e.id, d.day, FALSE, e.opening_time, e.closing_time
+              FROM establishment e
+              CROSS JOIN (VALUES ('MONDAY'), ('TUESDAY'), ('WEDNESDAY'), ('THURSDAY'),
+                                 ('FRIDAY'), ('SATURDAY'), ('SUNDAY')) AS d(day)
+              WHERE e.opening_time IS NOT NULL
+                AND e.closing_time IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM establishment_weekly_hours w
+                                WHERE w.establishment_id = e.id);

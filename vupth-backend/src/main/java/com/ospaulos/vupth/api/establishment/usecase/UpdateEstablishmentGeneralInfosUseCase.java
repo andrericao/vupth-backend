@@ -5,12 +5,16 @@ import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentGeneralInf
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.WeekdayHours;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.DayOfWeek;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -85,6 +89,17 @@ public class UpdateEstablishmentGeneralInfosUseCase {
         if (request.closingTime() != null) {
             establishment.setClosingTime(request.closingTime());
             modified.add("closing_time");
+        }
+
+        // Compatibilidade (#2): o app antigo manda o horario unico — ele passa a valer para os 7 dias,
+        // e as excecoes por data ja marcadas continuam.
+        if ((request.openingTime() != null || request.closingTime() != null)
+                && establishment.getOpeningTime() != null && establishment.getClosingTime() != null) {
+            DayHours single = DayHours.open(establishment.getOpeningTime(), establishment.getClosingTime());
+            List<WeekdayHours> week = Arrays.stream(DayOfWeek.values())
+                    .map(day -> new WeekdayHours(day, single))
+                    .toList();
+            establishment.applyBusinessHours(establishment.getBusinessHours().withWeek(week));
         }
 
         return modified;
