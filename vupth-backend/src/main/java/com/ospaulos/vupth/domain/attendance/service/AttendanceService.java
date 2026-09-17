@@ -133,6 +133,12 @@ public interface AttendanceService {
     public com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse getProfessionalAgenda(UUID professionalId);
 
     /**
+     * Barra de encaixe (#3 / Client B2) — agenda PUBLICA de um profissional: o mesmo quadro da agenda
+     * dele e os horarios reservados por intencoes como blocos ANONIMOS (so inicio e duracao). Read-only.
+     */
+    public com.ospaulos.vupth.api.attendance.dto.response.PublicAgendaResponse getPublicAgenda(UUID professionalId);
+
+    /**
      * Backlog #4 (fatia 2 — visao de agenda) — agenda do CLIENTE: os proprios agendamentos
      * ({@code INTENTION}) em qualquer loja, ordenados por horario, mais um frame por profissional
      * distinto. Mesma forma da agenda do profissional. Read-only.

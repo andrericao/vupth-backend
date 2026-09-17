@@ -30,8 +30,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -166,5 +168,52 @@ class IntentionAgendaIntegrationTest {
         mvc.perform(get("/attendances/intentions/professional/me")
                         .header("Authorization", clientToken))
                 .andExpect(status().isForbidden());
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Barra de encaixe (#3 / Client B2): agenda PUBLICA com blocos anonimos
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(50)
+    @DisplayName("barra de encaixe: publica, 1 quadro + os 3 blocos em ordem, sem dado pessoal")
+    void publicAgenda_anonymousBlocks() throws Exception {
+        mvc.perform(get("/attendances/intentions/professional/{id}", professionalId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.frame.professionalId").value(professionalId))
+                .andExpect(jsonPath("$.frame.projectedQueueEnd").exists())
+                .andExpect(jsonPath("$.frame.closingTime").exists())
+                .andExpect(jsonPath("$.blocks.length()").value(3))
+                .andExpect(jsonPath("$.blocks[0].start").exists())
+                .andExpect(jsonPath("$.blocks[0].durationMinutes").isNumber())
+                .andExpect(jsonPath("$.blocks[0].id").doesNotExist())
+                .andExpect(jsonPath("$.blocks[0].clientId").doesNotExist())
+                .andExpect(jsonPath("$.blocks[0].clientName").doesNotExist())
+                .andExpect(jsonPath("$.blocks[0].services").doesNotExist())
+                .andExpect(result -> {
+                    var blocks = new JSONObject(result.getResponse().getContentAsString()).getJSONArray("blocks");
+                    for (int i = 1; i < blocks.length(); i++) {
+                        assertThat(OffsetDateTime.parse(blocks.getJSONObject(i).getString("start")))
+                                .as("blocos em ordem de inicio")
+                                .isAfterOrEqualTo(OffsetDateTime.parse(blocks.getJSONObject(i - 1).getString("start")));
+                    }
+                })
+                .andDo(print());
+    }
+
+    @Test
+    @Order(51)
+    @DisplayName("barra de encaixe: profissional inexistente -> 404")
+    void publicAgenda_unknownProfessional_404() throws Exception {
+        mvc.perform(get("/attendances/intentions/professional/{id}", UUID.randomUUID()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Order(52)
+    @DisplayName("barra de encaixe: professional/me continua exigindo o papel (a rota fixa ganha da variavel)")
+    void publicAgenda_meStillProtected() throws Exception {
+        mvc.perform(get("/attendances/intentions/professional/me"))
+                .andExpect(status().isUnauthorized());
     }
 }

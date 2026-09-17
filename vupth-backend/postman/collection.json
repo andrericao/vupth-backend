@@ -16623,6 +16623,44 @@
      "response": []
     },
     {
+     "name": "GET barra de encaixe PUBLICA (professional/{id}, #3) -> 200 blocos anonimos",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Barra de encaixe (#3 / Client B2): sem token. So inicio e duracao — nenhum dado de quem agendou.",
+         "pm.test('Status 200', () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test('frame do profissional, com piso da fila', () => {",
+         "    pm.expect(r.frame.professionalId).to.equal(pm.collectionVariables.get('prof_professional_id'));",
+         "    pm.expect(r.frame).to.have.property('projectedQueueEnd');",
+         "  });",
+         "  pm.test('blocos com a intencao do setup', () => pm.expect(r.blocks.length).to.be.above(0));",
+         "  pm.test('blocos anonimos: so start e durationMinutes', () => {",
+         "    r.blocks.forEach(b => pm.expect(Object.keys(b).sort()).to.eql(['durationMinutes', 'start']));",
+         "  });",
+         "  pm.test('blocos em ordem de inicio', () => {",
+         "    for (let i = 1; i < r.blocks.length; i++) pm.expect(Date.parse(r.blocks[i].start)).to.be.at.least(Date.parse(r.blocks[i - 1].start));",
+         "  });",
+         "}"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/attendances/intentions/professional/{{prof_professional_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "GET agenda do cliente (client/me) -> 200",
      "event": [
       {

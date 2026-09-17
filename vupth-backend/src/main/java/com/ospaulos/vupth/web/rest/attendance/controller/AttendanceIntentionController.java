@@ -3,6 +3,7 @@ package com.ospaulos.vupth.web.rest.attendance.controller;
 import com.ospaulos.vupth.api.attendance.dto.request.CreateIntentionRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.UpdateIntentionRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.PublicAgendaResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.domain.attendance.service.AttendanceService;
 import com.ospaulos.vupth.domain.attendance.service.IntentionPromotionScheduler;
@@ -71,6 +72,18 @@ public class AttendanceIntentionController {
             @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("INTENTION CONTROLLER AGENDA (professional) — professional={}", principal.getUserId());
         return ResponseEntity.ok(attendanceService.getProfessionalAgenda(principal.getUserId()));
+    }
+
+    /**
+     * GET /attendances/intentions/professional/{professionalId} — barra de encaixe (#3 / Client B2),
+     * PUBLICA: o quadro do profissional (piso da fila + horario de hoje) e os horarios ja reservados
+     * como blocos anonimos ({@code start}, {@code durationMinutes}). O app calcula os horarios livres
+     * com eles. A rota fixa {@code /professional/me} tem precedencia sobre esta.
+     */
+    @GetMapping("/professional/{professionalId}")
+    public ResponseEntity<PublicAgendaResponse> publicAgenda(@PathVariable UUID professionalId) {
+        log.info("INTENTION CONTROLLER AGENDA (public) — professional={}", professionalId);
+        return ResponseEntity.ok(attendanceService.getPublicAgenda(professionalId));
     }
 
     /**

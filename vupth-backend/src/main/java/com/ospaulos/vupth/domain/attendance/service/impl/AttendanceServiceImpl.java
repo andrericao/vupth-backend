@@ -21,6 +21,7 @@ import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullExce
 import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.IntentionAgendaResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.PublicAgendaResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AgendaFrameResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.model.AttendanceRating;
@@ -384,6 +385,26 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .collect(Collectors.toList());
 
         return new IntentionAgendaResponse(List.of(frameFor(professional)), items);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public PublicAgendaResponse getPublicAgenda(UUID professionalId) {
+        Professional professional = professionalRepository.findById(professionalId)
+                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+
+        // O mesmo "reservado" que o algoritmo da intencao usa para encaixar (estimativa congelada,
+        // senao o horario pretendido) — a barra mostra exatamente o que o create vai considerar.
+        List<PublicAgendaResponse.Block> blocks = attendanceRepository.findIntentionsByProfessional(professionalId)
+                .stream()
+                .map(a -> new PublicAgendaResponse.Block(
+                        a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
+                        a.getEstimatedTotalMinutes()))
+                .filter(b -> b.start() != null)
+                .sorted(java.util.Comparator.comparing(PublicAgendaResponse.Block::start))
+                .toList();
+
+        return new PublicAgendaResponse(frameFor(professional), blocks);
     }
 
     @Override

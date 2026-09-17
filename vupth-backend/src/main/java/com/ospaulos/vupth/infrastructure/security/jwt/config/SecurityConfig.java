@@ -121,6 +121,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/attendances/*").authenticated()
                         // Visao de agenda (#4, fatia 2): agenda do profissional e a do cliente (intencoes futuras)
                         .requestMatchers(HttpMethod.GET, "/attendances/intentions/professional/me").hasRole("PROFESSIONAL")
+                        // Barra de encaixe (#3): agenda publica com blocos anonimos — DEPOIS da regra do /me
+                        .requestMatchers(HttpMethod.GET, "/attendances/intentions/professional/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/attendances/intentions/client/me").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/intentions").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/cut-requests").hasRole("CLIENT")
