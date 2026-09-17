@@ -21,6 +21,12 @@ public interface EstablishmentService {
     List<EstablishmentResponse> findAll();
 
     /**
+     * Lojas do dono autenticado. Monta a resposta DENTRO da transacao: ela le colecoes lazy
+     * (endereco, horario por dia) e staging/prod rodam com open-in-view desligado.
+     */
+    List<EstablishmentResponse> findMine(UUID ownerId);
+
+    /**
      * Listagem publica com todos os filtros opcionais (backlog #2, fatia B).
      *
      * <p>Substituiu os cinco metodos de busca que existiam antes ({@code findAllActive},

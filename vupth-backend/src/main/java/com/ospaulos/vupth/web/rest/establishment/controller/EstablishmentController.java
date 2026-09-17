@@ -92,11 +92,7 @@ public class EstablishmentController {
 
         log.info("[Establishment] findMyEstablishments — owner={}", user.getUserId());
 
-        List<EstablishmentResponse> result = establishmentRepository
-                .findByOwnerId(user.getUserId())
-                .stream()
-                .map(EstablishmentResponse::fromEntity)
-                .toList();
+        List<EstablishmentResponse> result = service.findMine(user.getUserId());
 
         return ResponseEntity.ok(result);
     }

@@ -75,6 +75,13 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     }
 
     @Override
+    public List<EstablishmentResponse> findMine(UUID ownerId) {
+        return establishmentRepository.findByOwnerId(ownerId).stream()
+                .map(EstablishmentResponse::fromEntity)
+                .toList();
+    }
+
+    @Override
     public List<EstablishmentResponse> findAll() {
         return establishmentRepository.findAll().stream()
                 .map(EstablishmentResponse::fromEntity)
