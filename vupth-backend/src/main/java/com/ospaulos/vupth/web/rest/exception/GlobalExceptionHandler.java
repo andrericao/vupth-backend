@@ -31,6 +31,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveA
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
+import com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.exception.InvalidShowcaseFilterException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
@@ -191,6 +192,13 @@ public class GlobalExceptionHandler {
             EstablishmentNotReadyException ex, HttpServletRequest req) {
         log.warn("[422] EstablishmentNotReady | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_NOT_READY");
+    }
+
+    @ExceptionHandler(InvalidBusinessHoursException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidBusinessHours(
+            InvalidBusinessHoursException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidBusinessHours | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "BUSINESS_HOURS_INVALID");
     }
 
     @ExceptionHandler(EstablishmentHoursRequiredException.class)
