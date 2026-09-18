@@ -12,9 +12,9 @@ import java.math.BigDecimal;
  *   - customName       → nome exibido do servico
  *   - price            → preco (deve ser > 0 quando enviado)
  *   - estimatedMinutes → duracao estimada (deve ser > 0 quando enviado)
- *   - pro_receives     → o que o profissional recebe; passa pela politica de preco junto com o
- *                        price (ou com o preco atual, se price nao vier). Price novo SEM
- *                        pro_receives apaga o recebe antigo (ver ServiceItem#reprice).
+ *   - pro_receives + base_price → a divisao do preco (os dois juntos); passa pela regra de preco
+ *                        junto com o price (ou com o preco atual, se price nao vier). Price novo SEM
+ *                        a divisao apaga a divisao antiga (ver ServiceItem#reprice).
  *
  * Campos null sao ignorados; customName em branco e ignorado.
  */
@@ -36,12 +36,15 @@ public record UpdateServiceItemRequest(
         Boolean usesPlatformPricing,
 
         @JsonProperty("pro_receives")
-        BigDecimal proReceives
+        BigDecimal proReceives,
+
+        @JsonProperty("base_price")
+        BigDecimal basePrice
 
 ) {
     /** Sem {@code pro_receives}. */
     public UpdateServiceItemRequest(String customName, BigDecimal price, Integer estimatedMinutes,
                                     BigDecimal clientPrice, Boolean usesPlatformPricing) {
-        this(customName, price, estimatedMinutes, clientPrice, usesPlatformPricing, null);
+        this(customName, price, estimatedMinutes, clientPrice, usesPlatformPricing, null, null);
     }
 }

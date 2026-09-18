@@ -91,10 +91,10 @@ class ReportIntegrationTest {
                 ServiceItemType.BARBA, "Barba", BigDecimal.valueOf(20));
         this.serviceItemIds = List.of(UUID.fromString(s1.id()), UUID.fromString(s2.id()));
 
-        // Receita LIQUIDA: os dois servicos entram na politica de preco. O atendimento congela
-        // 32,90 + 21,90 = 54,80, dos quais o profissional recebe 30,00 + 20,00 = 50,00.
-        priceService(s1.id(), "32.90", "30.00");
-        priceService(s2.id(), "21.90", "20.00");
+        // Receita LIQUIDA: os dois servicos entram na regra de preco. O atendimento congela
+        // 31,90 + 21,90 = 53,80, dos quais o profissional recebe 30,00 + 20,00 = 50,00.
+        priceService(s1.id(), "31.90", "30.00", "30.00");
+        priceService(s2.id(), "21.90", "20.00", "20.00");
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientId = client.id();
@@ -134,11 +134,11 @@ class ReportIntegrationTest {
         log.info("[Report] setup — atendimento {} FINISHED, ambiente pronto", attId);
     }
 
-    private void priceService(String itemId, String price, String proReceives) throws Exception {
+    private void priceService(String itemId, String price, String proReceives, String basePrice) throws Exception {
         mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerProfId, itemId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken)
-                        .content(String.format("{\"price\":%s,\"pro_receives\":%s}", price, proReceives)))
+                        .content(String.format("{\"price\":%s,\"pro_receives\":%s,\"base_price\":%s}", price, proReceives, basePrice)))
                 .andExpect(status().isOk());
     }
 
@@ -163,7 +163,7 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.professionals[0].name").exists())
                 .andExpect(jsonPath("$.professionals[0].attendances").value(1))
                 .andExpect(jsonPath("$.professionals[0].revenue").exists())
-                .andExpect(jsonPath("$.totalRevenue").value(54.80))
+                .andExpect(jsonPath("$.totalRevenue").value(53.80))
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andExpect(jsonPath("$.professionals[0].netRevenue").value(50.00))
@@ -248,7 +248,7 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.totalRevenue").exists())
                 .andExpect(jsonPath("$.avgDurationMinutes").exists())
                 .andExpect(jsonPath("$.topService").exists())
-                .andExpect(jsonPath("$.totalRevenue").value(54.80))
+                .andExpect(jsonPath("$.totalRevenue").value(53.80))
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andDo(print());

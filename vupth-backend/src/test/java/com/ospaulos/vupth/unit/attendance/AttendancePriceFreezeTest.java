@@ -21,10 +21,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @DisplayName("Attendance — congelamento do preco")
 class AttendancePriceFreezeTest {
 
-    private static ServiceItem item(String price, String proReceives) {
+    /** {@code base} nulo = servico legado (sem a divisao). */
+    private static ServiceItem item(String price, String proReceives, String base) {
         ServiceItem item = new ServiceItem();
         item.setEstimatedMinutes(30);
-        item.reprice(new BigDecimal(price), proReceives == null ? null : new BigDecimal(proReceives));
+        item.reprice(new BigDecimal(price),
+                proReceives == null ? null : new BigDecimal(proReceives),
+                base == null ? null : new BigDecimal(base));
         return item;
     }
 
@@ -37,14 +40,14 @@ class AttendancePriceFreezeTest {
     @Test
     @DisplayName("soma a divisao de cada servico, e as tres partes somam o total")
     void sumsTheSplitOfEachService() {
-        Attendance attendance = attendanceWith(item("32.90", "30.00"), item("53.90", "50.00"));
+        Attendance attendance = attendanceWith(item("31.90", "30.00", "30.00"), item("53.90", "50.00", "50.00"));
 
         attendance.onCreate();
 
-        assertThat(attendance.getTotalValue()).isEqualByComparingTo("86.80");
+        assertThat(attendance.getTotalValue()).isEqualByComparingTo("85.80");
         assertThat(attendance.getProReceives()).isEqualByComparingTo("80.00");
-        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("3.48");
-        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("3.32");
+        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("3.20");
+        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("2.60");
         assertThat(attendance.getProReceives().add(attendance.getIntermediaryFee()).add(attendance.getPlatformFee()))
                 .isEqualByComparingTo(attendance.getTotalValue());
     }
@@ -52,11 +55,11 @@ class AttendancePriceFreezeTest {
     @Test
     @DisplayName("um servico legado (sem recebe) deixa a divisao inteira nula — nada de meia soma")
     void legacyServiceLeavesSplitNull() {
-        Attendance attendance = attendanceWith(item("32.90", "30.00"), item("35.00", null));
+        Attendance attendance = attendanceWith(item("31.90", "30.00", "30.00"), item("35.00", null, null));
 
         attendance.onCreate();
 
-        assertThat(attendance.getTotalValue()).isEqualByComparingTo("67.90");
+        assertThat(attendance.getTotalValue()).isEqualByComparingTo("66.90");
         assertThat(attendance.getProReceives()).isNull();
         assertThat(attendance.getIntermediaryFee()).isNull();
         assertThat(attendance.getPlatformFee()).isNull();
@@ -65,17 +68,17 @@ class AttendancePriceFreezeTest {
     @Test
     @DisplayName("o preco do servico muda depois: total e divisao do atendimento nao mudam")
     void laterPriceChangeDoesNotRewriteHistory() {
-        ServiceItem corte = item("32.90", "30.00");
+        ServiceItem corte = item("31.90", "30.00", "30.00");
         Attendance attendance = attendanceWith(corte);
         attendance.onCreate();
 
-        corte.reprice(new BigDecimal("53.90"), new BigDecimal("50.00"));
+        corte.reprice(new BigDecimal("53.90"), new BigDecimal("50.00"), new BigDecimal("50.00"));
         attendance.onUpdate();
 
-        assertThat(attendance.getTotalValue()).isEqualByComparingTo("32.90");
+        assertThat(attendance.getTotalValue()).isEqualByComparingTo("31.90");
         assertThat(attendance.getProReceives()).isEqualByComparingTo("30.00");
-        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("1.32");
-        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("1.58");
+        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("1.20");
+        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("0.70");
     }
 
     @Test

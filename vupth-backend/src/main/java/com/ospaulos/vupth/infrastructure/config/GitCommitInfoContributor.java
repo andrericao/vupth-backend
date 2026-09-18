@@ -6,9 +6,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -43,6 +46,16 @@ public class GitCommitInfoContributor implements InfoContributor {
     private final String renderGitCommit;
     private final String railwayGitCommit;
 
+    /**
+     * O commit que o CI grava em {@value #BUNDLED_COMMIT_RESOURCE} antes do {@code railway up}. O
+     * upload do Railway nao carrega contexto de git — sem este arquivo o commit sai "unknown" e a
+     * espera do test-prod nao tinha como distinguir a build nova de um restart da build antiga
+     * (17/09: a antiga reiniciou 26s depois do deploy e o Newman a testou como se fosse a nova).
+     */
+    private final String bundledCommit;
+
+    static final String BUNDLED_COMMIT_RESOURCE = "build-commit.txt";
+
     /** Inicio da JVM, nao da criacao deste bean. Fixo enquanto o processo viver. */
     private final long startedAtEpochMs;
 
@@ -66,7 +79,7 @@ public class GitCommitInfoContributor implements InfoContributor {
     public GitCommitInfoContributor(
             @Value("${RENDER_GIT_COMMIT:}") String renderGitCommit,
             @Value("${RAILWAY_GIT_COMMIT_SHA:}") String railwayGitCommit) {
-        this(renderGitCommit, railwayGitCommit,
+        this(renderGitCommit, railwayGitCommit, readBundledCommit(),
                 ManagementFactory.getRuntimeMXBean().getStartTime());
     }
 
@@ -75,9 +88,27 @@ public class GitCommitInfoContributor implements InfoContributor {
      * relogio da JVM nao e escolha de quem testa.
      */
     public GitCommitInfoContributor(String renderGitCommit, String railwayGitCommit, long startedAtEpochMs) {
+        this(renderGitCommit, railwayGitCommit, "", startedAtEpochMs);
+    }
+
+    public GitCommitInfoContributor(String renderGitCommit, String railwayGitCommit, String bundledCommit,
+                                    long startedAtEpochMs) {
         this.renderGitCommit = renderGitCommit;
         this.railwayGitCommit = railwayGitCommit;
+        this.bundledCommit = bundledCommit == null ? "" : bundledCommit.trim();
         this.startedAtEpochMs = startedAtEpochMs;
+    }
+
+    private static String readBundledCommit() {
+        ClassPathResource resource = new ClassPathResource(BUNDLED_COMMIT_RESOURCE);
+        if (!resource.exists()) {
+            return "";
+        }
+        try (var in = resource.getInputStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     /**
@@ -109,7 +140,7 @@ public class GitCommitInfoContributor implements InfoContributor {
     }
 
     private String shortCommit() {
-        String commit = firstNonBlank(renderGitCommit, railwayGitCommit);
+        String commit = firstNonBlank(renderGitCommit, railwayGitCommit, bundledCommit);
         if (commit == null) {
             return UNKNOWN;
         }

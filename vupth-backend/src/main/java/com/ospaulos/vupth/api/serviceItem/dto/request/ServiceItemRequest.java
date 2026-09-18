@@ -24,13 +24,17 @@ public record ServiceItemRequest(
         // "Voce recebe": o que o profissional recebe. Opcional ate o app enviar; com ele, o preco
         // passa pela politica de preco (PriceSplit) e o backend calcula a divisao da taxa.
         @JsonProperty("pro_receives")
-        BigDecimal proReceives
+        BigDecimal proReceives,
+
+        // O valor digitado no cadastro — a base dos 6% (regra de 16/09). Vai junto com pro_receives.
+        @JsonProperty("base_price")
+        BigDecimal basePrice
 ) {
     /** Sem {@code pro_receives} (servico legado). */
     public ServiceItemRequest(UUID establishmentId, ServiceItemType serviceItemType, String customName,
                               BigDecimal price, Integer estimatedMinutes, BigDecimal clientPrice,
                               Boolean usesPlatformPricing) {
         this(establishmentId, serviceItemType, customName, price, estimatedMinutes, clientPrice,
-                usesPlatformPricing, null);
+                usesPlatformPricing, null, null);
     }
 }

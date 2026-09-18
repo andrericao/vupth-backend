@@ -36,6 +36,9 @@ public record ServiceItemResponse(
         @JsonProperty("pro_receives")
         BigDecimal proReceives,
 
+        @JsonProperty("base_price")
+        BigDecimal basePrice,
+
         @JsonProperty("intermediary_fee")
         BigDecimal intermediaryFee,
 
@@ -49,7 +52,7 @@ public record ServiceItemResponse(
                                BigDecimal clientPrice, Boolean usesPlatformPricing,
                                Integer weeklyAverageDurationInMinutes, Double ratingAverage, long ratingCount) {
         this(establishmentId, establishmentName, id, serviceItemType, customName, price, clientPrice,
-                usesPlatformPricing, weeklyAverageDurationInMinutes, ratingAverage, ratingCount, null, null, null);
+                usesPlatformPricing, weeklyAverageDurationInMinutes, ratingAverage, ratingCount, null, null, null, null);
     }
 
     public static ServiceItemResponse fromEntity(ServiceItem item) {
@@ -67,6 +70,7 @@ public record ServiceItemResponse(
                 item.getRatingAverage(),
                 item.getRatingCount(),
                 split != null ? split.proReceives() : null,
+                split != null ? split.basePrice() : null,
                 split != null ? split.intermediaryFee() : null,
                 split != null ? split.platformFee() : null
         );

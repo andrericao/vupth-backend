@@ -5174,20 +5174,23 @@
      "response": []
     },
     {
-     "name": "Receita LIQUIDA: PATCH preco + pro_receives → divisao do preco (#10)",
+     "name": "Receita LIQUIDA: PATCH preco + recebe + digitado → divisao do preco (#10)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
-         "// Politica de preco (16/09): o profissional recebe o que estipulou; 4% da empresa de pagamento",
-         "// sobre o preco do cliente; o app fica com o resto (>= 2%). As tres partes somam o preco.",
+         "// Regra do Andre (16/09): 6% sobre o valor DIGITADO, preco sobe ao X,90 seguinte.",
+         "// 30,00 digitado -> taxa 1,80 -> preco 31,90; pagamento 4% de 30 = 1,20; app = o resto.",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  const r = pm.response.json();",
-         "  pm.test(\"pro_receives exato\", () => pm.expect(Number(r.pro_receives)).to.eql(30));",
-         "  pm.test(\"intermediary_fee = 4% de 32,90 (1,316 -> 1,32)\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.32));",
-         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(1.58));",
+         "  pm.test(\"pro_receives e base_price exatos\", () => {",
+         "    pm.expect(Number(r.pro_receives)).to.eql(30);",
+         "    pm.expect(Number(r.base_price)).to.eql(30);",
+         "  });",
+         "  pm.test(\"intermediary_fee = 4% do digitado\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.2));",
+         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(0.7));",
          "  pm.test(\"as tres partes somam o preco\", () => {",
          "    const sum = Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100);",
          "    pm.expect(sum).to.eql(Math.round(Number(r.price) * 100));",
@@ -5213,7 +5216,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"price\":32.90,\"pro_receives\":30.00}"
+       "raw": "{\"price\":31.90,\"pro_receives\":30.00,\"base_price\":30.00}"
       },
       "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
       "auth": {
@@ -5223,13 +5226,14 @@
      "response": []
     },
     {
-     "name": "[ERRO] Receita LIQUIDA: PATCH pro_receives acima de 94% do preco → 422 (#10)",
+     "name": "[ERRO] Receita LIQUIDA: PATCH com o preco da regra ANTERIOR → 422 (#10)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
-         "// 31,00 de 32,90 deixa taxa de 1,90 (< 6%): o app ficaria com menos de 2%.",
+         "// 32,90 era o preco da regra anterior (30 / 0,94). Pela regra de 16/09 o preco de 30 digitados",
+         "// e 31,90 — o app do parceiro ja calcula assim (ecf8069).",
          "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
          "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
         ],
@@ -5252,7 +5256,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"pro_receives\":31.00}"
+       "raw": "{\"price\":32.90,\"pro_receives\":30.00,\"base_price\":30.00}"
       },
       "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
       "auth": {
@@ -16616,6 +16620,44 @@
        }
       ],
       "url": "{{base_url}}/attendances/intentions/professional/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET barra de encaixe PUBLICA (professional/{id}, #3) -> 200 blocos anonimos",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Barra de encaixe (#3 / Client B2): sem token. So inicio e duracao — nenhum dado de quem agendou.",
+         "pm.test('Status 200', () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test('frame do profissional, com piso da fila', () => {",
+         "    pm.expect(r.frame.professionalId).to.equal(pm.collectionVariables.get('prof_professional_id'));",
+         "    pm.expect(r.frame).to.have.property('projectedQueueEnd');",
+         "  });",
+         "  pm.test('blocos com a intencao do setup', () => pm.expect(r.blocks.length).to.be.above(0));",
+         "  pm.test('blocos anonimos: so start e durationMinutes', () => {",
+         "    r.blocks.forEach(b => pm.expect(Object.keys(b).sort()).to.eql(['durationMinutes', 'start']));",
+         "  });",
+         "  pm.test('blocos em ordem de inicio', () => {",
+         "    for (let i = 1; i < r.blocks.length; i++) pm.expect(Date.parse(r.blocks[i].start)).to.be.at.least(Date.parse(r.blocks[i - 1].start));",
+         "  });",
+         "}"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/attendances/intentions/professional/{{prof_professional_id}}",
       "auth": {
        "type": "noauth"
       }

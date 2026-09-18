@@ -65,11 +65,13 @@ class ReportNetRevenueTest {
         establishment.setId(UUID.randomUUID());
     }
 
-    private Attendance finished(String price, String proReceives) {
+    private Attendance finished(String price, String proReceives, String base) {
         ServiceItem item = new ServiceItem();
         item.setServiceItemType(ServiceItemType.CORTE_MAQUINA);
         item.setEstimatedMinutes(30);
-        item.reprice(new BigDecimal(price), proReceives == null ? null : new BigDecimal(proReceives));
+        item.reprice(new BigDecimal(price),
+                proReceives == null ? null : new BigDecimal(proReceives),
+                base == null ? null : new BigDecimal(base));
 
         Attendance attendance = new Attendance();
         attendance.setProfessional(professional);
@@ -83,12 +85,12 @@ class ReportNetRevenueTest {
     void professionalReport_netRevenueAndWithoutSplit() {
         when(professionalRepository.findByIdWithBaseUser(professional.getId())).thenReturn(Optional.of(professional));
         when(attendanceRepository.findFinishedByProfessionalBetween(eq(professional.getId()), any(), any()))
-                .thenReturn(List.of(finished("32.90", "30.00"), finished("53.90", "50.00"), finished("35.00", null)));
+                .thenReturn(List.of(finished("31.90", "30.00", "30.00"), finished("53.90", "50.00", "50.00"), finished("35.00", null, null)));
 
         ProfessionalReportResponse report = reportService.getProfessionalReport(professional.getId(), null, null);
 
         assertThat(report.totalAttendances()).isEqualTo(3);
-        assertThat(report.totalRevenue()).isEqualByComparingTo("121.80");
+        assertThat(report.totalRevenue()).isEqualByComparingTo("120.80");
         assertThat(report.netRevenue()).isEqualByComparingTo("80.00");
         assertThat(report.attendancesWithoutSplit()).isEqualTo(1);
     }
@@ -114,7 +116,7 @@ class ReportNetRevenueTest {
         establishment.setOwner(new Owner(owner));
         when(establishmentRepository.findById(establishment.getId())).thenReturn(Optional.of(establishment));
         when(attendanceRepository.findFinishedByEstablishmentBetween(eq(establishment.getId()), any(), any()))
-                .thenReturn(List.of(finished("32.90", "30.00"), finished("35.00", null)));
+                .thenReturn(List.of(finished("31.90", "30.00", "30.00"), finished("35.00", null, null)));
 
         EstablishmentReportResponse report = reportService.getEstablishmentReport(ownerId, establishment.getId(), null, null);
 
@@ -122,6 +124,6 @@ class ReportNetRevenueTest {
         assertThat(report.attendancesWithoutSplit()).isEqualTo(1);
         assertThat(report.professionals()).hasSize(1);
         assertThat(report.professionals().get(0).netRevenue()).isEqualByComparingTo("30.00");
-        assertThat(report.professionals().get(0).revenue()).isEqualByComparingTo("67.90");
+        assertThat(report.professionals().get(0).revenue()).isEqualByComparingTo("66.90");
     }
 }
