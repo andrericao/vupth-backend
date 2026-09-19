@@ -140,14 +140,16 @@ class OpenStatusDerivationIntegrationTest {
 
     @Test
     @Order(40)
-    @DisplayName("professionals-with-queue expoe o work_status de cada profissional")
+    @DisplayName("professionals-with-queue expoe o work_status de quem esta em expediente (e so dele)")
     void queueSnapshot_exposesWorkStatus() throws Exception {
         patchStatus(ownerProfToken, "WORKING"); // A presente, B OFF (do Order 20/30)
 
+        // 18/09: quem nao marcou expediente some da tela do cliente — "entende-se que esta em casa".
+        // Antes B vinha na lista com work_status OFF; hoje o cliente nao ve ninguem em casa.
         mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.professionals[?(@.name == 'Prof A')].work_status").value("WORKING"))
-                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof B')].work_status").value("OFF"));
+                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof B')]").isEmpty());
 
         patchStatus(ownerProfToken, "OFF"); // limpa
     }

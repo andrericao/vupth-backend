@@ -6,6 +6,7 @@ import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentQuickCreateRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
@@ -96,6 +97,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class EstablishmentIntegrationTest {
 
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired UserRepository userRepository;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
@@ -980,6 +982,12 @@ class EstablishmentIntegrationTest {
 
         // Após o Order 68 ter adicionado um serviço ao ownerProf, o profissional
         // passa a ter >= 1 serviço e deve voltar a ser exibido ao cliente.
+        //
+        // 18/09: ter serviço deixou de bastar — quem não marcou expediente some da tela do cliente
+        // ("entende-se que está em casa"). Como o que se testa aqui é o gate de SERVIÇO (#31), o
+        // profissional chega para a loja antes da conferência.
+        TestUserUtils.putEveryoneToWork(professionalRepository, ownerProfEstablishmentId);
+
         MvcResult result = mvc.perform(get("/establishment/id/{id}/professionals-with-queue",
                         ownerProfEstablishmentId)
                         .contentType(MediaType.APPLICATION_JSON))

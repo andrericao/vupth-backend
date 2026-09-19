@@ -58,6 +58,10 @@ public class GetEstablishmentWithQueueUseCase {
         List<Professional> professionals = professionalRepository
                 .findByEstablishmentIdWithServices(establishmentId).stream()
                 .filter(prof -> prof.getServices() != null && !prof.getServices().isEmpty())
+                // Decisao do Andre (18/09): quem nao marcou "trabalhando" nao aparece — "entende-se
+                // que esta em casa". INTERVALO continua aparecendo: e almoco ou saida rapida, e a
+                // pessoa volta (o rotulo do cliente ja distingue os dois).
+                .filter(prof -> prof.getWorkStatus() != null && prof.getWorkStatus().countsAsOpen())
                 .toList();
 
         List<ProfessionalWithQueueResponse> professionalDtos = professionals.stream()

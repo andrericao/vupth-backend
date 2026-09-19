@@ -52,8 +52,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * (nasce SCHEDULED na fila viva e prenderia a drenagem); agendar data futura segue livre via
  * INTENTION (#4, fora da fila). Ao finalizar o ultimo
  * atendimento com a fila fechada (ou fechar sem nada ativo), o profissional vira {@code OFF}
- * sozinho e — sendo o ultimo presente — a loja fecha (derivacao da fatia 2). Voltar de OFF para
- * expediente reabre a fila (turno novo).</p>
+ * sozinho e — sendo o ultimo presente — a loja fecha (derivacao da fatia 2).</p>
+ *
+ * <p><b>Atualizado pelas decisoes de 17–18/09:</b> quem esta {@code OFF} <b>some da loja</b> para o
+ * cliente ("entende-se que esta em casa"), entao a drenagem termina com o profissional fora da
+ * listagem, e nao mais com o rotulo INDISPONIVEL; e voltar de {@code OFF} para expediente <b>nao
+ * reabre</b> a fila sozinha — quem fechou decide quando abrir.</p>
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -143,6 +147,13 @@ class AcceptingNewDrainIntegrationTest {
         mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')].availability").value(expected));
+    }
+
+    /** 18/09 — quem esta Fora nao aparece para o cliente: entende-se que esta em casa. */
+    private void assertNotListed() throws Exception {
+        mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')]").isEmpty());
     }
 
     @Test
@@ -235,21 +246,21 @@ class AcceptingNewDrainIntegrationTest {
                 .andExpect(jsonPath("$.work_status").value("OFF"))
                 .andExpect(jsonPath("$.accepting_new").value(false));
         assertOpenStatus("CLOSED");
-        assertAvailability("INDISPONIVEL"); // fatia 4: OFF
+        assertNotListed(); // 18/09: Fora some da loja
     }
 
     @Test
     @Order(40)
-    @DisplayName("turno novo: voltar de OFF para WORKING reabre a fila (accepting_new=true)")
-    void backToWork_reopensQueue() throws Exception {
+    @DisplayName("voltar de OFF para WORKING abre a LOJA, mas nao reabre a fila sozinha")
+    void backToWork_doesNotReopenQueue() throws Exception {
         mvc.perform(patch("/professional/me/status")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken)
                         .content("{\"status\":\"WORKING\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accepting_new").value(true));
+                .andExpect(jsonPath("$.accepting_new").value(false)); // 09/09: quem fechou decide quando abrir
         assertOpenStatus("OPEN");
-        assertAvailability("DISPONIVEL"); // fatia 4: turno novo volta a DISPONIVEL
+        assertAvailability("ENCERRANDO"); // em expediente com a fila ainda fechada
     }
 
     @Test

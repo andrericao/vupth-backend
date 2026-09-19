@@ -78,6 +78,11 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
             UUID establishmentId,
             Collection<ProfessionalStatus> statuses);
 
+    // Fechar a loja leva todos a OFF (Andre, 18/09): os que estao em expediente agora.
+    List<Professional> findByEstablishment_IdAndWorkStatusIn(
+            UUID establishmentId,
+            Collection<ProfessionalStatus> statuses);
+
     // --- S1 fatia 5 (auto-fechamento por horario / BUG1) -----------------------------------------
 
     // Profissionais em um dado conjunto de work_status — usado pelo auto-fechamento para varrer quem

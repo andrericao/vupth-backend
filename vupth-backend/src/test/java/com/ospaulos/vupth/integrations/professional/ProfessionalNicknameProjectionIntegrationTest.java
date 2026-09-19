@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -46,6 +47,7 @@ class ProfessionalNicknameProjectionIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ServiceItemRepository serviceItemRepository;
     @Autowired UserRepository userRepository;
 
@@ -67,6 +69,10 @@ class ProfessionalNicknameProjectionIntegrationTest {
         // service item para o profissional aparecer na fila (gate #31)
         TestUserUtils.createServiceItem(mvc, mapper, establishmentId, ownerProfToken,
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
+
+        // 18/09: so quem esta em expediente aparece no professionals-with-queue — quem nao marcou
+        // "trabalhando" entende-se que esta em casa.
+        TestUserUtils.putEveryoneToWork(professionalRepository, establishmentId);
 
         // define o apelido pelo ponto unico de escrita
         mvc.perform(patch("/profile/general-infos")

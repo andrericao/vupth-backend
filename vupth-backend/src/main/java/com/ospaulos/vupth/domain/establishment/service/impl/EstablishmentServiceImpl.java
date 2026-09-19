@@ -26,6 +26,9 @@ import com.ospaulos.vupth.domain.establishment.valueObject.Showcase;
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.owner.repository.OwnerRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.AllArgsConstructor;
@@ -51,6 +54,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final ObjectMapper mapper;
     private final GetEstablishmentsQueueSummaryUseCase queueSummaryUseCase;
     private final AttendanceRepository attendanceRepository;
+    private final ProfessionalRepository professionalRepository;
 
     @Override
     public EstablishmentResponse registerEstablishment(EstablishmentRequest request){
@@ -358,7 +362,29 @@ public class EstablishmentServiceImpl implements EstablishmentService {
         establishment.setLastStatusChange(ZonedDateTime.now());
         Establishment saved = establishmentRepository.save(establishment);
 
+        // Decisao do Andre (18/09): loja fechada => ninguem trabalhando. Os dois estados conviviam, e
+        // no aparelho a loja aparecia FECHADA com o profissional Trabalhando e a fila aceitando novos.
+        // Fechar manda todos para Fora e fecha as filas, na mesma transacao.
+        if (newStatus != OpenStatus.OPEN) {
+            sendEveryoneHome(saved);
+        }
+
         return EstablishmentResponse.fromEntity(saved);
+    }
+
+    /** Fechar a loja leva todos os profissionais a {@code OFF} e fecha as filas (Andre, 18/09). */
+    private void sendEveryoneHome(Establishment establishment) {
+        List<Professional> inShift = professionalRepository.findByEstablishment_IdAndWorkStatusIn(
+                establishment.getId(), List.of(ProfessionalStatus.WORKING, ProfessionalStatus.ON_BREAK));
+        for (Professional professional : inShift) {
+            professional.setWorkStatus(ProfessionalStatus.OFF);
+            professional.setAcceptingNew(false);
+        }
+        if (!inShift.isEmpty()) {
+            professionalRepository.saveAll(inShift);
+            log.info("[OpenStatus] loja {} fechada — {} profissional(is) foram para OFF",
+                    establishment.getId(), inShift.size());
+        }
     }
 
     /**

@@ -7,6 +7,7 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
 import jakarta.persistence.EntityManagerFactory;
@@ -63,6 +64,7 @@ class EstablishmentListingCurveIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired EntityManagerFactory entityManagerFactory;
 
     private final Faker faker = new Faker();
@@ -81,6 +83,10 @@ class EstablishmentListingCurveIntegrationTest {
             var service = TestUserUtils.createServiceItem(mvc, mapper, id, owner.token(),
                     ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
             TestUserUtils.openEstablishment(establishmentRepository, id);
+            // 18/09: a tela da loja so mostra quem esta em expediente. Para comparar os DOIS numeros
+            // (vitrine x detalhe) e preciso que os dois olhem o mesmo conjunto — com o profissional
+            // em casa, o detalhe vem vazio e a comparacao perde o objeto.
+            TestUserUtils.putEveryoneToWork(professionalRepository, id);
 
             String name = rename(id, PREFIX + " Loja " + i);
             establishmentIds.add(id);
