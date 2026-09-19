@@ -12,9 +12,6 @@ import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepositor
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
-import com.ospaulos.vupth.domain.professional.model.Professional;
-import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
-import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -24,7 +21,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Set;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -209,21 +205,6 @@ public class TestUserUtils {
         e.setOpenStatus(OpenStatus.OPEN);
         repository.save(e);
         log.debug("[TestUtils] openEstablishment estab={} -> OPEN", establishmentId);
-    }
-
-    /**
-     * Poe todos os profissionais da loja em {@code WORKING} direto no banco (o gate de servico do
-     * {@code PATCH /professional/me/status} fica de fora, como no {@link #openEstablishment}).
-     *
-     * <p>Necessario desde 18/09: profissional nasce {@code OFF} e quem nao esta em expediente
-     * <b>some</b> do {@code professionals-with-queue} — "entende-se que esta em casa". Teste que
-     * espera ver o profissional na tela do cliente precisa dizer que ele chegou. Idempotente.</p>
-     */
-    public static void putEveryoneToWork(ProfessionalRepository repository, String establishmentId) {
-        List<Professional> professionals = repository.findByEstablishmentId(UUID.fromString(establishmentId));
-        professionals.forEach(p -> p.setWorkStatus(ProfessionalStatus.WORKING));
-        repository.saveAll(professionals);
-        log.debug("[TestUtils] putEveryoneToWork estab={} -> {} em expediente", establishmentId, professionals.size());
     }
 
     /**

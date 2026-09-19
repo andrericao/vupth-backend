@@ -35,9 +35,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *       trabalhando ela responde aberta mesmo <b>fora</b> do horario publicado;</li>
  *   <li><b>fechar a loja leva todos a {@code OFF}</b> e fecha as filas — os dois estados nao convivem
  *       (no aparelho apareceu loja FECHADA com profissional Trabalhando e fila aceitando novos);</li>
- *   <li>profissional que nao marcou "trabalhando" <b>nao aparece</b> para o cliente
- *       (<i>"entende-se que esta em casa"</i>) — mas <b>intervalo continua aparecendo</b>: e almoco ou
- *       saida rapida, a pessoa volta;</li>
+ * *   <li>a tela da loja mostra <b>todos</b> os profissionais com o seu {@code work_status}, e o app os
+ *       separa em secoes ("Trabalhando: fulano e sicrano · Fora: beltrano") — decisao de 19/09, que
+ *       substituiu o "quem esta em casa some" de 18/09;</li>
  *   <li>voltar de <i>Fora</i> <b>nao reabre</b> a fila sozinha (regra de 09/09).</li>
  * </ul>
  */
@@ -129,14 +129,18 @@ class StoreProfessionalCoherenceIntegrationTest {
 
     @Test
     @Order(3)
-    @DisplayName("quem está FORA some da loja — entende-se que está em casa")
-    void offDisappears() throws Exception {
+    @DisplayName("quem está FORA continua na lista, com o status que o app usa para separar as seções")
+    void offStillShowsWithItsStatus() throws Exception {
         setStatus(employeeToken, ProfessionalStatus.OFF);
 
-        assertThat(professionalsSeenByClient()).contains(ownerId).doesNotContain(employeeId);
+        // 19/09: a lista nao esconde ninguem — quem some da tela e a secao "Fora", quando vazia.
+        // O cliente ve os dois, e o work_status diz em qual secao cada um entra.
+        assertThat(professionalsSeenByClient()).contains(ownerId, employeeId);
 
         mvc.perform(get("/establishment/id/{id}/professionals-with-queue", establishmentId))
-                .andExpect(jsonPath("$.professionals", hasSize(1)))
+                .andExpect(jsonPath("$.professionals", hasSize(2)))
+                .andExpect(jsonPath("$.professionals[?(@.id == '" + ownerId + "')].work_status").value("WORKING"))
+                .andExpect(jsonPath("$.professionals[?(@.id == '" + employeeId + "')].work_status").value("OFF"))
                 .andDo(print());
     }
 
@@ -161,7 +165,10 @@ class StoreProfessionalCoherenceIntegrationTest {
                     .isEqualTo(ProfessionalStatus.OFF);
             assertThat(professional.getAcceptingNew()).as("fila de %s fechada", id).isFalse();
         }
-        assertThat(professionalsSeenByClient()).as("loja fechada não mostra ninguém").isEmpty();
+        // A loja fechada segue listando os dois: o que muda e que agora os dois estao Fora, e a tela
+        // do cliente nao tem mais ninguem na secao "Trabalhando".
+        assertThat(professionalsSeenByClient()).as("os dois continuam na lista, agora Fora")
+                .contains(ownerId, employeeId);
     }
 
     @Test

@@ -54,10 +54,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * atendimento com a fila fechada (ou fechar sem nada ativo), o profissional vira {@code OFF}
  * sozinho e — sendo o ultimo presente — a loja fecha (derivacao da fatia 2).</p>
  *
- * <p><b>Atualizado pelas decisoes de 17–18/09:</b> quem esta {@code OFF} <b>some da loja</b> para o
- * cliente ("entende-se que esta em casa"), entao a drenagem termina com o profissional fora da
- * listagem, e nao mais com o rotulo INDISPONIVEL; e voltar de {@code OFF} para expediente <b>nao
- * reabre</b> a fila sozinha — quem fechou decide quando abrir.</p>
+ * <p><b>Atualizado pela decisao de 09/09:</b> voltar de {@code OFF} para expediente <b>nao reabre</b>
+ * a fila sozinha — quem fechou decide quando abrir. A listagem segue mostrando quem esta {@code OFF}
+ * (com o rotulo INDISPONIVEL): quem separa as secoes da tela e o app, pela decisao de 19/09.</p>
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -147,13 +146,6 @@ class AcceptingNewDrainIntegrationTest {
         mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')].availability").value(expected));
-    }
-
-    /** 18/09 — quem esta Fora nao aparece para o cliente: entende-se que esta em casa. */
-    private void assertNotListed() throws Exception {
-        mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.professionals[?(@.name == 'Prof Drain')]").isEmpty());
     }
 
     @Test
@@ -246,7 +238,7 @@ class AcceptingNewDrainIntegrationTest {
                 .andExpect(jsonPath("$.work_status").value("OFF"))
                 .andExpect(jsonPath("$.accepting_new").value(false));
         assertOpenStatus("CLOSED");
-        assertNotListed(); // 18/09: Fora some da loja
+        assertAvailability("INDISPONIVEL"); // fatia 4: OFF
     }
 
     @Test

@@ -9,7 +9,6 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
-import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -59,7 +58,6 @@ class QueueVisibilityBug8IntegrationTest {
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
-    @Autowired ProfessionalRepository professionalRepository;
 
     private final Faker faker = new Faker();
 
@@ -104,10 +102,6 @@ class QueueVisibilityBug8IntegrationTest {
         Establishment e = establishmentRepository.findById(UUID.fromString(estab1Id)).orElseThrow();
         e.setOpenStatus(OpenStatus.OPEN);
         establishmentRepository.save(e);
-
-        // 18/09: quem nao esta em expediente some do professionals-with-queue. A fila deste teste e
-        // do prof1, entao ele chegou para trabalhar.
-        TestUserUtils.putEveryoneToWork(professionalRepository, estab1Id);
 
         log.info("[BUG8] setup — estab1={} prof1={} client={}", estab1Id, prof1Id, clientId);
     }

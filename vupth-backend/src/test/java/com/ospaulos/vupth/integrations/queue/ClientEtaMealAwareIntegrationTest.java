@@ -7,7 +7,6 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
-import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -63,7 +62,6 @@ class ClientEtaMealAwareIntegrationTest {
     @Autowired UserRepository userRepository;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalIntervalRepository intervalRepository;
-    @Autowired ProfessionalRepository professionalRepository;
 
     private final Faker faker = new Faker();
 
@@ -87,9 +85,6 @@ class ClientEtaMealAwareIntegrationTest {
 
         // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
         TestUserUtils.openEstablishment(establishmentRepository, estab.id());
-        // 18/09: e o profissional em expediente — quem esta em casa nao aparece no snapshot de onde
-        // este teste le o ETA.
-        TestUserUtils.putEveryoneToWork(professionalRepository, estab.id());
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientUuid = UUID.fromString(client.id());

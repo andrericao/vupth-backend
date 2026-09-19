@@ -9,7 +9,6 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
-import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -56,7 +55,6 @@ class PausedAttendanceVisibilityIntegrationTest {
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
-    @Autowired ProfessionalRepository professionalRepository;
 
     private final Faker faker = new Faker();
 
@@ -86,10 +84,6 @@ class PausedAttendanceVisibilityIntegrationTest {
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(OpenStatus.OPEN);
         establishmentRepository.save(e);
-
-        // 18/09: o snapshot filtra sim por EXPEDIENTE — quem esta OFF some da tela do cliente. O
-        // profissional deste teste esta atendendo, entao ele chegou.
-        TestUserUtils.putEveryoneToWork(professionalRepository, establishmentId);
 
         // cria walk-in e coloca em atendimento (IN_PROGRESS)
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);

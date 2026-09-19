@@ -58,10 +58,12 @@ public class GetEstablishmentWithQueueUseCase {
         List<Professional> professionals = professionalRepository
                 .findByEstablishmentIdWithServices(establishmentId).stream()
                 .filter(prof -> prof.getServices() != null && !prof.getServices().isEmpty())
-                // Decisao do Andre (18/09): quem nao marcou "trabalhando" nao aparece — "entende-se
-                // que esta em casa". INTERVALO continua aparecendo: e almoco ou saida rapida, e a
-                // pessoa volta (o rotulo do cliente ja distingue os dois).
-                .filter(prof -> prof.getWorkStatus() != null && prof.getWorkStatus().countsAsOpen())
+                // Decisao do Andre (19/09): a tela da loja mostra TODOS os profissionais, e o app os
+                // separa em secoes pelo work_status que vai no snapshot ("Trabalhando: fulano e
+                // sicrano · Fora: beltrano"). Por um dia a lista escondeu quem estava OFF ("entende-se
+                // que esta em casa", 18/09); esconder criava um desencontro com a VITRINE, que conta
+                // available_professionals sem olhar expediente — a lista anunciava 3 numa loja que
+                // abria mostrando 0. Quem decide o que fazer com o status e a tela, nao a consulta.
                 .toList();
 
         List<ProfessionalWithQueueResponse> professionalDtos = professionals.stream()
