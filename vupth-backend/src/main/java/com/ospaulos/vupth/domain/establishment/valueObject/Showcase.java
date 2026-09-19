@@ -19,10 +19,10 @@ import com.ospaulos.vupth.domain.establishment.exception.InvalidShowcaseFilterEx
  *
  * @param sort            ordenacao pedida, ou {@code null} para o default (distancia com
  *                        coordenada, espera sem ela)
- * @param openNow         so lojas <b>abertas agora</b> — pelo {@code is_open} <b>efetivo</b>
- *                        ({@code open_status == OPEN} E dentro do horario), que e o mesmo campo que
- *                        escreve "Aberta" no card. Filtrar pelo {@code open_status} cru deixaria
- *                        passar loja marcada aberta cujo expediente ja acabou
+ * @param openNow         so lojas <b>abertas agora</b> — pelo {@code is_open} <b>efetivo</b>, que e
+ *                        o mesmo campo que escreve "Aberta" no card. Desde 19/09 ele e o proprio
+ *                        {@code open_status == OPEN}: o filtro passou a acompanhar sozinho, porque
+ *                        le o campo e nao a janela de horario
  * @param hasAvailability so lojas com {@code available_professionals > 0}. O Front-Client ja fazia
  *                        este corte <b>no app</b> para as fechadas; virando parametro, ele apaga codigo
  * @param maxWaitMinutes  teto de espera. ⚠️ Loja <b>sem</b> disponibilidade tem espera {@code null}

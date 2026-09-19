@@ -48,10 +48,11 @@ public record EstablishmentResponse(
         @JsonProperty("open_status")
         String openStatus,
 
-        // "Aberto agora" efetivo (BUG5 parte B): open_status == OPEN E dentro de
-        // [opening_time, closing_time). Campo de LEITURA derivado — nao muda o
-        // open_status persistido. O front-client usa pra nao mostrar como aberta
-        // uma loja OPEN cujo horario ja passou.
+        // "Aberto agora" efetivo. Campo de LEITURA derivado — nao muda o open_status persistido.
+        // ⚠️ Desde 19/09 ele e IGUAL a open_status == OPEN: o horario publicado virou o plano do
+        // dia (guia auto-fechamento e agenda) e nao fecha mais uma loja que esta atendendo. Ate
+        // 18/09 exigia tambem estar dentro de [opening_time, closing_time), e era isso que punha a
+        // loja como aberta no app do parceiro e fechada no do cliente, na mesma resposta.
         @JsonProperty("is_open")
         boolean isOpen,
 

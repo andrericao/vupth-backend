@@ -5405,11 +5405,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "// Gate de entrada (BUG5 C1): walk-in so entra com a loja 'aberta agora' = OPEN E",
-         "// horario atual dentro de [opening_time, closing_time). A loja ja esta OPEN; aqui",
-         "// abrimos uma janela de dia inteiro [00:00:00Z, 23:59:59Z) p/ que o walk-in passe em",
-         "// QUALQUER horario de execucao da collection SEM tirar do expediente os intervalos de",
-         "// refeicao em horario fixo (ex.: 14:00Z), que a pasta '12 - intervals' cria depois.",
+         "// ⚠️ A janela nao e mais o que destrava o walk-in: desde 19/09 \"aberta agora\" e so o",
+         "// open_status, e a loja ja esta OPEN. A janela de dia inteiro FICA por outro motivo — ela",
+         "// mantem os intervalos de refeicao em horario fixo (ex.: 14:00Z, pasta '12 - intervals')",
+         "// dentro do expediente em QUALQUER horario de execucao da collection, e evita que o",
+         "// auto-fechamento feche a loja no meio da corrida.",
          "pm.test(\"Status 200 - janela atualizada\", () => pm.response.to.have.status(200));",
          "pm.test(\"is_open true (aberto agora)\", () => pm.expect(pm.response.json().is_open).to.eql(true));"
         ]

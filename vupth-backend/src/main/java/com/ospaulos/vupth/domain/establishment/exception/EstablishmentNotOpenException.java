@@ -6,9 +6,10 @@ import java.util.UUID;
  * Lançada quando um cliente tenta entrar na fila (walk-in imediato) de um establishment
  * que não está "aberto agora" (BUG5 parte C1 — gate de entrada).
  *
- * "Aberto agora" efetivo = {@code open_status == OPEN} <b>e</b> horário atual dentro de
- * {@code [opening_time, closing_time)} (ver {@link com.ospaulos.vupth.domain.establishment.model.Establishment#isOpenNow()}).
- * Fora do horário (ou com a loja fechada) o cliente <b>não entra sozinho</b> na fila viva; a
+ * "Aberto agora" efetivo = {@code open_status == OPEN}, e só (desde 19/09 — ver
+ * {@link com.ospaulos.vupth.domain.establishment.model.Establishment#isOpenNow()}). Com alguém em
+ * expediente o cliente entra <b>mesmo fora do horário publicado</b>; quem encerra o dia é o
+ * auto-fechamento. Com a loja fechada o cliente <b>não entra sozinho</b> na fila viva; a
  * fila existente continua sendo atendida, e o caminho de "solicitar corte" (C2) fica para depois.
  *
  * Não bloqueia a INTENÇÃO de fila (#40, entrada com {@code targetTime} futuro), que mira um

@@ -34,8 +34,8 @@ public record EstablishmentGeneralInfosResponse(
         @JsonProperty("open_status")
         String openStatus,
 
-        // "Aberto agora" efetivo (BUG5 parte B): open_status == OPEN E dentro da
-        // janela [opening_time, closing_time). Derivado, nao persistido.
+        // "Aberto agora" efetivo. Desde 19/09 e o proprio open_status — quem abre a loja e a
+        // chegada do primeiro profissional, nao o relogio (D11). Derivado, nao persistido.
         @JsonProperty("is_open")
         boolean isOpen,
 
