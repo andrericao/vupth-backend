@@ -18602,6 +18602,274 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "fora de expediente: register 2o profissional (nunca marca status)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ps_off_email\",\"psoff_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ps_off_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ps_off_email}}\",\"password\":\"{{ps_off_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: login do 2o profissional",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ps_off_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ps_off_email}}\",\"password\":\"{{ps_off_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: ele se filia a MESMA loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_off_prof_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_off_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Prof Fora\",\"establishmentId\":\"{{ps_estab_id}}\",\"specialty\":\"Barber\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: com servico (para o #31 nao ser o motivo)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_off_service_id\", pm.response.json().id);",
+         "// Com servico, o gate do item #31 nao entra em cena: o que barra a seguir e SO o expediente."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_off_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ps_estab_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"BARBA\",\"customName\":\"Barba do 2o\",\"price\":25.00,\"estimatedMinutes\":20}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: o colega abre a loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// O COLEGA abre a loja. O 2o profissional segue OFF: nasceu assim e nunca tocou no status."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] fora de expediente: cliente na fila de quem nunca chegou -> 409",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// 20/09: quem nao marcou \"trabalhando\" nao recebe fila. O gate do accepting_new sozinho nao",
+         "// pegava este caso — o profissional NASCE OFF com accepting_new=true, entao o recem-cadastrado",
+         "// recebia cliente numa loja que o COLEGA abriu, e o cliente esperava quem nem chegou.",
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code PROFESSIONAL_NOT_ACCEPTING_NEW\", () => pm.expect(pm.response.json().code).to.equal(\"PROFESSIONAL_NOT_ACCEPTING_NEW\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ps_off_prof_id}}\",\"establishmentId\":\"{{ps_estab_id}}\",\"serviceItemIds\":[\"{{ps_off_service_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: cleanup — o colega sai",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"OFF\"}"
+      }
+     },
+     "response": []
     }
    ]
   },

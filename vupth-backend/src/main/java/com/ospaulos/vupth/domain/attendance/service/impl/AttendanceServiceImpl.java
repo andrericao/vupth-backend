@@ -606,7 +606,17 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (Boolean.FALSE.equals(professional.getAcceptingNew())) {
             log.warn("[Attendance] createAttendance — professional={} fechou a fila (entrada na fila viva bloqueada)",
                     professional.getId());
-            throw new ProfessionalNotAcceptingNewException(professional.getId());
+            throw ProfessionalNotAcceptingNewException.queueClosed(professional.getId());
+        }
+
+        // Quem nao marcou "trabalhando" nao recebe fila (regra de 07/09, fechada em 20/09). O gate do
+        // accepting_new sozinho nao cobria este caso: ir para Fora fecha a fila (19/09), mas o
+        // profissional NASCE OFF com accepting_new=true — entao o recem-cadastrado, que nunca tocou no
+        // status, recebia cliente numa loja aberta por um COLEGA. O cliente ia esperar quem nem chegou.
+        if (professional.getWorkStatus() == null || !professional.getWorkStatus().countsAsOpen()) {
+            log.warn("[Attendance] createAttendance — professional={} fora de expediente (work_status={})",
+                    professional.getId(), professional.getWorkStatus());
+            throw ProfessionalNotAcceptingNewException.notInShift(professional.getId());
         }
 
         Client client = clientRepository.findById(request.clientId())
