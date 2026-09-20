@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.integrations.attendance;
 
 import com.ospaulos.vupth.domain.shared.BusinessClock;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
@@ -60,6 +61,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class IntentionUpdateCancelIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired TransactionTemplate tx;
@@ -80,6 +82,9 @@ class IntentionUpdateCancelIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerToken, establishmentId, "Owner Professional");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         // Sem intervalos (refeição) atravessando — mantém a projeção da fila previsível.
         professionalIntervalRepository.deleteAll(

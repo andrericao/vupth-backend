@@ -128,6 +128,9 @@ class AccountDeletionIntegrationTest {
         // (`assertServiceItemsBelongToProfessional`), entao o do dono nao serve para a fila dele.
         this.employee = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, employee.token(), establishmentId, "Funcionario");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
         professionalIntervalRepository.deleteAll(
                 professionalIntervalRepository.findByProfessional_Id(UUID.fromString(employee.id())));
         var employeeService = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, employee.token(),

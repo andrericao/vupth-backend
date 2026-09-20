@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
@@ -93,6 +94,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AttendanceIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -150,6 +152,10 @@ class AttendanceIntegrationTest {
         var anotherUser = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var anotherEstab = TestUserUtils.becomeOwner(mvc, mapper, faker, anotherUser.token());
         TestUserUtils.becomeProfessional(mvc, mapper, faker, anotherUser.token(), anotherEstab.id());
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
+        TestUserUtils.startShift(professionalRepository, anotherEstab.id());
         this.anotherProfToken = anotherUser.token();
 
         log.info("[Attendance] setup — ambiente completo. estab={} prof={} client={}",

@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.establishment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
@@ -61,6 +62,7 @@ class EstablishmentListingCurveIntegrationTest {
     private static final String PREFIX = "CurvaB10";
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired EntityManagerFactory entityManagerFactory;
@@ -78,6 +80,9 @@ class EstablishmentListingCurveIntegrationTest {
             String id = estab.id();
 
             TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), id, "Prof " + i);
+            // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+            // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+            TestUserUtils.startShift(professionalRepository, id);
             var service = TestUserUtils.createServiceItem(mvc, mapper, id, owner.token(),
                     ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
             TestUserUtils.openEstablishment(establishmentRepository, id);

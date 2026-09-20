@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -58,6 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AttendanceListingCurveIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired EntityManagerFactory entityManagerFactory;
@@ -78,6 +80,9 @@ class AttendanceListingCurveIntegrationTest {
         this.establishmentId = UUID.fromString(estab.id());
 
         TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), estab.id(), "Prof da Agenda");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, estab.id());
         // Relogin: o papel PROFESSIONAL so entra no token novo (quem autoriza e o banco, mas o
         // filtro le o token).
         this.professionalToken = relogin(owner.email(), owner.password());

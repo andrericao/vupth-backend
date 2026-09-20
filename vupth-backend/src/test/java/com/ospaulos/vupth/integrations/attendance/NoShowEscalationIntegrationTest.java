@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -58,6 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class NoShowEscalationIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired ClientPenaltyEventRepository penaltyEventRepository;
@@ -85,6 +87,9 @@ class NoShowEscalationIntegrationTest {
         // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Owner Professional");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         // ETA puro = tempo de servico (sem refeicoes recorrentes).
         professionalIntervalRepository.deleteAll(

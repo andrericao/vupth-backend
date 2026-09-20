@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -65,6 +66,7 @@ class ClientQueueIntegrationTest {
       //      org.slf4j.LoggerFactory.getLogger(ClientQueueIntegrationTest.class);
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -87,6 +89,9 @@ class ClientQueueIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerProfToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId);
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
         this.professionalId = ownerProf.id(); // MapsId: professional.id == baseUser.id
 
         // Service items
