@@ -589,7 +589,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         // BUG5 parte C1 — gate de entrada: walk-in imediato (sem targetTime) so entra se a loja
-        // estiver "aberta agora" (open_status OPEN E dentro do horario). Fora disso o cliente nao
+        // estiver "aberta agora" — desde 19/09 isso e open_status OPEN, e so. Fechada, o cliente nao
         // entra sozinho na fila viva. A INTENCAO de fila (#40, com targetTime) NAO passa por aqui —
         // mira um horario futuro dentro do expediente. Guest (adicionado pela loja) tampouco.
         if (request.targetTime() == null && !establishment.isOpenNow()) {

@@ -83,12 +83,31 @@ class AutoCloseAtNightIntegrationTest {
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
     }
 
-    /** O expediente de HOJE: abriu duas horas atras e fechou {@code minutosAtras} minutos atras. */
+    /**
+     * O expediente de HOJE: fechou {@code minutosAtras} minutos atras, tendo aberto ate duas horas
+     * antes disso — e <b>sem nunca virar a meia-noite</b>.
+     *
+     * <p>⚠️ A abertura era sempre {@code agora - 2h}, e so isso ja quebrava o teste entre 00:00 e
+     * 02:00 da MADRUGADA: {@code agora - 2h} cai no dia anterior, a janela fica com
+     * {@code closes < opens} e o dominio a le como expediente que VIRA a meia-noite
+     * ({@code DayHours.crossesMidnight}). O fechamento de hoje passa a ser o de AMANHA, o
+     * {@code mostRecentClosingInstant} nao acha nada e nenhum aviso vence — a lista volta vazia.
+     * Nao e regressao do produto: aparece so na maquina de quem roda de madrugada, e no CI (UTC)
+     * passa verde. Ancorar a abertura na meia-noite tira a hora do relogio da conta.</p>
+     */
     private void closedTodayAt(int minutosAtras) throws Exception {
         LocalTime now = BusinessClock.nowTime();
+        LocalTime closes = now.minusMinutes(minutosAtras).withSecond(0).withNano(0);
+
+        // Nos primeiros minutos do dia nao existe "fechou ha pouco, ainda hoje" para descrever: o
+        // fechamento cairia na vespera. Sao ~6 minutos por dia — melhor pular dizendo por que do que
+        // montar uma janela que nao e a do cenario.
+        Assumptions.assumeTrue(closes.isAfter(LocalTime.MIDNIGHT),
+                "cenario impossivel entre 00:00 e 00:0" + minutosAtras + " — o fechamento cairia ontem");
+
+        LocalTime opens = closes.isAfter(LocalTime.of(2, 0)) ? closes.minusHours(2) : LocalTime.MIDNIGHT;
         String body = String.format("{\"closed\": false, \"opens\": \"%s\", \"closes\": \"%s\"}",
-                now.minusHours(2).withSecond(0).withNano(0),
-                now.minusMinutes(minutosAtras).withSecond(0).withNano(0));
+                opens, closes);
         mvc.perform(put("/establishment/{id}/hours/dates/{date}", establishmentId, BusinessClock.today())
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)

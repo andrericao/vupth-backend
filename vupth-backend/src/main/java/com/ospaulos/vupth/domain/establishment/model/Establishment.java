@@ -279,25 +279,20 @@ public class Establishment implements Serializable {
         return today == null ? null : today.closes();
     }
 
-    public boolean isOpenNow() {
-        return isOpenAt(BusinessClock.nowTime());
-    }
-
     /**
-     * Nucleo puro do {@link #isOpenNow()}, parametrizado pela hora de parede — deterministico
-     * para teste. Trata janela normal {@code [open, close)}, 24h ({@code open == close})
-     * e janela que vira a meia-noite ({@code close < open}).
+     * "Aberto agora" efetivo. Desde 18/09 e <b>so</b> o {@code open_status} — que por sua vez deriva de
+     * quem esta em expediente (D11: quem abre a loja e a chegada do primeiro profissional, nao o
+     * relogio). O horario publicado e o <b>plano do dia</b>: ele guia o auto-fechamento e a agenda, e
+     * nao fecha uma loja que esta atendendo. No aparelho, a regra antiga mostrava a loja FECHADA com o
+     * profissional Trabalhando e a fila aberta.
      */
-    public boolean isOpenAt(LocalTime now) {
-        if (openStatus != OpenStatus.OPEN) {
-            return false;
-        }
-        return isWithinBusinessHours(now);
+    public boolean isOpenNow() {
+        return openStatus == OpenStatus.OPEN;
     }
 
     /**
      * A hora de parede {@code t} de HOJE cai dentro do horario de hoje? Diferente de
-     * {@link #isOpenAt(LocalTime)}, <b>ignora o {@code openStatus}</b>. Para um instante de outro dia
+     * {@link #isOpenNow()}, <b>ignora o {@code openStatus}</b>. Para um instante de outro dia
      * (intencao, carencia), use {@link #isWithinBusinessHours(OffsetDateTime)}, que resolve o dia certo.
      * Nao configurada = qualquer hora vale.
      */

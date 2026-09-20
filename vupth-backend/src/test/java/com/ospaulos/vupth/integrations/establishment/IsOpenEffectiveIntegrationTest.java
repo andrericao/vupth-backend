@@ -25,13 +25,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests — "aberto agora" efetivo (BUG5 parte B).
+ * Integration tests — "aberto agora" efetivo no contrato HTTP.
  *
- * O {@code EstablishmentResponse} expoe {@code is_open} = {@code open_status == OPEN}
- * <b>E</b> horario atual dentro de {@code [opening_time, closing_time)}. Campo de LEITURA
- * derivado — nao muda o {@code open_status} persistido.
+ * <p><b>Regra de 17–18/09 (D11 do Client):</b> quem abre a loja e a chegada do primeiro
+ * profissional, nao o relogio. O {@code EstablishmentResponse} expoe {@code is_open} =
+ * {@code open_status == OPEN} e <b>nada mais</b>: o horario publicado e o plano do dia, nao
+ * autorizacao. Antes o campo tambem exigia estar dentro da janela, e no aparelho isso produziu
+ * o caso que o Andre decidiu: profissional Trabalhando, fila aberta, loja aparecendo FECHADA.
  *
- * Janelas montadas em torno do {@code now} (±1h e futuro) para o teste ser deterministico.
+ * <p>Janelas montadas em torno do {@code now} (±1h e futuro) para o teste ser deterministico.
+ * O horario continua valendo onde ele e previsao — o auto-fechamento no fim do expediente tem
+ * prova propria em {@code AutoCloseAtNightIntegrationTest}.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -49,7 +53,7 @@ class IsOpenEffectiveIntegrationTest {
     private final Faker faker = new Faker();
 
     String openWithinId;   // OPEN + horario atual DENTRO da janela  -> is_open true
-    String openOutsideId;  // OPEN + horario atual FORA da janela     -> is_open false
+    String openOutsideId;  // OPEN + horario atual FORA da janela     -> is_open true (regra nova)
     String closedWithinId; // CLOSED + janela cobre agora             -> is_open false
 
     @BeforeAll
@@ -60,7 +64,7 @@ class IsOpenEffectiveIntegrationTest {
         openWithinId = createEstablishment();
         setHoursAndStatus(openWithinId, OpenStatus.OPEN, now.minusHours(1), now.plusHours(1));
 
-        // Loja 2 — OPEN, mas janela no futuro [now+2h, now+3h): fechada agora
+        // Loja 2 — OPEN com a janela no futuro [now+2h, now+3h): aberta assim mesmo
         openOutsideId = createEstablishment();
         setHoursAndStatus(openOutsideId, OpenStatus.OPEN, now.plusHours(2), now.plusHours(3));
 
@@ -94,12 +98,13 @@ class IsOpenEffectiveIntegrationTest {
 
     @Test
     @Order(20)
-    @DisplayName("OPEN fora da janela -> is_open false (open_status segue OPEN)")
-    void openOutsideWindow_isOpenFalse() throws Exception {
+    @DisplayName("OPEN fora da janela -> is_open true: quem abre e o profissional, nao o relogio")
+    void openOutsideWindow_isOpenTrue() throws Exception {
         mvc.perform(get("/establishment/id/{id}", openOutsideId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.open_status").value("OPEN"))
-                .andExpect(jsonPath("$.is_open").value(false));
+                .andExpect(jsonPath("$.is_open").value(true))
+                .andExpect(jsonPath("$.opening_time").exists());
     }
 
     @Test

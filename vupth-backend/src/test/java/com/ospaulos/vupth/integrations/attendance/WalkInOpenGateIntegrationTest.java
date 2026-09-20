@@ -36,8 +36,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Integration tests — gate de ENTRADA na fila (BUG5 parte C1).
  *
  * <p>Um walk-in imediato (POST /attendances sem {@code targetTime}) só entra na fila se a loja
- * estiver "aberta agora" = {@code open_status == OPEN} <b>e</b> horário atual dentro da janela
- * {@code [opening_time, closing_time)}. Fora disso → <b>409 ESTABLISHMENT_NOT_OPEN</b>.
+ * estiver "aberta agora". Pela decisão de 17–18/09 (D11 do Client), isso é {@code open_status == OPEN}
+ * e mais nada: quem abre a loja é a chegada do primeiro profissional, não o relógio — com alguém em
+ * expediente e a fila aberta, o cliente entra mesmo passado o horário publicado (quem encerra o dia é
+ * o auto-fechamento). Com a loja fechada → <b>409 ESTABLISHMENT_NOT_OPEN</b>.
  *
  * <p>A INTENÇÃO de fila ({@code targetTime} futuro, item #40) NÃO passa por esse gate — mira um
  * horário do expediente e é aceita mesmo com a loja marcada fechada.
@@ -129,15 +131,14 @@ class WalkInOpenGateIntegrationTest {
 
     @Test
     @Order(30)
-    @DisplayName("walk-in com OPEN mas FORA do horário — 409 ESTABLISHMENT_NOT_OPEN (aberto agora efetivo)")
-    void walkin_openOutsideHours_409() throws Exception {
+    @DisplayName("walk-in com OPEN FORA do horário publicado — 201: quem abre é o profissional, não o relógio")
+    void walkin_openOutsideHours_201() throws Exception {
         LocalTime now = BusinessClock.nowTime();
-        // Janela no futuro [now+2h, now+3h): open_status OPEN mas isOpenNow() == false.
+        // Janela no futuro [now+2h, now+3h): o relógio diz "fora", mas a loja está OPEN porque tem gente.
         setStatusAndHours(OpenStatus.OPEN, now.plusHours(2), now.plusHours(3));
 
         postWalkin(null)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_NOT_OPEN"));
+                .andExpect(status().isCreated());
     }
 
     @Test

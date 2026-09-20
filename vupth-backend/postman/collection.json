@@ -5405,11 +5405,11 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "// Gate de entrada (BUG5 C1): walk-in so entra com a loja 'aberta agora' = OPEN E",
-         "// horario atual dentro de [opening_time, closing_time). A loja ja esta OPEN; aqui",
-         "// abrimos uma janela de dia inteiro [00:00:00Z, 23:59:59Z) p/ que o walk-in passe em",
-         "// QUALQUER horario de execucao da collection SEM tirar do expediente os intervalos de",
-         "// refeicao em horario fixo (ex.: 14:00Z), que a pasta '12 - intervals' cria depois.",
+         "// ⚠️ A janela nao e mais o que destrava o walk-in: desde 19/09 \"aberta agora\" e so o",
+         "// open_status, e a loja ja esta OPEN. A janela de dia inteiro FICA por outro motivo — ela",
+         "// mantem os intervalos de refeicao em horario fixo (ex.: 14:00Z, pasta '12 - intervals')",
+         "// dentro do expediente em QUALQUER horario de execucao da collection, e evita que o",
+         "// auto-fechamento feche a loja no meio da corrida.",
          "pm.test(\"Status 200 - janela atualizada\", () => pm.response.to.have.status(200));",
          "pm.test(\"is_open true (aberto agora)\", () => pm.expect(pm.response.json().is_open).to.eql(true));"
         ]
@@ -17224,6 +17224,47 @@
      "response": []
     },
     {
+     "name": "fatia 2: reabre a fila na mao (voltar de Fora nao reabre — 09/09)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// 09/09: voltar de Fora NAO reabre a fila sozinho — quem fechou decide quando abrir. Sem este",
+         "// passo o profissional volta em expediente com a fila fechada e a proxima conferencia (que",
+         "// cobra DISPONIVEL) receberia ENCERRANDO.",
+         "pm.test(\"accepting_new=true (reaberta na mao)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/accepting-new",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"value\":true}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "fatia 2: professionals-with-queue expoe work_status",
      "event": [
       {
@@ -17289,6 +17330,86 @@
       "body": {
        "mode": "raw",
        "raw": "{\"openStatus\":\"CLOSED\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 2: fechar a loja mandou todos para Fora (18/09)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "// 18/09: loja fechada => ninguem trabalhando. Os dois estados conviviam e no aparelho aparecia",
+         "// loja FECHADA com o profissional Trabalhando e a fila aceitando novos.",
+         "pm.test(\"fechar a loja mandou o profissional para Fora\", () => pm.expect(r.work_status).to.equal(\"OFF\"));",
+         "pm.test(\"e fechou a fila dele\", () => pm.expect(r.accepting_new).to.be.false);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 2: quem esta Fora aparece com o seu status (19/09)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// 19/09: a tela da loja mostra TODOS, e o app separa em secoes pelo work_status",
+         "// (\"Trabalhando: fulano e sicrano · Fora: beltrano\"). Quem fechou a loja acima levou o",
+         "// profissional para Fora — ele continua na lista, agora com OFF.",
+         "pm.test(\"continua na lista, com work_status OFF\", () => {",
+         "  const profs = pm.response.json().professionals || [];",
+         "  const me = profs.find(p => p.id === pm.collectionVariables.get(\"ps_prof_id\"));",
+         "  pm.expect(me, \"profissional na lista\").to.not.be.undefined;",
+         "  pm.expect(me.work_status).to.equal(\"OFF\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{ps_estab_id}}/professionals-with-queue",
+      "auth": {
+       "type": "noauth"
       }
      },
      "response": []
@@ -17756,14 +17877,16 @@
      "response": []
     },
     {
-     "name": "fatia 3: prof WORKING (turno novo reabre a fila)",
+     "name": "fatia 3: prof WORKING (voltar de Fora NAO reabre a fila — 09/09)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"accepting_new resetado a true (turno novo)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+         "// 09/09: ir para Fora fecha a fila, e voltar NAO a reabre — quem fechou decide quando abrir.",
+         "// Antes disto o turno novo resetava o accepting_new para true.",
+         "pm.test(\"accepting_new segue false (voltar nao reabre)\", () => pm.expect(pm.response.json().accepting_new).to.be.false);"
         ],
         "type": "text/javascript"
        }
@@ -17789,6 +17912,44 @@
       "body": {
        "mode": "raw",
        "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: reabre a fila na mao -> 200 (walk-in abaixo depende dela)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"accepting_new=true (reaberta na mao)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/accepting-new",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"value\":true}"
       }
      },
      "response": []
@@ -18127,14 +18288,16 @@
      "response": []
     },
     {
-     "name": "fatia 3: WORKING de novo -> fila reabre",
+     "name": "fatia 3: WORKING de novo (a fila segue fechada — 09/09)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"accepting_new=true (turno novo)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+         "// 09/09: ir para Fora fecha a fila, e voltar NAO a reabre — quem fechou decide quando abrir.",
+         "// Antes disto o turno novo resetava o accepting_new para true.",
+         "pm.test(\"accepting_new segue false (voltar nao reabre)\", () => pm.expect(pm.response.json().accepting_new).to.be.false);"
         ],
         "type": "text/javascript"
        }
@@ -18160,6 +18323,44 @@
       "body": {
        "mode": "raw",
        "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fatia 3: reabre a fila na mao -> 200 (para fechar de novo abaixo)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"accepting_new=true (reaberta na mao)\", () => pm.expect(pm.response.json().accepting_new).to.be.true);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/accepting-new",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"value\":true}"
       }
      },
      "response": []

@@ -144,6 +144,8 @@ class OpenStatusDerivationIntegrationTest {
     void queueSnapshot_exposesWorkStatus() throws Exception {
         patchStatus(ownerProfToken, "WORKING"); // A presente, B OFF (do Order 20/30)
 
+        // 19/09: a lista traz os dois, cada um com o seu status — e o app que separa "Trabalhando"
+        // de "Fora" na tela. Por um dia (18/09) quem estava OFF ficou escondido aqui.
         mvc.perform(get("/establishment/id/" + establishmentId + "/professionals-with-queue"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.professionals[?(@.name == 'Prof A')].work_status").value("WORKING"))

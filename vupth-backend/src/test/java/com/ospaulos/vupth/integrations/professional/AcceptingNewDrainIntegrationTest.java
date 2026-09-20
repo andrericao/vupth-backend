@@ -52,8 +52,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * (nasce SCHEDULED na fila viva e prenderia a drenagem); agendar data futura segue livre via
  * INTENTION (#4, fora da fila). Ao finalizar o ultimo
  * atendimento com a fila fechada (ou fechar sem nada ativo), o profissional vira {@code OFF}
- * sozinho e — sendo o ultimo presente — a loja fecha (derivacao da fatia 2). Voltar de OFF para
- * expediente reabre a fila (turno novo).</p>
+ * sozinho e — sendo o ultimo presente — a loja fecha (derivacao da fatia 2).</p>
+ *
+ * <p><b>Atualizado pela decisao de 09/09:</b> voltar de {@code OFF} para expediente <b>nao reabre</b>
+ * a fila sozinha — quem fechou decide quando abrir. A listagem segue mostrando quem esta {@code OFF}
+ * (com o rotulo INDISPONIVEL): quem separa as secoes da tela e o app, pela decisao de 19/09.</p>
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -240,16 +243,16 @@ class AcceptingNewDrainIntegrationTest {
 
     @Test
     @Order(40)
-    @DisplayName("turno novo: voltar de OFF para WORKING reabre a fila (accepting_new=true)")
-    void backToWork_reopensQueue() throws Exception {
+    @DisplayName("voltar de OFF para WORKING abre a LOJA, mas nao reabre a fila sozinha")
+    void backToWork_doesNotReopenQueue() throws Exception {
         mvc.perform(patch("/professional/me/status")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken)
                         .content("{\"status\":\"WORKING\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accepting_new").value(true));
+                .andExpect(jsonPath("$.accepting_new").value(false)); // 09/09: quem fechou decide quando abrir
         assertOpenStatus("OPEN");
-        assertAvailability("DISPONIVEL"); // fatia 4: turno novo volta a DISPONIVEL
+        assertAvailability("ENCERRANDO"); // em expediente com a fila ainda fechada
     }
 
     @Test
