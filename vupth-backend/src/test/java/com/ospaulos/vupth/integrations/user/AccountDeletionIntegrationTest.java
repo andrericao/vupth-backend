@@ -120,6 +120,10 @@ class AccountDeletionIntegrationTest {
         this.serviceItemIds = List.of(UUID.fromString(service.id()));
 
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
+        // 20/09: quem nao esta em expediente nao recebe fila, e o cliente entra na fila LOGO ABAIXO —
+        // antes do funcionario existir. Por isso a chegada aparece duas vezes neste setup: aqui para o
+        // dono-profissional, e de novo depois que o funcionario se filia.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         this.client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientAttendanceId = enterQueue(client, ownerId, serviceItemIds);
