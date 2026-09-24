@@ -88,7 +88,9 @@ public class ClientServiceImpl implements ClientService {
             throw new AttendanceInvalidStatusException("Attendance is already completed");
         }
 
-        if (attendance.getStatus() == AttendanceStatus.CANCELLED) {
+        // Fora da fila nao tem tempo de espera — tanto faz se o cliente desistiu ou se a loja o
+        // retirou (18/09).
+        if (attendance.getStatus().leftWithoutService()) {
             throw new AttendanceInvalidStatusException("Attendance is canceled");
         }
 

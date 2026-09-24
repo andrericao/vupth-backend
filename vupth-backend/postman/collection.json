@@ -11174,7 +11174,8 @@
          "pm.test(\"Status 200 - Removido da fila\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  pm.test(\"Schema: status é CANCELLED\", () => {",
-         "    pm.expect(pm.response.json().status).to.equal(\"CANCELLED\");",
+         "// 18/09: quem tira e a LOJA -> REMOVED. O cliente que desiste segue CANCELLED (pasta 09).",
+         "    pm.expect(pm.response.json().status).to.equal(\"REMOVED\");",
          "  });",
          "}"
         ],

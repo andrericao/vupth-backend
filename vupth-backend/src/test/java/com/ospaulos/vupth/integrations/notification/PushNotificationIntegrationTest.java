@@ -219,7 +219,7 @@ class PushNotificationIntegrationTest {
 
     @Test
     @Order(22)
-    @DisplayName("(BUG9) profissional remove da fila -> push ATTENDANCE_CANCELLED + status CANCELLED")
+    @DisplayName("(BUG9) profissional remove da fila -> push ATTENDANCE_CANCELLED + status REMOVED")
     void push_attendanceCancelled_onRemoveFromQueue() throws Exception {
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         String t1 = "ExponentPushToken[" + UUID.randomUUID() + "]";
@@ -237,7 +237,7 @@ class PushNotificationIntegrationTest {
         verify(pushSender).send(argThat(l -> l.contains(t1)), eq("Você saiu da fila"), any(), any());
         // e o atendimento sai do read ativo do cliente (CANCELLED)
         assertThat(attendanceRepository.findById(UUID.fromString(att)).orElseThrow().getStatus())
-                .isEqualTo(AttendanceStatus.CANCELLED);
+                .isEqualTo(AttendanceStatus.REMOVED);
     }
 
     private String join(com.ospaulos.vupth.integrations.utils.TestUserUtils.UserAuthAndToken client) throws Exception {

@@ -657,12 +657,13 @@ class AttendanceIntegrationTest {
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(removeId))
-                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                // 18/09: quem tira e a LOJA -> REMOVED. CANCELLED ficou para o cliente que desiste.
+                .andExpect(jsonPath("$.status").value("REMOVED"))
                 .andDo(print());
 
         Attendance updated = attendanceRepository.findById(UUID.fromString(removeId)).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.CANCELLED);
-        log.info("[Attendance] removeFromQueue_success — status=CANCELED confirmado no banco");
+        assertThat(updated.getStatus()).isEqualTo(AttendanceStatus.REMOVED);
+        log.info("[Attendance] removeFromQueue_success — status=REMOVED confirmado no banco");
     }
 
     @Test

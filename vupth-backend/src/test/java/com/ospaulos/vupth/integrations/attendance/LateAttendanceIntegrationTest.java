@@ -238,7 +238,7 @@ class LateAttendanceIntegrationTest {
 
     @Test
     @Order(14)
-    @DisplayName("DELETE /professional-queue/{id}/remove — remove um cliente LATE da fila → CANCELLED")
+    @DisplayName("DELETE /professional-queue/{id}/remove — remove um cliente LATE da fila → REMOVED")
     void removeFromQueue_acceptsLateAttendance() throws Exception {
         String late = createScheduled(900);
         createScheduled(901); // proximo, para o late ter como cair
@@ -252,7 +252,7 @@ class LateAttendanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andDo(print());
 
-        assertThat(statusOf(late)).isEqualTo(AttendanceStatus.CANCELLED);
+        assertThat(statusOf(late)).isEqualTo(AttendanceStatus.REMOVED);
         assertThat(waitingIndexOf(late))
                 .as("cliente removido sai da fila de espera")
                 .isEqualTo(-1);
