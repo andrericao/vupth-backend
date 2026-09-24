@@ -6122,6 +6122,52 @@
    "name": "07 - client queue",
    "item": [
     {
+     "name": "setup: o profissional CHEGA (WORKING) — sem expediente nao ha fila (20/09)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// 20/09: quem nao marcou \"trabalhando\" nao recebe fila. O profissional do fluxo principal",
+         "// (criado em \"03 - professional\", com servico proprio em \"04\") nasce OFF, e daqui para baixo",
+         "// sao ~20 entradas na fila dele — pastas 07, 08c/d/e/f/g/h/i, 08b, 09 e 08k. Uma chegada so",
+         "// cobre todas; sem ela, a primeira ja devolve 409 PROFESSIONAL_NOT_ACCEPTING_NEW.",
+         "//",
+         "// ⚠️ A loja JA esta OPEN aqui (pasta 04). Como a derivacao so grava a abertura real na",
+         "// TRANSICAO para aberta, esta chegada nao reescreve o horario do dia — e por isso as refeicoes",
+         "// em horario fixo da pasta 12 continuam cabendo no expediente.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"work_status WORKING\", () => pm.expect(pm.response.json().work_status).to.equal(\"WORKING\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "get professionals with queue",
      "event": [
       {
