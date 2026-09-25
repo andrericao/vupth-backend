@@ -161,6 +161,21 @@ public class Attendance implements Serializable {
     private OffsetDateTime toleranceUntil;
 
     /**
+     * Horario de atendimento prometido na entrada (entrada + espera comunicada) — D4. O profissional so
+     * marca o cliente atrasado 5 min depois dele (e da chegada da vez), para ninguem ser punido por nao
+     * estar la antes do que lhe foi dito. Null nos atendimentos anteriores a regra.
+     */
+    @Column(name = "promised_time")
+    private OffsetDateTime promisedTime;
+
+    /**
+     * Quantas marcacoes de atraso deste atendimento entraram no contador do cliente (D4) — as feitas
+     * depois da tolerancia. O undo-late desconta exatamente estas.
+     */
+    @Column(name = "counted_lates", nullable = false)
+    private int countedLates = 0;
+
+    /**
      * Notificacoes push (backlog #1): true depois que este atendimento ja recebeu o push
      * "voce e o proximo" ao alcancar a frente da fila. Evita reenviar a cada nova mutacao
      * enquanto continua na frente. Ver {@code QueuePushService.notifyNextInLine}.

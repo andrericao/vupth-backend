@@ -334,3 +334,11 @@ databaseChangeLog:
   - include:
       file: changesets/70-client/008-add-acknowledged_at-to-client_penalty_event.yaml
       relativeToChangeLogFile: true
+
+  # Contador de atrasos (D4): horario prometido na entrada + contador no cliente
+  - include:
+      file: changesets/80-attendance/014-add-promised_time-to-attendance.yaml
+      relativeToChangeLogFile: true
+  - include:
+      file: changesets/70-client/009-add-late_count-to-client.yaml
+      relativeToChangeLogFile: true

@@ -16,5 +16,8 @@ public record ClientResponse(
         UUID id,
         String firstName,
         String email,
-        int strikeCount
+        int strikeCount,
+        // D4: atrasos acumulados e quantos faltam para a multa ("este e o seu 2o atraso").
+        int lateCount,
+        int latesUntilPenalty
 ) {}

@@ -9,9 +9,12 @@ package com.ospaulos.vupth.domain.client.model;
  *   <li>{@code NO_SHOW} — escalada de no-show: cliente que ja estava LATE (#19, caiu de posicao)
  *       e nao compareceu ao ser chamado de novo e removido da fila (CANCELLED) + recebe strike.
  *       Emitido por {@code PATCH /attendances/{id}/no-show}.</li>
+ *   <li>{@code LATE_ARRIVAL} — o 3o atraso acumulado (D4, Andre 25/09): o profissional marcou o
+ *       cliente atrasado pela terceira vez, somando atendimentos. R$ 5,00.</li>
  * </ul>
  */
 public enum PenaltyType {
     LATE_CANCEL,
-    NO_SHOW
+    NO_SHOW,
+    LATE_ARRIVAL
 }

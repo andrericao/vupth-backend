@@ -43,6 +43,18 @@ public class Client {
     @Column(name = "strike_count", nullable = false)
     private int strikeCount = 0;
 
+    /**
+     * Atrasos acumulados (D4, Andre 25/09): soma entre atendimentos e zera quando a multa nasce — o 3o
+     * atraso custa R$ 5,00. Exposto com {@link #getLatesUntilPenalty()} para o aviso "este e o seu 2o".
+     */
+    @Column(name = "late_count", nullable = false)
+    private int lateCount = 0;
+
+    /** Atrasos que faltam para a multa (3, 2 ou 1). */
+    public int getLatesUntilPenalty() {
+        return com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY - this.lateCount;
+    }
+
     public Client(BaseUser baseUser) {
         this.baseUser = baseUser;
         this.id = baseUser.getId();
@@ -50,6 +62,10 @@ public class Client {
 
     public void incrementStrike() {
         this.strikeCount++;
+    }
+
+    public void decrementStrike() {
+        this.strikeCount = Math.max(0, this.strikeCount - 1);
     }
 
     public String getFirstName(){

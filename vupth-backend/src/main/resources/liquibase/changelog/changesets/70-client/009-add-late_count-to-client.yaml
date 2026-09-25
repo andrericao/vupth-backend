@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # Contador de atrasos (D4, Andre 25/09): soma entre atendimentos e zera quando a multa nasce
+  # (3o atraso = R$ 5,00).
+  - changeSet:
+      id: 009-add-late_count-to-client
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: client
+                columnName: late_count
+      changes:
+        - addColumn:
+            tableName: client
+            columns:
+              - column:
+                  name: late_count
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false

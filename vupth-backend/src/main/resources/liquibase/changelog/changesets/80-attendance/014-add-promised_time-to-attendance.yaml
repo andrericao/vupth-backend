@@ -1,0 +1,27 @@
+databaseChangeLog:
+  # Contador de atrasos (D4): o horario de atendimento prometido na entrada (entrada + espera
+  # comunicada) — atraso marcado antes dele + 5 min nao conta; nulo nos atendimentos anteriores, a
+  # promessa nao foi gravada e nao se inventa. counted_lates: quantas marcacoes deste atendimento
+  # entraram no contador (o undo-late desconta estas).
+  - changeSet:
+      id: 014-add-promised_time-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: promised_time
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: promised_time
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: counted_lates
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false

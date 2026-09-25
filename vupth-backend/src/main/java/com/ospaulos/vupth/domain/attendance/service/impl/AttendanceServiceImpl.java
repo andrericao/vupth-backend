@@ -164,7 +164,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * Trava (lock) no ingresso as refeicoes que ja estavam no ETA do cliente (item #37): grava no
      * atendimento os ids das refeicoes recorrentes contadas ate a posicao dele na fila. Depois disso,
      * essas refeicoes nao saem mais do ETA dele por ritmo da fila (so por skip #41 / inicio / remocao).
-     * Grava tambem a tolerancia de saida (D4), que depende desse mesmo ETA.
+     * Grava tambem a tolerancia de saida e o horario prometido (D4), que dependem desse mesmo ETA.
      * Best-effort: falha aqui nao quebra a criacao do atendimento.
      */
     private void lockMealsAtIngress(com.ospaulos.vupth.domain.attendance.model.Attendance saved,
@@ -191,6 +191,8 @@ public class AttendanceServiceImpl implements AttendanceService {
             // lock acima) e nao muda depois — e a que foi prometida na entrada.
             int waitAtEntry = clientWaitCalculator.clientWaitMinutes(saved, now).orElse(0);
             saved.setToleranceUntil(ExitPenaltyRule.toleranceUntil(now, waitAtEntry));
+            // D4: o horario prometido — ninguem e marcado atrasado antes dele + 5 min.
+            saved.setPromisedTime(now.plusMinutes(waitAtEntry));
             attendanceRepository.save(saved);
         } catch (Exception e) {
             log.warn("[Attendance] lockMealsAtIngress falhou para {}: {}", saved.getId(), e.getMessage());

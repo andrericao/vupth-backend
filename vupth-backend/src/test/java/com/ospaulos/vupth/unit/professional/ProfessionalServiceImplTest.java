@@ -78,6 +78,8 @@ class ProfessionalServiceImplTest {
     @Mock AttendanceRepository attendanceRepository;
     @Mock EstablishmentRepository establishmentRepository;
     @Mock ProfessionalIntervalService intervalService;
+    // Contador de atrasos (D4): o mark/undo-late conta e desconta aqui.
+    @Mock com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrivalService;
 
     @InjectMocks ProfessionalServiceImpl professionalService;
 

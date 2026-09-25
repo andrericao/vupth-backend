@@ -19,5 +19,8 @@ public record ClientInQueueResponse(
         /** Ate quando sair da fila e de graca (D4, tolerancia de 24/09); nulo em atendimento anterior a regra. */
         OffsetDateTime toleranceUntil,
         /** Quanto custa sair AGORA — o valor do aviso "Sim / Nao"; 0.00 dentro da tolerancia ou com 1h ou mais. */
-        BigDecimal exitPenaltyValue
+        BigDecimal exitPenaltyValue,
+        /** Atrasos acumulados do cliente e quantos faltam para a multa (D4); 0 / 3 para convidado. */
+        int lateCount,
+        int latesUntilPenalty
 ) {}
