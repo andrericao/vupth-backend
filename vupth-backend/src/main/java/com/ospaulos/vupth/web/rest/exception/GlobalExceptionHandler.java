@@ -209,6 +209,27 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.user.exception.InvalidProfilePhotoException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidProfilePhoto(
+            com.ospaulos.vupth.domain.user.exception.InvalidProfilePhotoException ex, HttpServletRequest req) {
+        log.warn("[400] InvalidProfilePhoto | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_PROFILE_PHOTO");
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        log.warn("[400] MaxUploadSize | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "A foto passa de 2 MB.", "INVALID_PROFILE_PHOTO");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.shared.storage.StorageNotConfiguredException.class)
+    public ResponseEntity<ErrorResponse> handleStorageNotConfigured(
+            com.ospaulos.vupth.domain.shared.storage.StorageNotConfiguredException ex, HttpServletRequest req) {
+        log.error("[503] StorageNotConfigured | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), "STORAGE_NOT_CONFIGURED");
+    }
+
     @ExceptionHandler(ExitPenaltyNotAcknowledgedException.class)
     public ResponseEntity<ExitPenaltyErrorResponse> handleExitPenaltyNotAcknowledged(
             ExitPenaltyNotAcknowledgedException ex, HttpServletRequest req) {

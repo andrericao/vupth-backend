@@ -16,7 +16,11 @@ public record ProfessionalSearchResponse(
         String nickname,
 
         @JsonProperty("is_available")
-        Boolean isAvailable
+        Boolean isAvailable,
+
+        // S22: foto de perfil (URL publica no R2); null sem foto.
+        @JsonProperty("profile_image_url")
+        String profileImageUrl
 ) {
     public static ProfessionalSearchResponse fromEntity(Professional p) {
         return new ProfessionalSearchResponse(
@@ -24,7 +28,8 @@ public record ProfessionalSearchResponse(
                 p.getBaseUser() != null ? p.getBaseUser().getFirstName() : null,
                 p.getSpecialty(),
                 p.getBaseUser() != null ? p.getBaseUser().getNickname() : null,
-                p.getIsAvailable()
+                p.getIsAvailable(),
+                p.getBaseUser() != null ? p.getBaseUser().getProfileImageUrl() : null
         );
     }
 }

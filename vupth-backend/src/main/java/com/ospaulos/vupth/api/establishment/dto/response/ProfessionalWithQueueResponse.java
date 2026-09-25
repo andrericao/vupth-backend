@@ -64,7 +64,11 @@ public record ProfessionalWithQueueResponse(
         long ratingCount,
 
         @JsonProperty("service_items")
-        List<ServiceItemSummary> serviceItems
+        List<ServiceItemSummary> serviceItems,
+
+        // S22: foto de perfil (URL publica no R2); null sem foto.
+        @JsonProperty("profile_image_url")
+        String profileImageUrl
 
 ) {
 
@@ -144,7 +148,8 @@ public record ProfessionalWithQueueResponse(
                 estimatedWait,
                 professional.getRatingAverage(),
                 professional.getRatingCount(),
-                serviceItemDtos
+                serviceItemDtos,
+                professional.getBaseUser() != null ? professional.getBaseUser().getProfileImageUrl() : null
         );
     }
 }

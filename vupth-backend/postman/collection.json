@@ -15156,6 +15156,41 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] PUT /profile/me/photo - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// S22: o upload real nao roda aqui — gravaria lixo no R2 a cada rodada. O contrato (200, 400,",
+         "// 503 sem R2) e do ProfilePhotoIntegrationTest.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/profile/me/photo",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "me",
+        "photo"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
