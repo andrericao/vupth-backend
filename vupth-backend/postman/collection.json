@@ -6886,8 +6886,8 @@
          "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
          "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
          "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));",
-         "pm.test(\"(BUG9) remove -> status CANCELLED (sai do read ativo do cliente)\", () => {",
-         "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"CANCELLED\");",
+         "pm.test(\"(BUG9) remove -> status REMOVED (a loja tirou; sai do read ativo do cliente)\", () => {",
+         "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"REMOVED\");",
          "});"
         ],
         "type": "text/javascript"

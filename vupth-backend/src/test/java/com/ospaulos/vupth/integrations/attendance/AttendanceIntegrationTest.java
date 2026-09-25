@@ -697,7 +697,8 @@ class AttendanceIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                // convidado nao muda a regra: quem tira e a LOJA -> REMOVED.
+                .andExpect(jsonPath("$.status").value("REMOVED"))
                 .andDo(print());
     }
 
