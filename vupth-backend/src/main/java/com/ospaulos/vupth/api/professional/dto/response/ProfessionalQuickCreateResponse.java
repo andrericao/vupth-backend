@@ -34,6 +34,10 @@ public record ProfessionalQuickCreateResponse(
         @JsonProperty("accepting_new")
         Boolean acceptingNew,
 
+        // D9 (25/09): QUEUE ou AGENDA_ONLY
+        @JsonProperty("operation_mode")
+        com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
+
         String message
 ) {
     public static ProfessionalQuickCreateResponse fromEntity(Professional p) {
@@ -47,6 +51,7 @@ public record ProfessionalQuickCreateResponse(
                 p.getIsAvailable(),
                 p.getWorkStatus(),
                 p.getAcceptingNew(),
+                p.getOperationMode(),
                 "Professional created! Your ID is permanent. Fill in the rest whenever you want."
         );
     }

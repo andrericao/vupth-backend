@@ -87,6 +87,7 @@ public class ProfessionalQuickCreateController {
     private final QueueWebSocketPublisher        queuePublisher;
     private final PushNotificationPublisher      pushPublisher;
     private final com.ospaulos.vupth.domain.establishment.service.EstablishmentAutoCloseScheduler autoCloseScheduler;
+    private final com.ospaulos.vupth.api.professional.usecase.UpdateOperationModeUseCase operationModeUseCase;
 
     /**
      * GET /professional?name=&specialty=
@@ -141,6 +142,7 @@ public class ProfessionalQuickCreateController {
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
                 professional.getAcceptingNew(),
+                professional.getOperationMode(),
                 null
         ));
     }
@@ -189,6 +191,29 @@ public class ProfessionalQuickCreateController {
 
         // S1 fatia 5 — entrar/sair de expediente muda o proximo closing_time relevante; re-arma o timer.
         autoCloseScheduler.reschedule();
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /professional/me/operation-mode — {@code {"mode": "QUEUE" | "AGENDA_ONLY"}}.
+     *
+     * Modo de funcionamento do profissional (D9, por profissional; Andre 25/09). So troca no inicio do
+     * expediente, antes do primeiro cliente na fila de hoje ({@code 409 OPERATION_MODE_LOCKED}).
+     * Em AGENDA_ONLY o cliente nao entra na fila nem pede corte ({@code 409 PROFESSIONAL_AGENDA_ONLY});
+     * agendar segue livre. Auth: ROLE_PROFESSIONAL
+     */
+    @PatchMapping("/me/operation-mode")
+    public ResponseEntity<ProfessionalQuickCreateResponse> updateMyOperationMode(
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid com.ospaulos.vupth.api.professional.dto.request.UpdateOperationModeRequest request) {
+
+        log.info("PATCH /professional/me/operation-mode — user={} mode={}", principal.getUserId(), request.mode());
+
+        ProfessionalQuickCreateResponse response = operationModeUseCase.execute(principal.getUserId(), request.mode());
+
+        // o cliente passa a ver o botao certo (fila x agendar) na tela da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
 
         return ResponseEntity.ok(response);
     }

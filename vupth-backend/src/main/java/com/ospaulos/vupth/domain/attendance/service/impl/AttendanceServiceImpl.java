@@ -599,6 +599,12 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new EstablishmentNotFoundException(request.establishmentId());
         }
 
+        // D9 (25/09): quem trabalha so com agenda nao tem fila para entrar — nem walk-in nem horario-alvo
+        // na fila (#40). O caminho e agendar (POST /attendances/intentions), que segue valendo.
+        if (professional.getOperationMode() == com.ospaulos.vupth.domain.professional.valueObject.OperationMode.AGENDA_ONLY) {
+            throw new com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException(professional.getId());
+        }
+
         // BUG5 parte C1 — gate de entrada: walk-in imediato (sem targetTime) so entra se a loja
         // estiver "aberta agora" — desde 19/09 isso e open_status OPEN, e so. Fechada, o cliente nao
         // entra sozinho na fila viva. A INTENCAO de fila (#40, com targetTime) NAO passa por aqui —

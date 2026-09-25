@@ -58,6 +58,12 @@ public class Professional {
     @Column(name = "accepting_new", nullable = false)
     private Boolean acceptingNew = true;
 
+    /** Fila ou so agenda (D9, por profissional). So troca antes do primeiro cliente na fila do dia. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "operation_mode", nullable = false, length = 20)
+    private com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode =
+            com.ospaulos.vupth.domain.professional.valueObject.OperationMode.QUEUE;
+
     /**
      * Auto-fechamento por horario (S1 fatia 5 / BUG1): instante-limite da carencia de 15min apos o
      * {@code closing_time}. Setado pelo scheduler quando o profissional segue em expediente fora do

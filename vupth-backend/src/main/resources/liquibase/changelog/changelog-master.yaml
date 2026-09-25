@@ -342,3 +342,8 @@ databaseChangeLog:
   - include:
       file: changesets/70-client/009-add-late_count-to-client.yaml
       relativeToChangeLogFile: true
+
+  # Modo de funcionamento por profissional: fila ou so agenda (D9, 25/09)
+  - include:
+      file: changesets/60-professional/012-add-operation_mode-to-professional.yaml
+      relativeToChangeLogFile: true

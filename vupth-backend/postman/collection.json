@@ -3102,6 +3102,10 @@
          "});",
          "pm.test(\"BUG10: apelido volta no /professional/me\", () => {",
          "  pm.expect(pm.response.json().nickname).to.eql(\"Bibba\");",
+         "});",
+         "// D9 (25/09): fila ou so agenda, por profissional",
+         "pm.test(\"D9: operation_mode QUEUE ou AGENDA_ONLY\", () => {",
+         "  if (pm.response.code === 200) pm.expect([\"QUEUE\", \"AGENDA_ONLY\"]).to.include(pm.response.json().operation_mode);",
          "});"
         ],
         "type": "text/javascript"
@@ -15184,6 +15188,50 @@
         "profile",
         "me",
         "photo"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH /professional/me/operation-mode - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// D9: trocar o modo de verdade travaria o profissional de teste no staging; o contrato e do",
+         "// OperationModeIntegrationTest.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"mode\":\"AGENDA_ONLY\"}"
+      },
+      "url": {
+       "raw": "{{base_url}}/professional/me/operation-mode",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "operation-mode"
        ]
       },
       "auth": {

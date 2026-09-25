@@ -230,6 +230,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), "STORAGE_NOT_CONFIGURED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalAgendaOnly(
+            com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalAgendaOnly | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_AGENDA_ONLY");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.professional.exception.OperationModeLockedException.class)
+    public ResponseEntity<ErrorResponse> handleOperationModeLocked(
+            com.ospaulos.vupth.domain.professional.exception.OperationModeLockedException ex, HttpServletRequest req) {
+        log.warn("[409] OperationModeLocked | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "OPERATION_MODE_LOCKED");
+    }
+
     @ExceptionHandler(ExitPenaltyNotAcknowledgedException.class)
     public ResponseEntity<ExitPenaltyErrorResponse> handleExitPenaltyNotAcknowledged(
             ExitPenaltyNotAcknowledgedException ex, HttpServletRequest req) {

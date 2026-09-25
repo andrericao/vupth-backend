@@ -76,6 +76,10 @@ public class CutRequestServiceImpl implements CutRequestService {
         }
 
         // Gate C2: so faz sentido pedir corte com a loja FECHADA agora. Aberta -> entra normal (409).
+        // D9 (25/09): pedido de corte vira entrada na fila — nao existe para quem trabalha so com agenda.
+        if (professional.getOperationMode() == com.ospaulos.vupth.domain.professional.valueObject.OperationMode.AGENDA_ONLY) {
+            throw new com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException(professional.getId());
+        }
         if (establishment.isOpenNow()) {
             throw new CutRequestNotAllowedException(establishment.getId());
         }

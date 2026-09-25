@@ -103,6 +103,7 @@ public class AffiliateToEstablishmentUseCase {
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
                 professional.getAcceptingNew(),
+                professional.getOperationMode(),
                 "Professional affiliated to establishment successfully."
         );
     }
