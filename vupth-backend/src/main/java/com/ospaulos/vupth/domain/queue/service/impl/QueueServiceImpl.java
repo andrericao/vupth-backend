@@ -145,7 +145,8 @@ public class QueueServiceImpl implements QueueService {
                 ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
                 attendance.getClient() != null ? attendance.getClient().getLateCount() : 0,
                 attendance.getClient() != null ? attendance.getClient().getLatesUntilPenalty()
-                        : com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY
+                        : com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY,
+                attendance.getPromisedTime()
         );
     }
 

@@ -6478,6 +6478,12 @@
          "  pm.expect(b.lateCount, \"lateCount\").to.be.a(\"number\");",
          "  pm.expect(b.latesUntilPenalty, \"latesUntilPenalty\").to.be.a(\"number\");",
          "  pm.expect(b.lateCount + b.latesUntilPenalty).to.eql(3);",
+         "});",
+         "// D8 (17/09): o horario que vale para o atraso — o prometido na entrada ou o adiantado aceito.",
+         "pm.test(\"D8: promisedTime (data) no wait-time\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.promisedTime, \"promisedTime\").to.be.a(\"string\");",
+         "  pm.expect(new Date(b.promisedTime).toString()).to.not.eql(\"Invalid Date\");",
          "});"
         ],
         "type": "text/javascript"
@@ -15112,6 +15118,39 @@
       "method": "GET",
       "header": [],
       "url": "{{base_url}}/rota-que-nao-existe/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] accept-earlier-turn - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id}}/accept-earlier-turn",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id}}",
+        "accept-earlier-turn"
+       ]
+      },
       "auth": {
        "type": "noauth"
       }

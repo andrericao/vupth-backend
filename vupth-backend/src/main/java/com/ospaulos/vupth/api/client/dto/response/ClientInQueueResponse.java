@@ -22,5 +22,10 @@ public record ClientInQueueResponse(
         BigDecimal exitPenaltyValue,
         /** Atrasos acumulados do cliente e quantos faltam para a multa (D4); 0 / 3 para convidado. */
         int lateCount,
-        int latesUntilPenalty
+        int latesUntilPenalty,
+        /**
+         * O horario que vale para o atraso (D4/D8): o prometido na entrada, ou o adiantado que o cliente
+         * aceitou. Se {@code startTime} vier bem antes dele, a vez adiantou e o convite pode ser aceito.
+         */
+        OffsetDateTime promisedTime
 ) {}
