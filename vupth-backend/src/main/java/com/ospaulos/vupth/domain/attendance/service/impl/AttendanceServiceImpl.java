@@ -174,9 +174,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             for (int i = 0; i < queue.size(); i++) {
                 if (queue.get(i).getId().equals(saved.getId())) { pos = i; break; }
             }
-            if (pos <= 0) {
-                return; // primeiro da fila (ou fora dela): nenhuma refeicao a frente para travar
+            if (pos < 0) {
+                return; // fora da fila: nada a travar
             }
+            // pos 0 tambem trava: o primeiro da fila ainda espera a refeicao EM CURSO.
             Set<UUID> locked = QueueUtils.mealsCountedForPosition(
                     queue, professional.getIntervals(), OffsetDateTime.now(), pos);
             if (!locked.isEmpty()) {

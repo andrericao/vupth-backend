@@ -43,7 +43,7 @@ public class QueueUtils {
         final int durationMinutes;
         final OffsetDateTime disappearAt; // recorrente previsto: some ao alcancar isto; null = nunca some
         final boolean previsto;           // recorrente nao iniciado (deslocavel/cancelavel)
-        final UUID intervalId;            // id da refeicao recorrente prevista (null p/ iniciado/unexpected)
+        final UUID intervalId;            // id da refeicao a travar no ingresso (prevista ou em curso); null p/ unexpected
 
         Block(OffsetDateTime start, int durationMinutes, OffsetDateTime disappearAt,
               boolean previsto, UUID intervalId) {
@@ -291,11 +291,15 @@ public class QueueUtils {
             throw new IllegalArgumentException("Invalid position in queue: " + positionX + " (size=" + queue.size() + ")");
         }
         Set<UUID> counted = new HashSet<>();
-        if (positionX == 0 || queue.isEmpty()) {
-            return new Sim(0, counted);
+        List<Block> blocks = buildBlocks(intervals, now);
+        if (positionX == 0) {
+            // Ninguem a frente, mas a refeicao/pausa EM CURSO ainda esta entre o cliente e a cadeira:
+            // devolver 0 aqui era o "agora" com o profissional almocando (Partner/Client, 17-25/09).
+            // So o que ja esta acontecendo conta — refeicao prevista nao entra sem fila que a alcance.
+            blocks.removeIf(b -> b.previsto || b.start.isAfter(now));
+            return new Sim((int) drainDue(blocks, now, counted).added(), counted);
         }
 
-        List<Block> blocks = buildBlocks(intervals, now);
         return simulateImpl(queue, blocks, now, positionX, counted);
     }
 
@@ -387,14 +391,16 @@ public class QueueUtils {
 
         List<Block> blocks = new ArrayList<>();
 
-        // Iniciados hoje (em andamento) + unexpected de hoje: blocos fixos (nao somem, sem id de lock).
+        // Iniciados hoje (em andamento) + unexpected de hoje: blocos fixos (nao somem). O iniciado leva
+        // o id para ser TRAVADO no ingresso de quem chega durante ele (lockedMealContribution conta o
+        // restante); sem o id, o wait-time de quem entrou no meio da refeicao a esquecia.
         for (ProfessionalInterval iv : intervals) {
             if (iv.isStartedOn(today)) {
                 OffsetDateTime end = iv.getPlannedEndTime();
                 if (end != null && end.isAfter(now)) {
                     long remaining = Duration.between(now, end).toMinutes();
                     if (remaining > 0) {
-                        blocks.add(new Block(now, (int) remaining, null, false, null));
+                        blocks.add(new Block(now, (int) remaining, null, false, iv.getId()));
                     }
                 }
             } else if (iv.getIntervalType() == IntervalType.UNEXPECTED
