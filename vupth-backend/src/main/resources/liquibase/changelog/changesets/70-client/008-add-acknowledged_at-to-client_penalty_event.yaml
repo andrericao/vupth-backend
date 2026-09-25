@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # Ciencia da multa (D4): o instante do "Sim" do cliente. Nulo onde nao houve toque — eventos
+  # anteriores e o nao comparecimento (o cliente nao esta la para tocar).
+  - changeSet:
+      id: 008-add-acknowledged_at-to-client_penalty_event
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: client_penalty_event
+                columnName: acknowledged_at
+      changes:
+        - addColumn:
+            tableName: client_penalty_event
+            columns:
+              - column:
+                  name: acknowledged_at
+                  type: TIMESTAMP WITH TIME ZONE

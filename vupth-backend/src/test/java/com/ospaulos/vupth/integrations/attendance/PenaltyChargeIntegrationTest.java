@@ -111,7 +111,9 @@ class PenaltyChargeIntegrationTest {
     }
 
     private void cancel(String attendanceId) throws Exception {
+        // D4: o "Sim" do aviso (o maior valor possivel) — a ciencia nao e o objeto deste teste.
         mvc.perform(put("/attendances/{id}/cancel", attendanceId)
+                        .param("acknowledgedPenalty", "5.00")
                         .header("Authorization", clientToken))
                 .andExpect(status().isOk());
     }

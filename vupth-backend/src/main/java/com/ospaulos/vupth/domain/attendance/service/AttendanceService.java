@@ -38,7 +38,16 @@ public interface AttendanceService {
 
     public AttendanceInQueueResponse cancelAttendance(Attendance attendance);
 
-    public AttendanceInQueueResponse cancelAttendance(UUID attendance, UUID clientId);
+    /** Sem ciencia: so sai se a saida nao gerar multa (D4). */
+    default AttendanceInQueueResponse cancelAttendance(UUID attendance, UUID clientId) {
+        return cancelAttendance(attendance, clientId, null);
+    }
+
+    /**
+     * Cliente desiste da vez. Se sair agora gera multa, {@code acknowledgedPenalty} e o "Sim" do aviso:
+     * precisa ser igual ou maior que o valor de agora, senao 409 EXIT_PENALTY_NOT_ACKNOWLEDGED com o valor.
+     */
+    AttendanceInQueueResponse cancelAttendance(UUID attendance, UUID clientId, java.math.BigDecimal acknowledgedPenalty);
 
     /**
      * Item #39 — escalada de no-show. Registra um {@code ClientPenaltyEvent} do tipo
@@ -49,7 +58,13 @@ public interface AttendanceService {
      */
     public void registerNoShowPenalty(Attendance attendance);
 
-    public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId);
+    /** Sem ciencia: so sai se a saida nao gerar multa (D4). */
+    default AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId) {
+        return leaveQueue(attendanceId, clientId, null);
+    }
+
+    /** Cliente sai da fila — a mesma ciencia do {@link #cancelAttendance(UUID, UUID, java.math.BigDecimal)}. */
+    AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId, java.math.BigDecimal acknowledgedPenalty);
 
     /**
      * Item #43 (Opcao A) — remanejar por horario-alvo. O cliente com espera longa reagenda a

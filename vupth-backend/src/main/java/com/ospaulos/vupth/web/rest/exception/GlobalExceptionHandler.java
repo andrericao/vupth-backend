@@ -16,6 +16,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundExceptio
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
+import com.ospaulos.vupth.domain.attendance.exception.ExitPenaltyNotAcknowledgedException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
@@ -206,6 +207,15 @@ public class GlobalExceptionHandler {
             EstablishmentHoursRequiredException ex, HttpServletRequest req) {
         log.warn("[422] EstablishmentHoursRequired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
+    }
+
+    @ExceptionHandler(ExitPenaltyNotAcknowledgedException.class)
+    public ResponseEntity<ExitPenaltyErrorResponse> handleExitPenaltyNotAcknowledged(
+            ExitPenaltyNotAcknowledgedException ex, HttpServletRequest req) {
+        log.warn("[409] ExitPenaltyNotAcknowledged | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ExitPenaltyErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), "EXIT_PENALTY_NOT_ACKNOWLEDGED",
+                ex.getExitPenaltyValue(), OffsetDateTime.now()));
     }
 
     @ExceptionHandler(TargetTimeNotFeasibleException.class)
@@ -725,6 +735,15 @@ public class GlobalExceptionHandler {
             int status,
             String message,
             String code,
+            OffsetDateTime timestamp) {
+    }
+
+    /** 409 da ciencia da multa: o valor vem junto para o app mostrar o aviso Sim / Nao. */
+    public record ExitPenaltyErrorResponse(
+            int status,
+            String message,
+            String code,
+            java.math.BigDecimal exitPenaltyValue,
             OffsetDateTime timestamp) {
     }
 

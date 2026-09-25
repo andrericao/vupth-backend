@@ -8032,7 +8032,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_latecancel}}/cancel",
+      "url": "{{base_url}}/attendances/{{attendance_id_latecancel}}/cancel?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -8571,7 +8571,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_resched}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{attendance_id_resched}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -8915,7 +8915,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_rating2}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{attendance_id_rating2}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -10367,7 +10367,7 @@
        "mode": "raw",
        "raw": "{}"
       },
-      "url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel",
+      "url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -10512,7 +10512,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -23088,7 +23088,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{da_att_id}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{da_att_id}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }

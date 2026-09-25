@@ -129,11 +129,14 @@ public class AttendanceController {
     @PutMapping("/{attendanceId}/cancel")
     public ResponseEntity<AttendanceInQueueResponse> cancelAttendance(
             @PathVariable UUID attendanceId,
+            // D4: o "Sim" do aviso da multa — o valor que o cliente viu (exitPenaltyValue do wait-time).
+            @RequestParam(required = false) java.math.BigDecimal acknowledgedPenalty,
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
         log.info("ATTENDANCE CONTROLLER CANCEL {} by client={}", attendanceId, principal.getUserId());
 
-        AttendanceInQueueResponse response = attendanceService.cancelAttendance(attendanceId, principal.getUserId());
+        AttendanceInQueueResponse response = attendanceService.cancelAttendance(
+                attendanceId, principal.getUserId(), acknowledgedPenalty);
 
         // #42: saiu da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
@@ -154,11 +157,14 @@ public class AttendanceController {
     @DeleteMapping("/{attendanceId}/leave-queue")
     public ResponseEntity<AttendanceInQueueResponse> leaveQueue(
             @PathVariable UUID attendanceId,
+            // D4: o "Sim" do aviso da multa — o valor que o cliente viu (exitPenaltyValue do wait-time).
+            @RequestParam(required = false) java.math.BigDecimal acknowledgedPenalty,
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
         log.info("ATTENDANCE CONTROLLER LEAVE QUEUE {} by client={}", attendanceId, principal.getUserId());
 
-        AttendanceInQueueResponse response = attendanceService.leaveQueue(attendanceId, principal.getUserId());
+        AttendanceInQueueResponse response = attendanceService.leaveQueue(
+                attendanceId, principal.getUserId(), acknowledgedPenalty);
 
         // #42: saiu da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);

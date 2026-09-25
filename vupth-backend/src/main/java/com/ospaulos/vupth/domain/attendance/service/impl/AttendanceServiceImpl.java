@@ -803,8 +803,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId) {
-        log.info("[Attendance] cancelAttendance — attendanceId={} clientId={}", attendanceId, clientId);
+    public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId,
+                                                      java.math.BigDecimal acknowledgedPenalty) {
+        log.info("[Attendance] cancelAttendance — attendanceId={} clientId={} ack={}", attendanceId, clientId, acknowledgedPenalty);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
@@ -828,7 +829,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // D4: sair depois da tolerancia com menos de 1h para a vez gera multa. Avalia AGORA, antes de
         // marcar CANCELLED, enquanto ainda esta na fila de espera.
-        registerExitPenaltyIfApplicable(attendance);
+        registerExitPenaltyIfApplicable(attendance, acknowledgedPenalty);
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
@@ -855,7 +856,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      * nao sao multados.</p>
      */
     private void registerExitPenaltyIfApplicable(
-            com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+            com.ospaulos.vupth.domain.attendance.model.Attendance attendance,
+            java.math.BigDecimal acknowledgedPenalty) {
         Client client = attendance.getClient();
         if (client == null) {
             return; // convidado — sem conta, sem multa
@@ -871,12 +873,21 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (amount.signum() == 0) {
             return;
         }
-        penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+        // Ciencia obrigatoria (Andre, 25/09): sem o "Sim" a saida nao acontece — a excecao desfaz a
+        // transacao antes de o status mudar. Confirmar um valor MAIOR cobre (o tempo andou e a multa caiu);
+        // menor nao: o cliente nao soube do valor que seria cobrado.
+        if (acknowledgedPenalty == null || acknowledgedPenalty.compareTo(amount) < 0) {
+            throw new com.ospaulos.vupth.domain.attendance.exception.ExitPenaltyNotAcknowledgedException(
+                    amount, acknowledgedPenalty);
+        }
+        var event = new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
                 client,
                 com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL,
                 attendance.getId(),
                 wait.getAsInt(),
-                amount));
+                amount);
+        event.setAcknowledgedAt(now);
+        penaltyEventRepository.save(event);
         // client e gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
         client.incrementStrike();
         log.info("[Attendance] multa de saida: client={} attendance={} faltavam={}min valor={} strikes={}",
@@ -1007,8 +1018,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId) {
-        log.info("[Attendance] leaveQueue — attendanceId={} clientId={}", attendanceId, clientId);
+    public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId,
+                                                java.math.BigDecimal acknowledgedPenalty) {
+        log.info("[Attendance] leaveQueue — attendanceId={} clientId={} ack={}", attendanceId, clientId, acknowledgedPenalty);
 
         Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
@@ -1023,7 +1035,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         // D4: sair da fila e o mesmo ato que cancelar para a multa.
-        registerExitPenaltyIfApplicable(attendance);
+        registerExitPenaltyIfApplicable(attendance, acknowledgedPenalty);
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         Attendance saved = attendanceRepository.save(attendance);

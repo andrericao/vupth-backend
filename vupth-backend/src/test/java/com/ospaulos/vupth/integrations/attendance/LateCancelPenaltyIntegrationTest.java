@@ -149,7 +149,9 @@ class LateCancelPenaltyIntegrationTest {
 
     /** O proprio cliente cancela sua vez (PUT /attendances/{id}/cancel, clientId vem do JWT). */
     private void cancel(Q q) throws Exception {
+        // D4: o cliente tocou "Sim" no aviso de R$ 5 (o maior valor possivel) — cobre qualquer multa.
         mvc.perform(put("/attendances/{id}/cancel", q.id())
+                        .param("acknowledgedPenalty", "5.00")
                         .header("Authorization", q.token()))
                 .andExpect(status().isOk());
     }
@@ -276,6 +278,7 @@ class LateCancelPenaltyIntegrationTest {
         expireTolerance(q);
 
         mvc.perform(delete("/attendances/{id}/leave-queue", q.id())
+                        .param("acknowledgedPenalty", "5.00")
                         .header("Authorization", q.token()))
                 .andExpect(status().isOk());
 
@@ -284,6 +287,66 @@ class LateCancelPenaltyIntegrationTest {
         assertThat(events).hasSize(1);
         assertThat(events.get(0).getAmount()).isEqualByComparingTo("5.00");
         assertThat(strikeCountOf(q)).isEqualTo(1);
+    }
+
+    @Test
+    @Order(20)
+    @DisplayName("Ciencia obrigatoria: sem o 'Sim', a saida com multa NAO acontece — 409 com o valor")
+    void cancel_withoutAcknowledgement_conflictWithValue() throws Exception {
+        Q q = createWalkin();
+        expireTolerance(q);
+
+        mvc.perform(put("/attendances/{id}/cancel", q.id())
+                        .header("Authorization", q.token()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("EXIT_PENALTY_NOT_ACKNOWLEDGED"))
+                .andExpect(jsonPath("$.exitPenaltyValue").value(5.00));
+
+        assertThat(attendanceRepository.findById(UUID.fromString(q.id())).orElseThrow().getStatus())
+                .as("continua na fila").isEqualTo(AttendanceStatus.SCHEDULED);
+        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(q.clientId()))).isZero();
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("Confirmar valor MENOR que a multa de agora nao vale: 409 de novo (leave-queue)")
+    void leaveQueue_acknowledgedLess_conflict() throws Exception {
+        Q q = createWalkin();
+        expireTolerance(q);
+
+        mvc.perform(delete("/attendances/{id}/leave-queue", q.id())
+                        .param("acknowledgedPenalty", "3.00")
+                        .header("Authorization", q.token()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.exitPenaltyValue").value(5.00));
+
+        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(q.clientId()))).isZero();
+    }
+
+    @Test
+    @Order(22)
+    @DisplayName("Com o 'Sim' a saida acontece e a multa guarda o instante da ciencia")
+    void cancel_acknowledged_recordsAcknowledgement() throws Exception {
+        Q q = createWalkin();
+        expireTolerance(q);
+
+        cancel(q);
+
+        ClientPenaltyEvent event = penaltyEventRepository
+                .findByClientIdOrderByCreatedAtDesc(UUID.fromString(q.clientId())).get(0);
+        assertThat(event.getAmount()).isEqualByComparingTo("5.00");
+        assertThat(event.getAcknowledgedAt()).as("o toque do cliente fica registrado").isNotNull();
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("Sem multa (dentro da tolerancia) a saida nao pede ciencia")
+    void cancel_noPenalty_noAcknowledgementNeeded() throws Exception {
+        Q q = createWalkin();
+
+        mvc.perform(put("/attendances/{id}/cancel", q.id())
+                        .header("Authorization", q.token()))
+                .andExpect(status().isOk());
     }
 
     /** Cria um atendimento walk-in para um cliente EXISTENTE (reaproveita o mesmo usuario). */

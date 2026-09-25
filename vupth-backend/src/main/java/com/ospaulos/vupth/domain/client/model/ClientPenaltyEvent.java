@@ -61,6 +61,10 @@ public class ClientPenaltyEvent implements Serializable {
     @Column(name = "charged_attendance_id")
     private UUID chargedAttendanceId;
 
+    /** Instante do "Sim" do cliente no aviso da multa (ciencia, D4). Nulo onde nao houve toque. */
+    @Column(name = "acknowledged_at")
+    private OffsetDateTime acknowledgedAt;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
