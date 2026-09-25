@@ -2,6 +2,7 @@ package com.ospaulos.vupth.api.client.dto.response;
 
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -14,5 +15,9 @@ public record ClientInQueueResponse(
         int totalEstimatedMinutes,
         int totalRemainingMinutes,
         int estimatedWaitingTime,
-        OffsetDateTime startTime
+        OffsetDateTime startTime,
+        /** Ate quando sair da fila e de graca (D4, tolerancia de 24/09); nulo em atendimento anterior a regra. */
+        OffsetDateTime toleranceUntil,
+        /** Quanto custa sair AGORA — o valor do aviso "Sim / Nao"; 0.00 dentro da tolerancia ou com 1h ou mais. */
+        BigDecimal exitPenaltyValue
 ) {}

@@ -153,6 +153,14 @@ public class Attendance implements Serializable {
     private OffsetDateTime desiredTime;
 
     /**
+     * Ate quando o cliente sai da fila de graca (D4, tolerancia de 24/09). Gravado no ingresso, pela
+     * espera prevista naquele momento ({@code ExitPenaltyRule}); nao se recalcula depois — a janela
+     * prometida na entrada e a que vale. Null nos atendimentos anteriores a regra.
+     */
+    @Column(name = "tolerance_until")
+    private OffsetDateTime toleranceUntil;
+
+    /**
      * Notificacoes push (backlog #1): true depois que este atendimento ja recebeu o push
      * "voce e o proximo" ao alcancar a frente da fila. Evita reenviar a cada nova mutacao
      * enquanto continua na frente. Ver {@code QueuePushService.notifyNextInLine}.

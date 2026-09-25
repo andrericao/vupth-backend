@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -48,6 +49,10 @@ public class ClientPenaltyEvent implements Serializable {
     @Column(name = "eta_minutes", nullable = false)
     private int etaMinutes;
 
+    /** Valor da multa em reais (D4). Nulo nos eventos anteriores a regra e nos tipos que ainda nao cobram. */
+    @Column(name = "amount", precision = 10, scale = 2)
+    private BigDecimal amount;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -56,6 +61,11 @@ public class ClientPenaltyEvent implements Serializable {
         this.type = type;
         this.attendanceId = attendanceId;
         this.etaMinutes = etaMinutes;
+    }
+
+    public ClientPenaltyEvent(Client client, PenaltyType type, UUID attendanceId, int etaMinutes, BigDecimal amount) {
+        this(client, type, attendanceId, etaMinutes);
+        this.amount = amount;
     }
 
     @PrePersist

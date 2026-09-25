@@ -89,6 +89,8 @@ class AttendanceServiceImplTest {
     @Mock ServiceItemRepository serviceItemRepository;
     @Mock ProfessionalRepository professionalRepository;
     @Mock ClientRepository clientRepository;
+    // Espera que o cliente le (multa de saida D4): vazio = fora da fila de espera -> sem multa.
+    @Mock com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
 
     @InjectMocks AttendanceServiceImpl attendanceService;
 

@@ -6462,6 +6462,16 @@
          "pm.test(\"Status 200 - Status na fila OK\", () => pm.response.to.have.status(200));",
          "pm.test(\"Schema: resposta é objeto\", () => {",
          "  pm.expect(pm.response.json()).to.be.an(\"object\");",
+         "});",
+         "// D4 (multa de saida): o app mostra \"sair sem multa ate HH:MM\" e o valor do aviso Sim / Nao",
+         "// sem calcular nada. O valor depende do relogio (tolerancia de 5/10 min), entao aqui se afirma o",
+         "// contrato, nao o numero — o numero e do LateCancelPenaltyIntegrationTest.",
+         "pm.test(\"D4: toleranceUntil (data) e exitPenaltyValue (numero) no wait-time\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.toleranceUntil, \"toleranceUntil\").to.be.a(\"string\");",
+         "  pm.expect(new Date(b.toleranceUntil).toString()).to.not.eql(\"Invalid Date\");",
+         "  pm.expect(b.exitPenaltyValue, \"exitPenaltyValue\").to.be.a(\"number\");",
+         "  pm.expect([0, 3, 5]).to.include(b.exitPenaltyValue);",
          "});"
         ],
         "type": "text/javascript"
