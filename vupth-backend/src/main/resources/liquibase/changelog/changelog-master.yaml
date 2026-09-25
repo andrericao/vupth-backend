@@ -328,3 +328,6 @@ databaseChangeLog:
   - include:
       file: changesets/70-client/006-add-amount-to-client_penalty_event.yaml
       relativeToChangeLogFile: true
+  - include:
+      file: changesets/70-client/007-add-charged_attendance_id-to-client_penalty_event.yaml
+      relativeToChangeLogFile: true

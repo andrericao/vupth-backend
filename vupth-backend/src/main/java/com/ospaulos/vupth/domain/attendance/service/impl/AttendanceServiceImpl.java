@@ -79,6 +79,10 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
     private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRatingRepository attendanceRatingRepository;
     private final com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
+
+    /** Multa por nao comparecer (D4, Andre 18/09). */
+    private static final java.math.BigDecimal NO_SHOW_PENALTY = new java.math.BigDecimal("5.00");
 
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
@@ -134,6 +138,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
@@ -461,6 +466,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // (Modelo A — sem reserva de slot; o desiredTime persistido segue como registro do pretendido).
         attendance.setScheduledTime(now);
         Attendance saved = attendanceRepository.save(attendance);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, saved.getProfessional(), saved.getEstablishment());
 
         UUID establishmentId = saved.getEstablishment() != null ? saved.getEstablishment().getId() : null;
@@ -671,6 +677,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         applyIntentIfRequested(attendance, professional, establishment, request.targetTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={} intent={} targetTime={}",
                 saved.getId(), saved.getTotalValue(), saved.isIntent(), saved.getTargetTime());
@@ -712,6 +719,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
         return saved;
@@ -911,11 +919,13 @@ public class AttendanceServiceImpl implements AttendanceService {
             }
         }
 
+        // D4 (Andre, 18/09): nao comparecer custa R$ 5,00, cobrado no proximo atendimento.
         penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
                 client,
                 com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW,
                 attendance.getId(),
-                eta));
+                eta,
+                NO_SHOW_PENALTY));
         // client gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
         client.incrementStrike();
         log.info("[Attendance] registerNoShowPenalty — NO_SHOW strike: client={} eta={}min strikes={}",
@@ -1145,6 +1155,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         return saved;
     }
@@ -1544,8 +1555,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<Attendance> attendances = attendanceRepository.findByClientFilters(
                 clientId, status, from, to);
 
+        // D4: o relatorio mostra as multas que cada atendimento carrega, com a origem de cada uma.
+        Map<UUID, List<com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse>> penalties =
+                clientPenaltyService.chargedTo(attendances.stream().map(Attendance::getId).toList());
         return attendances.stream()
-                .map(AttendanceListResponse::fromEntity)
+                .map(a -> AttendanceListResponse.fromEntity(a)
+                        .withPenalties(penalties.getOrDefault(a.getId(), List.of())))
                 .collect(Collectors.toList());
     }
 

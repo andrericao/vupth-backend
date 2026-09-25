@@ -1,0 +1,27 @@
+databaseChangeLog:
+  # Multa cobrada no proximo atendimento (D4): o atendimento que carrega a multa. Nulo = pendente.
+  # Se esse atendimento terminar sem servico, a multa volta a pendente (derivado do status dele);
+  # concluido = paga. Sem FK de proposito: o historico de multas sobrevive a limpeza de atendimentos,
+  # como o attendance_id de origem.
+  - changeSet:
+      id: 007-add-charged_attendance_id-to-client_penalty_event
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: client_penalty_event
+                columnName: charged_attendance_id
+      changes:
+        - addColumn:
+            tableName: client_penalty_event
+            columns:
+              - column:
+                  name: charged_attendance_id
+                  type: UUID
+        - createIndex:
+            tableName: client_penalty_event
+            indexName: idx_penalty_event_charged_attendance
+            columns:
+              - column:
+                  name: charged_attendance_id

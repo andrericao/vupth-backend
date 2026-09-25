@@ -1,7 +1,9 @@
 package com.ospaulos.vupth.web.rest.client.controller;
 
 import com.ospaulos.vupth.api.client.dto.response.ClientResponse;
+import com.ospaulos.vupth.api.client.dto.response.PendingPenaltiesResponse;
 import com.ospaulos.vupth.api.client.usecase.GetClientUseCase;
+import com.ospaulos.vupth.domain.client.service.ClientPenaltyService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,7 @@ import java.util.UUID;
 public class ClientController {
 
     private final GetClientUseCase getClientUseCase;
+    private final ClientPenaltyService clientPenaltyService;
 
     @GetMapping("/{id}")
     //@PreAuthorize("hasRole('PROFESSIONAL')")
@@ -31,5 +34,15 @@ public class ClientController {
         ClientResponse response = getClientUseCase.execute(id);
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    /**
+     * Multas que o cliente logado ainda deve (D4). O app as soma aos servicos marcados antes de entrar
+     * na fila e cita cada uma pela origem ("corte do dia tal com o profissional tal").
+     */
+    @GetMapping("/me/pending-penalties")
+    public ResponseEntity<PendingPenaltiesResponse> pendingPenalties(
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(clientPenaltyService.pending(user.getUserId()));
     }
 }

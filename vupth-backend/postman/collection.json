@@ -6519,6 +6519,58 @@
        }
       ]
      }
+    },
+    {
+     "name": "multas pendentes do cliente (D4)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// D4: o app soma o total aos servicos marcados antes de entrar na fila e cita cada multa pela",
+         "// origem (corte do dia tal com o profissional tal). O cliente paga o valor cheio: 4% do gateway,",
+         "// o resto do app. Aqui se afirma o contrato; os valores sao do PenaltyChargeIntegrationTest.",
+         "pm.test(\"Status 200 - multas pendentes\", () => pm.response.to.have.status(200));",
+         "pm.test(\"D4: total (numero) + penalties (lista)\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.total, \"total\").to.be.a(\"number\");",
+         "  pm.expect(b.penalties, \"penalties\").to.be.an(\"array\");",
+         "  b.penalties.forEach(p => {",
+         "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\", \"gatewayFee\", \"appShare\",",
+         "      \"originAttendanceId\", \"originDate\", \"originProfessionalName\", \"originEstablishmentName\");",
+         "    pm.expect(p.gatewayFee + p.appShare).to.be.closeTo(p.amount, 0.001);",
+         "  });",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/clients/me/pending-penalties",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "clients",
+        "me",
+        "pending-penalties"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

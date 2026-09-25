@@ -53,6 +53,14 @@ public class ClientPenaltyEvent implements Serializable {
     @Column(name = "amount", precision = 10, scale = 2)
     private BigDecimal amount;
 
+    /**
+     * Atendimento que carrega a cobranca desta multa (D4: cobrada no proximo atendimento). Nulo =
+     * pendente. Se esse atendimento terminar sem servico, a multa volta a pendente — derivado do status
+     * dele, sem gatilho em cada caminho de saida; concluido = paga.
+     */
+    @Column(name = "charged_attendance_id")
+    private UUID chargedAttendanceId;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 

@@ -207,6 +207,7 @@ class NoShowEscalationIntegrationTest {
                 .findByClientIdOrderByCreatedAtDesc(UUID.fromString(c1.clientId()));
         assertThat(events).as("1 evento NO_SHOW registrado").hasSize(1);
         assertThat(events.get(0).getType()).isEqualTo(PenaltyType.NO_SHOW);
+        assertThat(events.get(0).getAmount()).as("D4 (18/09): nao comparecer custa R$ 5,00").isEqualByComparingTo("5.00");
         assertThat(events.get(0).getAttendanceId().toString()).isEqualTo(c1.id());
 
         assertThat(strikeCountOf(c1)).as("strikeCount exposto = 1").isEqualTo(1);
