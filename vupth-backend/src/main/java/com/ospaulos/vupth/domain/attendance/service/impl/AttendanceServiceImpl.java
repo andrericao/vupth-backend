@@ -606,7 +606,17 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (Boolean.FALSE.equals(professional.getAcceptingNew())) {
             log.warn("[Attendance] createAttendance — professional={} fechou a fila (entrada na fila viva bloqueada)",
                     professional.getId());
-            throw new ProfessionalNotAcceptingNewException(professional.getId());
+            throw ProfessionalNotAcceptingNewException.queueClosed(professional.getId());
+        }
+
+        // Quem nao marcou "trabalhando" nao recebe fila (regra de 07/09, fechada em 20/09). O gate do
+        // accepting_new sozinho nao cobria este caso: ir para Fora fecha a fila (19/09), mas o
+        // profissional NASCE OFF com accepting_new=true — entao o recem-cadastrado, que nunca tocou no
+        // status, recebia cliente numa loja aberta por um COLEGA. O cliente ia esperar quem nem chegou.
+        if (professional.getWorkStatus() == null || !professional.getWorkStatus().countsAsOpen()) {
+            log.warn("[Attendance] createAttendance — professional={} fora de expediente (work_status={})",
+                    professional.getId(), professional.getWorkStatus());
+            throw ProfessionalNotAcceptingNewException.notInShift(professional.getId());
         }
 
         Client client = clientRepository.findById(request.clientId())
@@ -788,9 +798,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
 
-        // Guard: already cancelled — inform the caller instead of silently overwriting
-        if (attendance.getStatus() == AttendanceStatus.CANCELLED) {
-            log.warn("[Attendance] cancelAttendance — attendance={} is already CANCELLED", attendanceId);
+        // Guard: ja saiu da fila — avisa em vez de sobrescrever em silencio. Cobre os DOIS desfechos
+        // (o cliente que ja desistiu e o que a loja ja retirou): cancelar o que nao esta mais na fila
+        // e o mesmo erro, venha de onde vier.
+        if (attendance.getStatus().leftWithoutService()) {
+            log.warn("[Attendance] cancelAttendance — attendance={} ja saiu da fila ({})",
+                    attendanceId, attendance.getStatus());
             throw new AttendanceAlreadyCancelledException(attendanceId);
         }
 
@@ -1200,7 +1213,9 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceInvalidStatusException(status, AttendanceStatus.SCHEDULED);
         }
 
-        attendance.setStatus(AttendanceStatus.CANCELLED);
+        // Quem tirou foi o PROFISSIONAL: REMOVED, nao CANCELLED (18/09). O cliente desistindo
+        // continua CANCELLED — e a distincao que o app precisa para contar a historia certa.
+        attendance.setStatus(AttendanceStatus.REMOVED);
         Attendance saved = attendanceRepository.save(attendance);
 
         String clientName = attendance.getClient() != null

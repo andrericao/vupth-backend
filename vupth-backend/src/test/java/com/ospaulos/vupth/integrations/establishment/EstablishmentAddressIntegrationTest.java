@@ -309,8 +309,8 @@ class EstablishmentAddressIntegrationTest {
                 faker.address().stateAbbr(),
                 validZip(),
                 "Next to " + faker.company().name(),
-                Double.parseDouble(faker.address().latitude()),
-                Double.parseDouble(faker.address().longitude()));
+                faker.number().randomDouble(6, -90, 90),
+                faker.number().randomDouble(6, -180, 180));
     }
 
     /**

@@ -79,8 +79,8 @@ public class UserAddressIntegrationTest {
                 faker.address().stateAbbr(),
                 validZip(),
                 "Next to " + faker.company().name(),
-                Double.parseDouble(faker.address().latitude()),
-                Double.parseDouble(faker.address().longitude())
+                faker.number().randomDouble(6, -90, 90),
+                faker.number().randomDouble(6, -180, 180)
         );
 
         final MvcResult responseCreatedAddress = mvc.perform(post("/users/me/addresses")
@@ -112,8 +112,8 @@ public class UserAddressIntegrationTest {
                 faker.address().stateAbbr(),
                 validZip(),
                 "Next to " + faker.company().name(),
-                Double.parseDouble(faker.address().latitude()),
-                Double.parseDouble(faker.address().longitude())
+                faker.number().randomDouble(6, -90, 90),
+                faker.number().randomDouble(6, -180, 180)
         );
 
         mvc.perform(post("/users/me/addresses")

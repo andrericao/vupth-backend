@@ -6122,6 +6122,52 @@
    "name": "07 - client queue",
    "item": [
     {
+     "name": "setup: o profissional CHEGA (WORKING) — sem expediente nao ha fila (20/09)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// 20/09: quem nao marcou \"trabalhando\" nao recebe fila. O profissional do fluxo principal",
+         "// (criado em \"03 - professional\", com servico proprio em \"04\") nasce OFF, e daqui para baixo",
+         "// sao ~20 entradas na fila dele — pastas 07, 08c/d/e/f/g/h/i, 08b, 09 e 08k. Uma chegada so",
+         "// cobre todas; sem ela, a primeira ja devolve 409 PROFESSIONAL_NOT_ACCEPTING_NEW.",
+         "//",
+         "// ⚠️ A loja JA esta OPEN aqui (pasta 04). Como a derivacao so grava a abertura real na",
+         "// TRANSICAO para aberta, esta chegada nao reescreve o horario do dia — e por isso as refeicoes",
+         "// em horario fixo da pasta 12 continuam cabendo no expediente.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"work_status WORKING\", () => pm.expect(pm.response.json().work_status).to.equal(\"WORKING\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "get professionals with queue",
      "event": [
       {
@@ -6840,8 +6886,8 @@
          "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
          "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
          "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));",
-         "pm.test(\"(BUG9) remove -> status CANCELLED (sai do read ativo do cliente)\", () => {",
-         "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"CANCELLED\");",
+         "pm.test(\"(BUG9) remove -> status REMOVED (a loja tirou; sai do read ativo do cliente)\", () => {",
+         "  if (pm.response.code === 200) pm.expect(pm.response.json().status).to.eql(\"REMOVED\");",
          "});"
         ],
         "type": "text/javascript"
@@ -11128,7 +11174,8 @@
          "pm.test(\"Status 200 - Removido da fila\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  pm.test(\"Schema: status é CANCELLED\", () => {",
-         "    pm.expect(pm.response.json().status).to.equal(\"CANCELLED\");",
+         "// 18/09: quem tira e a LOJA -> REMOVED. O cliente que desiste segue CANCELLED (pasta 09).",
+         "    pm.expect(pm.response.json().status).to.equal(\"REMOVED\");",
          "  });",
          "}"
         ],
@@ -18440,6 +18487,433 @@
       "body": {
        "mode": "raw",
        "raw": "{\"value\":true}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "abertura real: planta a semana 00:30 -> 23:59",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// Abertura real (19/09): o dia passa a valer a hora em que o 1o profissional marcou",
+         "// \"trabalhando\". A semana entra com um plano largo (00:30 -> 23:59) para a chegada caber",
+         "// em qualquer horario de execucao sem a janela virar a meia-noite."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ps_estab_id}}/hours/weekly",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\":[{\"day\":\"MONDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"},{\"day\":\"TUESDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"},{\"day\":\"WEDNESDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"},{\"day\":\"THURSDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"},{\"day\":\"FRIDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"},{\"day\":\"SATURDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"},{\"day\":\"SUNDAY\",\"closed\":false,\"opens\":\"00:30\",\"closes\":\"23:59\"}]}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "abertura real: o profissional CHEGA (abre a loja)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"work_status WORKING\", () => pm.expect(pm.response.json().work_status).to.equal(\"WORKING\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "abertura real: opening_time do dia = a hora da chegada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"o dia passou a valer a hora da CHEGADA, nao a cadastrada\", () => {",
+         "  pm.expect(b.opening_time, \"opening_time do dia\").to.match(/^\\d{2}:\\d{2}$/);",
+         "  // ⚠️ Limite conhecido: se a corrida cair exatamente em 00:30 (o plano), os dois valores",
+         "  // coincidem de verdade. E 1 minuto em 1440 — o mesmo limite do teste de integracao.",
+         "  pm.expect(b.opening_time).to.not.equal(\"00:30\");",
+         "});",
+         "pm.test(\"o fechamento do plano fica (e ele que guia o auto-fechamento)\", () => {",
+         "  pm.expect(b.closing_time).to.equal(\"23:59\");",
+         "});",
+         "pm.test(\"loja aberta\", () => pm.expect(b.open_status).to.equal(\"OPEN\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{ps_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "abertura real: cleanup — profissional sai",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"OFF\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: register 2o profissional (nunca marca status)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ps_off_email\",\"psoff_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"ps_off_pass\",\"Senha123!\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ps_off_email}}\",\"password\":\"{{ps_off_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: login do 2o profissional",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ps_off_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ps_off_email}}\",\"password\":\"{{ps_off_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: ele se filia a MESMA loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_off_prof_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_off_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Prof Fora\",\"establishmentId\":\"{{ps_estab_id}}\",\"specialty\":\"Barber\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: com servico (para o #31 nao ser o motivo)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ps_off_service_id\", pm.response.json().id);",
+         "// Com servico, o gate do item #31 nao entra em cena: o que barra a seguir e SO o expediente."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_off_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ps_estab_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"BARBA\",\"customName\":\"Barba do 2o\",\"price\":25.00,\"estimatedMinutes\":20}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: o colega abre a loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "// O COLEGA abre a loja. O 2o profissional segue OFF: nasceu assim e nunca tocou no status."
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] fora de expediente: cliente na fila de quem nunca chegou -> 409",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// 20/09: quem nao marcou \"trabalhando\" nao recebe fila. O gate do accepting_new sozinho nao",
+         "// pegava este caso — o profissional NASCE OFF com accepting_new=true, entao o recem-cadastrado",
+         "// recebia cliente numa loja que o COLEGA abriu, e o cliente esperava quem nem chegou.",
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code PROFESSIONAL_NOT_ACCEPTING_NEW\", () => pm.expect(pm.response.json().code).to.equal(\"PROFESSIONAL_NOT_ACCEPTING_NEW\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ps_off_prof_id}}\",\"establishmentId\":\"{{ps_estab_id}}\",\"serviceItemIds\":[\"{{ps_off_service_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fora de expediente: cleanup — o colega sai",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ps_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"OFF\"}"
       }
      },
      "response": []

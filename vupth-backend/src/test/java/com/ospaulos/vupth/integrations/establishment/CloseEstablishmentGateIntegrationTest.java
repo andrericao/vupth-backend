@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.establishment;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
@@ -51,6 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class CloseEstablishmentGateIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -71,6 +73,9 @@ class CloseEstablishmentGateIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerToken, establishmentId, "Owner Professional");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         professionalIntervalRepository.deleteAll(
                 professionalIntervalRepository.findByProfessional_Id(UUID.fromString(professionalId)));

@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.notification;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.notification.dto.request.DeviceTokenRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -54,6 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class PushNotificationIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired DeviceTokenRepository deviceTokenRepository;
@@ -80,6 +82,9 @@ class PushNotificationIntegrationTest {
         // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Owner Professional");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         professionalIntervalRepository.deleteAll(
                 professionalIntervalRepository.findByProfessional_Id(UUID.fromString(professionalId)));
@@ -214,7 +219,7 @@ class PushNotificationIntegrationTest {
 
     @Test
     @Order(22)
-    @DisplayName("(BUG9) profissional remove da fila -> push ATTENDANCE_CANCELLED + status CANCELLED")
+    @DisplayName("(BUG9) profissional remove da fila -> push ATTENDANCE_CANCELLED + status REMOVED")
     void push_attendanceCancelled_onRemoveFromQueue() throws Exception {
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         String t1 = "ExponentPushToken[" + UUID.randomUUID() + "]";
@@ -232,7 +237,7 @@ class PushNotificationIntegrationTest {
         verify(pushSender).send(argThat(l -> l.contains(t1)), eq("Você saiu da fila"), any(), any());
         // e o atendimento sai do read ativo do cliente (CANCELLED)
         assertThat(attendanceRepository.findById(UUID.fromString(att)).orElseThrow().getStatus())
-                .isEqualTo(AttendanceStatus.CANCELLED);
+                .isEqualTo(AttendanceStatus.REMOVED);
     }
 
     private String join(com.ospaulos.vupth.integrations.utils.TestUserUtils.UserAuthAndToken client) throws Exception {

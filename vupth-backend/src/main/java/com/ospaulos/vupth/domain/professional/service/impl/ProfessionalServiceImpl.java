@@ -231,9 +231,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         // Registra o strike NO_SHOW ANTES de sair da fila (ainda esta na fila de espera).
         attendanceService.registerNoShowPenalty(attendance);
 
-        // Remove da fila: sai da espera (findWaiting exclui CANCELLED). O motivo (no-show)
-        // fica auditado no ClientPenaltyEvent NO_SHOW.
-        attendance.setStatus(AttendanceStatus.CANCELLED);
+        // Remove da fila: sai da espera (as consultas da fila trabalham por lista branca de status).
+        // REMOVED e nao CANCELLED porque quem tirou foi a LOJA (18/09) — o motivo (no-show) segue
+        // auditado no ClientPenaltyEvent NO_SHOW.
+        attendance.setStatus(AttendanceStatus.REMOVED);
         attendanceRepository.save(attendance);
 
         queueService.updateQueueEstimates(professional);

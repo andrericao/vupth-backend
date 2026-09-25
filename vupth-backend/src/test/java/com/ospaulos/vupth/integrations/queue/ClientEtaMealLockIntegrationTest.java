@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.queue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -59,6 +60,7 @@ class ClientEtaMealLockIntegrationTest {
     private static final int MEAL_MINUTES = 25;
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired UserRepository userRepository;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -81,6 +83,9 @@ class ClientEtaMealLockIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
         this.establishmentUuid = UUID.fromString(estab.id());
         TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), estab.id());
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, estab.id());
         this.profToken = relogin(owner.email(), owner.password());
 
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, estab.id(), owner.token(),

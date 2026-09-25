@@ -17,6 +17,7 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenExc
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotAffiliatedException;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
@@ -121,6 +122,10 @@ class AttendanceServiceImplTest {
         professional = new Professional(profUser);
         professional.setEstablishment(establishment);
         professional.setIsAvailable(true);
+        // 20/09: quem nao esta em expediente nao recebe fila. O profissional nasce OFF; aqui ele
+        // chega para trabalhar, porque o assunto destes casos e outro (dono do establishment,
+        // servico inexistente, duplo ingresso).
+        professional.setWorkStatus(ProfessionalStatus.WORKING);
         professional.setAttendances(new ArrayList<>());
 
         clientUser = new BaseUser();

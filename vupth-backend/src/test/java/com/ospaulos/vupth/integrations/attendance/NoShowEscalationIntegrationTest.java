@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -43,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * Regra: um cliente que ja estava LATE (#19, caiu de posicao) e nao compareceu ao ser chamado de
  * novo pode ser removido da fila pelo profissional via {@code PATCH /attendances/{id}/no-show}:
- * o atendimento vira CANCELLED e registra-se um {@link ClientPenaltyEvent} do tipo {@code NO_SHOW}
+ * o atendimento vira REMOVED (a loja tirou, 18/09) e registra-se um {@link ClientPenaltyEvent} {@code NO_SHOW}
  * incrementando o {@code strikeCount} do cliente. Exige status LATE (senao 400). Convidados (sem
  * conta) sao removidos mas NAO acumulam strike.
  *
@@ -58,6 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class NoShowEscalationIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired ClientPenaltyEventRepository penaltyEventRepository;
@@ -85,6 +87,9 @@ class NoShowEscalationIntegrationTest {
         // Loja "aberta agora" — walk-in do cliente so entra com a loja aberta (gate BUG5 C1).
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Owner Professional");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         // ETA puro = tempo de servico (sem refeicoes recorrentes).
         professionalIntervalRepository.deleteAll(
@@ -182,7 +187,7 @@ class NoShowEscalationIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("LATE -> no-show remove da fila (CANCELLED) + registra strike NO_SHOW + expoe count")
+    @DisplayName("LATE -> no-show remove da fila (REMOVED) + registra strike NO_SHOW + expoe count")
     void noShow_onLate_removesAndStrikes() throws Exception {
         Q c1 = createWalkin();
         createWalkin(); // proximo, para o c1 ter atras de quem cair no /late
@@ -194,7 +199,8 @@ class NoShowEscalationIntegrationTest {
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 
-        assertThat(statusOf(c1.id())).as("removido -> CANCELLED").isEqualTo(AttendanceStatus.CANCELLED);
+        // 18/09: o no-show e a LOJA tirando o cliente da fila -> REMOVED.
+        assertThat(statusOf(c1.id())).as("removido -> REMOVED").isEqualTo(AttendanceStatus.REMOVED);
         assertThat(inWaiting(c1.id())).as("saiu da fila de espera").isFalse();
 
         List<ClientPenaltyEvent> events = penaltyEventRepository
@@ -234,7 +240,7 @@ class NoShowEscalationIntegrationTest {
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 
-        assertThat(statusOf(guest)).as("convidado removido -> CANCELLED").isEqualTo(AttendanceStatus.CANCELLED);
+        assertThat(statusOf(guest)).as("convidado removido -> REMOVED").isEqualTo(AttendanceStatus.REMOVED);
         assertThat(inWaiting(guest)).as("saiu da fila").isFalse();
         assertThat(penaltyEventRepository.count()).as("convidado nao gera evento de penalidade").isZero();
     }

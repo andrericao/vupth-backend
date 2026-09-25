@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
@@ -55,6 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class QueueVisibilityBug8IntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
@@ -91,6 +93,10 @@ class QueueVisibilityBug8IntegrationTest {
         var estab2 = TestUserUtils.becomeOwner(mvc, mapper, faker, prof2Token);
         this.estab2Id = estab2.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, prof2Token, estab2Id, "Prof 2");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, estab1Id);
+        TestUserUtils.startShift(professionalRepository, estab2Id);
         var s2 = TestUserUtils.createServiceItem(mvc, mapper, estab2Id, prof2Token,
                 ServiceItemType.CORTE_MAQUINA, "Corte 2", BigDecimal.valueOf(30));
         this.serviceItem2 = UUID.fromString(s2.id());

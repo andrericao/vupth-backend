@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -58,6 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DoubleQueueEntryIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -94,6 +96,9 @@ class DoubleQueueEntryIntegrationTest {
         // (assertServiceItemsBelongToProfessional), entao o item do dono nao serve na fila dele.
         this.employee = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, employee.token(), establishmentId, "Funcionario");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
         limpaRefeicoes(employee.id());
         var s2 = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, employee.token(),
                 ServiceItemType.CORTE_MAQUINA, "Corte do funcionario", BigDecimal.valueOf(30));

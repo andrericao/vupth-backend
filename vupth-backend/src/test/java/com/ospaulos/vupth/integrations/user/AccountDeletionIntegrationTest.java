@@ -120,6 +120,10 @@ class AccountDeletionIntegrationTest {
         this.serviceItemIds = List.of(UUID.fromString(service.id()));
 
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
+        // 20/09: quem nao esta em expediente nao recebe fila, e o cliente entra na fila LOGO ABAIXO —
+        // antes do funcionario existir. Por isso a chegada aparece duas vezes neste setup: aqui para o
+        // dono-profissional, e de novo depois que o funcionario se filia.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
 
         this.client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientAttendanceId = enterQueue(client, ownerId, serviceItemIds);
@@ -128,6 +132,9 @@ class AccountDeletionIntegrationTest {
         // (`assertServiceItemsBelongToProfessional`), entao o do dono nao serve para a fila dele.
         this.employee = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, employee.token(), establishmentId, "Funcionario");
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
         professionalIntervalRepository.deleteAll(
                 professionalIntervalRepository.findByProfessional_Id(UUID.fromString(employee.id())));
         var employeeService = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, employee.token(),

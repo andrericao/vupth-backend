@@ -3,6 +3,7 @@ package com.ospaulos.vupth.integrations.attendance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
@@ -57,6 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class LateAttendanceIntegrationTest {
 
     @Autowired MockMvc mvc;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -92,6 +94,10 @@ class LateAttendanceIntegrationTest {
         var anotherUser = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var anotherEstab = TestUserUtils.becomeOwner(mvc, mapper, faker, anotherUser.token());
         TestUserUtils.becomeProfessional(mvc, mapper, faker, anotherUser.token(), anotherEstab.id());
+        // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
+        // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
+        TestUserUtils.startShift(professionalRepository, establishmentId);
+        TestUserUtils.startShift(professionalRepository, anotherEstab.id());
         this.anotherProfToken = anotherUser.token();
 
         log.info("[Late] setup — estab={} prof={}", establishmentId, professionalId);
@@ -232,7 +238,7 @@ class LateAttendanceIntegrationTest {
 
     @Test
     @Order(14)
-    @DisplayName("DELETE /professional-queue/{id}/remove — remove um cliente LATE da fila → CANCELLED")
+    @DisplayName("DELETE /professional-queue/{id}/remove — remove um cliente LATE da fila → REMOVED")
     void removeFromQueue_acceptsLateAttendance() throws Exception {
         String late = createScheduled(900);
         createScheduled(901); // proximo, para o late ter como cair
@@ -246,7 +252,7 @@ class LateAttendanceIntegrationTest {
                 .andExpect(status().isOk())
                 .andDo(print());
 
-        assertThat(statusOf(late)).isEqualTo(AttendanceStatus.CANCELLED);
+        assertThat(statusOf(late)).isEqualTo(AttendanceStatus.REMOVED);
         assertThat(waitingIndexOf(late))
                 .as("cliente removido sai da fila de espera")
                 .isEqualTo(-1);

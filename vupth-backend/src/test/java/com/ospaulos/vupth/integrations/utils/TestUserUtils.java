@@ -12,6 +12,9 @@ import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepositor
 import com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
+import com.ospaulos.vupth.domain.professional.model.Professional;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -21,6 +24,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Set;
 import java.time.LocalTime;
 import java.util.UUID;
@@ -205,6 +209,25 @@ public class TestUserUtils {
         e.setOpenStatus(OpenStatus.OPEN);
         repository.save(e);
         log.debug("[TestUtils] openEstablishment estab={} -> OPEN", establishmentId);
+    }
+
+    /**
+     * Poe todos os profissionais da loja em {@code WORKING} direto no banco — "o profissional chegou
+     * para trabalhar". Escreve como o {@link #openEstablishment}: sem passar pelo
+     * {@code PATCH /professional/me/status}, entao o gate de servico e a derivacao do open_status
+     * ficam de fora, e o teste continua mandando no estado da loja.
+     *
+     * <p><b>Por que quase todo teste de fila precisa disto (20/09):</b> profissional <b>nasce
+     * {@code OFF}</b>, e quem nao esta em expediente nao recebe fila. Sem a chegada, o
+     * {@code POST /attendances} devolve 409 — foi o que reprovou 140 testes de uma vez. Onde o
+     * expediente e o proprio objeto do teste (derivacao, drenagem, auto-fechamento), NAO se usa este
+     * atalho: la o status vai pelo endpoint, que e o que se quer provar.</p>
+     */
+    public static void startShift(ProfessionalRepository repository, String establishmentId) {
+        List<Professional> professionals = repository.findByEstablishmentId(UUID.fromString(establishmentId));
+        professionals.forEach(p -> p.setWorkStatus(ProfessionalStatus.WORKING));
+        repository.saveAll(professionals);
+        log.debug("[TestUtils] startShift estab={} -> {} em expediente", establishmentId, professionals.size());
     }
 
     /**
