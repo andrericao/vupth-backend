@@ -210,6 +210,61 @@ class LateCountIntegrationTest {
         assertThat(pending.getJSONArray("penalties").getJSONObject(0).getString("originAttendanceId")).isEqualTo(third);
     }
 
+    @Test
+    @Order(50)
+    @DisplayName("No 3o atraso ele vai para o FIM da fila (Andre 26/09) e pode sair sem nova multa")
+    void thirdLate_movesToEnd_andLeavesFree() throws Exception {
+        leaveQueue(); // comeca limpo: contador em 0 depois da multa do caso anterior
+        // o atrasado na frente de outros quatro: tres quedas de uma posicao o deixariam em 4o de 5 — so a
+        // regra do 3o atraso o leva para o fim
+        String late = enter();
+        String last = null;
+        for (int i = 0; i < 4; i++) {
+            var other = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+            last = enterAs(other.id(), other.token());
+        }
+
+        for (int i = 0; i < 3; i++) {
+            promisedTenMinutesAgo(late);
+            markLate(late);
+        }
+
+        var waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                UUID.fromString(professionalId), UUID.fromString(establishmentId));
+        assertThat(waiting.get(waiting.size() - 1).getId().toString())
+                .as("3o atraso -> fim da fila, depois de quem era o ultimo").isEqualTo(late);
+        assertThat(waiting.get(waiting.size() - 2).getId().toString()).isEqualTo(last);
+        assertThat(attendanceRepository.findById(UUID.fromString(late)).orElseThrow().getStatus())
+                .as("recomeca no fim como espera comum").isEqualTo(AttendanceStatus.SCHEDULED);
+
+        MvcResult wait = mvc.perform(get("/client-queue/{attendanceId}/wait-time", late)
+                        .param("clientId", clientId)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        assertThat(new BigDecimal(new JSONObject(wait.getResponse().getContentAsString()).get("exitPenaltyValue").toString()))
+                .as("ja pagou a do 3o: sair nao custa mais nada").isEqualByComparingTo("0.00");
+
+        long before = penaltyEventRepository.count();
+        mvc.perform(delete("/attendances/{id}/leave-queue", late)
+                        .header("Authorization", clientToken))
+                .andExpect(status().isOk());
+        assertThat(penaltyEventRepository.count()).as("sem nova multa ao sair").isEqualTo(before);
+    }
+
+    private String enterAs(String id, String token) throws Exception {
+        AttendanceRequest request = new AttendanceRequest(
+                UUID.fromString(professionalId), UUID.fromString(establishmentId), UUID.fromString(id),
+                serviceItemIds, AttendanceStatus.SCHEDULED, OffsetDateTime.now(), 30, OffsetDateTime.now(), null);
+        MvcResult r = mvc.perform(post("/attendances")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", token)
+                        .content(mapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return new JSONObject(r.getResponse().getContentAsString()).getString("id");
+    }
+
     @AfterAll
     void tearDown() {
         penaltyEventRepository.deleteAll();

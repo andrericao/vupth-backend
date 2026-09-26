@@ -7952,7 +7952,7 @@
   },
   {
    "name": "08f - cancelamento tardio (#39)",
-   "description": "Item #39 (Fase 1) — multa/aviso de cancelamento tardio + strikes. Cancelar (PUT /attendances/{id}/cancel) com o ETA da propria vez a menos de 1h registra um strike (ClientPenaltyEvent LATE_CANCEL) e incrementa strikeCount no client. GET /clients/{id} expoe strikeCount. Fase 1 so registra/expoe (sem cobranca, sem bloqueio). Em ambiente compartilhado o ETA depende do estado da fila; este folder valida o contrato (strikeCount numerico) e o comportamento (nao diminui apos cancelar; +1 quando ETA<1h).",
+   "description": "Multa por sair da fila (D4). Cancelar depois da tolerancia com menos de 1h para a vez gera multa (R$ 3 / R$ 5), com ciencia obrigatoria (?acknowledgedPenalty). O strike saiu em 26/09: strikeCount vem sempre 0 ate os apps tirarem o campo. Os valores sao do LateCancelPenaltyIntegrationTest — aqui o contrato.",
    "item": [
     {
      "name": "GET strikeCount inicial do cliente",
@@ -8093,8 +8093,8 @@
    ]
   },
   {
-   "name": "08g - escalada de no-show (#39)",
-   "description": "Item #39 (escalada de no-show). Um cliente que ja estava LATE (#19) e nao compareceu ao ser chamado de novo e removido da fila via PATCH /attendances/{id}/no-show (CANCELLED) + strike NO_SHOW (ClientPenaltyEvent + strikeCount). Exige status LATE (senao 400). Convidados sao removidos mas nao acumulam strike. Requer role PROFESSIONAL (token do dono).",
+   "name": "08g - \"nao compareceu\" saiu (26/09) — regra dos 3 atrasos",
+   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. PATCH /attendances/{id}/no-show responde 410 NO_SHOW_REMOVED ate os apps tirarem o botao.",
    "item": [
     {
      "name": "create walk-in para no-show -> 201",
@@ -8173,20 +8173,17 @@
      "response": []
     },
     {
-     "name": "PATCH no-show (prof) -> 200 sai da fila",
+     "name": "PATCH no-show (prof) -> 410 NO_SHOW_REMOVED",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "if (pm.response.code === 200) {",
-         "  const r = pm.response.json();",
-         "  const id = pm.collectionVariables.get(\"attendance_id_noshow\");",
-         "  const found = (r.attendancesInQueue || []).find(a => a.id === id);",
-         "  pm.test(\"no-show removido da fila de espera\", () => pm.expect(found, \"nao deveria estar na fila\").to.be.undefined);",
-         "}"
+         "// Andre 26/09: o \"nao compareceu\" saiu — a regra dos 3 atrasos cobre o sumico. O endpoint responde",
+         "// 410 ate os apps tirarem o botao, e nao mexe em nada (o atendimento segue na fila).",
+         "pm.test(\"Status 410 - no-show removido\", () => pm.response.to.have.status(410));",
+         "pm.test(\"code NO_SHOW_REMOVED\", () => pm.expect(pm.response.json().code).to.eql(\"NO_SHOW_REMOVED\"));"
         ]
        }
       }
@@ -8208,7 +8205,7 @@
      "response": []
     },
     {
-     "name": "GET strikeCount apos no-show -> numero >= 1",
+     "name": "GET cliente -> strikeCount 0 (saiu) + contador de atrasos",
      "event": [
       {
        "listen": "test",
@@ -8218,15 +8215,8 @@
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  const r = pm.response.json();",
-         "  pm.test(\"strikeCount e numero\", () => pm.expect(r.strikeCount).to.be.a(\"number\"));",
-         "  pm.test(\"strikeCount >= 1 apos no-show\", () => pm.expect(r.strikeCount).to.be.at.least(1));",
-         "}",
-         "// D4: o contador de atrasos do cliente (soma entre atendimentos, zera na multa do 3o).",
-         "if (pm.response.code === 200) {",
-         "  pm.test(\"D4: lateCount + latesUntilPenalty somam 3\", () => {",
-         "    const r = pm.response.json();",
-         "    pm.expect(r.lateCount + r.latesUntilPenalty).to.eql(3);",
-         "  });",
+         "  pm.test(\"strikeCount fixo em 0 (o strike saiu em 26/09)\", () => pm.expect(r.strikeCount).to.eql(0));",
+         "  pm.test(\"D4: lateCount + latesUntilPenalty somam 3\", () => pm.expect(r.lateCount + r.latesUntilPenalty).to.eql(3));",
          "}"
         ]
        }
@@ -8242,6 +8232,39 @@
        }
       ],
       "url": "{{base_url}}/clients/{{client_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cleanup: remove o atrasado da fila (o no-show nao remove mais)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// O corpo da resposta entra na mensagem da falha: sem ele, um cleanup vermelho diz",
+         "// so \"esperava 200/204, veio 400\" — e 400 aqui pode ser INVALID_PATH_VARIABLE (a",
+         "// variavel do id ficou vazia) ou ATTENDANCE_INVALID_STATUS (a linha ja saiu da fila),",
+         "// que sao defeitos diferentes e mandam investigar lugares diferentes.",
+         "pm.test(\"cleanup 200/204\", () => pm.expect([200,204], pm.response.text()).to.include(pm.response.code));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional-queue/{{attendance_id_noshow}}/remove",
       "auth": {
        "type": "noauth"
       }
@@ -8287,14 +8310,14 @@
      "response": []
     },
     {
-     "name": "[ERRO] no-show em SCHEDULED (nao-LATE) -> 400",
+     "name": "[ERRO] no-show em SCHEDULED -> 410 (o endpoint saiu)",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 400 - atendimento nao esta LATE\", () => pm.response.to.have.status(400));"
+         "pm.test(\"Status 410 - no-show removido\", () => pm.response.to.have.status(410));"
         ]
        }
       }

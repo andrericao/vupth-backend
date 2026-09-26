@@ -42,6 +42,7 @@ public class QueueServiceImpl implements QueueService {
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
     private final ClientWaitCalculator clientWaitCalculator;
+    private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
 
     @Override
     public QueueResponse getQueueOverview(Professional professional, Establishment establishment) {
@@ -142,7 +143,11 @@ public class QueueServiceImpl implements QueueService {
                 totalWaitingTime,
                 startTime,
                 attendance.getToleranceUntil(),
-                ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
+                // quem ja pagou a multa do 3o atraso sai sem nova multa (Andre, 26/09)
+                penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
+                        com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+                        ? new java.math.BigDecimal("0.00")
+                        : ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
                 attendance.getClient() != null ? attendance.getClient().getLateCount() : 0,
                 attendance.getClient() != null ? attendance.getClient().getLatesUntilPenalty()
                         : com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY,

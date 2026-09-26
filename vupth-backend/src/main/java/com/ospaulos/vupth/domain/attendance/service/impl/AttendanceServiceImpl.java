@@ -81,9 +81,6 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
     private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
 
-    /** Multa por nao comparecer (D4, Andre 18/09). */
-    private static final java.math.BigDecimal NO_SHOW_PENALTY = new java.math.BigDecimal("5.00");
-
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
      * esta aguardando, atrasado, sendo atendido ou com o atendimento pausado. Nesses quatro, uma
@@ -870,7 +867,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * Multa por sair da fila (D4 — {@link ExitPenaltyRule}). Vale para os dois atos do cliente que vagam
      * a vez: cancelar e sair da fila. Depois da tolerancia gravada no ingresso, com menos de 1h para a
      * vez, registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
-     * {@code LATE_CANCEL} com o valor e soma um strike. Sem isencao para quem esta sozinho na fila
+     * {@code LATE_CANCEL} com o valor. Sem isencao para quem esta sozinho na fila
      * (Andre, 25/09).
      *
      * <p>O "tempo que falta" e o mesmo {@code estimatedWaitingTime} que o cliente le
@@ -890,6 +887,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         java.util.OptionalInt wait = clientWaitCalculator.clientWaitMinutes(attendance, now);
         if (wait.isEmpty()) {
             return; // ja nao esta na fila de espera — nada a multar
+        }
+        // Andre, 26/09: quem levou a multa do 3o atraso foi para o fim da fila e pode sair sem nova multa.
+        if (penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
+                com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)) {
+            return;
         }
 
         java.math.BigDecimal amount = ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), wait.getAsInt());
@@ -911,59 +913,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 amount);
         event.setAcknowledgedAt(now);
         penaltyEventRepository.save(event);
-        // client e gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
-        client.incrementStrike();
-        log.info("[Attendance] multa de saida: client={} attendance={} faltavam={}min valor={} strikes={}",
-                client.getId(), attendance.getId(), wait.getAsInt(), amount, client.getStrikeCount());
-    }
-
-    /**
-     * Item #39 — escalada de no-show. Diferente do late-cancel, o strike aqui e
-     * <b>incondicional</b> (nao ha janela de 1h): quem chama ja constatou que o cliente,
-     * mesmo depois de cair de posicao (LATE #19), nao compareceu ao ser chamado de novo.
-     * Registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
-     * {@code NO_SHOW} e incrementa o {@code strikeCount}. O {@code etaMinutes} guardado e o
-     * ETA da vez do cliente AGORA (best-effort; 0 se ja fora da fila de espera), apenas para
-     * auditoria. Convidados (sem conta) nao acumulam strikes.
-     */
-    @Override
-    public void registerNoShowPenalty(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
-        Client client = attendance.getClient();
-        if (client == null) {
-            return; // convidado — sem conta, sem strike
-        }
-
-        Professional professional = attendance.getProfessional();
-        Establishment establishment = attendance.getEstablishment();
-
-        int eta = 0;
-        if (professional != null && establishment != null) {
-            List<Attendance> waiting = attendanceRepository
-                    .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
-            int position = -1;
-            for (int i = 0; i < waiting.size(); i++) {
-                if (waiting.get(i).getId().equals(attendance.getId())) {
-                    position = i;
-                    break;
-                }
-            }
-            if (position >= 0) {
-                eta = QueueUtils.calculateWaitingTimeForPosition(
-                        waiting, professional.getIntervals(), OffsetDateTime.now(), position);
-            }
-        }
-
-        // D4 (Andre, 18/09): nao comparecer custa R$ 5,00, cobrado no proximo atendimento.
-        penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
-                client,
-                com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW,
-                attendance.getId(),
-                eta,
-                NO_SHOW_PENALTY));
-        // client gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
-        client.incrementStrike();
-        log.info("[Attendance] registerNoShowPenalty — NO_SHOW strike: client={} eta={}min strikes={}",
-                client.getId(), eta, client.getStrikeCount());
+        log.info("[Attendance] multa de saida: client={} attendance={} faltavam={}min valor={}",
+                client.getId(), attendance.getId(), wait.getAsInt(), amount);
     }
 
     /**
