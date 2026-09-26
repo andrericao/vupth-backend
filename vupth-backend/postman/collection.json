@@ -9033,7 +9033,10 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"intent_desired\", new Date(Date.now() + 3*3600*1000).toISOString());"
+         "// Amanha as 10:00 (Brasilia) — dentro do expediente da loja de teste (08:30-19:00).",
+         "// \"Agora + Nh\" caia fora do expediente quando o CI rodava a tarde (26/09: 16:52 + 3h = 19:52 -> 422).",
+         "const d = new Date(); d.setUTCDate(d.getUTCDate() + 1); d.setUTCHours(13, 0, 0, 0);",
+         "pm.collectionVariables.set(\"intent_desired\", d.toISOString());"
         ],
         "type": "text/javascript"
        }
@@ -9393,7 +9396,10 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"intent_edit\", new Date(Date.now() + 4*3600*1000).toISOString());"
+         "// Amanha as 11:00 (Brasilia) — dentro do expediente da loja de teste (08:30-19:00).",
+         "// \"Agora + Nh\" caia fora do expediente quando o CI rodava a tarde (26/09: 16:52 + 3h = 19:52 -> 422).",
+         "const d = new Date(); d.setUTCDate(d.getUTCDate() + 1); d.setUTCHours(14, 0, 0, 0);",
+         "pm.collectionVariables.set(\"intent_edit\", d.toISOString());"
         ],
         "type": "text/javascript"
        }
@@ -9473,7 +9479,10 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"intent_edit\", new Date(Date.now() + 5*3600*1000).toISOString());"
+         "// Amanha as 12:00 (Brasilia) — dentro do expediente da loja de teste (08:30-19:00).",
+         "// \"Agora + Nh\" caia fora do expediente quando o CI rodava a tarde (26/09: 16:52 + 3h = 19:52 -> 422).",
+         "const d = new Date(); d.setUTCDate(d.getUTCDate() + 1); d.setUTCHours(15, 0, 0, 0);",
+         "pm.collectionVariables.set(\"intent_edit\", d.toISOString());"
         ],
         "type": "text/javascript"
        }
