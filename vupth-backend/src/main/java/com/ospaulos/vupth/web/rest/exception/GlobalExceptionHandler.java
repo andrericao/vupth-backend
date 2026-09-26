@@ -251,6 +251,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.GONE, ex.getMessage(), "NO_SHOW_REMOVED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.EstablishmentNobodyWorkingException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentNobodyWorking(
+            com.ospaulos.vupth.domain.establishment.exception.EstablishmentNobodyWorkingException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentNobodyWorking | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_NOBODY_WORKING");
+    }
+
     @ExceptionHandler(ExitPenaltyNotAcknowledgedException.class)
     public ResponseEntity<ExitPenaltyErrorResponse> handleExitPenaltyNotAcknowledged(
             ExitPenaltyNotAcknowledgedException ex, HttpServletRequest req) {

@@ -55,6 +55,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     private final GetEstablishmentsQueueSummaryUseCase queueSummaryUseCase;
     private final AttendanceRepository attendanceRepository;
     private final ProfessionalRepository professionalRepository;
+    private final com.ospaulos.vupth.domain.establishment.service.EstablishmentOpenStatusService openStatusService;
 
     @Override
     public EstablishmentResponse registerEstablishment(EstablishmentRequest request){
@@ -348,6 +349,16 @@ public class EstablishmentServiceImpl implements EstablishmentService {
             if (!establishment.getBusinessHours().isConfigured()) {
                 throw new EstablishmentHoursRequiredException(establishmentId);
             }
+            putRequesterToWork(establishment, requesterId);
+            // S28 (Andre, 26/09): a loja so abre com alguem para atender — senao aparece aberta para o
+            // cliente sem ninguem no local.
+            boolean someoneWorking = professionalRepository.existsByEstablishment_IdAndWorkStatusIn(
+                    establishmentId, java.util.List.of(
+                            com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus.WORKING,
+                            com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus.ON_BREAK));
+            if (!someoneWorking) {
+                throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentNobodyWorkingException(establishmentId);
+            }
         }
 
         // Gate de fechamento (Partner BUG6): não fechar com cliente na fila ou em atendimento.
@@ -391,6 +402,27 @@ public class EstablishmentServiceImpl implements EstablishmentService {
      * Pode alterar o open-status quem é o dono da loja OU um profissional afiliado a ela.
      * (Profissional-funcionário também abre/fecha a loja — decisão de produto do Andre.)
      */
+    /**
+     * S28 (Andre, 26/09): quem abre a loja e tambem profissional dela — o dono-profissional ou o
+     * funcionario — passa a "trabalhando" na hora, sem precisar lembrar de mudar o proprio status na
+     * area do profissional. So se ele tem servico (a mesma regra de entrar em expediente). A fila dele
+     * segue como estava: ir para Fora fecha, e voltar nao reabre (09/09) — quem fechou decide.
+     */
+    private void putRequesterToWork(Establishment establishment, UUID requesterId) {
+        establishment.getProfessionals().stream()
+                .filter(prof -> prof.getId().equals(requesterId))
+                .filter(prof -> prof.getWorkStatus() == null || !prof.getWorkStatus().countsAsOpen())
+                .filter(prof -> prof.getServices() != null && !prof.getServices().isEmpty())
+                .findFirst()
+                .ifPresent(prof -> {
+                    prof.setWorkStatus(com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus.WORKING);
+                    professionalRepository.save(prof);
+                    // abre pela derivacao, que tambem grava a hora real da abertura (19/09)
+                    openStatusService.deriveFromProfessionals(establishment.getId());
+                    log.info("[Establishment] abrir a loja pos o profissional={} em expediente", prof.getId());
+                });
+    }
+
     private boolean canManageOpenStatus(Establishment establishment, UUID requesterId) {
         boolean isOwner = establishment.getOwner() != null
                 && establishment.getOwner().getId().equals(requesterId);
