@@ -269,6 +269,52 @@ public class QueueUtils {
         return candidate;
     }
 
+    /**
+     * Horario-alvo que cai numa refeicao/pausa do profissional e EMPURRADO para o fim dela (Client 03/07,
+     * regra do Andre: "se ele agendar 12:30, e avisado que sera atendido apos o intervalo"). Nao recusa:
+     * so reposiciona. Olha o dia do proprio {@code start}: refeicao em curso, recorrente prevista (fora
+     * as puladas #41 e as ja feitas) e pausa avulsa. Encadeia: se o fim de uma cai em outra, segue.
+     *
+     * @return o inicio que nao sobrepoe nenhum intervalo — o proprio {@code start} se nada colide
+     */
+    public static OffsetDateTime pushPastBreaks(OffsetDateTime start, int durationMinutes,
+                                                Collection<ProfessionalInterval> intervals) {
+        if (start == null || intervals == null || intervals.isEmpty()) {
+            return start;
+        }
+        LocalDate day = BusinessClock.dateAt(start);
+        List<OffsetDateTime[]> windows = new ArrayList<>();
+        for (ProfessionalInterval iv : intervals) {
+            if (iv == null || iv.isSkippedOn(day) || iv.isDoneOn(day)) {
+                continue;
+            }
+            if (iv.isStartedOn(day) && iv.getActualStartTime() != null && iv.getPlannedEndTime() != null) {
+                windows.add(new OffsetDateTime[]{iv.getActualStartTime(), iv.getPlannedEndTime()});
+            } else if (iv.getIntervalType() == IntervalType.RECURRENT && iv.getFixedStartTime() != null
+                    && iv.getDurationMinutes() != null) {
+                OffsetDateTime from = BusinessClock.at(day, iv.getFixedStartTime());
+                windows.add(new OffsetDateTime[]{from, from.plusMinutes(iv.getDurationMinutes())});
+            } else if (iv.getIntervalType() == IntervalType.UNEXPECTED && iv.getStartTime() != null
+                    && iv.getDurationMinutes() != null && BusinessClock.dateAt(iv.getStartTime()).equals(day)) {
+                windows.add(new OffsetDateTime[]{iv.getStartTime(), iv.getStartTime().plusMinutes(iv.getDurationMinutes())});
+            }
+        }
+        OffsetDateTime candidate = start;
+        boolean moved = true;
+        while (moved) {
+            moved = false;
+            OffsetDateTime end = candidate.plusMinutes(Math.max(0, durationMinutes));
+            for (OffsetDateTime[] w : windows) {
+                if (candidate.isBefore(w[1]) && w[0].isBefore(end)) {
+                    candidate = w[1];
+                    moved = true;
+                    break;
+                }
+            }
+        }
+        return candidate;
+    }
+
     private static int lockedMealContribution(ProfessionalInterval meal, LocalDate today) {
         if (meal == null || meal.isSkippedOn(today) || meal.isDoneOn(today)) {
             return 0; // pulada/removida do dia ou ja consumida hoje

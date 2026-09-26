@@ -265,7 +265,22 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .filter(Attendance::isIntent)
                 .map(a -> new QueueUtils.AgendaSlot(a.getScheduledTime(), a.getEstimatedTotalMinutes()))
                 .collect(Collectors.toList());
-        OffsetDateTime slot = QueueUtils.assignAgendaSlot(targetTime, duration, reserved);
+        // Encaixe cronologico entre os ja reservados E fora das refeicoes/pausas (Client 03/07): agendar
+        // 12:30 com almoco 12:00-13:00 vira 13:00 — "pos-almoco + o tempo de quem pediu antes". Repete
+        // ate estabilizar, porque sair de uma refeicao pode cair num slot reservado e vice-versa.
+        OffsetDateTime slot = targetTime;
+        OffsetDateTime previous;
+        boolean afterBreak = false;
+        do {
+            previous = slot;
+            slot = QueueUtils.assignAgendaSlot(slot, duration, reserved);
+            OffsetDateTime pastBreaks = QueueUtils.pushPastBreaks(slot, duration, professional.getIntervals());
+            if (!pastBreaks.equals(slot)) {
+                afterBreak = true;
+                slot = pastBreaks;
+            }
+        } while (!slot.equals(previous));
+        attendance.setPlacedAfterBreak(afterBreak);
 
         attendance.setIntent(true);
         attendance.setTargetTime(targetTime);

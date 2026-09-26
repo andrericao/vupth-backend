@@ -32,6 +32,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -170,6 +171,44 @@ class ClientRescheduleIntegrationTest {
         // `target` em memoria falharia por nanos truncados no store (slot >= alvo e o invariante real).
         assertThat(a.getScheduledTime()).as("slot >= alvo (cede a vez ate encostar no alvo)")
                 .isAfterOrEqualTo(a.getTargetTime());
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("reschedule com alvo DENTRO de uma pausa -> empurrado para o fim dela, com placedAfterBreak (Client 03/07)")
+    void reschedule_insideBreak_pushedAfterIt() throws Exception {
+        Q c = createWalkin();
+        var professional = professionalRepository.findById(UUID.fromString(professionalId)).orElseThrow();
+        OffsetDateTime breakStart = OffsetDateTime.now().plusHours(2);
+        var pause = professionalIntervalRepository.save(
+                com.ospaulos.vupth.domain.professional.model.ProfessionalInterval.createUnexpected(
+                        professional, 60, breakStart, "pausa do teste"));
+        try {
+            mvc.perform(patch("/attendances/{id}/reschedule", c.id())
+                            .param("targetTime", breakStart.plusMinutes(30).toString())
+                            .header("Authorization", c.token()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.placedAfterBreak").value(true));
+
+            assertThat(load(c.id()).getScheduledTime())
+                    .as("atendido so depois do fim da pausa, nao no horario pedido")
+                    .isAfterOrEqualTo(breakStart.plusMinutes(60).minusSeconds(1));
+        } finally {
+            professionalIntervalRepository.delete(pause);
+        }
+    }
+
+    @Test
+    @Order(16)
+    @DisplayName("reschedule com alvo fora de pausa -> fica no horario pedido, placedAfterBreak false")
+    void reschedule_outsideBreak_notMoved() throws Exception {
+        Q c = createWalkin();
+
+        mvc.perform(patch("/attendances/{id}/reschedule", c.id())
+                        .param("targetTime", OffsetDateTime.now().plusHours(3).toString())
+                        .header("Authorization", c.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.placedAfterBreak").value(false));
     }
 
     @Test

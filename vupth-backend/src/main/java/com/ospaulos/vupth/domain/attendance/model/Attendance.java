@@ -169,6 +169,13 @@ public class Attendance implements Serializable {
     private OffsetDateTime promisedTime;
 
     /**
+     * So na resposta do agendamento por horario-alvo: o horario pedido caia numa refeicao/pausa e foi
+     * empurrado para o fim dela (Client 03/07). Nao persiste — e o aviso daquela resposta.
+     */
+    @Transient
+    private boolean placedAfterBreak;
+
+    /**
      * Quantas marcacoes de atraso deste atendimento entraram no contador do cliente (D4) — as feitas
      * depois da tolerancia. O undo-late desconta exatamente estas.
      */

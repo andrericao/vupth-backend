@@ -474,4 +474,48 @@ class QueueUtilsTest {
         // alvo 17:00 + 30 = 17:30, nao toca 18:00 -> mantem 17:00
         assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved)).isEqualTo(TARGET);
     }
+
+    // ── horario-alvo empurrado para depois da refeicao (Client 03/07) ──
+
+    @Test
+    @DisplayName("pushPastBreaks: alvo 12:30 com almoco 12:00-13:00 -> 13:00")
+    void pushPastBreaks_insideMeal() {
+        var meal = recurring("12:00", 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "12:30"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "13:00"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: servico que comeca antes mas invade o almoco tambem vai para depois")
+    void pushPastBreaks_overlapsStart() {
+        var meal = recurring("12:00", 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "11:45"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "13:00"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: cabe antes do almoco -> nao mexe")
+    void pushPastBreaks_fitsBefore() {
+        var meal = recurring("12:00", 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "11:00"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "11:00"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: almoco pulado no dia (#41) nao empurra")
+    void pushPastBreaks_skippedMeal() {
+        var meal = recurring("12:00", 60);
+        meal.skipOn(TODAY);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "12:30"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "12:30"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: encadeia — sair do almoco e cair numa pausa avulsa empurra de novo")
+    void pushPastBreaks_chained() {
+        var meal = recurring("12:00", 60);
+        var pause = unexpected(at("2026-06-16", "13:00"), 20);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "12:30"), 30, List.of(meal, pause)))
+                .isEqualTo(at("2026-06-16", "13:20"));
+    }
 }

@@ -29,7 +29,11 @@ public record AttendanceInQueueResponse(
         // nao confirmada); targetTime e o horario-alvo escolhido pelo cliente (null em walk-in normal).
         // Permite ao Front-Partner distinguir intencao vs confirmado e ao Front-Client exibir o estado.
         boolean isIntent,
-        OffsetDateTime targetTime
+        OffsetDateTime targetTime,
+        // Client 03/07: o horario pedido caia numa refeicao/pausa e o atendimento ficou para depois dela
+        // ("voce sera atendido apos o intervalo, por volta de HH:MM" = scheduledTime). So vem true na
+        // resposta de quem pediu o horario (entrada com targetTime ou reschedule).
+        boolean placedAfterBreak
 ) {
     public static AttendanceInQueueResponse fromEntity(Attendance attendance) {
 
@@ -55,7 +59,8 @@ public record AttendanceInQueueResponse(
                 //attendance.getPausedTime
                 attendance.getDurationInMinutes(),
                 attendance.isIntent(),
-                attendance.getTargetTime()
+                attendance.getTargetTime(),
+                attendance.isPlacedAfterBreak()
         );
     }
 
