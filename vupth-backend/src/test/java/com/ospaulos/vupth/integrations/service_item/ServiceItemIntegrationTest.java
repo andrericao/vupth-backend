@@ -26,6 +26,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -275,7 +276,15 @@ class ServiceItemIntegrationTest {
                 .andExpect(jsonPath("$.id").value(serviceItemId))
                 .andExpect(jsonPath("$.customName").value("Corte Degradê Premium"))
                 .andExpect(jsonPath("$.price").value(45.00))
+                // Partner 25/09: a duracao gravava mas nao voltava — o app via a edicao como perdida
+                .andExpect(jsonPath("$.estimatedMinutes").value(40))
                 .andDo(print());
+
+        // e a listagem que o app usa devolve o valor salvo
+        mvc.perform(get("/professional/{id}/service-items", ownerId)
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + serviceItemId + "')].estimatedMinutes").value(40));
     }
 
     @Test
