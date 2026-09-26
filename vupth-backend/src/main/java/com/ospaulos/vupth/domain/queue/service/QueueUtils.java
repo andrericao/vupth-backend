@@ -41,7 +41,7 @@ public class QueueUtils {
     private static final class Block {
         OffsetDateTime start;             // mutavel: desloca durante a simulacao
         final int durationMinutes;
-        final OffsetDateTime disappearAt; // recorrente previsto: some ao alcancar isto; null = nunca some
+        final OffsetDateTime disappearAt; // recorrente previsto: some ao passar do inicio maximo (Modelo B); null = nunca some
         final boolean previsto;           // recorrente nao iniciado (deslocavel/cancelavel)
         final UUID intervalId;            // id da refeicao a travar no ingresso (prevista ou em curso); null p/ unexpected
 
@@ -55,7 +55,7 @@ public class QueueUtils {
         }
 
         boolean disappeared() {
-            return previsto && disappearAt != null && !start.isBefore(disappearAt);
+            return previsto && disappearAt != null && start.isAfter(disappearAt);
         }
     }
 
@@ -134,6 +134,23 @@ public class QueueUtils {
             Collection<ProfessionalInterval> lockedMeals,
             LocalDate today
     ) {
+        // sem a lista inteira nem o relogio, a supressao (Modelo B) olha so as travadas, no inicio do dia
+        return lockedClientWait(ahead, currentRemainingMinutes, lockedMeals, lockedMeals,
+                BusinessClock.at(today, LocalTime.MIDNIGHT));
+    }
+
+    /**
+     * {@link #lockedClientWait(List, int, Collection, LocalDate)} com a supressao do Modelo B: a
+     * refeicao travada que passou do inicio maximo sem iniciar deixa de contar. {@code allIntervals}
+     * sao todas as refeicoes do profissional (o inicio maximo depende da proxima).
+     */
+    public static int lockedClientWait(
+            List<Attendance> ahead,
+            int currentRemainingMinutes,
+            Collection<ProfessionalInterval> lockedMeals,
+            Collection<ProfessionalInterval> allIntervals,
+            OffsetDateTime now
+    ) {
         int total = Math.max(0, currentRemainingMinutes);
         if (ahead != null) {
             // `ahead` e um prefixo da fila de espera ordenada (indices 0..N-1 = posicao real),
@@ -145,7 +162,7 @@ public class QueueUtils {
         }
         if (lockedMeals != null) {
             for (ProfessionalInterval meal : lockedMeals) {
-                total += lockedMealContribution(meal, today);
+                total += lockedMealContribution(meal, allIntervals, now);
             }
         }
         return total;
@@ -315,15 +332,88 @@ public class QueueUtils {
         return candidate;
     }
 
-    private static int lockedMealContribution(ProfessionalInterval meal, LocalDate today) {
+    private static int lockedMealContribution(ProfessionalInterval meal, Collection<ProfessionalInterval> all,
+                                              OffsetDateTime now) {
+        LocalDate today = BusinessClock.dateAt(now);
         if (meal == null || meal.isSkippedOn(today) || meal.isDoneOn(today)) {
             return 0; // pulada/removida do dia ou ja consumida hoje
+        }
+        if (isSuppressed(meal, all, now)) {
+            return 0; // Modelo B: passou do inicio maximo sem iniciar — sumiu do dia, mesmo travada
         }
         if (meal.isStartedOn(today)) {
             return (int) meal.getRemainingMinutes(); // em curso: so o que falta
         }
         Integer dur = meal.getDurationMinutes();
         return dur != null ? dur : 0; // prevista: duracao cheia (travada)
+    }
+
+    // ── Refeicoes Modelo B — janela flexivel (Partner S3, spec de 28/06) ─────────────────────────
+
+    /** Folga minima entre uma refeicao e a proxima: o almoco nao comeca a menos de 3h da janta. */
+    static final int MIN_GAP_TO_NEXT_MEAL_MINUTES = 180;
+
+    /**
+     * Inicio maximo da refeicao no dia (Modelo B): o menor entre (a proxima refeicao - 3h) e (o
+     * fechamento do dia - a duracao) — passou dele sem iniciar, ela some do dia. Nunca antes do proprio
+     * horario-alvo (refeicoes cadastradas a menos de 3h uma da outra nao ficam sempre suprimidas). Sem
+     * proxima refeicao nem fechamento conhecido, vale o fim do dia.
+     */
+    public static OffsetDateTime latestStart(ProfessionalInterval meal, Collection<ProfessionalInterval> all,
+                                             LocalDate day) {
+        OffsetDateTime target = BusinessClock.at(day, meal.getFixedStartTime());
+        OffsetDateTime latest = BusinessClock.at(day.plusDays(1), LocalTime.MIDNIGHT);
+        if (all != null) {
+            for (ProfessionalInterval other : all) {
+                if (other != null && other != meal && other.getIntervalType() == IntervalType.RECURRENT
+                        && other.getFixedStartTime() != null
+                        && other.getFixedStartTime().isAfter(meal.getFixedStartTime())
+                        && !other.isSkippedOn(day)) {
+                    OffsetDateTime bound = BusinessClock.at(day, other.getFixedStartTime())
+                            .minusMinutes(MIN_GAP_TO_NEXT_MEAL_MINUTES);
+                    if (bound.isBefore(latest)) {
+                        latest = bound;
+                    }
+                }
+            }
+        }
+        LocalTime closes = closingOf(meal, day);
+        if (closes != null && meal.getDurationMinutes() != null) {
+            OffsetDateTime bound = BusinessClock.at(day, closes).minusMinutes(meal.getDurationMinutes());
+            if (bound.isBefore(latest)) {
+                latest = bound;
+            }
+        }
+        return latest.isBefore(target) ? target : latest;
+    }
+
+    /**
+     * A refeicao recorrente passou do inicio maximo hoje sem ser iniciada, feita ou pulada — sumiu do
+     * dia (Modelo B). "Iniciar refeicao" pula as suprimidas e comeca a proxima.
+     */
+    public static boolean isSuppressed(ProfessionalInterval meal, Collection<ProfessionalInterval> all,
+                                       OffsetDateTime now) {
+        if (meal == null || meal.getIntervalType() != IntervalType.RECURRENT || meal.getFixedStartTime() == null) {
+            return false;
+        }
+        LocalDate day = BusinessClock.dateAt(now);
+        if (meal.isStartedOn(day) || meal.isDoneOn(day) || meal.isSkippedOn(day)) {
+            return false;
+        }
+        return now.isAfter(latestStart(meal, all, day));
+    }
+
+    /** Fechamento do dia da loja do profissional; nulo se desconhecido (sem loja, dia fechado, fora de sessao). */
+    private static LocalTime closingOf(ProfessionalInterval meal, LocalDate day) {
+        try {
+            if (meal.getProfessional() == null || meal.getProfessional().getEstablishment() == null) {
+                return null;
+            }
+            var hours = meal.getProfessional().getEstablishment().getBusinessHours().on(day);
+            return hours == null || hours.closed() ? null : hours.closes();
+        } catch (RuntimeException e) {
+            return null; // colecao lazy fora de sessao: sem fechamento, vale a regra da proxima refeicao
+        }
     }
 
     private static Sim simulate(
@@ -467,17 +557,16 @@ public class QueueUtils {
             }
         }
 
-        // Recorrentes previstos: projetados em hoje, deslocados pra frente, com deadline "some na proxima".
+        // Recorrentes previstos: projetados em hoje, deslocados pra frente, e suprimidos ao passar do
+        // inicio maximo da janela (Modelo B).
         for (int i = 0; i < previstos.size(); i++) {
             ProfessionalInterval iv = previstos.get(i);
             OffsetDateTime projected = BusinessClock.at(today, iv.getFixedStartTime());
             OffsetDateTime start = projected.isBefore(now) ? now : projected; // nunca no passado
-            OffsetDateTime disappearAt = (i + 1 < previstos.size())
-                    ? BusinessClock.at(today, previstos.get(i + 1).getFixedStartTime())
-                    : endOfDay;
+            OffsetDateTime disappearAt = latestStart(iv, intervals, today);
 
-            // ja alcancou a proxima refeicao (ou o fim do dia) → some
-            if (!start.isBefore(disappearAt)) {
+            // Modelo B: empurrada para depois do inicio maximo -> suprimida no dia (sai do ETA)
+            if (start.isAfter(disappearAt)) {
                 continue;
             }
             blocks.add(new Block(start, iv.getDurationMinutes(), disappearAt, true, iv.getId()));

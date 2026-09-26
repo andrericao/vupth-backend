@@ -58,6 +58,6 @@ public class ClientWaitCalculator {
                 .toList();
 
         return OptionalInt.of(QueueUtils.lockedClientWait(
-                waiting.subList(0, position), currentRemaining, lockedMeals, BusinessClock.dateAt(now)));
+                waiting.subList(0, position), currentRemaining, lockedMeals, professional.getIntervals(), now));
     }
 }

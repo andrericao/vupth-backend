@@ -15262,6 +15262,44 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] PATCH intervals/next/start - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Modelo B (S3): iniciar de verdade depende do relogio do staging; o contrato e do MealModelBIntegrationTest.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/professionals/{{prof_professional_id}}/intervals/next/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "professionals",
+        "{{prof_professional_id}}",
+        "intervals",
+        "next",
+        "start"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

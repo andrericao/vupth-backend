@@ -16,5 +16,13 @@ public record IntervalResponse(
         OffsetDateTime endTime,
         String description,
         LocalTime fixedStartTime,
-        String recurrencePattern)
-{}
+        String recurrencePattern,
+        // Modelo B (Partner S3): a refeicao passou do inicio maximo hoje sem iniciar e sumiu do dia.
+        // So vem na listagem (GET); nas outras respostas, nulo.
+        Boolean suppressedToday)
+{
+    public IntervalResponse withSuppressedToday(boolean suppressed) {
+        return new IntervalResponse(intervalId, type, status, durationMinutes, startTime, endTime, description,
+                fixedStartTime, recurrencePattern, suppressed);
+    }
+}
