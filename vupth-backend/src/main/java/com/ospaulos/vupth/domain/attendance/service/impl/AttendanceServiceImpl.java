@@ -7,6 +7,7 @@ import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressRespon
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendancePausedResponse;
+import com.ospaulos.vupth.domain.attendance.penalty.ExitPenaltyRule;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
 import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
@@ -77,12 +78,11 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final EstablishmentRepository establishmentRepository;
     private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
     private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRatingRepository attendanceRatingRepository;
+    private final com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
 
-    /**
-     * Janela (minutos) abaixo da qual cancelar a vez e considerado tardio (item #39). Cancelar com o
-     * ETA da propria vez a menos disso gera um strike (penalidade) ao cliente registrado.
-     */
-    private static final int LATE_CANCEL_THRESHOLD_MINUTES = 60;
+    /** Multa por nao comparecer (D4, Andre 18/09). */
+    private static final java.math.BigDecimal NO_SHOW_PENALTY = new java.math.BigDecimal("5.00");
 
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
@@ -138,6 +138,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
@@ -163,6 +164,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * Trava (lock) no ingresso as refeicoes que ja estavam no ETA do cliente (item #37): grava no
      * atendimento os ids das refeicoes recorrentes contadas ate a posicao dele na fila. Depois disso,
      * essas refeicoes nao saem mais do ETA dele por ritmo da fila (so por skip #41 / inicio / remocao).
+     * Grava tambem a tolerancia de saida e o horario prometido (D4), que dependem desse mesmo ETA.
      * Best-effort: falha aqui nao quebra a criacao do atendimento.
      */
     private void lockMealsAtIngress(com.ospaulos.vupth.domain.attendance.model.Attendance saved,
@@ -174,16 +176,24 @@ public class AttendanceServiceImpl implements AttendanceService {
             for (int i = 0; i < queue.size(); i++) {
                 if (queue.get(i).getId().equals(saved.getId())) { pos = i; break; }
             }
-            if (pos <= 0) {
-                return; // primeiro da fila (ou fora dela): nenhuma refeicao a frente para travar
+            if (pos < 0) {
+                return; // fora da fila: nada a travar
             }
+            // pos 0 tambem trava: o primeiro da fila ainda espera a refeicao EM CURSO.
+            OffsetDateTime now = OffsetDateTime.now();
             Set<UUID> locked = QueueUtils.mealsCountedForPosition(
-                    queue, professional.getIntervals(), OffsetDateTime.now(), pos);
+                    queue, professional.getIntervals(), now, pos);
             if (!locked.isEmpty()) {
                 saved.setLockedIntervalIds(locked);
-                attendanceRepository.save(saved);
                 log.info("[Attendance] lock refeicoes no ingresso — attendance={} meals={}", saved.getId(), locked);
             }
+            // D4: a janela de saida gratuita e decidida pela espera que o cliente LE agora (ja com o
+            // lock acima) e nao muda depois — e a que foi prometida na entrada.
+            int waitAtEntry = clientWaitCalculator.clientWaitMinutes(saved, now).orElse(0);
+            saved.setToleranceUntil(ExitPenaltyRule.toleranceUntil(now, waitAtEntry));
+            // D4: o horario prometido — ninguem e marcado atrasado antes dele + 5 min.
+            saved.setPromisedTime(now.plusMinutes(waitAtEntry));
+            attendanceRepository.save(saved);
         } catch (Exception e) {
             log.warn("[Attendance] lockMealsAtIngress falhou para {}: {}", saved.getId(), e.getMessage());
         }
@@ -458,6 +468,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // (Modelo A — sem reserva de slot; o desiredTime persistido segue como registro do pretendido).
         attendance.setScheduledTime(now);
         Attendance saved = attendanceRepository.save(attendance);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, saved.getProfessional(), saved.getEstablishment());
 
         UUID establishmentId = saved.getEstablishment() != null ? saved.getEstablishment().getId() : null;
@@ -588,6 +599,12 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new EstablishmentNotFoundException(request.establishmentId());
         }
 
+        // D9 (25/09): quem trabalha so com agenda nao tem fila para entrar — nem walk-in nem horario-alvo
+        // na fila (#40). O caminho e agendar (POST /attendances/intentions), que segue valendo.
+        if (professional.getOperationMode() == com.ospaulos.vupth.domain.professional.valueObject.OperationMode.AGENDA_ONLY) {
+            throw new com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException(professional.getId());
+        }
+
         // BUG5 parte C1 — gate de entrada: walk-in imediato (sem targetTime) so entra se a loja
         // estiver "aberta agora" — desde 19/09 isso e open_status OPEN, e so. Fechada, o cliente nao
         // entra sozinho na fila viva. A INTENCAO de fila (#40, com targetTime) NAO passa por aqui —
@@ -668,6 +685,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         applyIntentIfRequested(attendance, professional, establishment, request.targetTime());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={} intent={} targetTime={}",
                 saved.getId(), saved.getTotalValue(), saved.isIntent(), saved.getTargetTime());
@@ -709,6 +727,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
         return saved;
@@ -792,8 +811,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId) {
-        log.info("[Attendance] cancelAttendance — attendanceId={} clientId={}", attendanceId, clientId);
+    public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId,
+                                                      java.math.BigDecimal acknowledgedPenalty) {
+        log.info("[Attendance] cancelAttendance — attendanceId={} clientId={} ack={}", attendanceId, clientId, acknowledgedPenalty);
 
         com.ospaulos.vupth.domain.attendance.model.Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
@@ -815,9 +835,9 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new AttendanceCancelNotAllowedException(attendanceId);
         }
 
-        // Item #39 (Fase 1): cancelar a <1h da propria vez desorganiza a fila — registra strike.
-        // Avalia o ETA AGORA (antes de marcar CANCELLED, enquanto ainda esta na fila de espera).
-        registerLateCancelPenaltyIfApplicable(attendance);
+        // D4: sair depois da tolerancia com menos de 1h para a vez gera multa. Avalia AGORA, antes de
+        // marcar CANCELLED, enquanto ainda esta na fila de espera.
+        registerExitPenaltyIfApplicable(attendance, acknowledgedPenalty);
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
@@ -832,56 +852,54 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * Item #39 (Fase 1, sem pagamento). Se o atendimento que esta sendo cancelado pertence a um
-     * cliente registrado e o ETA ate a vez dele AGORA e menor que {@link #LATE_CANCEL_THRESHOLD_MINUTES},
-     * registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
-     * {@code LATE_CANCEL} e incrementa o contador denormalizado {@code strikeCount} do cliente.
+     * Multa por sair da fila (D4 — {@link ExitPenaltyRule}). Vale para os dois atos do cliente que vagam
+     * a vez: cancelar e sair da fila. Depois da tolerancia gravada no ingresso, com menos de 1h para a
+     * vez, registra um {@link com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent} do tipo
+     * {@code LATE_CANCEL} com o valor e soma um strike. Sem isencao para quem esta sozinho na fila
+     * (Andre, 25/09).
      *
-     * <p>O ETA usa {@link QueueUtils#calculateWaitingTimeForPosition} (meal-aware) sobre a fila de
-     * espera atual, ate a posicao do proprio atendimento — a mesma base do ingresso (#40) e do
-     * wait-time exibido ao cliente. Convidados (sem conta) nao acumulam strikes.</p>
+     * <p>O "tempo que falta" e o mesmo {@code estimatedWaitingTime} que o cliente le
+     * ({@link com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator}): a regua da multa e o
+     * horario comunicado, e o valor cobrado tem de ser o que o aviso mostrou. Convidados (sem conta)
+     * nao sao multados.</p>
      */
-    private void registerLateCancelPenaltyIfApplicable(
-            com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+    private void registerExitPenaltyIfApplicable(
+            com.ospaulos.vupth.domain.attendance.model.Attendance attendance,
+            java.math.BigDecimal acknowledgedPenalty) {
         Client client = attendance.getClient();
         if (client == null) {
-            return; // convidado — sem conta, sem strike
-        }
-
-        Professional professional = attendance.getProfessional();
-        Establishment establishment = attendance.getEstablishment();
-        if (professional == null || establishment == null) {
-            return;
-        }
-
-        List<Attendance> waiting = attendanceRepository
-                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
-        int position = -1;
-        for (int i = 0; i < waiting.size(); i++) {
-            if (waiting.get(i).getId().equals(attendance.getId())) {
-                position = i;
-                break;
-            }
-        }
-        if (position < 0) {
-            return; // ja nao esta na fila de espera — nada a penalizar
+            return; // convidado — sem conta, sem multa
         }
 
         OffsetDateTime now = OffsetDateTime.now();
-        int eta = QueueUtils.calculateWaitingTimeForPosition(
-                waiting, professional.getIntervals(), now, position);
-
-        if (eta < LATE_CANCEL_THRESHOLD_MINUTES) {
-            penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
-                    client,
-                    com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL,
-                    attendance.getId(),
-                    eta));
-            // client e gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
-            client.incrementStrike();
-            log.info("[Attendance] cancelAttendance — LATE_CANCEL strike: client={} eta={}min strikes={}",
-                    client.getId(), eta, client.getStrikeCount());
+        java.util.OptionalInt wait = clientWaitCalculator.clientWaitMinutes(attendance, now);
+        if (wait.isEmpty()) {
+            return; // ja nao esta na fila de espera — nada a multar
         }
+
+        java.math.BigDecimal amount = ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), wait.getAsInt());
+        if (amount.signum() == 0) {
+            return;
+        }
+        // Ciencia obrigatoria (Andre, 25/09): sem o "Sim" a saida nao acontece — a excecao desfaz a
+        // transacao antes de o status mudar. Confirmar um valor MAIOR cobre (o tempo andou e a multa caiu);
+        // menor nao: o cliente nao soube do valor que seria cobrado.
+        if (acknowledgedPenalty == null || acknowledgedPenalty.compareTo(amount) < 0) {
+            throw new com.ospaulos.vupth.domain.attendance.exception.ExitPenaltyNotAcknowledgedException(
+                    amount, acknowledgedPenalty);
+        }
+        var event = new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+                client,
+                com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL,
+                attendance.getId(),
+                wait.getAsInt(),
+                amount);
+        event.setAcknowledgedAt(now);
+        penaltyEventRepository.save(event);
+        // client e gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
+        client.incrementStrike();
+        log.info("[Attendance] multa de saida: client={} attendance={} faltavam={}min valor={} strikes={}",
+                client.getId(), attendance.getId(), wait.getAsInt(), amount, client.getStrikeCount());
     }
 
     /**
@@ -920,11 +938,13 @@ public class AttendanceServiceImpl implements AttendanceService {
             }
         }
 
+        // D4 (Andre, 18/09): nao comparecer custa R$ 5,00, cobrado no proximo atendimento.
         penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
                 client,
                 com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW,
                 attendance.getId(),
-                eta));
+                eta,
+                NO_SHOW_PENALTY));
         // client gerenciado pela sessao (tx ativa) -> dirty checking persiste o strikeCount no commit
         client.incrementStrike();
         log.info("[Attendance] registerNoShowPenalty — NO_SHOW strike: client={} eta={}min strikes={}",
@@ -1006,8 +1026,9 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId) {
-        log.info("[Attendance] leaveQueue — attendanceId={} clientId={}", attendanceId, clientId);
+    public AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId,
+                                                java.math.BigDecimal acknowledgedPenalty) {
+        log.info("[Attendance] leaveQueue — attendanceId={} clientId={} ack={}", attendanceId, clientId, acknowledgedPenalty);
 
         Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
@@ -1020,6 +1041,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (!attendance.getStatus().equals(AttendanceStatus.SCHEDULED)) {
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
+
+        // D4: sair da fila e o mesmo ato que cancelar para a multa.
+        registerExitPenaltyIfApplicable(attendance, acknowledgedPenalty);
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         Attendance saved = attendanceRepository.save(attendance);
@@ -1151,6 +1175,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
         lockMealsAtIngress(saved, professional, establishment);
         return saved;
     }
@@ -1550,8 +1575,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<Attendance> attendances = attendanceRepository.findByClientFilters(
                 clientId, status, from, to);
 
+        // D4: o relatorio mostra as multas que cada atendimento carrega, com a origem de cada uma.
+        Map<UUID, List<com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse>> penalties =
+                clientPenaltyService.chargedTo(attendances.stream().map(Attendance::getId).toList());
         return attendances.stream()
-                .map(AttendanceListResponse::fromEntity)
+                .map(a -> AttendanceListResponse.fromEntity(a)
+                        .withPenalties(penalties.getOrDefault(a.getId(), List.of())))
                 .collect(Collectors.toList());
     }
 

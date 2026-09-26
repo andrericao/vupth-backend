@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # Multa de saida (D4): o valor em reais do evento. Nulo nos eventos anteriores (strike sem valor) e
+  # nos tipos que ainda nao cobram.
+  - changeSet:
+      id: 006-add-amount-to-client_penalty_event
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: client_penalty_event
+                columnName: amount
+      changes:
+        - addColumn:
+            tableName: client_penalty_event
+            columns:
+              - column:
+                  name: amount
+                  type: DECIMAL(10,2)

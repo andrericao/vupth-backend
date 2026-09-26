@@ -157,6 +157,41 @@ class QueueUtilsTest {
     }
 
     @Test
+    @DisplayName("posicao 0 com refeicao EM CURSO: espera o restante dela, nao 'agora' (fila vazia ou nao)")
+    void startedToday_positionZero_countsRemaining() {
+        OffsetDateTime now = at("2026-06-16", "12:30");
+        // iniciou 12:00, 60min → restam 30. Ninguem a frente, mas o profissional esta almocando.
+        var intervals = List.of(startedAt(at("2026-06-16", "12:00"), 60));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(), intervals, now, 0)).isEqualTo(30);
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(att(30)), intervals, now, 0)).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("posicao 0 com pausa avulsa EM CURSO: espera o restante dela")
+    void unexpectedInProgress_positionZero_countsRemaining() {
+        // pausa 10:50/20min → termina 11:10; NOW 11:00 → restam 10
+        var intervals = List.of(unexpected(at("2026-06-16", "10:50"), 20));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(), intervals, NOW, 0)).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("posicao 0: refeicao PREVISTA ja vencida e nao iniciada nao conta — so o que esta acontecendo")
+    void previstoOverdue_positionZero_notCounted() {
+        OffsetDateTime now = at("2026-06-16", "12:30");
+        // almoco previsto 12:00, nao iniciado: o profissional esta trabalhando, a loja so projeta
+        var intervals = List.of(recurring("12:00", 60));
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(), intervals, now, 0)).isZero();
+    }
+
+    @Test
+    @DisplayName("professionalEta com fila vazia e refeicao em curso: o snapshot da loja mostra o restante")
+    void professionalEta_emptyQueue_mealInProgress() {
+        OffsetDateTime now = at("2026-06-16", "12:30");
+        var intervals = List.of(startedAt(at("2026-06-16", "12:00"), 60));
+        assertThat(QueueUtils.professionalEta(List.of(), intervals, null, now)).isEqualTo(30);
+    }
+
+    @Test
     @DisplayName("day-scoped: intervalo iniciado ONTEM nao carrega (tratado como previsto hoje)")
     void startedYesterday_noCarryover() {
         // actualStartTime ontem, isActive=true, fixedStartTime 12:00 → hoje vira previsto
@@ -215,7 +250,28 @@ class QueueUtilsTest {
     }
 
     @Test
-    @DisplayName("mealsCountedForPosition: posicao 0 nao trava nada")
+    @DisplayName("mealsCountedForPosition: refeicao EM CURSO e travada para o primeiro da fila (pos 0)")
+    void mealsCounted_startedMeal_positionZero_returnsId() {
+        var id = java.util.UUID.randomUUID();
+        var meal = startedAt(at("2026-06-16", "12:00"), 60);
+        meal.setId(id);
+        var now = at("2026-06-16", "12:30");
+        assertThat(QueueUtils.mealsCountedForPosition(List.of(att(30)), List.of(meal), now, 0)).containsExactly(id);
+    }
+
+    @Test
+    @DisplayName("mealsCountedForPosition: refeicao EM CURSO tambem e travada para quem entra atras de alguem")
+    void mealsCounted_startedMeal_behindQueue_returnsId() {
+        var id = java.util.UUID.randomUUID();
+        var meal = startedAt(at("2026-06-16", "12:00"), 60);
+        meal.setId(id);
+        var now = at("2026-06-16", "12:30");
+        assertThat(QueueUtils.mealsCountedForPosition(List.of(att(30), att(30)), List.of(meal), now, 1))
+                .containsExactly(id);
+    }
+
+    @Test
+    @DisplayName("mealsCountedForPosition: posicao 0 nao trava refeicao PREVISTA (a fila nao a alcanca)")
     void mealsCounted_positionZero_empty() {
         var intervals = List.of(recurringWithId("12:00", 60, java.util.UUID.randomUUID()));
         assertThat(QueueUtils.mealsCountedForPosition(List.of(att(30)), intervals, NOW, 0)).isEmpty();

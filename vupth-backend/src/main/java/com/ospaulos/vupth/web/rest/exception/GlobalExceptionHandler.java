@@ -16,6 +16,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundExceptio
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceServiceItemNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
+import com.ospaulos.vupth.domain.attendance.exception.ExitPenaltyNotAcknowledgedException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
@@ -206,6 +207,50 @@ public class GlobalExceptionHandler {
             EstablishmentHoursRequiredException ex, HttpServletRequest req) {
         log.warn("[422] EstablishmentHoursRequired | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ESTABLISHMENT_HOURS_REQUIRED");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.user.exception.InvalidProfilePhotoException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidProfilePhoto(
+            com.ospaulos.vupth.domain.user.exception.InvalidProfilePhotoException ex, HttpServletRequest req) {
+        log.warn("[400] InvalidProfilePhoto | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), "INVALID_PROFILE_PHOTO");
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        log.warn("[400] MaxUploadSize | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.BAD_REQUEST, "A foto passa de 2 MB.", "INVALID_PROFILE_PHOTO");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.shared.storage.StorageNotConfiguredException.class)
+    public ResponseEntity<ErrorResponse> handleStorageNotConfigured(
+            com.ospaulos.vupth.domain.shared.storage.StorageNotConfiguredException ex, HttpServletRequest req) {
+        log.error("[503] StorageNotConfigured | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), "STORAGE_NOT_CONFIGURED");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalAgendaOnly(
+            com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException ex, HttpServletRequest req) {
+        log.warn("[409] ProfessionalAgendaOnly | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PROFESSIONAL_AGENDA_ONLY");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.professional.exception.OperationModeLockedException.class)
+    public ResponseEntity<ErrorResponse> handleOperationModeLocked(
+            com.ospaulos.vupth.domain.professional.exception.OperationModeLockedException ex, HttpServletRequest req) {
+        log.warn("[409] OperationModeLocked | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "OPERATION_MODE_LOCKED");
+    }
+
+    @ExceptionHandler(ExitPenaltyNotAcknowledgedException.class)
+    public ResponseEntity<ExitPenaltyErrorResponse> handleExitPenaltyNotAcknowledged(
+            ExitPenaltyNotAcknowledgedException ex, HttpServletRequest req) {
+        log.warn("[409] ExitPenaltyNotAcknowledged | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ExitPenaltyErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), "EXIT_PENALTY_NOT_ACKNOWLEDGED",
+                ex.getExitPenaltyValue(), OffsetDateTime.now()));
     }
 
     @ExceptionHandler(TargetTimeNotFeasibleException.class)
@@ -725,6 +770,15 @@ public class GlobalExceptionHandler {
             int status,
             String message,
             String code,
+            OffsetDateTime timestamp) {
+    }
+
+    /** 409 da ciencia da multa: o valor vem junto para o app mostrar o aviso Sim / Nao. */
+    public record ExitPenaltyErrorResponse(
+            int status,
+            String message,
+            String code,
+            java.math.BigDecimal exitPenaltyValue,
             OffsetDateTime timestamp) {
     }
 

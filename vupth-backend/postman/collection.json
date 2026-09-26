@@ -3102,6 +3102,10 @@
          "});",
          "pm.test(\"BUG10: apelido volta no /professional/me\", () => {",
          "  pm.expect(pm.response.json().nickname).to.eql(\"Bibba\");",
+         "});",
+         "// D9 (25/09): fila ou so agenda, por profissional",
+         "pm.test(\"D9: operation_mode QUEUE ou AGENDA_ONLY\", () => {",
+         "  if (pm.response.code === 200) pm.expect([\"QUEUE\", \"AGENDA_ONLY\"]).to.include(pm.response.json().operation_mode);",
          "});"
         ],
         "type": "text/javascript"
@@ -6462,6 +6466,28 @@
          "pm.test(\"Status 200 - Status na fila OK\", () => pm.response.to.have.status(200));",
          "pm.test(\"Schema: resposta é objeto\", () => {",
          "  pm.expect(pm.response.json()).to.be.an(\"object\");",
+         "});",
+         "// D4 (multa de saida): o app mostra \"sair sem multa ate HH:MM\" e o valor do aviso Sim / Nao",
+         "// sem calcular nada. O valor depende do relogio (tolerancia de 5/10 min), entao aqui se afirma o",
+         "// contrato, nao o numero — o numero e do LateCancelPenaltyIntegrationTest.",
+         "pm.test(\"D4: toleranceUntil (data) e exitPenaltyValue (numero) no wait-time\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.toleranceUntil, \"toleranceUntil\").to.be.a(\"string\");",
+         "  pm.expect(new Date(b.toleranceUntil).toString()).to.not.eql(\"Invalid Date\");",
+         "  pm.expect(b.exitPenaltyValue, \"exitPenaltyValue\").to.be.a(\"number\");",
+         "  pm.expect([0, 3, 5]).to.include(b.exitPenaltyValue);",
+         "});",
+         "pm.test(\"D4: lateCount + latesUntilPenalty (inteiros, somam 3) no wait-time\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.lateCount, \"lateCount\").to.be.a(\"number\");",
+         "  pm.expect(b.latesUntilPenalty, \"latesUntilPenalty\").to.be.a(\"number\");",
+         "  pm.expect(b.lateCount + b.latesUntilPenalty).to.eql(3);",
+         "});",
+         "// D8 (17/09): o horario que vale para o atraso — o prometido na entrada ou o adiantado aceito.",
+         "pm.test(\"D8: promisedTime (data) no wait-time\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.promisedTime, \"promisedTime\").to.be.a(\"string\");",
+         "  pm.expect(new Date(b.promisedTime).toString()).to.not.eql(\"Invalid Date\");",
          "});"
         ],
         "type": "text/javascript"
@@ -6509,6 +6535,58 @@
        }
       ]
      }
+    },
+    {
+     "name": "multas pendentes do cliente (D4)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// D4: o app soma o total aos servicos marcados antes de entrar na fila e cita cada multa pela",
+         "// origem (corte do dia tal com o profissional tal). O cliente paga o valor cheio: 4% do gateway,",
+         "// o resto do app. Aqui se afirma o contrato; os valores sao do PenaltyChargeIntegrationTest.",
+         "pm.test(\"Status 200 - multas pendentes\", () => pm.response.to.have.status(200));",
+         "pm.test(\"D4: total (numero) + penalties (lista)\", () => {",
+         "  const b = pm.response.json();",
+         "  pm.expect(b.total, \"total\").to.be.a(\"number\");",
+         "  pm.expect(b.penalties, \"penalties\").to.be.an(\"array\");",
+         "  b.penalties.forEach(p => {",
+         "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\", \"gatewayFee\", \"appShare\",",
+         "      \"originAttendanceId\", \"originDate\", \"originProfessionalName\", \"originEstablishmentName\");",
+         "    pm.expect(p.gatewayFee + p.appShare).to.be.closeTo(p.amount, 0.001);",
+         "  });",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/clients/me/pending-penalties",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "clients",
+        "me",
+        "pending-penalties"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
@@ -7970,7 +8048,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_latecancel}}/cancel",
+      "url": "{{base_url}}/attendances/{{attendance_id_latecancel}}/cancel?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -8142,6 +8220,13 @@
          "  const r = pm.response.json();",
          "  pm.test(\"strikeCount e numero\", () => pm.expect(r.strikeCount).to.be.a(\"number\"));",
          "  pm.test(\"strikeCount >= 1 apos no-show\", () => pm.expect(r.strikeCount).to.be.at.least(1));",
+         "}",
+         "// D4: o contador de atrasos do cliente (soma entre atendimentos, zera na multa do 3o).",
+         "if (pm.response.code === 200) {",
+         "  pm.test(\"D4: lateCount + latesUntilPenalty somam 3\", () => {",
+         "    const r = pm.response.json();",
+         "    pm.expect(r.lateCount + r.latesUntilPenalty).to.eql(3);",
+         "  });",
          "}"
         ]
        }
@@ -8509,7 +8594,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_resched}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{attendance_id_resched}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -8853,7 +8938,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_rating2}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{attendance_id_rating2}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -10305,7 +10390,7 @@
        "mode": "raw",
        "raw": "{}"
       },
-      "url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel",
+      "url": "{{base_url}}/attendances/{{attendance_id_cancel}}/cancel?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -10450,7 +10535,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }
@@ -15037,6 +15122,118 @@
       "method": "GET",
       "header": [],
       "url": "{{base_url}}/rota-que-nao-existe/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] accept-earlier-turn - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id}}/accept-earlier-turn",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id}}",
+        "accept-earlier-turn"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PUT /profile/me/photo - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// S22: o upload real nao roda aqui — gravaria lixo no R2 a cada rodada. O contrato (200, 400,",
+         "// 503 sem R2) e do ProfilePhotoIntegrationTest.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/profile/me/photo",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "me",
+        "photo"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PATCH /professional/me/operation-mode - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// D9: trocar o modo de verdade travaria o profissional de teste no staging; o contrato e do",
+         "// OperationModeIntegrationTest.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"mode\":\"AGENDA_ONLY\"}"
+      },
+      "url": {
+       "raw": "{{base_url}}/professional/me/operation-mode",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "operation-mode"
+       ]
+      },
       "auth": {
        "type": "noauth"
       }
@@ -23026,7 +23223,7 @@
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/attendances/{{da_att_id}}/leave-queue",
+      "url": "{{base_url}}/attendances/{{da_att_id}}/leave-queue?acknowledgedPenalty=5.00",
       "auth": {
        "type": "noauth"
       }

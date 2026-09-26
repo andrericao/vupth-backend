@@ -1,0 +1,20 @@
+databaseChangeLog:
+  # Multa de saida (D4): ate quando o cliente sai da fila de graca, gravado no ingresso pela espera
+  # prevista naquele momento. Nula nos atendimentos anteriores — a janela nao foi prometida e nao se
+  # inventa.
+  - changeSet:
+      id: 013-add-tolerance_until-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: tolerance_until
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: tolerance_until
+                  type: TIMESTAMP WITH TIME ZONE

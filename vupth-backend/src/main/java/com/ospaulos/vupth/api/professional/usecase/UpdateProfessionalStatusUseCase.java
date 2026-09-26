@@ -95,6 +95,7 @@ public class UpdateProfessionalStatusUseCase {
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
                 professional.getAcceptingNew(),
+                professional.getOperationMode(),
                 null
         );
     }

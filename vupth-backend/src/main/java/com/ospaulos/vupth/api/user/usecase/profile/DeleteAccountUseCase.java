@@ -82,6 +82,7 @@ public class DeleteAccountUseCase {
     private final PasswordResetCodeRepository passwordResetCodeRepository;
     private final LeaveEstablishmentUseCase leaveEstablishmentUseCase;
     private final PasswordEncoder passwordEncoder;
+    private final com.ospaulos.vupth.domain.user.service.ProfilePhotoService profilePhotoService;
 
     @Transactional
     public void execute(UUID userId, String currentPassword) {
@@ -100,6 +101,8 @@ public class DeleteAccountUseCase {
         detachProfessional(user);
         deleteOwnedOnlyData(user);
 
+        // A foto e dado pessoal: sai do storage, nao so da coluna (a URL publica continuaria abrindo).
+        profilePhotoService.deleteQuietly(user.getProfileImageUrl());
         user.anonymize(passwordEncoder.encode(UUID.randomUUID().toString()));
         userRepository.save(user);
 

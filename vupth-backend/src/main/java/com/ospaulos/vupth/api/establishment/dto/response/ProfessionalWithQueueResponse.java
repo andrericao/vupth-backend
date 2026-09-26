@@ -64,7 +64,15 @@ public record ProfessionalWithQueueResponse(
         long ratingCount,
 
         @JsonProperty("service_items")
-        List<ServiceItemSummary> serviceItems
+        List<ServiceItemSummary> serviceItems,
+
+        // S22: foto de perfil (URL publica no R2); null sem foto.
+        @JsonProperty("profile_image_url")
+        String profileImageUrl,
+
+        // D9 (25/09): AGENDA_ONLY = o app desabilita "entrar na fila" e oferece so agendar
+        @JsonProperty("operation_mode")
+        com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode
 
 ) {
 
@@ -144,7 +152,9 @@ public record ProfessionalWithQueueResponse(
                 estimatedWait,
                 professional.getRatingAverage(),
                 professional.getRatingCount(),
-                serviceItemDtos
+                serviceItemDtos,
+                professional.getBaseUser() != null ? professional.getBaseUser().getProfileImageUrl() : null,
+                professional.getOperationMode()
         );
     }
 }

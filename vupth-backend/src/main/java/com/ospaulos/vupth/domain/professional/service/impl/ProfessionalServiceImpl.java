@@ -52,6 +52,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     private final AttendanceRepository attendanceRepository;
     private final EstablishmentRepository establishmentRepository;
     private final EstablishmentOpenStatusService openStatusService;
+    private final com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrivalService;
 
     // ─────────────────────────────────────────────────────────────
     // GUEST
@@ -174,6 +175,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         attendance.setStatus(AttendanceStatus.LATE);
         attendanceRepository.save(attendance);
 
+        // D4: conta o atraso so depois da tolerancia (soma entre atendimentos; o 3o gera a multa) e avisa.
+        // A marcacao em si segue livre (#19): antes da tolerancia o cliente cai de posicao sem contar.
+        lateArrivalService.registerLate(attendance, professional, java.time.OffsetDateTime.now());
+
         queueService.updateQueueEstimates(professional);
         log.info("[Professional] markAttendanceLate — attendance={} marcado LATE (caiu de posicao)", attendanceId);
         return queueService.getQueueOverview(professional, establishment);
@@ -201,6 +206,9 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         // Volta a SCHEDULED mantendo a posicao atual (a que ele caiu) — nao reposiciona.
         attendance.setStatus(AttendanceStatus.SCHEDULED);
         attendanceRepository.save(attendance);
+
+        // D4: o atraso foi engano — sai do contador (e a multa que ele gerou, se ainda nao cobrada).
+        lateArrivalService.undoLate(attendance);
 
         queueService.updateQueueEstimates(professional);
         log.info("[Professional] undoAttendanceLate — attendance={} voltou para SCHEDULED", attendanceId);

@@ -1,0 +1,21 @@
+databaseChangeLog:
+  # Modo de funcionamento por profissional (D9; Andre 25/09): QUEUE (padrao) ou AGENDA_ONLY.
+  - changeSet:
+      id: 012-add-operation_mode-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: operation_mode
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: operation_mode
+                  type: VARCHAR(20)
+                  defaultValue: QUEUE
+                  constraints:
+                    nullable: false

@@ -31,6 +31,7 @@ public class ProfileController {
     private final UpdatePasswordUseCase updatePasswordUseCase;
     private final UpdateProfileGeneralInfosUseCase updateProfileGeneralInfosUseCase;
     private final GetMyProfileUseCase getMyProfileUseCase;
+    private final com.ospaulos.vupth.domain.user.service.ProfilePhotoService profilePhotoService;
 
     /**
      * GET /profile/me
@@ -119,6 +120,26 @@ public class ProfileController {
 
         deleteAccountUseCase.execute(user.getUserId(), request.currentPassword());
 
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * PUT /profile/me/photo (multipart, campo {@code file}) — foto de perfil (S22; R2, Andre 25/09).
+     * JPEG, PNG ou WebP ate 2 MB. Devolve a URL publica, que passa a sair em {@code profile_image_url}.
+     */
+    @PutMapping(value = "/me/photo", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<java.util.Map<String, String>> uploadPhoto(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @AuthenticationPrincipal UserDetailsImpl user) throws java.io.IOException {
+        log.info("CONTROLLER PROFILE PUT /me/photo — userId={} bytes={}", user.getUserId(), file.getSize());
+        String url = profilePhotoService.upload(user.getUserId(), file.getBytes());
+        return ResponseEntity.ok(java.util.Map.of("profile_image_url", url));
+    }
+
+    /** DELETE /profile/me/photo — tira a foto (e apaga o arquivo). */
+    @DeleteMapping("/me/photo")
+    public ResponseEntity<Void> removePhoto(@AuthenticationPrincipal UserDetailsImpl user) {
+        profilePhotoService.remove(user.getUserId());
         return ResponseEntity.noContent().build();
     }
 }

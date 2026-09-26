@@ -83,6 +83,7 @@ public class RegisterProfessionalUseCase {
                 professional.getIsAvailable(),
                 professional.getWorkStatus(),
                 professional.getAcceptingNew(),
+                professional.getOperationMode(),
                 "Professional profile created! Ask an owner to add you to their establishment, " +
                 "or use /professional/affiliate when you have an establishment ID."
         );

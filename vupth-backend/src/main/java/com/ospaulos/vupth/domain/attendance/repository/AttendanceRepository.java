@@ -478,4 +478,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo
     );
+
+    /** O profissional ja teve fila neste intervalo? (trava da troca de modo — D9, 25/09) */
+    boolean existsByProfessionalIdAndStatusInAndScheduledTimeBetween(
+            UUID professionalId, java.util.Collection<com.ospaulos.vupth.domain.attendance.AttendanceStatus> statuses,
+            java.time.OffsetDateTime from, java.time.OffsetDateTime to);
 }

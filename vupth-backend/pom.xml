@@ -33,6 +33,7 @@
 		<hibernate.version>6.3.1.Final</hibernate.version>
 		<liquibase.version>4.33.0</liquibase.version>
 		<liquibase.hibernate6.version>4.30.0</liquibase.hibernate6.version>
+		<awssdk.version>2.29.0</awssdk.version>
 
 		<timestamp>${maven.build.timestamp}</timestamp>
 		<maven.build.timestamp.format>dd/MM/yyyy-HH:mm</maven.build.timestamp.format>
@@ -118,6 +119,28 @@
 			<groupId>org.mapstruct</groupId>
 			<artifactId>mapstruct</artifactId>
 			<version>1.6.3</version>
+		</dependency>
+		<!-- Foto de perfil no Cloudflare R2 (Andre, 25/09): o R2 fala a API do S3, entao o SDK e o da AWS.
+		     Sem os clientes HTTP pesados (netty/apache): o url-connection do proprio JDK basta para PUT/DELETE. -->
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>s3</artifactId>
+			<version>${awssdk.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>netty-nio-client</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>software.amazon.awssdk</groupId>
+					<artifactId>apache-client</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>url-connection-client</artifactId>
+			<version>${awssdk.version}</version>
 		</dependency>
 	</dependencies>
 

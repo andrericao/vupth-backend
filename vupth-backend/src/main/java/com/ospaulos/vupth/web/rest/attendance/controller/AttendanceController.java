@@ -37,6 +37,7 @@ public class AttendanceController {
     private final QueueSwapService queueSwapService;
     private final SwapOfferService swapOfferService;
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
+    private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
 
     @GetMapping
     public ResponseEntity<List<AttendanceListResponse>> listAttendances(
@@ -129,17 +130,22 @@ public class AttendanceController {
     @PutMapping("/{attendanceId}/cancel")
     public ResponseEntity<AttendanceInQueueResponse> cancelAttendance(
             @PathVariable UUID attendanceId,
+            // D4: o "Sim" do aviso da multa — o valor que o cliente viu (exitPenaltyValue do wait-time).
+            @RequestParam(required = false) java.math.BigDecimal acknowledgedPenalty,
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
         log.info("ATTENDANCE CONTROLLER CANCEL {} by client={}", attendanceId, principal.getUserId());
 
-        AttendanceInQueueResponse response = attendanceService.cancelAttendance(attendanceId, principal.getUserId());
+        AttendanceInQueueResponse response = attendanceService.cancelAttendance(
+                attendanceId, principal.getUserId(), acknowledgedPenalty);
 
         // #42: saiu da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
         swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: saiu da fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
+        // D8 (17/09): quem foi adiantado pela desistencia recebe o convite do horario novo
+        offerEarlierTurns(response);
 
         return ResponseEntity.ok(response);
     }
@@ -154,17 +160,22 @@ public class AttendanceController {
     @DeleteMapping("/{attendanceId}/leave-queue")
     public ResponseEntity<AttendanceInQueueResponse> leaveQueue(
             @PathVariable UUID attendanceId,
+            // D4: o "Sim" do aviso da multa — o valor que o cliente viu (exitPenaltyValue do wait-time).
+            @RequestParam(required = false) java.math.BigDecimal acknowledgedPenalty,
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
         log.info("ATTENDANCE CONTROLLER LEAVE QUEUE {} by client={}", attendanceId, principal.getUserId());
 
-        AttendanceInQueueResponse response = attendanceService.leaveQueue(attendanceId, principal.getUserId());
+        AttendanceInQueueResponse response = attendanceService.leaveQueue(
+                attendanceId, principal.getUserId(), acknowledgedPenalty);
 
         // #42: saiu da fila → propostas de troca pendentes deixam de existir
         queueSwapService.expirePendingForAttendance(attendanceId);
         swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: saiu da fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
+        // D8 (17/09): quem foi adiantado pela desistencia recebe o convite do horario novo
+        offerEarlierTurns(response);
 
         return ResponseEntity.ok(response);
     }
@@ -489,5 +500,27 @@ public class AttendanceController {
 
         return ResponseEntity.ok(response);
     }
-}
 
+    /**
+     * PATCH /attendances/{attendanceId}/accept-earlier-turn
+     *
+     * O cliente topa o horario adiantado por uma desistencia (D8, 17/09): ele vira o horario prometido,
+     * e o atraso volta a contar a partir dele. Sem aceitar, segue valendo o prometido na entrada.
+     */
+    @PatchMapping("/{attendanceId}/accept-earlier-turn")
+    public ResponseEntity<java.util.Map<String, Object>> acceptEarlierTurn(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        java.time.OffsetDateTime promisedTime = earlierTurnService.acceptEarlierTurn(attendanceId, principal.getUserId());
+        return ResponseEntity.ok(java.util.Map.of("attendanceId", attendanceId, "promisedTime", promisedTime));
+    }
+
+    /** Best-effort: o aviso nunca quebra a saida de quem desistiu. */
+    private void offerEarlierTurns(AttendanceInQueueResponse leaver) {
+        try {
+            earlierTurnService.offerEarlierTurns(leaver.professionalId(), leaver.establishmentId());
+        } catch (Exception e) {
+            log.warn("[EarlierTurn] aviso de horario adiantado falhou apos a saida de {}: {}", leaver.id(), e.getMessage());
+        }
+    }
+}

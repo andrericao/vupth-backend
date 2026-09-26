@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.attendance.dto.response;
 
+import com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 
@@ -27,8 +28,23 @@ public record AttendanceListResponse(
         // legado ou anterior a 16/09. proReceives + intermediaryFee + platformFee = totalValue.
         BigDecimal proReceives,
         BigDecimal intermediaryFee,
-        BigDecimal platformFee
+        BigDecimal platformFee,
+        // D4: multas cobradas NESTE atendimento ("cobrancas do app"), cada uma com a origem. Separadas do
+        // totalValue ("cobrancas do servico") de proposito. Nulas onde nao foram consultadas (listagem
+        // da loja); lista vazia = sem multa.
+        List<PenaltyChargeResponse> penalties,
+        BigDecimal penaltyTotal
 ) {
+
+    public AttendanceListResponse withPenalties(List<PenaltyChargeResponse> charged) {
+        BigDecimal total = charged.stream()
+                .map(PenaltyChargeResponse::amount)
+                .reduce(new BigDecimal("0.00"), BigDecimal::add);
+        return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
+                establishmentId, services, status, totalValue, scheduledTime, startTime, endTime,
+                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total);
+    }
+
     public static AttendanceListResponse fromEntity(Attendance attendance) {
         UUID clientId = attendance.getClient() != null ? attendance.getClient().getId() : null;
         String clientName = attendance.getClient() != null
@@ -53,7 +69,9 @@ public record AttendanceListResponse(
                 attendance.getDurationInMinutes(),
                 attendance.getProReceives(),
                 attendance.getIntermediaryFee(),
-                attendance.getPlatformFee()
+                attendance.getPlatformFee(),
+                null,
+                null
         );
     }
 }
