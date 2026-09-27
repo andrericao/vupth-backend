@@ -196,6 +196,29 @@ class AttendanceRatingIntegrationTest {
     }
 
     @Test
+    @Order(16)
+    @DisplayName("Historico do cliente traz rated: false antes de avaliar, true depois")
+    void clientHistory_ratedFlag() throws Exception {
+        Q q = createWalkin(List.of(service1Id));
+        finish(q.id());
+
+        org.assertj.core.api.Assertions.assertThat(ratedInHistory(q)).as("concluido, ainda sem nota").isFalse();
+        rate(q.id(), q.token(), 4, null);
+        org.assertj.core.api.Assertions.assertThat(ratedInHistory(q)).as("depois de avaliar").isTrue();
+    }
+
+    private boolean ratedInHistory(Q q) throws Exception {
+        MvcResult r = mvc.perform(get("/attendances/client/me").header("Authorization", q.token())).andReturn();
+        org.json.JSONArray list = new org.json.JSONArray(r.getResponse().getContentAsString());
+        for (int i = 0; i < list.length(); i++) {
+            if (list.getJSONObject(i).getString("id").equals(q.id())) {
+                return list.getJSONObject(i).getBoolean("rated");
+            }
+        }
+        throw new AssertionError("atendimento fora do historico");
+    }
+
+    @Test
     @Order(11)
     @DisplayName("2+ servicos -> avaliar alimenta SO o profissional; serviceItemId null; servicos intactos")
     void rate_combo_feedsOnlyProfessional() throws Exception {

@@ -9,4 +9,10 @@ public interface AttendanceRatingRepository extends JpaRepository<AttendanceRati
 
     /** True se o atendimento ja foi avaliado (bloqueia o 2o voto — item #6). */
     boolean existsByAttendanceId(UUID attendanceId);
+
+    /** Quais destes atendimentos ja foram avaliados — uma consulta so para o historico inteiro. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT r.attendanceId FROM AttendanceRating r WHERE r.attendanceId IN :ids")
+    java.util.Set<UUID> findRatedAttendanceIds(
+            @org.springframework.data.repository.query.Param("ids") java.util.Collection<UUID> ids);
 }

@@ -1544,9 +1544,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         // D4: o relatorio mostra as multas que cada atendimento carrega, com a origem de cada uma.
         Map<UUID, List<com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse>> penalties =
                 clientPenaltyService.chargedTo(attendances.stream().map(Attendance::getId).toList());
+        // Client: "ja avaliei?" — uma consulta para o historico inteiro.
+        Set<UUID> rated = attendances.isEmpty() ? Set.of()
+                : attendanceRatingRepository.findRatedAttendanceIds(attendances.stream().map(Attendance::getId).toList());
         return attendances.stream()
                 .map(a -> AttendanceListResponse.fromEntity(a)
-                        .withPenalties(penalties.getOrDefault(a.getId(), List.of())))
+                        .withPenalties(penalties.getOrDefault(a.getId(), List.of()))
+                        .withRated(rated.contains(a.getId())))
                 .collect(Collectors.toList());
     }
 
