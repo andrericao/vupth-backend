@@ -85,6 +85,7 @@ public class EstablishmentController {
     private final ReportService                          reportService;
     private final ServiceItemService                     serviceItemService;
     private final QueueWebSocketPublisher                queuePublisher;
+    private final com.ospaulos.vupth.api.establishment.usecase.ListEstablishmentProfessionalsUseCase listProfessionalsUseCase;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -347,6 +348,17 @@ public class EstablishmentController {
      *
      * Requer: ROLE_OWNER.
      */
+    /**
+     * GET /establishment/{establishmentId}/professionals — todos os vinculados, inclusive sem servico
+     * (Partner S8), com {@code service_count}/{@code has_service}. So o dono ou um profissional da loja.
+     */
+    @GetMapping("/{establishmentId}/professionals")
+    public ResponseEntity<java.util.List<com.ospaulos.vupth.api.establishment.dto.response.EstablishmentProfessionalResponse>> listProfessionals(
+            @PathVariable UUID establishmentId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(listProfessionalsUseCase.execute(establishmentId, user.getUserId()));
+    }
+
     @PostMapping("/{establishmentId}/professionals")
     public ResponseEntity<ProfessionalQuickCreateResponse> addProfessional(
             @PathVariable UUID establishmentId,

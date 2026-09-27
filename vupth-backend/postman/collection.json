@@ -15309,6 +15309,40 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] GET /establishment/{id}/professionals - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// S8: a lista de gestao (todos os vinculados, inclusive sem servico) nao e publica.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "professionals"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
