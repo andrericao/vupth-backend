@@ -315,18 +315,23 @@ public class QueueUtils {
         LocalDate day = BusinessClock.dateAt(start);
         List<OffsetDateTime[]> windows = new ArrayList<>();
         for (ProfessionalInterval iv : intervals) {
-            if (iv == null || iv.isSkippedOn(day) || iv.isDoneOn(day)) {
+            if (iv == null) {
                 continue;
             }
-            if (iv.isStartedOn(day) && iv.getActualStartTime() != null && iv.getPlannedEndTime() != null) {
+            // Em curso e pausa avulsa tem horario REAL: valem pelo horario, nao pelo dia — uma pausa das
+            // 23:44 ainda cobre um pedido das 00:14 (defeito pego pelo CI das 21:44 de 26/09).
+            if (Boolean.TRUE.equals(iv.getIsActive()) && iv.getActualStartTime() != null && iv.getPlannedEndTime() != null
+                    && iv.getActualEndTime() == null) {
                 windows.add(new OffsetDateTime[]{iv.getActualStartTime(), iv.getPlannedEndTime()});
-            } else if (iv.getIntervalType() == IntervalType.RECURRENT && iv.getFixedStartTime() != null
+            } else if (iv.getIntervalType() == IntervalType.UNEXPECTED && iv.getStartTime() != null
                     && iv.getDurationMinutes() != null) {
+                windows.add(new OffsetDateTime[]{iv.getStartTime(), iv.getStartTime().plusMinutes(iv.getDurationMinutes())});
+            } else if (iv.getIntervalType() == IntervalType.RECURRENT && iv.getFixedStartTime() != null
+                    && iv.getDurationMinutes() != null
+                    && !iv.isSkippedOn(day) && !iv.isDoneOn(day) && !iv.isStartedOn(day)) {
+                // recorrente prevista: projetada no dia do pedido (fora as puladas #41 e as ja feitas)
                 OffsetDateTime from = BusinessClock.at(day, iv.getFixedStartTime());
                 windows.add(new OffsetDateTime[]{from, from.plusMinutes(iv.getDurationMinutes())});
-            } else if (iv.getIntervalType() == IntervalType.UNEXPECTED && iv.getStartTime() != null
-                    && iv.getDurationMinutes() != null && BusinessClock.dateAt(iv.getStartTime()).equals(day)) {
-                windows.add(new OffsetDateTime[]{iv.getStartTime(), iv.getStartTime().plusMinutes(iv.getDurationMinutes())});
             }
         }
         OffsetDateTime candidate = start;

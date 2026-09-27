@@ -601,4 +601,12 @@ class QueueUtilsTest {
         assertThat(QueueUtils.displayedWait(4)).as("piso 0").isZero();
         assertThat(QueueUtils.displayedWait(0)).isZero();
     }
+
+    @Test
+    @DisplayName("pushPastBreaks: pausa avulsa de ontem 23:44 ainda cobre o pedido das 00:14 (atravessa a meia-noite)")
+    void pushPastBreaks_pauseAcrossMidnight() {
+        var pause = unexpected(at("2026-06-16", "23:44"), 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-17", "00:14"), 30, List.of(pause)))
+                .isEqualTo(at("2026-06-17", "00:44"));
+    }
 }
