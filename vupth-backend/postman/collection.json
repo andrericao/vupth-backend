@@ -15343,6 +15343,40 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] PUT /establishment/{id}/photo - sem token (401)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Foto da loja (26/09): o upload real nao roda aqui — gravaria no R2 a cada rodada.",
+         "pm.test(\"Status 401 - sem token\", () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/photo",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "photo"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },
