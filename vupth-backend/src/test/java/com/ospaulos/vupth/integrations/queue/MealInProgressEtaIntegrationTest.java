@@ -162,7 +162,7 @@ class MealInProgressEtaIntegrationTest {
 
         assertThat(waitTime(attendanceIdA, clientA))
                 .as("ninguem a frente, mas o profissional esta almocando")
-                .isBetween(MEAL_MINUTES - 1, MEAL_MINUTES);
+                .isBetween(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(MEAL_MINUTES - 1), com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(MEAL_MINUTES)); // folga de -10 (S10)
     }
 
     @Test
@@ -175,7 +175,7 @@ class MealInProgressEtaIntegrationTest {
 
         assertThat(waitTime(attendanceIdB, clientB))
                 .as("atendimento de A (%d min) + o restante da refeicao", aheadMinutes)
-                .isBetween(aheadMinutes + MEAL_MINUTES - 1, aheadMinutes + MEAL_MINUTES);
+                .isBetween(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(aheadMinutes + MEAL_MINUTES - 1), com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(aheadMinutes + MEAL_MINUTES)); // folga de -10 (S10)
     }
 
     @Test
@@ -204,7 +204,7 @@ class MealInProgressEtaIntegrationTest {
 
         assertThat(waitTime(attendanceId, cutClient))
                 .as("o encaixe aceito com o profissional almocando nao e 'agora'")
-                .isBetween(MEAL_MINUTES - 1, MEAL_MINUTES);
+                .isBetween(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(MEAL_MINUTES - 1), com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(MEAL_MINUTES)); // folga de -10 (S10)
     }
 
     @AfterAll

@@ -126,7 +126,10 @@ public class QueueServiceImpl implements QueueService {
         OffsetDateTime now = OffsetDateTime.now();
         int totalWaitingTime = clientWaitCalculator.clientWaitMinutes(attendance, now)
                 .orElseThrow(() -> new ClientNotInQueueException(attendance.getId()));
-        OffsetDateTime startTime = now.plusMinutes(totalWaitingTime);
+        // S10 (26/09): a espera e o horario EXIBIDOS levam a folga de -10 min; a multa de saida abaixo e o
+        // horario prometido (ingresso) seguem o tempo real — ninguem e punido pela folga.
+        int displayedWait = QueueUtils.displayedWait(totalWaitingTime);
+        OffsetDateTime startTime = now.plusMinutes(displayedWait);
 
         AttendanceInQueueResponse attendanceQueue = AttendanceInQueueResponse.fromEntity(attendance);
 
@@ -140,7 +143,7 @@ public class QueueServiceImpl implements QueueService {
                 fullQueue.size(),
                 fullQueue.totalEstimatedMinutes(),
                 fullQueue.totalRemainingMinutes(),
-                totalWaitingTime,
+                displayedWait,
                 startTime,
                 attendance.getToleranceUntil(),
                 // quem ja pagou a multa do 3o atraso sai sem nova multa (Andre, 26/09)

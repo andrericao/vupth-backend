@@ -188,7 +188,7 @@ class ClientEtaMealLockIntegrationTest {
         // Como a refeicao foi travada no ingresso, ela continua no ETA dele = exatamente a duracao.
         assertThat(etaB)
                 .as("refeicao travada nao sai do ETA mesmo B virando o 1o da fila")
-                .isEqualTo(MEAL_MINUTES);
+                .isEqualTo(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(MEAL_MINUTES)); // exibido com a folga de -10 (S10)
     }
 
     @Test
@@ -216,7 +216,7 @@ class ClientEtaMealLockIntegrationTest {
         int etaB = waitTime(attendanceIdB, clientUuidB, tokenB);
         assertThat(etaB)
                 .as("ao desfazer o skip, a refeicao travada volta ao ETA")
-                .isEqualTo(MEAL_MINUTES);
+                .isEqualTo(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(MEAL_MINUTES)); // exibido com a folga de -10 (S10)
     }
 
     @AfterAll

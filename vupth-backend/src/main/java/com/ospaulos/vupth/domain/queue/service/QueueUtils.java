@@ -95,6 +95,19 @@ public class QueueUtils {
         return eta;
     }
 
+    /**
+     * Folga da espera EXIBIDA (Partner S10, regra global de 23/07): o cliente ve 10 min a menos, com
+     * piso 0, para chegar antes. So a exibicao — as regras (multa de saida, tolerancia, horario
+     * prometido do atraso) seguem o tempo real (Andre, 26/09): ninguem e multado nem marcado atrasado
+     * por causa da folga. Aplicar SO onde o numero vai para a tela.
+     */
+    public static final int DISPLAY_BUFFER_MINUTES = 10;
+
+    /** A espera como o cliente a ve: o tempo real menos a folga, com piso 0. */
+    public static int displayedWait(int realMinutes) {
+        return Math.max(0, realMinutes - DISPLAY_BUFFER_MINUTES);
+    }
+
     public static int calculateWaitingTimeForPosition(
             List<Attendance> queue,
             List<ProfessionalInterval> intervals,

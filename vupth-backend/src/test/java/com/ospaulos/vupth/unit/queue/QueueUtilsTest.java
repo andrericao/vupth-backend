@@ -592,4 +592,13 @@ class QueueUtilsTest {
         assertThat(QueueUtils.lockedClientWait(List.of(att(30)), 0, List.of(lunch), List.of(lunch, dinner),
                 at("2026-06-16", "14:30"))).as("dentro da janela segue travada").isEqualTo(90);
     }
+
+    @Test
+    @DisplayName("S10: a espera exibida e a real menos 10 min, com piso 0")
+    void displayedWait_buffer() {
+        assertThat(QueueUtils.displayedWait(45)).isEqualTo(35);
+        assertThat(QueueUtils.displayedWait(10)).isZero();
+        assertThat(QueueUtils.displayedWait(4)).as("piso 0").isZero();
+        assertThat(QueueUtils.displayedWait(0)).isZero();
+    }
 }

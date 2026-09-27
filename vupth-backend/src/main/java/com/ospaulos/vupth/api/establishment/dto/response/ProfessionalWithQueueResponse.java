@@ -130,7 +130,9 @@ public record ProfessionalWithQueueResponse(
         // A conta mora no QueueUtils porque a LISTAGEM publica calcula o mesmo numero por outro
         // caminho (B10 — resumo em lote, sem passar por este snapshot): fonte unica ou as duas
         // telas divergem.
-        int estimatedWait = QueueUtils.professionalEta(waitingList, intervals, currentAttendance, now);
+        // S10: o numero da tela leva a folga de -10 min (so exibicao; as regras usam o real)
+        int estimatedWait = QueueUtils.displayedWait(
+                QueueUtils.professionalEta(waitingList, intervals, currentAttendance, now));
 
         List<ServiceItemSummary> serviceItemDtos = professional.getServices().stream()
                 .map(ServiceItemSummary::fromEntity)
