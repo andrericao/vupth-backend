@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Auto-nega dos pedidos de corte (BUG5 C2, fatia 3) — <b>EVENT-DRIVEN, nao polling</b>, mesmo padrao do
@@ -53,6 +54,9 @@ public class CutRequestExpiryScheduler {
 
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> pending;
+
+    /** Trava (reentrante) no lugar de synchronized: com threads virtuais, I/O dentro de um monitor prende a portadora. */
+    private final ReentrantLock lock = new ReentrantLock();
 
     public CutRequestExpiryScheduler(CutRequestRepository cutRequestRepository,
                                      CutRequestService cutRequestService) {
@@ -94,7 +98,16 @@ public class CutRequestExpiryScheduler {
      * a cabeca. Sem PENDING -> fica ocioso. Se a cabeca ja venceu, dispara "ja" (em 1s). Chamado pos-commit de
      * create/accept/refuse e no boot.
      */
-    public synchronized void reschedule() {
+    public void reschedule() {
+        lock.lock();
+        try {
+            rescheduleLocked();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void rescheduleLocked() {
         cancelPending();
         Optional<CutRequest> head = cutRequestRepository.findFirstByStatusOrderByExpiresAtAsc(CutRequestStatus.PENDING);
         if (head.isEmpty()) {
@@ -110,7 +123,16 @@ public class CutRequestExpiryScheduler {
      * Expira todos os PENDING ja vencidos e reagenda para a proxima cabeca. Executado na thread do scheduler.
      * Sincronizado com {@link #reschedule()} para nao correr com um create/accept/refuse.
      */
-    synchronized void runExpiryCycle() {
+    void runExpiryCycle() {
+        lock.lock();
+        try {
+            runExpiryCycleLocked();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void runExpiryCycleLocked() {
         pending = null;
         try {
             int expired = cutRequestService.expireDueCutRequests();
