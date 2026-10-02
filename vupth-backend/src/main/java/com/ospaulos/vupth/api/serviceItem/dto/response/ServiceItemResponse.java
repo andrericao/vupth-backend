@@ -43,7 +43,12 @@ public record ServiceItemResponse(
         BigDecimal intermediaryFee,
 
         @JsonProperty("platform_fee")
-        BigDecimal platformFee
+        BigDecimal platformFee,
+
+        // A duracao que o profissional cadastrou — o POST e o PATCH gravavam, mas a resposta nao
+        // devolvia, e o app mostrava a edicao como perdida (Partner, 25/09). Diferente de
+        // weeklyAverageDurationInMinutes, que e a media MEDIDA na semana.
+        Integer estimatedMinutes
 ){
 
     /** Sem a divisao do preco (servico legado). */
@@ -52,7 +57,7 @@ public record ServiceItemResponse(
                                BigDecimal clientPrice, Boolean usesPlatformPricing,
                                Integer weeklyAverageDurationInMinutes, Double ratingAverage, long ratingCount) {
         this(establishmentId, establishmentName, id, serviceItemType, customName, price, clientPrice,
-                usesPlatformPricing, weeklyAverageDurationInMinutes, ratingAverage, ratingCount, null, null, null, null);
+                usesPlatformPricing, weeklyAverageDurationInMinutes, ratingAverage, ratingCount, null, null, null, null, null);
     }
 
     public static ServiceItemResponse fromEntity(ServiceItem item) {
@@ -72,7 +77,8 @@ public record ServiceItemResponse(
                 split != null ? split.proReceives() : null,
                 split != null ? split.basePrice() : null,
                 split != null ? split.intermediaryFee() : null,
-                split != null ? split.platformFee() : null
+                split != null ? split.platformFee() : null,
+                item.getEstimatedMinutes()
         );
     }
 }

@@ -177,7 +177,18 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         // D4: conta o atraso so depois da tolerancia (soma entre atendimentos; o 3o gera a multa) e avisa.
         // A marcacao em si segue livre (#19): antes da tolerancia o cliente cai de posicao sem contar.
-        lateArrivalService.registerLate(attendance, professional, java.time.OffsetDateTime.now());
+        int lateNumber = lateArrivalService.registerLate(attendance, professional, java.time.OffsetDateTime.now());
+
+        // Andre, 26/09: no 3o atraso, logo depois do registro, ele sai da vez e vai para o FIM da fila —
+        // pode continuar ali ou sair (sem nova multa: ja pagou a do 3o). Antes do 3o so troca com o proximo.
+        if (lateNumber >= com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY) {
+            moveToEnd(attendance, attendanceRepository
+                    .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId()));
+            // Recomeca no fim como espera comum: a vez atrasada acabou, e ele pode sair (leave-queue so
+            // aceita SCHEDULED) ou continuar.
+            attendance.setStatus(AttendanceStatus.SCHEDULED);
+            attendanceRepository.save(attendance);
+        }
 
         queueService.updateQueueEstimates(professional);
         log.info("[Professional] markAttendanceLate — attendance={} marcado LATE (caiu de posicao)", attendanceId);
@@ -215,47 +226,21 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         return queueService.getQueueOverview(professional, establishment);
     }
 
-    @Override
-    @Transactional
-    public QueueResponse markAttendanceNoShow(UUID professionalId, UUID attendanceId) {
-        log.info("[Professional] markAttendanceNoShow — professional={} attendance={}",
-                professionalId, attendanceId);
-
-        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
-                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
-
-        Establishment establishment = attendance.getEstablishment();
-        Professional professional = professionalRepository.findByIdWithBaseUser(professionalId)
-                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
-
-        assertProfessionalOwnsAttendance(professional, attendance);
-
-        // Escalada: so quem ja esta LATE (caiu de posicao ao menos uma vez, #19) pode ser
-        // marcado como no-show. Do contrario o profissional deve usar /late primeiro.
-        if (attendance.getStatus() != AttendanceStatus.LATE) {
-            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.LATE);
-        }
-
-        // Registra o strike NO_SHOW ANTES de sair da fila (ainda esta na fila de espera).
-        attendanceService.registerNoShowPenalty(attendance);
-
-        // Remove da fila: sai da espera (as consultas da fila trabalham por lista branca de status).
-        // REMOVED e nao CANCELLED porque quem tirou foi a LOJA (18/09) — o motivo (no-show) segue
-        // auditado no ClientPenaltyEvent NO_SHOW.
-        attendance.setStatus(AttendanceStatus.REMOVED);
-        attendanceRepository.save(attendance);
-
-        queueService.updateQueueEstimates(professional);
-        log.info("[Professional] markAttendanceNoShow — attendance={} removido da fila (no-show)", attendanceId);
-        return queueService.getQueueOverview(professional, establishment);
-    }
-
     /**
      * Empurra {@code target} para tras do proximo da fila de espera (cai 1 posicao), ajustando o
      * {@code scheduledTime} para um instante entre o proximo e o seguinte. Se o target ja for o
      * ultimo (ou nao estiver na lista), nada muda — permanece onde esta. A lista vem ordenada por
      * {@code scheduledTime} ASC e inclui SCHEDULED+LATE.
      */
+    /** Leva {@code target} para depois do ultimo da fila de espera (3o atraso — Andre, 26/09). */
+    private void moveToEnd(Attendance target, List<Attendance> waiting) {
+        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
+        if (last == null || last.getId().equals(target.getId())) {
+            return; // ja e o ultimo
+        }
+        target.setScheduledTime(last.getScheduledTime().plusMinutes(1));
+    }
+
     private void repositionBehindNext(Attendance target, List<Attendance> waiting) {
         int idx = -1;
         for (int i = 0; i < waiting.size(); i++) {

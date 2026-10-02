@@ -163,6 +163,12 @@ public class AutoCloseServiceImpl implements AutoCloseService {
             OffsetDateTime candidate = isPromptDue(professional, establishment, now, horizon)
                     ? now
                     : ClosingTimeMath.nextClosingInstant(establishment, now);
+            // Loja sem fechamento FUTURO (o de hoje ja passou e o resto da semana e 24h, fechado ou sem
+            // horario): nao ha evento dela. Sem isto, o candidato nulo derrubava o laco de TODAS as lojas —
+            // e com ele a troca de status de qualquer profissional (500 NPE no app, 26/09).
+            if (candidate == null) {
+                continue;
+            }
             if (earliest == null || candidate.isBefore(earliest)) {
                 earliest = candidate;
             }

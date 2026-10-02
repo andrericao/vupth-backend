@@ -84,8 +84,8 @@ class GetEstablishmentsQueueSummaryUseCaseTest {
             Map<UUID, QueueSummary> summaries = useCase.execute(List.of(ESTAB_A));
 
             assertThat(summaries.get(ESTAB_A))
-                    .as("a vitrine mostra a fila mais curta da loja, nao a soma")
-                    .isEqualTo(new QueueSummary(10, 2));
+                    .as("a vitrine mostra a fila mais curta da loja, nao a soma — com a folga de -10 (S10)")
+                    .isEqualTo(new QueueSummary(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(10), 2));
         }
 
         @Test
@@ -105,8 +105,8 @@ class GetEstablishmentsQueueSummaryUseCaseTest {
             Map<UUID, QueueSummary> summaries = useCase.execute(List.of(ESTAB_A));
 
             assertThat(summaries.get(ESTAB_A).minWaitMinutes())
-                    .as("fila vazia + 20min do atendimento em curso")
-                    .isEqualTo(20);
+                    .as("fila vazia + 20min do atendimento em curso, exibido com a folga (S10)")
+                    .isEqualTo(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(20));
         }
 
         @Test
@@ -153,7 +153,7 @@ class GetEstablishmentsQueueSummaryUseCaseTest {
                     .isEqualTo(QueueSummary.EMPTY);
             assertThat(summaries.get(ESTAB_B))
                     .as("a lista segue inteira")
-                    .isEqualTo(new QueueSummary(15, 1));
+                    .isEqualTo(new QueueSummary(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(15), 1));
         }
 
         @Test

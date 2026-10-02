@@ -244,6 +244,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "OPERATION_MODE_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException.class)
+    public ResponseEntity<ErrorResponse> handleNoShowRemoved(
+            com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException ex, HttpServletRequest req) {
+        log.warn("[410] NoShowRemoved | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.GONE, ex.getMessage(), "NO_SHOW_REMOVED");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.EstablishmentNobodyWorkingException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentNobodyWorking(
+            com.ospaulos.vupth.domain.establishment.exception.EstablishmentNobodyWorkingException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentNobodyWorking | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ESTABLISHMENT_NOBODY_WORKING");
+    }
+
     @ExceptionHandler(ExitPenaltyNotAcknowledgedException.class)
     public ResponseEntity<ExitPenaltyErrorResponse> handleExitPenaltyNotAcknowledged(
             ExitPenaltyNotAcknowledgedException ex, HttpServletRequest req) {

@@ -124,7 +124,6 @@ class LateArrivalServiceTest {
 
         assertThat(n).isEqualTo(3);
         assertThat(client.getLateCount()).as("zera quando a multa nasce").isZero();
-        assertThat(client.getStrikeCount()).isEqualTo(1);
         ArgumentCaptor<ClientPenaltyEvent> event = ArgumentCaptor.forClass(ClientPenaltyEvent.class);
         verify(penaltyEventRepository).save(event.capture());
         assertThat(event.getValue().getType()).isEqualTo(PenaltyType.LATE_ARRIVAL);
@@ -159,7 +158,6 @@ class LateArrivalServiceTest {
 
         verify(penaltyEventRepository).delete(fine);
         assertThat(client.getLateCount()).isEqualTo(2);
-        assertThat(client.getStrikeCount()).isZero();
         assertThat(a.getCountedLates()).isZero();
     }
 

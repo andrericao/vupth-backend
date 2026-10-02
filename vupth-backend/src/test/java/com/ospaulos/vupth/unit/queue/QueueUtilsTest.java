@@ -474,4 +474,139 @@ class QueueUtilsTest {
         // alvo 17:00 + 30 = 17:30, nao toca 18:00 -> mantem 17:00
         assertThat(QueueUtils.assignAgendaSlot(TARGET, 30, reserved)).isEqualTo(TARGET);
     }
+
+    // ── horario-alvo empurrado para depois da refeicao (Client 03/07) ──
+
+    @Test
+    @DisplayName("pushPastBreaks: alvo 12:30 com almoco 12:00-13:00 -> 13:00")
+    void pushPastBreaks_insideMeal() {
+        var meal = recurring("12:00", 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "12:30"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "13:00"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: servico que comeca antes mas invade o almoco tambem vai para depois")
+    void pushPastBreaks_overlapsStart() {
+        var meal = recurring("12:00", 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "11:45"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "13:00"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: cabe antes do almoco -> nao mexe")
+    void pushPastBreaks_fitsBefore() {
+        var meal = recurring("12:00", 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "11:00"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "11:00"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: almoco pulado no dia (#41) nao empurra")
+    void pushPastBreaks_skippedMeal() {
+        var meal = recurring("12:00", 60);
+        meal.skipOn(TODAY);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "12:30"), 30, List.of(meal)))
+                .isEqualTo(at("2026-06-16", "12:30"));
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: encadeia — sair do almoco e cair numa pausa avulsa empurra de novo")
+    void pushPastBreaks_chained() {
+        var meal = recurring("12:00", 60);
+        var pause = unexpected(at("2026-06-16", "13:00"), 20);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-16", "12:30"), 30, List.of(meal, pause)))
+                .isEqualTo(at("2026-06-16", "13:20"));
+    }
+
+    // ── Refeicoes Modelo B — janela flexivel (Partner S3, spec de 28/06) ──
+
+    @Test
+    @DisplayName("Modelo B: inicio maximo do almoco = janta - 3h (12:00 com janta 18:00 -> 15:00)")
+    void latestStart_nextMealMinus3h() {
+        var lunch = recurring("12:00", 60);
+        var dinner = recurring("18:00", 60);
+        assertThat(QueueUtils.latestStart(lunch, List.of(lunch, dinner), TODAY)).isEqualTo(at("2026-06-16", "15:00"));
+    }
+
+    @Test
+    @DisplayName("Modelo B: refeicoes a menos de 3h uma da outra nao ficam sempre suprimidas (piso = o proprio alvo)")
+    void latestStart_neverBeforeTarget() {
+        var lunch = recurring("12:00", 60);
+        var snack = recurring("13:00", 15);
+        assertThat(QueueUtils.latestStart(lunch, List.of(lunch, snack), TODAY)).isEqualTo(at("2026-06-16", "12:00"));
+    }
+
+    @Test
+    @DisplayName("Modelo B: sem proxima refeicao nem fechamento conhecido, vale o fim do dia")
+    void latestStart_noNext_endOfDay() {
+        var dinner = recurring("18:00", 60);
+        assertThat(QueueUtils.latestStart(dinner, List.of(dinner), TODAY)).isEqualTo(at("2026-06-17", "00:00"));
+    }
+
+    @Test
+    @DisplayName("Modelo B: almoco nao iniciado as 15:30 (passou de 15:00) some do ETA — antes contava ate a janta")
+    void suppressed_leavesEta() {
+        var lunch = recurring("12:00", 60);
+        var dinner = recurring("18:00", 60);
+        var now = at("2026-06-16", "15:30");
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(att(30)), List.of(lunch, dinner), now, 1))
+                .as("so o atendimento a frente").isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("Modelo B: ainda dentro da janela (14:30) o almoco atrasado segue no ETA")
+    void withinWindow_stillCounts() {
+        var lunch = recurring("12:00", 60);
+        var dinner = recurring("18:00", 60);
+        var now = at("2026-06-16", "14:30");
+        assertThat(QueueUtils.calculateWaitingTimeForPosition(List.of(att(30)), List.of(lunch, dinner), now, 1))
+                .as("almoco (60) projetado agora + o atendimento").isEqualTo(90);
+    }
+
+    @Test
+    @DisplayName("Modelo B: isSuppressed — passou do inicio maximo sem iniciar; iniciada, feita ou pulada nao conta como suprimida")
+    void isSuppressed_rules() {
+        var lunch = recurring("12:00", 60);
+        var dinner = recurring("18:00", 60);
+        var all = List.of(lunch, dinner);
+        assertThat(QueueUtils.isSuppressed(lunch, all, at("2026-06-16", "15:30"))).isTrue();
+        assertThat(QueueUtils.isSuppressed(lunch, all, at("2026-06-16", "14:59"))).isFalse();
+        assertThat(QueueUtils.isSuppressed(dinner, all, at("2026-06-16", "15:30"))).isFalse();
+
+        var skipped = recurring("12:00", 60);
+        skipped.skipOn(TODAY);
+        assertThat(QueueUtils.isSuppressed(skipped, List.of(skipped, dinner), at("2026-06-16", "15:30"))).isFalse();
+
+        var started = startedAt(at("2026-06-16", "15:10"), 60);
+        assertThat(QueueUtils.isSuppressed(started, List.of(started, dinner), at("2026-06-16", "15:30"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("Modelo B: refeicao TRAVADA no ingresso que depois foi suprimida deixa de contar no wait-time")
+    void lockedWait_suppressedMeal_zero() {
+        var lunch = recurring("12:00", 60);
+        var dinner = recurring("18:00", 60);
+        assertThat(QueueUtils.lockedClientWait(List.of(att(30)), 0, List.of(lunch), List.of(lunch, dinner),
+                at("2026-06-16", "15:30"))).isEqualTo(30);
+        assertThat(QueueUtils.lockedClientWait(List.of(att(30)), 0, List.of(lunch), List.of(lunch, dinner),
+                at("2026-06-16", "14:30"))).as("dentro da janela segue travada").isEqualTo(90);
+    }
+
+    @Test
+    @DisplayName("S10: a espera exibida e a real menos 10 min, com piso 0")
+    void displayedWait_buffer() {
+        assertThat(QueueUtils.displayedWait(45)).isEqualTo(35);
+        assertThat(QueueUtils.displayedWait(10)).isZero();
+        assertThat(QueueUtils.displayedWait(4)).as("piso 0").isZero();
+        assertThat(QueueUtils.displayedWait(0)).isZero();
+    }
+
+    @Test
+    @DisplayName("pushPastBreaks: pausa avulsa de ontem 23:44 ainda cobre o pedido das 00:14 (atravessa a meia-noite)")
+    void pushPastBreaks_pauseAcrossMidnight() {
+        var pause = unexpected(at("2026-06-16", "23:44"), 60);
+        assertThat(QueueUtils.pushPastBreaks(at("2026-06-17", "00:14"), 30, List.of(pause)))
+                .isEqualTo(at("2026-06-17", "00:44"));
+    }
 }

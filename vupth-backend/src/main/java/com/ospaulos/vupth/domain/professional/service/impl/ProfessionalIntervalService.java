@@ -171,6 +171,41 @@ public class ProfessionalIntervalService {
     }
 
     /**
+     * Ids das refeicoes do profissional que estao SUPRIMIDAS agora (Modelo B): passaram do inicio maximo
+     * hoje sem iniciar. Transacional porque a regra le as datas puladas (colecao lazy).
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.Set<UUID> suppressedTodayIds(UUID professionalId) {
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        List<ProfessionalInterval> all = intervalRepository.findByProfessional_Id(professionalId);
+        return all.stream()
+                .filter(iv -> com.ospaulos.vupth.domain.queue.service.QueueUtils.isSuppressed(iv, all, now))
+                .map(ProfessionalInterval::getId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * "Iniciar refeicao" do Modelo B (Partner S3, spec de 28/06): inicia a PROXIMA refeicao recorrente do
+     * dia que ainda nao foi feita, pulada, iniciada — nem SUPRIMIDA (passou do inicio maximo). Almoco
+     * suprimido e o profissional toca "iniciar" as 17:30 -> comeca a janta.
+     *
+     * @throws IntervalConflictException se nao sobrou refeicao hoje
+     */
+    public ProfessionalInterval startNextMeal(UUID professionalId) {
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        LocalDate today = BusinessClock.dateAt(now);
+        List<ProfessionalInterval> all = intervalRepository.findByProfessional_Id(professionalId);
+        ProfessionalInterval next = all.stream()
+                .filter(iv -> iv.getIntervalType() == com.ospaulos.vupth.domain.interval.valueObject.IntervalType.RECURRENT)
+                .filter(iv -> iv.getFixedStartTime() != null)
+                .filter(iv -> !iv.isStartedOn(today) && !iv.isDoneOn(today) && !iv.isSkippedOn(today))
+                .filter(iv -> !com.ospaulos.vupth.domain.queue.service.QueueUtils.isSuppressed(iv, all, now))
+                .min(java.util.Comparator.comparing(ProfessionalInterval::getFixedStartTime))
+                .orElseThrow(() -> new IntervalConflictException("Nao sobrou refeicao para hoje: todas feitas, puladas ou suprimidas."));
+        return startInterval(professionalId, next.getId());
+    }
+
+    /**
      * Resultado de um skip/unskip — o intervalo afetado + o establishment do profissional
      * (para o broadcast da fila via WebSocket, feito pela camada web apos o commit).
      */

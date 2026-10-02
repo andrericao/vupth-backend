@@ -75,6 +75,16 @@ public class ProfessionalIntervalController {
         return intervalMapper.toResponse(interval);
     }
 
+    /**
+     * PATCH .../intervals/next/start — "Iniciar refeicao" do Modelo B: comeca a proxima refeicao do dia
+     * que nao foi feita, pulada nem suprimida (almoco suprimido as 17:30 -> comeca a janta). 409
+     * INTERVAL_CONFLICT se nao sobrou nenhuma.
+     */
+    @PatchMapping("/next/start")
+    public IntervalResponse startNextMeal(@PathVariable UUID professionalId) {
+        return intervalMapper.toResponse(intervalService.startNextMeal(professionalId));
+    }
+
     @PatchMapping("/{intervalId}/start")
     public IntervalResponse startInterval(
             @PathVariable UUID professionalId,
@@ -144,7 +154,11 @@ public class ProfessionalIntervalController {
         List<ProfessionalInterval> intervals = intervalService
                 .getActiveIntervalsForProfessional(professionalId, targetDate);
 
-        return intervalMapper.toResponseList(intervals);
+        // Modelo B: marca as refeicoes que passaram do inicio maximo hoje sem iniciar (sumiram do dia)
+        java.util.Set<UUID> suppressed = intervalService.suppressedTodayIds(professionalId);
+        return intervals.stream()
+                .map(iv -> intervalMapper.toResponse(iv).withSuppressedToday(suppressed.contains(iv.getId())))
+                .toList();
     }
 
     // Exception handlers

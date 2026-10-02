@@ -162,6 +162,59 @@ class ProfilePhotoIntegrationTest {
         assertThat(storage.objects).isEmpty();
     }
 
+    // ── foto da LOJA (Andre, 26/09) — mesma mecanica, so o dono ──
+
+    private MockMultipartHttpServletRequestBuilder uploadStore(byte[] content) {
+        MockMultipartHttpServletRequestBuilder b = multipart("/establishment/{id}/photo", establishmentId)
+                .file(new MockMultipartFile("file", "loja.png", "image/png", content));
+        b.with(r -> { r.setMethod("PUT"); return r; });
+        return b;
+    }
+
+    @Test
+    @Order(70)
+    @DisplayName("PUT /establishment/{id}/photo (dono) -> 200 url_image, e o detalhe da loja passa a trazer")
+    void storePhoto_upload() throws Exception {
+        MvcResult r = mvc.perform(uploadStore(PNG).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andReturn();
+        String url = new JSONObject(r.getResponse().getContentAsString()).getString("url_image");
+        assertThat(url).startsWith("https://fotos.test/establishment/" + establishmentId + "/");
+
+        mvc.perform(get("/establishment/id/{id}", establishmentId))
+                .andExpect(status().isOk())
+                // o detalhe da loja expoe urlImage (camelCase) — e o nome que o Client ja le
+                .andExpect(jsonPath("$.urlImage").value(url));
+    }
+
+    @Test
+    @Order(71)
+    @DisplayName("Foto da loja por quem nao e o dono -> 403")
+    void storePhoto_notOwner_403() throws Exception {
+        var other = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        TestUserUtils.becomeOwner(mvc, mapper, faker, other.token()); // dono de OUTRA loja
+        String otherToken = "Bearer " + new JSONObject(mvc.perform(post("/auth/login")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(new com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest(
+                                other.email(), other.password()))))
+                .andReturn().getResponse().getContentAsString()).getJSONObject("tokens").getString("access_token");
+
+        mvc.perform(uploadStore(PNG).header("Authorization", otherToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(72)
+    @DisplayName("Foto da loja que nao e imagem -> 400; DELETE -> 204 e sai do storage")
+    void storePhoto_invalid_thenRemove() throws Exception {
+        mvc.perform(uploadStore("texto".getBytes()).header("Authorization", token))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(delete("/establishment/{id}/photo", establishmentId).header("Authorization", token))
+                .andExpect(status().isNoContent());
+        assertThat(storage.objects.keySet()).noneMatch(k -> k.startsWith("establishment/"));
+    }
+
     @AfterAll
     void tearDown() {
         userRepository.deleteAll();

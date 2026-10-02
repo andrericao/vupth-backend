@@ -287,8 +287,8 @@ class FitInAttendanceIntegrationTest {
         Q behind = createScheduled(52);      // q2 (fica de tras do encaixe)
         Q toFit = createScheduled(53);       // encaixado apos 2 (entre q1 e q2)
 
-        int before = clientWait(behind);     // 2 clientes a frente (q0,q1) x 30 = 60
-        assertThat(before).isEqualTo(60);
+        int before = clientWait(behind);     // 2 clientes a frente (q0,q1) x 30 = 60, exibido com a folga (S10)
+        assertThat(before).isEqualTo(com.ospaulos.vupth.domain.queue.service.QueueUtils.displayedWait(60));
 
         fitIn(toFit.id(), 2, ownerProfToken);
 

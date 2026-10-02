@@ -40,15 +40,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests — item #39 (escalada de no-show).
+ * Integration tests — o "nao compareceu" SAIU (Andre, 26/09): a regra dos 3 atrasos cobre o sumico.
  *
- * Regra: um cliente que ja estava LATE (#19, caiu de posicao) e nao compareceu ao ser chamado de
- * novo pode ser removido da fila pelo profissional via {@code PATCH /attendances/{id}/no-show}:
- * o atendimento vira REMOVED (a loja tirou, 18/09) e registra-se um {@link ClientPenaltyEvent} {@code NO_SHOW}
- * incrementando o {@code strikeCount} do cliente. Exige status LATE (senao 400). Convidados (sem
- * conta) sao removidos mas NAO acumulam strike.
- *
- * Cada atendimento dura 30 min e as refeicoes recorrentes sao removidas no setup -> ETA determinstico.
+ * <p>O endpoint {@code PATCH /attendances/{id}/no-show} fica respondendo 410 NO_SHOW_REMOVED ate os apps
+ * tirarem o botao — e nao mexe em nada: o cliente continua na fila, sem multa.
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -187,63 +182,22 @@ class NoShowEscalationIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("LATE -> no-show remove da fila (REMOVED) + registra strike NO_SHOW + expoe count")
-    void noShow_onLate_removesAndStrikes() throws Exception {
+    @DisplayName("no-show -> 410 NO_SHOW_REMOVED, e o cliente atrasado continua na fila sem multa")
+    void noShow_gone() throws Exception {
         Q c1 = createWalkin();
         createWalkin(); // proximo, para o c1 ter atras de quem cair no /late
 
         markLate(c1.id());
-        assertThat(statusOf(c1.id())).isEqualTo(AttendanceStatus.LATE);
 
         mvc.perform(patch("/attendances/{id}/no-show", c1.id())
                         .header("Authorization", ownerProfToken))
-                .andExpect(status().isOk());
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.code").value("NO_SHOW_REMOVED"));
 
-        // 18/09: o no-show e a LOJA tirando o cliente da fila -> REMOVED.
-        assertThat(statusOf(c1.id())).as("removido -> REMOVED").isEqualTo(AttendanceStatus.REMOVED);
-        assertThat(inWaiting(c1.id())).as("saiu da fila de espera").isFalse();
-
-        List<ClientPenaltyEvent> events = penaltyEventRepository
-                .findByClientIdOrderByCreatedAtDesc(UUID.fromString(c1.clientId()));
-        assertThat(events).as("1 evento NO_SHOW registrado").hasSize(1);
-        assertThat(events.get(0).getType()).isEqualTo(PenaltyType.NO_SHOW);
-        assertThat(events.get(0).getAmount()).as("D4 (18/09): nao comparecer custa R$ 5,00").isEqualByComparingTo("5.00");
-        assertThat(events.get(0).getAttendanceId().toString()).isEqualTo(c1.id());
-
-        assertThat(strikeCountOf(c1)).as("strikeCount exposto = 1").isEqualTo(1);
-    }
-
-    @Test
-    @Order(11)
-    @DisplayName("no-show em atendimento SCHEDULED (nao-LATE) -> 400, sem strike")
-    void noShow_notLate_400() throws Exception {
-        Q q = createWalkin(); // SCHEDULED
-
-        mvc.perform(patch("/attendances/{id}/no-show", q.id())
-                        .header("Authorization", ownerProfToken))
-                .andExpect(status().isBadRequest());
-
-        assertThat(statusOf(q.id())).as("permanece SCHEDULED").isEqualTo(AttendanceStatus.SCHEDULED);
-        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(q.clientId())))
-                .as("sem strike").isZero();
-    }
-
-    @Test
-    @Order(12)
-    @DisplayName("Convidado LATE -> no-show remove da fila mas NAO acumula strike (sem conta)")
-    void noShow_guest_removesWithoutStrike() throws Exception {
-        String guest = createGuest();
-
-        markLate(guest);
-        assertThat(statusOf(guest)).isEqualTo(AttendanceStatus.LATE);
-
-        mvc.perform(patch("/attendances/{id}/no-show", guest)
-                        .header("Authorization", ownerProfToken))
-                .andExpect(status().isOk());
-
-        assertThat(statusOf(guest)).as("convidado removido -> REMOVED").isEqualTo(AttendanceStatus.REMOVED);
-        assertThat(inWaiting(guest)).as("saiu da fila").isFalse();
-        assertThat(penaltyEventRepository.count()).as("convidado nao gera evento de penalidade").isZero();
+        assertThat(statusOf(c1.id())).as("nada mudou: segue atrasado").isEqualTo(AttendanceStatus.LATE);
+        assertThat(inWaiting(c1.id())).as("continua na fila").isTrue();
+        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(c1.clientId())))
+                .as("sem multa").isZero();
     }
 
     @Test

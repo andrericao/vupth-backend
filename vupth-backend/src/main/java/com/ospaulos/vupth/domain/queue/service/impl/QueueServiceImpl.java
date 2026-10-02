@@ -42,6 +42,7 @@ public class QueueServiceImpl implements QueueService {
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
     private final ClientWaitCalculator clientWaitCalculator;
+    private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
 
     @Override
     public QueueResponse getQueueOverview(Professional professional, Establishment establishment) {
@@ -125,7 +126,10 @@ public class QueueServiceImpl implements QueueService {
         OffsetDateTime now = OffsetDateTime.now();
         int totalWaitingTime = clientWaitCalculator.clientWaitMinutes(attendance, now)
                 .orElseThrow(() -> new ClientNotInQueueException(attendance.getId()));
-        OffsetDateTime startTime = now.plusMinutes(totalWaitingTime);
+        // S10 (26/09): a espera e o horario EXIBIDOS levam a folga de -10 min; a multa de saida abaixo e o
+        // horario prometido (ingresso) seguem o tempo real — ninguem e punido pela folga.
+        int displayedWait = QueueUtils.displayedWait(totalWaitingTime);
+        OffsetDateTime startTime = now.plusMinutes(displayedWait);
 
         AttendanceInQueueResponse attendanceQueue = AttendanceInQueueResponse.fromEntity(attendance);
 
@@ -139,10 +143,14 @@ public class QueueServiceImpl implements QueueService {
                 fullQueue.size(),
                 fullQueue.totalEstimatedMinutes(),
                 fullQueue.totalRemainingMinutes(),
-                totalWaitingTime,
+                displayedWait,
                 startTime,
                 attendance.getToleranceUntil(),
-                ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
+                // quem ja pagou a multa do 3o atraso sai sem nova multa (Andre, 26/09)
+                penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
+                        com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+                        ? new java.math.BigDecimal("0.00")
+                        : ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
                 attendance.getClient() != null ? attendance.getClient().getLateCount() : 0,
                 attendance.getClient() != null ? attendance.getClient().getLatesUntilPenalty()
                         : com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY,

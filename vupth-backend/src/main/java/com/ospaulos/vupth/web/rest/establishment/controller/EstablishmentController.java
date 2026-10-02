@@ -85,6 +85,8 @@ public class EstablishmentController {
     private final ReportService                          reportService;
     private final ServiceItemService                     serviceItemService;
     private final QueueWebSocketPublisher                queuePublisher;
+    private final com.ospaulos.vupth.api.establishment.usecase.ListEstablishmentProfessionalsUseCase listProfessionalsUseCase;
+    private final com.ospaulos.vupth.domain.establishment.service.EstablishmentPhotoService establishmentPhotoService;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -262,6 +264,28 @@ public class EstablishmentController {
      * Valores válidos: OPEN, CLOSED, TEMPORARILY_CLOSED
      * Requer: ROLE_OWNER ou ROLE_PROFESSIONAL (vínculo verificado no serviço → 403 se não pertence).
      */
+    /**
+     * PUT /establishment/{id}/photo (multipart, campo {@code file}) — foto da loja (Andre, 26/09). So o
+     * dono. Mesmas regras da foto de perfil: JPEG/PNG/WebP ate 2 MB (400 INVALID_PROFILE_PHOTO), R2 (503
+     * STORAGE_NOT_CONFIGURED sem ele). Devolve {@code url_image}, que o cliente ja le na lista e no detalhe.
+     */
+    @PutMapping(value = "/{id}/photo", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<java.util.Map<String, String>> uploadPhoto(
+            @PathVariable UUID id,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @AuthenticationPrincipal UserDetailsImpl user) throws java.io.IOException {
+        String url = establishmentPhotoService.upload(id, user.getUserId(), file.getBytes());
+        queuePublisher.broadcastQueue(id);
+        return ResponseEntity.ok(java.util.Map.of("url_image", url));
+    }
+
+    /** DELETE /establishment/{id}/photo — tira a foto da loja (e apaga o arquivo). So o dono. */
+    @DeleteMapping("/{id}/photo")
+    public ResponseEntity<Void> removePhoto(@PathVariable UUID id, @AuthenticationPrincipal UserDetailsImpl user) {
+        establishmentPhotoService.remove(id, user.getUserId());
+        return ResponseEntity.noContent().build();
+    }
+
     @PatchMapping("/{id}/open-status")
     public ResponseEntity<EstablishmentResponse> updateOpenStatus(
             @PathVariable UUID id,
@@ -347,6 +371,17 @@ public class EstablishmentController {
      *
      * Requer: ROLE_OWNER.
      */
+    /**
+     * GET /establishment/{establishmentId}/professionals — todos os vinculados, inclusive sem servico
+     * (Partner S8), com {@code service_count}/{@code has_service}. So o dono ou um profissional da loja.
+     */
+    @GetMapping("/{establishmentId}/professionals")
+    public ResponseEntity<java.util.List<com.ospaulos.vupth.api.establishment.dto.response.EstablishmentProfessionalResponse>> listProfessionals(
+            @PathVariable UUID establishmentId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(listProfessionalsUseCase.execute(establishmentId, user.getUserId()));
+    }
+
     @PostMapping("/{establishmentId}/professionals")
     public ResponseEntity<ProfessionalQuickCreateResponse> addProfessional(
             @PathVariable UUID establishmentId,

@@ -39,8 +39,9 @@ public class R2ImageStorage implements ImageStorage {
             @Value("${vupth.storage.r2.secret-access-key}") String secretAccessKey,
             @Value("${vupth.storage.r2.bucket}") String bucket,
             @Value("${vupth.storage.r2.public-base-url}") String publicBaseUrl) {
+        String endpoint = "https://" + normalizeAccountId(accountId) + ".r2.cloudflarestorage.com";
         this.client = S3Client.builder()
-                .endpointOverride(URI.create("https://" + accountId + ".r2.cloudflarestorage.com"))
+                .endpointOverride(URI.create(endpoint))
                 .region(Region.of("auto"))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
@@ -51,7 +52,22 @@ public class R2ImageStorage implements ImageStorage {
         this.publicBaseUrl = publicBaseUrl.endsWith("/")
                 ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1)
                 : publicBaseUrl;
-        log.info("[Storage] Cloudflare R2 ligado — bucket={} publico={}", bucket, this.publicBaseUrl);
+        log.info("[Storage] Cloudflare R2 ligado — endpoint={} bucket={} publico={}", endpoint, bucket, this.publicBaseUrl);
+    }
+
+    /**
+     * Aceita o Account ID puro ou o que a Cloudflare mostra no campo "S3 API" do bucket
+     * ({@code https://<id>.r2.cloudflarestorage.com/<bucket>}) — colar a URL inteira foi o primeiro erro de
+     * configuracao no staging (25/09): o host virava {@code https://https://...} e o upload dava UnknownHost.
+     */
+    static String normalizeAccountId(String raw) {
+        String id = raw == null ? "" : raw.trim();
+        id = id.replaceFirst("^https?://", "");
+        int slash = id.indexOf('/');
+        if (slash >= 0) {
+            id = id.substring(0, slash);
+        }
+        return id.replaceFirst("\\.r2\\.cloudflarestorage\\.com$", "").replaceFirst("\\.eu$", "");
     }
 
     @Override

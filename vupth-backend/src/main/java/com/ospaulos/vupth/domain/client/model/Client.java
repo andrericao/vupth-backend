@@ -60,13 +60,7 @@ public class Client {
         this.id = baseUser.getId();
     }
 
-    public void incrementStrike() {
-        this.strikeCount++;
-    }
 
-    public void decrementStrike() {
-        this.strikeCount = Math.max(0, this.strikeCount - 1);
-    }
 
     public String getFirstName(){
         return this.baseUser.getFirstName();

@@ -126,13 +126,14 @@ public class GetEstablishmentsQueueSummaryUseCase {
         try {
             Integer minWait = null;
             for (UUID professionalId : professionals) {
-                int eta = QueueUtils.professionalEta(
+                // S10: a vitrine mostra a espera com a folga de -10 min (so exibicao)
+                int eta = QueueUtils.displayedWait(QueueUtils.professionalEta(
                         waitingQueues.getOrDefault(
                                 new ProfessionalAtEstablishment(establishmentId, professionalId),
                                 List.of()),
                         intervals.getOrDefault(professionalId, List.of()),
                         currentAttendances.get(professionalId),
-                        now);
+                        now));
                 if (minWait == null || eta < minWait) {
                     minWait = eta;
                 }

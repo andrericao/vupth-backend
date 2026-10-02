@@ -19,6 +19,7 @@ public interface IntervalMapper {
     @Mapping(source = "intervalType", target = "type")
     @Mapping(source = "plannedEndTime", target = "endTime")
     @Mapping(target = "status", expression = "java(interval.getIsActive() ? com.ospaulos.vupth.domain.interval.valueObject.IntervalStatus.ACTIVE : com.ospaulos.vupth.domain.interval.valueObject.IntervalStatus.SCHEDULED)")
+    @Mapping(target = "suppressedToday", ignore = true)
     IntervalResponse toResponse(ProfessionalInterval interval);
 
     List<IntervalResponse> toResponseList(List<ProfessionalInterval> intervals);

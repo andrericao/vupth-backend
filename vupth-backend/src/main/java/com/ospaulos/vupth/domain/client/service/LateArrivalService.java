@@ -100,7 +100,6 @@ public class LateArrivalService {
         if (count >= LATES_PER_PENALTY) {
             penaltyEventRepository.save(new ClientPenaltyEvent(
                     client, PenaltyType.LATE_ARRIVAL, attendance.getId(), 0, LATE_PENALTY));
-            client.incrementStrike();
             client.setLateCount(0);
             log.info("[Late] 3o atraso do client={} (attendance={}) -> multa de R$ {}",
                     client.getId(), attendance.getId(), LATE_PENALTY);
@@ -131,7 +130,6 @@ public class LateArrivalService {
         if (penaltyFromThisAttendance.isPresent()) {
             // a multa zerou o contador: antes deste atendimento ele estava em (atual + 3 - contados)
             penaltyEventRepository.delete(penaltyFromThisAttendance.get());
-            client.decrementStrike();
             client.setLateCount(Math.max(0, client.getLateCount() + LATES_PER_PENALTY - counted));
         } else {
             client.setLateCount(Math.max(0, client.getLateCount() - counted));
@@ -141,13 +139,16 @@ public class LateArrivalService {
     }
 
     private void notify(Client client, Attendance attendance, int count) {
+        // No 3o ele vai para o fim da fila (Andre, 26/09): pode continuar ali ou sair sem nova multa.
         String body = count >= LATES_PER_PENALTY
-                ? "Este é o seu " + count + "º atraso: multa de R$ 5,00 no seu próximo atendimento."
-                : "Este é o seu " + count + "º atraso. No " + LATES_PER_PENALTY + "º, multa de R$ 5,00.";
+                ? "Este é o seu " + count + "º atraso: multa de R$ 5,00 no seu próximo atendimento. Você foi para o fim "
+                        + "da fila — pode continuar ou sair sem nova multa."
+                : "Este é o seu " + count + "º atraso. No " + LATES_PER_PENALTY + "º, multa de R$ 5,00 e você vai para o fim da fila.";
         pushPublisher.notifyUser(client.getId(), "Você está atrasado", body, Map.of(
                 "type", "LATE_MARKED",
                 "attendanceId", String.valueOf(attendance.getId()),
                 "lateCount", String.valueOf(count),
-                "latesUntilPenalty", String.valueOf(Math.max(0, LATES_PER_PENALTY - count))));
+                "latesUntilPenalty", String.valueOf(Math.max(0, LATES_PER_PENALTY - count)),
+                "movedToEnd", String.valueOf(count >= LATES_PER_PENALTY)));
     }
 }

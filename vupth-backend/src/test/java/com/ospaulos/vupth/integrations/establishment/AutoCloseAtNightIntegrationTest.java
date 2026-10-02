@@ -222,4 +222,39 @@ class AutoCloseAtNightIntegrationTest {
         assertThat(prompted).as("dia fechado não dispara o aviso")
                 .noneMatch(p -> p.professionalId().equals(UUID.fromString(ownerId)));
     }
+
+    @Test
+    @Order(5)
+    @DisplayName("URGENTE 27/09: loja com fechamento de hoje ja passado e o resto da semana em 24h nao derruba o proximo evento (NPE)")
+    void noNextClosing_doesNotBreakTheLoop() throws Exception {
+        // a semana inteira em 24h (sem fechamento) e hoje com fechamento ja passado: o hasClosingEvent
+        // aceita a loja (ve o de hoje) e o nextClosingInstant devolve nulo (nada no futuro)
+        weekOpenAllDay();
+        closedTodayAt(30);
+        mvc.perform(patch("/professional/me/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"status\":\"ON_BREAK\"}"))
+                .andExpect(status().isOk());
+        // Fila fechada e uma carencia ja armada: o aviso nao esta devido, entao o candidato desta loja vem do
+        // proximo fechamento — o nulo — e o "mais cedo" ja comeca preenchido pela carencia (em producao,
+        // qualquer profissional com carencia pendente). Era a combinacao que dava o NPE.
+        tx.executeWithoutResult(ignored -> {
+            Professional p = professionalRepository.findById(UUID.fromString(ownerId)).orElseThrow();
+            p.setAcceptingNew(false);
+            p.setClosingGraceUntil(java.time.OffsetDateTime.now().plusHours(1));
+            professionalRepository.save(p);
+        });
+
+        org.assertj.core.api.Assertions.assertThatCode(() -> autoCloseService.nextEventAt())
+                .as("o laco passa por todas as lojas — uma sem fechamento futuro nao pode quebrar as outras")
+                .doesNotThrowAnyException();
+
+        // e o que o app viu: mudar de status (que reagenda o timer) nao da 500
+        mvc.perform(patch("/professional/me/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"status\":\"ON_BREAK\"}"))
+                .andExpect(status().isOk());
+    }
 }

@@ -8,9 +8,8 @@ import java.util.UUID;
  * Exposes public-facing client profile data.
  * MVP: id, name, email. Additional fields (photo, stats) added in future sprints.
  *
- * <p>{@code strikeCount} (item #39, Fase 1): total de penalidades acumuladas pelo cliente
- * (ex.: cancelamentos tardios com ETA &lt; 1h). O front usa para exibir o aviso da politica de
- * cancelamento. Fase 1 apenas expoe a contagem — sem bloqueio automatico.</p>
+ * <p>{@code strikeCount}: SAIU (Andre, 26/09) — vem sempre 0 ate os apps tirarem o campo; depois sai.
+ * A regua do cliente agora e {@code lateCount} + {@code latesUntilPenalty} (regra dos 3 atrasos).</p>
  */
 public record ClientResponse(
         UUID id,

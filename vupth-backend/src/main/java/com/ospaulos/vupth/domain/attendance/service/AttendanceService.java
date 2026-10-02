@@ -49,15 +49,6 @@ public interface AttendanceService {
      */
     AttendanceInQueueResponse cancelAttendance(UUID attendance, UUID clientId, java.math.BigDecimal acknowledgedPenalty);
 
-    /**
-     * Item #39 — escalada de no-show. Registra um {@code ClientPenaltyEvent} do tipo
-     * {@code NO_SHOW} e incrementa o {@code strikeCount} do cliente do atendimento. Ao
-     * contrario do late-cancel, o strike e incondicional (o profissional ja declarou o
-     * ausente reincidente); convidados (sem conta) nao acumulam. Chamado enquanto o
-     * atendimento ainda esta na fila de espera, antes de ser marcado CANCELLED.
-     */
-    public void registerNoShowPenalty(Attendance attendance);
-
     /** Sem ciencia: so sai se a saida nao gerar multa (D4). */
     default AttendanceInQueueResponse leaveQueue(UUID attendanceId, UUID clientId) {
         return leaveQueue(attendanceId, clientId, null);

@@ -38,11 +38,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests — multa por sair da fila (D4; item #39 era a Fase 1, so strike).
+ * Integration tests — multa por sair da fila (D4).
  *
  * Regra: depois da tolerancia gravada no ingresso, cancelar ou sair da fila com o ETA da PROPRIA vez
  * a menos de 1h registra um {@link ClientPenaltyEvent} do tipo {@code LATE_CANCEL} com o valor
- * (R$ 5 com 30 min ou menos, R$ 3 ate 1h) e incrementa o {@code strikeCount}. Dentro da tolerancia, ou
+ * (R$ 5 com 30 min ou menos, R$ 3 ate 1h) . Dentro da tolerancia, ou
  * com ETA >= 1h, NAO penaliza. Sem isencao para quem esta sozinho (Andre, 25/09).
  *
  * A tolerancia e de minutos reais; o teste a vence escrevendo {@code tolerance_until} no passado
@@ -156,16 +156,6 @@ class LateCancelPenaltyIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    /** GET /clients/{id} -> strikeCount exposto (item #39). */
-    private int strikeCountOf(Q q) throws Exception {
-        MvcResult r = mvc.perform(get("/clients/{id}", q.clientId())
-                        .header("Authorization", q.token()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.strikeCount").exists())
-                .andReturn();
-        return new JSONObject(r.getResponse().getContentAsString()).getInt("strikeCount");
-    }
-
     @AfterEach
     void clearQueue() {
         penaltyEventRepository.deleteAll();
@@ -178,8 +168,8 @@ class LateCancelPenaltyIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("Cancelar depois da tolerancia, sozinho na fila (ETA 0) -> multa de R$ 5 + strike, sem isencao")
-    void cancel_atFront_registersStrike() throws Exception {
+    @DisplayName("Cancelar depois da tolerancia, sozinho na fila (ETA 0) -> multa de R$ 5, sem isencao")
+    void cancel_atFront_registersPenalty() throws Exception {
         Q q = createWalkin(); // sozinho -> ETA da vez = 0 < 60
         expireTolerance(q);
 
@@ -192,14 +182,12 @@ class LateCancelPenaltyIntegrationTest {
         assertThat(events.get(0).getAttendanceId().toString()).isEqualTo(q.id());
         assertThat(events.get(0).getEtaMinutes()).as("ETA da vez < 60").isLessThan(60);
         assertThat(events.get(0).getAmount()).as("30 min ou menos -> R$ 5").isEqualByComparingTo("5.00");
-
-        assertThat(strikeCountOf(q)).as("strikeCount exposto = 1").isEqualTo(1);
     }
 
     @Test
     @Order(11)
     @DisplayName("Cancelar com ETA >= 1h (atras de 3 na fila) -> NAO penaliza")
-    void cancel_farInQueue_noStrike() throws Exception {
+    void cancel_farInQueue_noPenalty() throws Exception {
         createWalkin();
         createWalkin();
         createWalkin();        // 3 x 30 = 90 min a frente
@@ -209,14 +197,13 @@ class LateCancelPenaltyIntegrationTest {
         cancel(q);
 
         assertThat(penaltyEventRepository.countByClientId(UUID.fromString(q.clientId())))
-                .as("sem strike quando ETA >= 1h").isZero();
-        assertThat(strikeCountOf(q)).as("strikeCount permanece 0").isZero();
+                .as("sem multa quando ETA >= 1h").isZero();
     }
 
     @Test
     @Order(12)
-    @DisplayName("Cancelamentos tardios reincidentes acumulam strikes")
-    void cancel_repeatedLate_accumulatesStrikes() throws Exception {
+    @DisplayName("Cancelamentos tardios reincidentes geram uma multa cada")
+    void cancel_repeatedLate_onePenaltyEach() throws Exception {
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
 
         // 1o cancelamento tardio (sozinho, ETA 0)
@@ -231,8 +218,6 @@ class LateCancelPenaltyIntegrationTest {
 
         assertThat(penaltyEventRepository.countByClientId(UUID.fromString(client.id())))
                 .as("2 eventos").isEqualTo(2);
-        assertThat(strikeCountOf(new Q(second.id(), client.token(), client.id())))
-                .as("strikeCount acumulado = 2").isEqualTo(2);
     }
 
     @Test
@@ -251,7 +236,6 @@ class LateCancelPenaltyIntegrationTest {
 
         assertThat(penaltyEventRepository.countByClientId(UUID.fromString(q.clientId())))
                 .as("saiu dentro da tolerancia").isZero();
-        assertThat(strikeCountOf(q)).isZero();
     }
 
     @Test
@@ -286,7 +270,6 @@ class LateCancelPenaltyIntegrationTest {
                 .findByClientIdOrderByCreatedAtDesc(UUID.fromString(q.clientId()));
         assertThat(events).hasSize(1);
         assertThat(events.get(0).getAmount()).isEqualByComparingTo("5.00");
-        assertThat(strikeCountOf(q)).isEqualTo(1);
     }
 
     @Test

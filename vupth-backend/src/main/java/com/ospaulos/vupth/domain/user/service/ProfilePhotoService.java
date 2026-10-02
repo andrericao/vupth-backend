@@ -31,20 +31,11 @@ public class ProfilePhotoService {
     private final ImageStorage imageStorage;
 
     public String upload(UUID userId, byte[] content) {
-        if (content == null || content.length == 0) {
-            throw new InvalidProfilePhotoException("A foto esta vazia.");
-        }
-        if (content.length > MAX_BYTES) {
-            throw new InvalidProfilePhotoException("A foto passa de 2 MB.");
-        }
-        ImageType type = ImageType.detect(content);
-        if (type == null) {
-            throw new InvalidProfilePhotoException("A foto precisa ser JPEG, PNG ou WebP.");
-        }
+        String[] type = validateImage(content);
         BaseUser user = userRepository.findById(userId).orElseThrow();
 
         String url = imageStorage.store(
-                "profile/" + userId + "/" + UUID.randomUUID() + "." + type.extension, content, type.contentType);
+                "profile/" + userId + "/" + UUID.randomUUID() + "." + type[1], content, type[0]);
         String previous = user.getProfileImageUrl();
         user.setProfileImageUrl(url);
         userRepository.save(user);
@@ -71,6 +62,26 @@ public class ProfilePhotoService {
         } catch (Exception e) {
             log.warn("[ProfilePhoto] nao apagou {}: {}", url, e.getMessage());
         }
+    }
+
+    /**
+     * As regras de imagem, reaproveitadas pela foto da loja (Andre, 26/09): vazia, acima de 2 MB ou que
+     * nao seja JPEG/PNG/WebP pelos bytes -> {@link InvalidProfilePhotoException} (400 INVALID_PROFILE_PHOTO).
+     *
+     * @return {content-type, extensao}
+     */
+    public static String[] validateImage(byte[] content) {
+        if (content == null || content.length == 0) {
+            throw new InvalidProfilePhotoException("A foto esta vazia.");
+        }
+        if (content.length > MAX_BYTES) {
+            throw new InvalidProfilePhotoException("A foto passa de 2 MB.");
+        }
+        ImageType type = ImageType.detect(content);
+        if (type == null) {
+            throw new InvalidProfilePhotoException("A foto precisa ser JPEG, PNG ou WebP.");
+        }
+        return new String[]{type.contentType, type.extension};
     }
 
     enum ImageType {

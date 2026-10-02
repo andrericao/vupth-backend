@@ -33,7 +33,10 @@ public record AttendanceListResponse(
         // totalValue ("cobrancas do servico") de proposito. Nulas onde nao foram consultadas (listagem
         // da loja); lista vazia = sem multa.
         List<PenaltyChargeResponse> penalties,
-        BigDecimal penaltyTotal
+        BigDecimal penaltyTotal,
+        // Client: o atendimento ja foi avaliado? Decide se o app mostra "Avaliar" (so FINISHED sem nota).
+        // Nulo onde nao foi consultado (listagem da loja).
+        Boolean rated
 ) {
 
     public AttendanceListResponse withPenalties(List<PenaltyChargeResponse> charged) {
@@ -42,7 +45,13 @@ public record AttendanceListResponse(
                 .reduce(new BigDecimal("0.00"), BigDecimal::add);
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, services, status, totalValue, scheduledTime, startTime, endTime,
-                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total);
+                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated);
+    }
+
+    public AttendanceListResponse withRated(boolean isRated) {
+        return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
+                establishmentId, services, status, totalValue, scheduledTime, startTime, endTime,
+                durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated);
     }
 
     public static AttendanceListResponse fromEntity(Attendance attendance) {
@@ -70,6 +79,7 @@ public record AttendanceListResponse(
                 attendance.getProReceives(),
                 attendance.getIntermediaryFee(),
                 attendance.getPlatformFee(),
+                null,
                 null,
                 null
         );

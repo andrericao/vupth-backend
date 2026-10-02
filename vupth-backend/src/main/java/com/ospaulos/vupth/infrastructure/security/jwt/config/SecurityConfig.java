@@ -107,6 +107,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/reports").hasRole("OWNER")
+                        // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
+                        .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
@@ -200,6 +202,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/service-items/*").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.POST, "/establishment/create").hasRole("OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/establishment/*/general-infos").hasRole("OWNER")
+                        // Foto da loja (26/09): so o dono envia/tira
+                        .requestMatchers(HttpMethod.PUT, "/establishment/*/photo").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.DELETE, "/establishment/*/photo").hasRole("OWNER")
                         // Horario por dia (#2): so o dono escreve; o GET cai no permitAll de /establishment/**
                         .requestMatchers(HttpMethod.PUT, "/establishment/*/hours/**").hasRole("OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/hours/**").hasRole("OWNER")
