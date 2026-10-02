@@ -334,6 +334,8 @@ public class EstablishmentController {
 
         ServiceItemResponse response = serviceItemService.updateServiceItemForEstablishment(
                 user.getUserId(), establishmentId, itemId, request);
+        // Tempo/preco novo chega na hora a quem esta com a loja aberta (o snapshot leva os servicos).
+        queuePublisher.broadcastQueue(establishmentId);
         return ResponseEntity.ok(response);
     }
 

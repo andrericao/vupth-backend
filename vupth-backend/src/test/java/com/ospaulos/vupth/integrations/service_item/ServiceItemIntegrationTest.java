@@ -285,6 +285,11 @@ class ServiceItemIntegrationTest {
                         .header("Authorization", ownerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '" + serviceItemId + "')].estimatedMinutes").value(40));
+
+        // e o que o Client le na loja (o mesmo snapshot que o WS leva) — teste do Andre 02/10
+        mvc.perform(get("/establishment/id/{id}/professionals-with-queue", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals[*].service_items[?(@.id == '" + serviceItemId + "')].estimatedMinutes").value(40));
     }
 
     @Test
