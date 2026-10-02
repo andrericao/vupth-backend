@@ -1,0 +1,17 @@
+# PRs semanais de atualizacao (seguranca inclusa) — gratis em repositorio privado.
+# Os PRs miram a dev, que e onde o CI roda antes de chegar a main.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /vupth-backend
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
