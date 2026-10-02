@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.3.5</version>
+		<version>3.5.16</version>
 		<relativePath/>
 	</parent>
 	<groupId>com.ospaulos</groupId>
@@ -30,7 +30,6 @@
 	<properties>
 		<postgresql.version>42.7.8</postgresql.version>
 		<java.version>21</java.version>
-		<hibernate.version>6.3.1.Final</hibernate.version>
 		<liquibase.version>4.33.0</liquibase.version>
 		<liquibase.hibernate6.version>4.30.0</liquibase.hibernate6.version>
 		<awssdk.version>2.29.0</awssdk.version>
