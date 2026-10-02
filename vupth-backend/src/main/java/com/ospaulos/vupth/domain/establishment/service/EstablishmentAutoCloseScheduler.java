@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.establishment.service;
 
+import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
@@ -67,6 +68,10 @@ public class EstablishmentAutoCloseScheduler {
 
     /** Trava (reentrante) no lugar de synchronized: com threads virtuais, I/O dentro de um monitor prende a portadora. */
     private final ReentrantLock lock = new ReentrantLock();
+
+    /** Trava entre instancias. Opcional so para os testes unitarios, que montam o scheduler na mao. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ClusterLock clusterLock;
 
     public EstablishmentAutoCloseScheduler(AutoCloseService autoCloseService,
                                            QueueWebSocketPublisher queuePublisher,
@@ -138,7 +143,16 @@ public class EstablishmentAutoCloseScheduler {
     void runCycle() {
         lock.lock();
         try {
-            runCycleLocked();
+            if (clusterLock == null) {
+                runCycleLocked();
+                return;
+            }
+            if (clusterLock.runExclusive("auto-close", this::runCycleLocked)) {
+                return;
+            }
+            // Outra instancia esta rodando este ciclo: ela processa o que venceu; aqui so se tenta de novo.
+            log.info("[AutoClose] ciclo — outra instancia tem a trava; nova tentativa em 30s");
+            pending = taskScheduler.schedule(this::runCycle, Instant.now().plusSeconds(30));
         } finally {
             lock.unlock();
         }

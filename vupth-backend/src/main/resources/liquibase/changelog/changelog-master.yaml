@@ -347,3 +347,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/012-add-operation_mode-to-professional.yaml
       relativeToChangeLogFile: true
+
+  # Trava entre instancias dos schedulers (ShedLock, 02/10)
+  - include:
+      file: changesets/00-foundation/004-create-shedlock.yaml
+      relativeToChangeLogFile: true

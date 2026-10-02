@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.attendance.service;
 
+import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -68,6 +69,10 @@ public class IntentionPromotionScheduler {
 
     /** Trava (reentrante) no lugar de synchronized: com threads virtuais, I/O dentro de um monitor prende a portadora. */
     private final ReentrantLock lock = new ReentrantLock();
+
+    /** Trava entre instancias. Opcional so para os testes unitarios, que montam o scheduler na mao. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ClusterLock clusterLock;
 
     public IntentionPromotionScheduler(AttendanceRepository attendanceRepository,
                                        AttendanceService attendanceService,
@@ -147,7 +152,16 @@ public class IntentionPromotionScheduler {
     void runPromotionCycle() {
         lock.lock();
         try {
-            runPromotionCycleLocked();
+            if (clusterLock == null) {
+                runPromotionCycleLocked();
+                return;
+            }
+            if (clusterLock.runExclusive("intention-promotion", this::runPromotionCycleLocked)) {
+                return;
+            }
+            // Outra instancia esta rodando este ciclo: ela processa o que venceu; aqui so se tenta de novo.
+            log.info("[IntentionPromo] ciclo — outra instancia tem a trava; nova tentativa em 30s");
+            pending = taskScheduler.schedule(this::runPromotionCycle, Instant.now().plusSeconds(30));
         } finally {
             lock.unlock();
         }
