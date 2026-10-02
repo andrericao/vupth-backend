@@ -76,8 +76,9 @@ jobs:
           echo "${{ secrets.JWT_PUBLIC_KEY_B64 }}"  | base64 -d > src/main/resources/keys/public.key
         working-directory: vupth-backend
 
+      # verify = mvn test + o jacoco:check (minimo de cobertura com catraca, DEC-7)
       - name: Run tests
-        run: mvn test
+        run: mvn verify
         working-directory: vupth-backend
 
 
