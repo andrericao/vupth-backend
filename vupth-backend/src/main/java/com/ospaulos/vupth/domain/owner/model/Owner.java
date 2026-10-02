@@ -28,7 +28,14 @@ public class Owner {
 
     public Owner(BaseUser baseUser) {
         this.baseUser = baseUser;
-        this.id = baseUser.getId();
+        // O id NAO e atribuido aqui: o @MapsId o deriva do baseUser no persist. Com o id preenchido, o
+        // Hibernate 6.6 trata o objeto novo como ja salvo e o merge em cascata falha ("Row was updated or
+        // deleted by another transaction"), porque a linha ainda nao existe.
+    }
+
+    /** Antes do flush o campo ainda esta nulo; o id e sempre o do usuario (MapsId). */
+    public UUID getId() {
+        return id != null ? id : (baseUser != null ? baseUser.getId() : null);
     }
 
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL)
