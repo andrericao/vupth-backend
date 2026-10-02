@@ -12,13 +12,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Envia push via Expo Push API (backlog #1). Ativo por padrao; desligado nos testes/staging com
  * {@code vupth.push.provider=none} (cai no {@link NoOpPushSender}).
  *
  * <p>POST {@code https://exp.host/--/api/v2/push/send} com um array de mensagens
- * {@code [{to, title, body, data, sound, priority, channelId}]}. Best-effort: qualquer falha e logada e engolida.
+ * {@code [{to, title, body, data, sound, priority, channelId, categoryId?}]}. Best-effort: qualquer falha e logada e engolida.
  * Expo aceita ate 100 mensagens por request — enviamos em lotes.</p>
  *
  * <p><b>Backlog #28 — a resposta deixou de ser descartada.</b> Antes o envio terminava em
@@ -48,6 +49,16 @@ public class ExpoPushSender implements PushSender {
 
     /** Canal Android que os dois apps criam (usePushRegistration.ts). Precisa existir no aparelho. */
     static final String DEFAULT_CHANNEL_ID = "default";
+
+    /**
+     * Categoria que os dois apps registram com o botao OK (S36, 02/10): com ela o Android mostra o OK
+     * na propria notificacao, com o app fechado. Vai em toda notificacao que so informa.
+     */
+    static final String INFO_CATEGORY_ID = "CIENCIA";
+
+    /** As que pedem decisao (aceitar/recusar, fechar ou nao) seguem sem categoria — o app abre nelas. */
+    static final Set<String> DECISION_TYPES = Set.of(
+            "CUT_REQUESTED", "CLOSING_PROMPT", "SWAP_REQUESTED", "EARLIER_TURN_OFFERED");
 
     private final RestClient restClient;
     private final String expoUrl;
@@ -92,6 +103,9 @@ public class ExpoPushSender implements PushSender {
             if (data != null && !data.isEmpty()) {
                 msg.put("data", data);
             }
+            if (isInformational(data)) {
+                msg.put("categoryId", INFO_CATEGORY_ID);
+            }
             recipients.add(token);
             messages.add(msg);
         }
@@ -107,6 +121,10 @@ public class ExpoPushSender implements PushSender {
             tickets.addAll(sendBatch(batch, batchTokens, title));
         }
         return tickets;
+    }
+
+    private static boolean isInformational(Map<String, Object> data) {
+        return data == null || !DECISION_TYPES.contains(String.valueOf(data.get("type")));
     }
 
     private List<PushTicket> sendBatch(List<Map<String, Object>> batch, List<String> batchTokens, String title) {
