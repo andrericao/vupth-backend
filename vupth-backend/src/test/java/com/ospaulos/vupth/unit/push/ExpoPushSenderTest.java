@@ -94,7 +94,7 @@ class ExpoPushSenderTest {
 
         send(sender, TOKEN_A);
 
-        assertThat(body.get()).contains("\"priority\":\"high\"").contains("\"channelId\":\"default\"");
+        assertThat(body.get()).contains("\"priority\":\"high\"").contains("\"channelId\":\"alertas\"");
     }
 
     @Test

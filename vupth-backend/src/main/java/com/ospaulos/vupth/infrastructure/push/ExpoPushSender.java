@@ -47,8 +47,12 @@ public class ExpoPushSender implements PushSender {
 
     private static final int EXPO_BATCH_SIZE = 100;
 
-    /** Canal Android que os dois apps criam (usePushRegistration.ts). Precisa existir no aparelho. */
-    static final String DEFAULT_CHANNEL_ID = "default";
+    /**
+     * Canal Android combinado em 02/10, com importancia HIGH, que os dois apps criam (Partner 9fdc24c,
+     * Client 1b3a3845). Precisa existir no aparelho: app ainda sem a versao nova cai no canal padrao do
+     * Android. Troca por {@code vupth.push.expo.channel-id}.
+     */
+    static final String DEFAULT_CHANNEL_ID = "alertas";
 
     /**
      * Categoria que os dois apps registram com o botao OK (S36, 02/10): com ela o Android mostra o OK
