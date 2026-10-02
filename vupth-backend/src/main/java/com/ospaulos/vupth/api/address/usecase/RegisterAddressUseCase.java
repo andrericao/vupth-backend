@@ -19,7 +19,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -47,11 +50,24 @@ public class RegisterAddressUseCase {
 
         Address address = addressMapper.toAddressEntity(request);
 
-        UserAddress userAddress = user.addAddress(address);
+        Set<UUID> existingIds = user.getUserAddresses().stream()
+                .map(UserAddress::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        UserAddress draft = user.addAddress(address);
 
         BaseUser userCreated = userRepository.save(user);
 
-        UserAddressResponse userAddressResponse = userAddressMapper.toUserAddressResponse(user.getId(), userAddress.getId(), userAddress.getIsMain(), address);
+        // save() faz merge: o endereco salvo (com id) e a copia que esta na colecao do usuario devolvido,
+        // nao o rascunho — no Hibernate 6.6 o rascunho fica sem id.
+        UserAddress userAddress = userCreated.getUserAddresses().stream()
+                .filter(ua -> ua.getId() != null && !existingIds.contains(ua.getId()))
+                .findFirst()
+                .orElse(draft);
+
+        UserAddressResponse userAddressResponse = userAddressMapper.toUserAddressResponse(
+                user.getId(), userAddress.getId(), userAddress.getIsMain(), userAddress.getAddress());
         UserProfileGeneralInfosResponse userResponse = userMapper.toGeneralInfosUserResponse(userCreated);
 
         return new UserAddressAndGeneralInfosResponse(userResponse, userAddressResponse);
