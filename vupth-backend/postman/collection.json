@@ -16920,14 +16920,23 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "// ⚠️ +8h, nao +3h. Esta pasta tinha um acoplamento INVISIVEL com o tamanho da fila viva:",
+         "// ⚠️ O alvo nao e um numero fixo. Esta pasta tinha um acoplamento INVISIVEL com o tamanho da fila viva:",
          "// a intencao e recusada com 422 INTENTION_BEFORE_QUEUE_END quando o horario pretendido cai",
          "// antes do termino previsto da fila — e o termino previsto soma os atendimentos vivos MAIS",
-         "// as refeicoes do profissional. Medido em homolog (17/08): com 4 atendimentos de 30min na",
-         "// fila + a refeicao de 60min, o alvo de +3h perdia por SETE SEGUNDOS. O setup desta pasta",
-         "// nao quer testar essa regra (ela tem pasta propria) — quer uma intencao que exista para a",
-         "// agenda ser lida. Com folga de 8h ela para de depender do que as pastas anteriores deixaram.",
-         "pm.collectionVariables.set(\"agenda_desired\", new Date(Date.now() + 8*3600*1000).toISOString());"
+         "// as refeicoes do profissional. Medido em homolog (17/08): +3h perdia por SETE SEGUNDOS; em 02/10",
+         "// o +8h fixo tambem perdeu (422, rodada perto do meio-dia). O setup desta pasta nao quer testar essa",
+         "// regra (ela tem pasta propria) — quer uma intencao que exista para a agenda ser lida. Entao le o",
+         "// piso na barra publica (o MESMO projectedQueueEnd que o servidor confere) e pede 30 min depois dele,",
+         "// nunca antes de +8h. A loja ficou 24h no passo anterior, entao qualquer hora cabe no expediente.",
+         "const base = pm.variables.get('base_url');",
+         "const profId = pm.collectionVariables.get('prof_professional_id');",
+         "const minimo = Date.now() + 8*3600*1000;",
+         "pm.collectionVariables.set('agenda_desired', new Date(minimo).toISOString());",
+         "pm.sendRequest({ url: base + '/attendances/intentions/professional/' + profId, method: 'GET' }, (err, res) => {",
+         "  if (err || res.code !== 200) { console.log('08m: barra publica indisponivel, fica +8h', err || res.code); return; }",
+         "  const piso = Date.parse(res.json().frame.projectedQueueEnd);",
+         "  if (!isNaN(piso)) pm.collectionVariables.set('agenda_desired', new Date(Math.max(minimo, piso + 30*60*1000)).toISOString());",
+         "});"
         ]
        }
       },
@@ -16936,7 +16945,9 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "// Se falhar, o nome do teste carrega o code do erro (INTENTION_BEFORE_QUEUE_END, _OUTSIDE_BUSINESS_HOURS...).",
+         "const code201 = pm.response.code === 201 ? '' : ' (veio ' + pm.response.code + ' ' + (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })() + ')';",
+         "pm.test('Status 201' + code201, () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const r = pm.response.json();",
          "  pm.collectionVariables.set(\"agenda_intention_id\", r.id);",
