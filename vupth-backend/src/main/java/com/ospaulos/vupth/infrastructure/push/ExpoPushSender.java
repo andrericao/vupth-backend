@@ -18,7 +18,7 @@ import java.util.Map;
  * {@code vupth.push.provider=none} (cai no {@link NoOpPushSender}).
  *
  * <p>POST {@code https://exp.host/--/api/v2/push/send} com um array de mensagens
- * {@code [{to, title, body, data, sound}]}. Best-effort: qualquer falha e logada e engolida.
+ * {@code [{to, title, body, data, sound, priority, channelId}]}. Best-effort: qualquer falha e logada e engolida.
  * Expo aceita ate 100 mensagens por request — enviamos em lotes.</p>
  *
  * <p><b>Backlog #28 — a resposta deixou de ser descartada.</b> Antes o envio terminava em
@@ -46,15 +46,26 @@ public class ExpoPushSender implements PushSender {
 
     private static final int EXPO_BATCH_SIZE = 100;
 
+    /** Canal Android que os dois apps criam (usePushRegistration.ts). Precisa existir no aparelho. */
+    static final String DEFAULT_CHANNEL_ID = "default";
+
     private final RestClient restClient;
     private final String expoUrl;
     private final String accessToken;
+    private final String channelId;
 
+    public ExpoPushSender(String expoUrl, String accessToken) {
+        this(expoUrl, accessToken, DEFAULT_CHANNEL_ID);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
     public ExpoPushSender(
             @Value("${vupth.push.expo.url:https://exp.host/--/api/v2/push/send}") String expoUrl,
-            @Value("${vupth.push.expo.access-token:}") String accessToken) {
+            @Value("${vupth.push.expo.access-token:}") String accessToken,
+            @Value("${vupth.push.expo.channel-id:" + DEFAULT_CHANNEL_ID + "}") String channelId) {
         this.expoUrl = expoUrl;
         this.accessToken = accessToken;
+        this.channelId = channelId;
         this.restClient = RestClient.create();
     }
 
@@ -74,6 +85,10 @@ public class ExpoPushSender implements PushSender {
             msg.put("title", title);
             msg.put("body", body);
             msg.put("sound", "default");
+            // Sem "high" a Expo manda com prioridade normal, e o Android em repouso (Doze) segura a
+            // entrega por minutos: o aviso de "sua vez" chegava depois da vez (teste de 02/10).
+            msg.put("priority", "high");
+            msg.put("channelId", channelId);
             if (data != null && !data.isEmpty()) {
                 msg.put("data", data);
             }
@@ -104,7 +119,10 @@ public class ExpoPushSender implements PushSender {
             if (accessToken != null && !accessToken.isBlank()) {
                 request = request.header("Authorization", "Bearer " + accessToken);
             }
+            long start = System.nanoTime();
             response = request.body(batch).retrieve().body(ExpoSendResponse.class);
+            log.info("[PUSH] lote de {} msg(s) entregue a Expo em {} ms title='{}' (priority=high channel={})",
+                    batch.size(), (System.nanoTime() - start) / 1_000_000, title, channelId);
         } catch (Exception e) {
             // Rede/HTTP fora do ar: nenhum ticket existe. NAO devolvemos "erro por token" aqui — o
             // token pode estar perfeitamente vivo, e trata-lo como morto apagaria device bom.

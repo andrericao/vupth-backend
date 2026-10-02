@@ -86,6 +86,18 @@ class ExpoPushSenderTest {
     }
 
     @Test
+    @DisplayName("Toda mensagem sai com priority high e o channelId do app — sem isso o Android em repouso atrasa")
+    void sendsHighPriorityAndChannel() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        send(sender, TOKEN_A);
+
+        assertThat(body.get()).contains("\"priority\":\"high\"").contains("\"channelId\":\"default\"");
+    }
+
+    @Test
     @DisplayName("DeviceNotRegistered marca o token como morto — e so ELE, pelo indice")
     void deviceNotRegisteredIsPairedByPosition() throws IOException {
         // O ticket NAO repete o token: a correspondencia e posicional. Se o pareamento estiver
