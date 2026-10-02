@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component;
 /**
  * EmailSender no-op — não chama provedor externo, apenas loga. Ativo por padrão e sempre que
  * {@code vupth.mail.provider=none} (testes/staging e produção enquanto o SMTP não estiver
- * configurado). O código de reset aparece no log para inspeção manual.
+ * configurado). O código de reset NUNCA vai para o log (DEC-2): quem lê o log não pode trocar a
+ * senha de ninguém — só o e-mail leva o código.
  */
 @Slf4j
 @Component
@@ -23,12 +24,12 @@ public class NoOpEmailSender implements EmailSender {
      */
     @PostConstruct
     void avisaQueNaoEnvia() {
-        log.warn("[MAIL] provider=none — NENHUM e-mail sera enviado; o codigo de reset so vai para o log. "
+        log.warn("[MAIL] provider=none — NENHUM e-mail sera enviado; o codigo de reset nao chega a ninguem. "
                 + "Para enviar de verdade: MAIL_PROVIDER=smtp + MAIL_HOST/MAIL_USER/MAIL_PASS.");
     }
 
     @Override
     public void sendPasswordResetCode(String toEmail, String code) {
-        log.info("[MAIL:noop] reset code para {} = {} (provider=none — nenhum e-mail enviado)", toEmail, code);
+        log.info("[MAIL:noop] reset code pedido para {} (provider=none — nenhum e-mail enviado)", toEmail);
     }
 }
