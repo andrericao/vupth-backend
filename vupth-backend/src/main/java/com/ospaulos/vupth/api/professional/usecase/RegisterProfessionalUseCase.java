@@ -61,11 +61,11 @@ public class RegisterProfessionalUseCase {
         // 4. Create professional profile via cascade (same pattern as QuickCreate)
         //    establishment = null — will be set later by owner via /establishment/{id}/professionals
         user.addProfessionalProfile();
-        Professional professional = user.getProfessional();
-        professional.setSpecialty(request.specialty());
+        user.getProfessional().setSpecialty(request.specialty());
         // professional.establishment intentionally left null
 
-        userRepository.save(user);
+        // save() de um usuario ja existente e um merge: o gerenciado e a copia devolvida (ver QuickCreate).
+        Professional professional = userRepository.save(user).getProfessional();
 
         // Seed refeicoes padrao (almoco/janta) — spec item #11a
         intervalService.seedDefaultMeals(professional);
