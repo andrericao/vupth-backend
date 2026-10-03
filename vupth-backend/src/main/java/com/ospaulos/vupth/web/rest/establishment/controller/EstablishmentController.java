@@ -11,6 +11,7 @@ import com.ospaulos.vupth.api.establishment.dto.request.WeeklyHoursRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.BusinessHoursResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentGeneralInfosResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
+import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentPageResponse;
 import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentWithProfessionalsResponse;
 import com.ospaulos.vupth.api.establishment.usecase.AddProfessionalToEstablishmentUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
@@ -32,6 +33,7 @@ import com.ospaulos.vupth.domain.establishment.valueObject.GeoSearch;
 import com.ospaulos.vupth.domain.establishment.valueObject.LocationFilter;
 import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.establishment.valueObject.Showcase;
+import com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalServiceImpl;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
@@ -122,6 +124,9 @@ public class EstablishmentController {
      *   ?hasAvailability=true                — so quem tem profissional disponivel
      *   ?maxWaitMinutes=20                   — teto de espera ("espero ate 20 min")
      *   ?includeAll=true                     — OBSOLETO, aceito e inocuo (ver abaixo)
+     *   ?page=0&size=20                      — PAGINADO (BAK-2, 03/10): volta o envelope
+     *                                          {items, page, size, totalItems, totalPages, hasNext};
+     *                                          sem os dois, a lista inteira de sempre
      * Sem filtro, lista todos os ativos — ABERTOS E FECHADOS — com os abertos primeiro.
      *
      * <p><b>A listagem devolve loja FECHADA de proposito (decisao do Andre, 06/09).</b> Ate aqui o
@@ -150,7 +155,7 @@ public class EstablishmentController {
      * ter conta.</p>
      */
     @GetMapping
-    public ResponseEntity<List<EstablishmentResponse>> findAll(
+    public ResponseEntity<?> findAll(
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String neighborhood,
             @RequestParam(required = false) String city,
@@ -165,13 +170,15 @@ public class EstablishmentController {
             @RequestParam(required = false) String sort,
             @RequestParam(required = false, defaultValue = "false") boolean openNow,
             @RequestParam(required = false, defaultValue = "false") boolean hasAvailability,
-            @RequestParam(required = false) Integer maxWaitMinutes) {
+            @RequestParam(required = false) Integer maxWaitMinutes,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
         log.info("[Establishment] findAll — name={} neighborhood={} city={} uf={} serviceType={}"
                         + " includeAll={} lat={} lng={} radiusKm={} sort={} openNow={}"
-                        + " hasAvailability={} maxWaitMinutes={}",
+                        + " hasAvailability={} maxWaitMinutes={} page={} size={}",
                 name, neighborhood, city, uf, serviceType, includeAll, lat, lng, radiusKm,
-                sort, openNow, hasAvailability, maxWaitMinutes);
+                sort, openNow, hasAvailability, maxWaitMinutes, page, size);
 
         // null quando nao veio coordenada — a listagem cai na ordenacao por tempo de espera.
         // Coordenada invalida (meia, fora do globo, (0,0)) ou raio <= 0 param aqui, com 422.
@@ -184,9 +191,16 @@ public class EstablishmentController {
         // aqui, com 422 — ver Showcase.
         Showcase showcase = Showcase.from(sort, openNow, hasAvailability, maxWaitMinutes);
 
+        // null sem page/size: a lista inteira de sempre (compativel ate o Client migrar). Valores
+        // impossiveis param aqui, com 422 — ver ShowcasePage.
+        ShowcasePage pagination = ShowcasePage.from(page, size);
+
         List<EstablishmentResponse> result =
                 service.searchPublic(name, serviceType, neighborhood, location, geo, showcase);
 
+        if (pagination != null) {
+            return ResponseEntity.ok(EstablishmentPageResponse.of(result, pagination));
+        }
         return ResponseEntity.ok(result);
     }
 

@@ -2882,6 +2882,132 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "?page=0&size=2 — vitrine paginada: envelope (BAK-2, 03/10)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"envelope com items, page, size, totalItems, totalPages e hasNext\", () => {",
+         "  pm.expect(r).to.include.all.keys('items', 'page', 'size', 'totalItems', 'totalPages', 'hasNext');",
+         "  pm.expect(r.items).to.be.an('array');",
+         "});",
+         "pm.test(\"no maximo 2 itens e a conta das paginas fecha\", () => {",
+         "  pm.expect(r.items.length).to.be.at.most(2);",
+         "  pm.expect(r.page).to.eql(0);",
+         "  pm.expect(r.size).to.eql(2);",
+         "  pm.expect(r.totalPages).to.eql(Math.ceil(r.totalItems / 2));",
+         "  pm.expect(r.hasNext).to.eql(r.totalPages > 1);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?page=0&size=2",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "page",
+         "value": "0"
+        },
+        {
+         "key": "size",
+         "value": "2"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "sem page/size — continua a lista inteira (compativel com o app em campo)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"resposta e array, nao envelope\", () => pm.expect(pm.response.json()).to.be.an('array'));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": []
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] ?size=101 -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ESTABLISHMENT_INVALID_FILTER\", () => {",
+         "  pm.expect(pm.response.json().code).to.eql(\"ESTABLISHMENT_INVALID_FILTER\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?size=101",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "size",
+         "value": "101"
+        }
+       ]
+      }
+     },
+     "response": []
     }
    ]
   },
