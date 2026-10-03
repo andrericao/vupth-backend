@@ -17051,6 +17051,47 @@
      "response": []
     },
     {
+     "name": "setup: tira a excecao de hoje (owner) -> 204/404",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// A abertura da loja de pastas anteriores grava uma EXCECAO para hoje (ex.: 09:40-18:00), e a excecao vence o",
+         "// general-infos 24h do passo anterior. Com ela, a intencao das ~17:40 (+8h) nao cabe antes das 18:00 e leva",
+         "// 409 PROFESSIONAL_AGENDA_FULL (newman de 03/10, um sabado). Hoje no fuso da loja (America/Sao_Paulo, -03:00).",
+         "pm.collectionVariables.set('agenda_today', new Date(Date.now() - 3*3600*1000).toISOString().slice(0, 10));"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('Status 204 ou 404 (sem excecao hoje)', () => pm.expect(pm.response.code).to.be.oneOf([204, 404]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/dates/{{agenda_today}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "setup: cria intencao p/ agenda (client) -> 201",
      "event": [
       {
