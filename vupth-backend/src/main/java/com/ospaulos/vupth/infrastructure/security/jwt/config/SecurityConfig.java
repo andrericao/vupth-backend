@@ -110,7 +110,10 @@ public class SecurityConfig {
                         // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
                         .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
+                        // A consulta de usuario (lista, por e-mail, por id) devolvia e-mail e papeis de
+                        // qualquer conta sem token — e nenhum app nem o Postman a usa. Fechada para todos
+                        // (mapa-endpoint-papel, 03/10). Os enderecos (/users/me/**) pedem login.
+                        .requestMatchers(HttpMethod.GET, "/users", "/users/email/**", "/users/id/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
                         .requestMatchers(HttpMethod.GET, "/service-types/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
