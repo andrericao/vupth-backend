@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -45,6 +46,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private final Clock clock;
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
+    @Autowired
     public AuthRateLimitFilter(
             @Value("${vupth.auth.rate-limit.enabled:true}") boolean enabled,
             @Value("${vupth.auth.rate-limit.max-requests:10}") int maxRequests,
