@@ -523,7 +523,7 @@
      ]
     },
     {
-     "name": "forgot-password (partner) — 200 (anti-enumeracao)",
+     "name": "forgot-password (partner) — 200",
      "event": [
       {
        "listen": "test",
@@ -566,14 +566,15 @@
      }
     },
     {
-     "name": "forgot-password — e-mail inexistente tambem 200 (nao vaza)",
+     "name": "forgot-password — e-mail inexistente 404 EMAIL_NOT_FOUND (D2)",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200 mesmo p/ e-mail inexistente\", () => pm.response.to.have.status(200));"
+         "pm.test(\"Status 404 p/ e-mail inexistente\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code EMAIL_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"EMAIL_NOT_FOUND\"));"
         ]
        }
       }

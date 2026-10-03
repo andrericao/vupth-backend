@@ -7,7 +7,9 @@ import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosR
 import com.ospaulos.vupth.api.user.mapper.UserMapper;
 import com.ospaulos.vupth.api.user.usecase.auth.LoginUsecase;
 import com.ospaulos.vupth.domain.refreshToken.model.RefreshToken;
+import com.ospaulos.vupth.domain.user.exception.EmailNotRegisteredException;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
+import com.ospaulos.vupth.domain.user.repository.UserRepository;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.security.jwt.token.JwtTokenProvider;
 import com.ospaulos.vupth.infrastructure.security.jwt.token.RefreshTokenProvider;
@@ -37,6 +39,7 @@ import static org.mockito.Mockito.*;
  * Covers:
  * - Success: AuthenticationManager authenticates, access_token and refresh_token returned
  * - Bad credentials: AuthenticationManager throws BadCredentialsException, propagated
+ * - Unknown e-mail: EmailNotRegisteredException before authenticating (BAK-6 · D2)
  *
  * The use case delegates credential validation entirely to Spring Security's
  * AuthenticationManager. The test verifies only the orchestration logic:
@@ -52,6 +55,7 @@ class LoginUseCaseTest {
     @Mock JwtTokenProvider       providerToken;
     @Mock RefreshTokenProvider   refreshTokenProvider;
     @Mock AuthenticationManager  authenticationManager;
+    @Mock UserRepository         userRepository;
 
     @InjectMocks LoginUsecase loginUsecase;
 
@@ -67,6 +71,7 @@ class LoginUseCaseTest {
         user.addClientProfile();
 
         userDetails = new UserDetailsImpl(user);
+        lenient().when(userRepository.existsByEmail("user@example.com")).thenReturn(true);
     }
 
     @Test
@@ -115,5 +120,17 @@ class LoginUseCaseTest {
 
         verify(providerToken, never()).createToken(any());
         verify(refreshTokenProvider, never()).createRefreshToken(any());
+    }
+
+    @Test
+    @DisplayName("unknown e-mail: EmailNotRegisteredException, AuthenticationManager never called (BAK-6)")
+    void executeLogin_unknownEmail_throws() {
+        when(userRepository.existsByEmail("nobody@example.com")).thenReturn(false);
+
+        assertThatThrownBy(() ->
+                loginUsecase.executeLogin(new LoginRequest("nobody@example.com", "any")))
+                .isInstanceOf(EmailNotRegisteredException.class);
+
+        verifyNoInteractions(authenticationManager, providerToken, refreshTokenProvider);
     }
 }

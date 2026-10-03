@@ -258,7 +258,7 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(new LoginRequest("nobody@example.com", "anyPassword"))))
                 .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("BAD_CREDENTIALS"))
+                .andExpect(jsonPath("$.code").value("EMAIL_NOT_FOUND"))
                 .andDo(print());
     }
 

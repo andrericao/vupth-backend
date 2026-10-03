@@ -6,6 +6,7 @@ import com.ospaulos.vupth.api.user.exception.InvalidResetCodeException;
 import com.ospaulos.vupth.api.user.exception.ResetCodeExpiredException;
 import com.ospaulos.vupth.api.user.usecase.auth.ForgotPasswordUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.ResetPasswordUseCase;
+import com.ospaulos.vupth.domain.user.exception.EmailNotRegisteredException;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.PasswordResetCode;
 import com.ospaulos.vupth.domain.user.repository.PasswordResetCodeRepository;
@@ -73,11 +74,12 @@ class PasswordResetUseCasesTest {
     class Forgot {
 
         @Test
-        @DisplayName("e-mail inexistente — não gera código nem envia (anti-enumeração)")
-        void unknownEmail_noop() {
+        @DisplayName("e-mail inexistente — EmailNotRegisteredException, sem código nem envio (D2)")
+        void unknownEmail_throws() {
             when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
 
-            forgotPasswordUseCase.execute(new ForgotPasswordRequest(EMAIL));
+            assertThatThrownBy(() -> forgotPasswordUseCase.execute(new ForgotPasswordRequest(EMAIL)))
+                    .isInstanceOf(EmailNotRegisteredException.class);
 
             verify(resetCodeRepository, never()).save(any());
             verifyNoInteractions(emailSender);
