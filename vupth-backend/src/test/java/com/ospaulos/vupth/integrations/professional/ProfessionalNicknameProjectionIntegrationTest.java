@@ -139,6 +139,54 @@ class ProfessionalNicknameProjectionIntegrationTest {
                 .andDo(print());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // BAK-4 (S13) — o apelido passa a ser PESQUISAVEL
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(20)
+    @DisplayName("GET /establishment?name=<apelido> — acha a loja onde o profissional atende (sem caixa, por trecho)")
+    void establishmentSearch_matchesProfessionalNickname() throws Exception {
+        String nick = "Apel" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        mvc.perform(patch("/profile/general-infos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"nickname\":\"" + nick + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/establishment").param("name", nick.toLowerCase().substring(1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(establishmentId))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("GET /professional?name=<apelido> — a busca do dono para convidar casa o apelido")
+    void ownerSearch_matchesNickname() throws Exception {
+        String nick = "Conv" + java.util.UUID.randomUUID().toString().substring(0, 8);
+        var freeProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freeProf.token())
+                        .content("{\"name\":\"Avulso\",\"specialty\":\"Corte\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(patch("/profile/general-infos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freeProf.token())
+                        .content("{\"nickname\":\"" + nick + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/professional")
+                        .param("name", nick.toUpperCase())
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].nickname").value(nick))
+                .andDo(print());
+    }
+
     @AfterAll
     void tearDown() {
         serviceItemRepository.deleteAll();
