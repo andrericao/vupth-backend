@@ -1,0 +1,69 @@
+databaseChangeLog:
+  # Expediente real do profissional (Partner S4): uma linha por turno, aberta quando ele entra em
+  # expediente (OFF -> WORKING/ON_BREAK) e fechada quando volta a Fora. ended_at nulo = turno em
+  # andamento. Alimenta o "Expediente: HH:MM–HH:MM" dos relatorios do dono e do profissional.
+  - changeSet:
+      id: 013-create-professional_shift
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: professional_shift
+      changes:
+        - createTable:
+            tableName: professional_shift
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_professional_shift
+                    nullable: false
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID
+              - column:
+                  name: started_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ended_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - addForeignKeyConstraint:
+            baseTableName: professional_shift
+            baseColumnNames: professional_id
+            constraintName: fk_professional_shift_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: professional_shift
+            baseColumnNames: establishment_id
+            constraintName: fk_professional_shift_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: SET NULL
+        - createIndex:
+            tableName: professional_shift
+            indexName: idx_professional_shift_professional_started
+            columns:
+              - column:
+                  name: professional_id
+              - column:
+                  name: started_at
+        - createIndex:
+            tableName: professional_shift
+            indexName: idx_professional_shift_establishment_started
+            columns:
+              - column:
+                  name: establishment_id
+              - column:
+                  name: started_at

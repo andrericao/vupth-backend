@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.professional.event.WorkStatusChangedEvent;
 import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import jakarta.persistence.*;
@@ -12,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -23,7 +25,7 @@ import java.util.stream.Collectors;
 @Entity
 @AllArgsConstructor
 @Table(name = "professional")
-public class Professional {
+public class Professional extends AbstractAggregateRoot<Professional> {
 
     @Id
     private UUID id;
@@ -113,6 +115,20 @@ public class Professional {
     /** Antes do flush o campo ainda esta nulo; o id e sempre o do usuario (MapsId). */
     public UUID getId() {
         return id != null ? id : (baseUser != null ? baseUser.getId() : null);
+    }
+
+    /**
+     * Troca o status de trabalho e, se mudou, registra o {@link WorkStatusChangedEvent} — publicado no
+     * {@code save} do repositorio. E dele que sai o expediente real dos relatorios (Partner S4).
+     */
+    public void setWorkStatus(ProfessionalStatus workStatus) {
+        ProfessionalStatus from = this.workStatus;
+        this.workStatus = workStatus;
+        if (from != workStatus) {
+            registerEvent(new WorkStatusChangedEvent(getId(),
+                    establishment != null ? establishment.getId() : null,
+                    from, workStatus, OffsetDateTime.now()));
+        }
     }
 
     public String getName(){

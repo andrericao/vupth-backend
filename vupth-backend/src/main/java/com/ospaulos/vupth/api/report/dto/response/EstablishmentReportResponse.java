@@ -27,7 +27,9 @@ public record EstablishmentReportResponse(
         List<ProfessionalRevenue> professionals,
         // Receita LIQUIDA (ver ProfessionalReportResponse): total da loja e contagem dos sem divisao.
         BigDecimal netRevenue,
-        long attendancesWithoutSplit
+        long attendancesWithoutSplit,
+        // Expediente da LOJA por dia (Partner S4): da primeira chegada a ultima saida, entre todos.
+        List<WorkdayResponse> workdays
 ) {
 
     public record ProfessionalRevenue(

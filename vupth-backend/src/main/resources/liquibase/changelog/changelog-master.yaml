@@ -352,3 +352,8 @@ databaseChangeLog:
   - include:
       file: changesets/00-foundation/004-create-shedlock.yaml
       relativeToChangeLogFile: true
+
+  # Expediente real do profissional nos relatorios (Partner S4, 02/10)
+  - include:
+      file: changesets/60-professional/013-create-professional_shift.yaml
+      relativeToChangeLogFile: true

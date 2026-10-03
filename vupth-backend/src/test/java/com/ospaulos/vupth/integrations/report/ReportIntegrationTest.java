@@ -292,6 +292,55 @@ class ReportIntegrationTest {
                 .andDo(print());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Expediente real (Partner S4)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(30)
+    @DisplayName("relatorios — expediente do dia: em andamento sem fim; depois de ir para Fora, com fim")
+    void reports_workdays() throws Exception {
+        String today = BusinessClock.today().toString();
+
+        // Em expediente desde o setup: o dia aparece com inicio e sem fim.
+        mvc.perform(get("/professional/me/reports")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workdays.length()").value(1))
+                .andExpect(jsonPath("$.workdays[0].date").value(today))
+                .andExpect(jsonPath("$.workdays[0].start").exists())
+                .andExpect(jsonPath("$.workdays[0].end").doesNotExist());
+
+        mvc.perform(patch("/professional/me/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"status\":\"OFF\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/professional/me/reports")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workdays[0].end").exists());
+
+        mvc.perform(get("/establishment/{id}/reports", establishmentId)
+                        .param("dateFrom", today)
+                        .param("dateTo", today)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workdays.length()").value(1))
+                .andExpect(jsonPath("$.workdays[0].start").exists())
+                .andExpect(jsonPath("$.workdays[0].end").exists())
+                .andDo(print());
+
+        // Periodo sem turno: lista vazia.
+        mvc.perform(get("/establishment/{id}/reports", establishmentId)
+                        .param("dateFrom", "2099-01-01")
+                        .param("dateTo", "2099-12-31")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.workdays").isEmpty());
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[Report] tearDown — limpando dados");

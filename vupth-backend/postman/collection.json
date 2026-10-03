@@ -3258,6 +3258,11 @@
          "    pm.expect(r).to.have.property('attendancesWithoutSplit');",
          "  });",
          "  pm.test('liquido nunca passa do total', () => pm.expect(Number(r.netRevenue)).to.be.at.most(Number(r.totalRevenue)));",
+         "  // Expediente real por dia (Partner S4): inicio, fim (nulo em andamento) e minutos.",
+         "  pm.test('workdays e lista com date, start e workedMinutes', () => {",
+         "    pm.expect(r.workdays).to.be.an('array');",
+         "    r.workdays.forEach(d => pm.expect(d).to.include.all.keys('date', 'start', 'end', 'workedMinutes'));",
+         "  });",
          "}"
         ],
         "type": "text/javascript"
@@ -10302,6 +10307,11 @@
          "    pm.expect(r).to.have.property('attendancesWithoutSplit');",
          "  });",
          "  pm.test('liquido nunca passa do total', () => pm.expect(Number(r.netRevenue)).to.be.at.most(Number(r.totalRevenue)));",
+         "  // Expediente real por dia (Partner S4): inicio, fim (nulo em andamento) e minutos.",
+         "  pm.test('workdays e lista com date, start e workedMinutes', () => {",
+         "    pm.expect(r.workdays).to.be.an('array');",
+         "    r.workdays.forEach(d => pm.expect(d).to.include.all.keys('date', 'start', 'end', 'workedMinutes'));",
+         "  });",
          "}"
         ],
         "type": "text/javascript"
