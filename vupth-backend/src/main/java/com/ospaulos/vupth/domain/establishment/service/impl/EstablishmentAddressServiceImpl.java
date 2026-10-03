@@ -94,6 +94,8 @@ public class EstablishmentAddressServiceImpl implements EstablishmentAddressServ
                 .orElseThrow(() -> new EntityNotFoundException("Address not found for this establishment"));
 
         estAddress.getAddress().update(request);
+        // A correcao e uma nova chance: ate o worker responder, o dono ve PENDING, nao o UNRESOLVED antigo.
+        estAddress.getAddress().setGeocodingFailed(false);
 
         EstablishmentAddress saved = establishmentAddressRepository.save(estAddress);
 

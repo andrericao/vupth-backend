@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.address.dto.response;
 
 import com.ospaulos.vupth.domain.address.model.Address;
+import com.ospaulos.vupth.domain.address.valueObject.LocationStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -31,7 +32,10 @@ public record AddressResponse(
 
         Double latitude,
 
-        Double longitude
+        Double longitude,
+
+        /** LOCATED, PENDING ou UNRESOLVED — so LOCATED entra na busca por proximidade (Partner S25). */
+        LocationStatus locationStatus
 ) {
     /**
      * Constroi o endereco embutido a partir do value object {@link Address}.
@@ -51,7 +55,8 @@ public record AddressResponse(
                 address.getZipCode(),
                 address.getReference(),
                 address.getLatitude(),
-                address.getLongitude()
+                address.getLongitude(),
+                LocationStatus.of(address)
         );
     }
 }

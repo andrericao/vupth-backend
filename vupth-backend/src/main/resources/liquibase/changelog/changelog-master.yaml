@@ -357,3 +357,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/013-create-professional_shift.yaml
       relativeToChangeLogFile: true
+
+  # Geocodificacao silenciosa: o dono sabe quando o endereco nao virou coordenada (Partner S25, 03/10)
+  - include:
+      file: changesets/00-foundation/005-add-geocoding_failed-to-address.yaml
+      relativeToChangeLogFile: true

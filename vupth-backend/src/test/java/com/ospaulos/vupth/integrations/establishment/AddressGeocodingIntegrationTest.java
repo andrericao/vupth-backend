@@ -6,6 +6,7 @@ import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.address.dto.request.AddressRequest;
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.address.repository.AddressRepository;
+import com.ospaulos.vupth.domain.address.valueObject.LocationStatus;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentAddressRepository;
 import com.ospaulos.vupth.infrastructure.geocoding.Coordinates;
 import com.ospaulos.vupth.infrastructure.geocoding.GeocodeQuery;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -73,6 +75,7 @@ class AddressGeocodingIntegrationTest {
         Address address = awaitCoordinates(addressId);
         assertThat(address.getLatitude()).isEqualTo(PENHA_LAT);
         assertThat(address.getLongitude()).isEqualTo(PENHA_LNG);
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.LOCATED);
     }
 
     @Test
@@ -83,9 +86,10 @@ class AddressGeocodingIntegrationTest {
 
         UUID addressId = createAddress(); // ja exige 201: a falha nao pode virar erro de cadastro
 
-        Address address = awaitSettled(addressId);
+        Address address = awaitFailed(addressId);
         assertThat(address.getLatitude()).isNull();
         assertThat(address.getLongitude()).isNull();
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.UNRESOLVED);
     }
 
     @Test
@@ -96,9 +100,10 @@ class AddressGeocodingIntegrationTest {
 
         UUID addressId = createAddress();
 
-        Address address = awaitSettled(addressId);
+        Address address = awaitFailed(addressId);
         assertThat(address.getLatitude()).isNull();
         assertThat(address.getLongitude()).isNull();
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.UNRESOLVED);
     }
 
     @Test
@@ -134,7 +139,9 @@ class AddressGeocodingIntegrationTest {
                         .header("Authorization", owner.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(request)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                // A resposta sai antes do worker: sem coordenada do aparelho, o dono ve PENDING.
+                .andExpect(jsonPath("$.locationStatus").value("PENDING"));
 
         // O EstablishmentAddressResponse nao expoe o id do Address — busca-se pelo vinculo da loja,
         // que e recem-criada e portanto tem exatamente um endereco.
@@ -155,12 +162,15 @@ class AddressGeocodingIntegrationTest {
         throw new AssertionError("coordenada nao foi gravada em 5s para o endereco " + addressId);
     }
 
-    /**
-     * Da tempo ao worker de tentar e desistir. Sem coordenada esperada nao ha o que aguardar, entao
-     * a espera e fixa e curta — o assert e justamente que ela NAO aparece.
-     */
-    private Address awaitSettled(UUID addressId) throws InterruptedException {
-        Thread.sleep(500);
-        return addressRepository.findById(addressId).orElseThrow();
+    /** Espera o worker desistir e marcar o endereco como nao resolvido (LocationStatus.UNRESOLVED). */
+    private Address awaitFailed(UUID addressId) throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            Address address = addressRepository.findById(addressId).orElseThrow();
+            if (address.isGeocodingFailed()) {
+                return address;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("endereco " + addressId + " nao foi marcado como nao resolvido em 5s");
     }
 }

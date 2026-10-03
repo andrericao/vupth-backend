@@ -5935,7 +5935,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 201 - Endereço adicionado\", () => pm.response.to.have.status(201));"
+         "pm.test(\"Status 201 - Endereço adicionado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"locationStatus PENDING — sem coordenada do aparelho, o geocoding roda depois\", () => pm.expect(pm.response.json().locationStatus).to.eql(\"PENDING\"));"
         ],
         "type": "text/javascript"
        }
@@ -21324,7 +21325,8 @@
          "    pm.expect(b.latitude).to.eql(-22.8422);",
          "    pm.expect(b.longitude).to.eql(-43.2764);",
          "  });",
-         "}"
+         "}",
+         "pm.test(\"locationStatus LOCATED — com a coordenada do aparelho a loja ja entra na busca por raio\", () => pm.expect(pm.response.json().locationStatus).to.eql(\"LOCATED\"));"
         ],
         "type": "text/javascript"
        }
