@@ -41,6 +41,7 @@ public class AffiliationController {
     private final InviteProfessionalUseCase inviteProfessionalUseCase;
     private final ResolveAffiliationUseCase resolveAffiliationUseCase;
     private final AffiliationRequestRepository affiliationRepository;
+    private final com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository establishmentRepository;
 
     @PostMapping("/professional/me/affiliations")
     public ResponseEntity<AffiliationRequestResponse> requestAffiliation(
@@ -55,14 +56,22 @@ public class AffiliationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    /**
+     * Sem {@code status}: so os PENDING, como sempre. {@code ?status=ALL} devolve o historico inteiro
+     * (aceitos, recusados e cancelados, com {@code resolvedAt}); {@code ?status=ACCEPTED} etc. filtra
+     * (DEC-19 · historico-de-vinculo).
+     */
     @GetMapping("/professional/me/affiliations")
     public ResponseEntity<List<AffiliationRequestResponse>> listProfessionalAffiliations(
-            @AuthenticationPrincipal UserDetailsImpl user) {
+            @AuthenticationPrincipal UserDetailsImpl user,
+            @RequestParam(required = false) String status) {
 
-        log.info("[Affiliation] GET /professional/me/affiliations — user={}", user.getUserId());
+        log.info("[Affiliation] GET /professional/me/affiliations — user={} status={}", user.getUserId(), status);
 
-        List<AffiliationRequestResponse> response = affiliationRepository
-                .findByProfessionalAndStatus(user.getUserId(), AffiliationStatus.PENDING)
+        AffiliationStatus filter = parseStatus(status);
+        List<AffiliationRequestResponse> response = (filter == null
+                        ? affiliationRepository.findByProfessional(user.getUserId())
+                        : affiliationRepository.findByProfessionalAndStatus(user.getUserId(), filter))
                 .stream()
                 .map(AffiliationRequestResponse::fromEntity)
                 .toList();
@@ -83,16 +92,30 @@ public class AffiliationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    /**
+     * Sem {@code status}: so os PENDING, como sempre. {@code ?status=ALL} e o historico do vinculo
+     * que o dono ve — aceitos e recusados com a data ({@code resolvedAt}) — e {@code ?status=REJECTED}
+     * etc. filtra (DEC-19 · historico-de-vinculo). So o dono da loja lista.
+     */
     @GetMapping("/establishment/{establishmentId}/affiliations")
     public ResponseEntity<List<AffiliationRequestResponse>> listEstablishmentAffiliations(
             @PathVariable UUID establishmentId,
-            @AuthenticationPrincipal UserDetailsImpl user) {
+            @AuthenticationPrincipal UserDetailsImpl user,
+            @RequestParam(required = false) String status) {
 
-        log.info("[Affiliation] GET /establishment/{}/affiliations — owner={}",
-                establishmentId, user.getUserId());
+        log.info("[Affiliation] GET /establishment/{}/affiliations — owner={} status={}",
+                establishmentId, user.getUserId(), status);
 
-        List<AffiliationRequestResponse> response = affiliationRepository
-                .findByEstablishmentAndStatus(establishmentId, AffiliationStatus.PENDING)
+        com.ospaulos.vupth.domain.establishment.model.Establishment establishment = establishmentRepository.findById(establishmentId)
+                .orElseThrow(() -> new com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException(establishmentId));
+        if (establishment.getOwner() == null || !establishment.getOwner().getId().equals(user.getUserId())) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException("You can only list the affiliations of your own establishments.");
+        }
+
+        AffiliationStatus filter = parseStatus(status);
+        List<AffiliationRequestResponse> response = (filter == null
+                        ? affiliationRepository.findByEstablishment(establishmentId)
+                        : affiliationRepository.findByEstablishmentAndStatus(establishmentId, filter))
                 .stream()
                 .map(AffiliationRequestResponse::fromEntity)
                 .toList();
@@ -130,5 +153,21 @@ public class AffiliationController {
 
         AffiliationRequestResponse response = resolveAffiliationUseCase.cancel(user.getUserId(), id);
         return ResponseEntity.ok(response);
+    }
+
+    /** null = todos (ALL); sem parametro = PENDING (o contrato de sempre); valor invalido = 400. */
+    private static AffiliationStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return AffiliationStatus.PENDING;
+        }
+        if ("ALL".equalsIgnoreCase(status)) {
+            return null;
+        }
+        try {
+            return AffiliationStatus.valueOf(status.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            // 400 INVALID_ARGUMENT (GlobalExceptionHandler)
+            throw new IllegalArgumentException("status must be ALL, PENDING, ACCEPTED, REJECTED or CANCELLED");
+        }
     }
 }

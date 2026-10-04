@@ -42,6 +42,7 @@ class RequestAffiliationUseCaseTest {
     @Mock EstablishmentRepository establishmentRepository;
     @Mock AffiliationRequestRepository affiliationRepository;
 
+    @Mock com.ospaulos.vupth.domain.affiliation.service.AffiliationNotifier notifier;
     @InjectMocks RequestAffiliationUseCase useCase;
 
     private Professional professional;
@@ -84,6 +85,7 @@ class RequestAffiliationUseCaseTest {
             assertThat(response.type()).isEqualTo("REQUEST");
             assertThat(response.status()).isEqualTo("PENDING");
             verify(affiliationRepository).save(any());
+            verify(notifier).created(any()); // DEC-19: o dono e avisado do pedido
         }
     }
 

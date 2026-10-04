@@ -43,6 +43,7 @@ class ResolveAffiliationUseCaseTest {
     @Mock AffiliationRequestRepository affiliationRepository;
     @Mock ProfessionalRepository professionalRepository;
 
+    @Mock com.ospaulos.vupth.domain.affiliation.service.AffiliationNotifier notifier;
     @InjectMocks ResolveAffiliationUseCase useCase;
 
     private Professional professional;
@@ -93,6 +94,7 @@ class ResolveAffiliationUseCaseTest {
             assertThat(response.status()).isEqualTo("ACCEPTED");
             assertThat(professional.getEstablishment()).isEqualTo(establishment);
             verify(professionalRepository).save(professional);
+            verify(notifier).resolved(ar); // DEC-19: quem pediu e avisado
         }
 
         @Test
@@ -182,6 +184,7 @@ class ResolveAffiliationUseCaseTest {
 
             assertThat(response.status()).isEqualTo("REJECTED");
             assertThat(professional.getEstablishment()).isNull();
+            verify(notifier).resolved(ar); // DEC-19: a recusa tambem chega
         }
 
         @Test

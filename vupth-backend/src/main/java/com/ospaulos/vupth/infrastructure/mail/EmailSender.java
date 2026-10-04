@@ -18,4 +18,11 @@ public interface EmailSender {
      * @param code    código de 6 dígitos em claro (só trafega aqui; no banco fica só o hash)
      */
     void sendPasswordResetCode(String toEmail, String code);
+
+    /**
+     * Envia um e-mail de texto simples (avisos do vinculo — DEC-19 historico-de-vinculo). Mesmo
+     * transporte e mesma falha ({@link EmailDeliveryException}) do reset; quem chama decide se e
+     * best-effort.
+     */
+    void send(String toEmail, String subject, String body);
 }

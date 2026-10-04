@@ -32,4 +32,9 @@ public class NoOpEmailSender implements EmailSender {
     public void sendPasswordResetCode(String toEmail, String code) {
         log.info("[MAIL:noop] reset code pedido para {} (provider=none — nenhum e-mail enviado)", toEmail);
     }
+
+    @Override
+    public void send(String toEmail, String subject, String body) {
+        log.info("[MAIL:noop] '{}' para {} (provider=none — nenhum e-mail enviado)", subject, toEmail);
+    }
 }

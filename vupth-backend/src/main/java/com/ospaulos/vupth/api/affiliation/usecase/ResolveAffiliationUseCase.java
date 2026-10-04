@@ -24,6 +24,7 @@ public class ResolveAffiliationUseCase {
 
     private final AffiliationRequestRepository affiliationRepository;
     private final ProfessionalRepository professionalRepository;
+    private final com.ospaulos.vupth.domain.affiliation.service.AffiliationNotifier notifier;
 
     @Transactional
     public AffiliationRequestResponse accept(UUID userId, UUID affiliationId) {
@@ -40,6 +41,8 @@ public class ResolveAffiliationUseCase {
         professionalRepository.save(professional);
         AffiliationRequest saved = affiliationRepository.save(ar);
 
+        notifier.resolved(saved); // DEC-19: quem pediu sabe do aceite
+
         log.info("[Affiliation] accepted — id={} professional={} establishment={}",
                 affiliationId, professional.getId(), ar.getEstablishment().getId());
         return AffiliationRequestResponse.fromEntity(saved);
@@ -51,6 +54,7 @@ public class ResolveAffiliationUseCase {
 
         ar.reject();
         AffiliationRequest saved = affiliationRepository.save(ar);
+        notifier.resolved(saved); // DEC-19: quem pediu sabe da recusa
 
         log.info("[Affiliation] rejected — id={}", affiliationId);
         return AffiliationRequestResponse.fromEntity(saved);

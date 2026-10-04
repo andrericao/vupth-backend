@@ -33,6 +33,28 @@ public interface AffiliationRequestRepository extends JpaRepository<AffiliationR
             @Param("establishmentId") UUID establishmentId,
             @Param("status") AffiliationStatus status);
 
+    /** Historico do vinculo da loja, todos os estados, mais novo primeiro (DEC-19). */
+    @Query("""
+        SELECT ar FROM AffiliationRequest ar
+        JOIN FETCH ar.professional p
+        JOIN FETCH p.baseUser
+        JOIN FETCH ar.establishment e
+        WHERE ar.establishment.id = :establishmentId
+        ORDER BY ar.createdAt DESC
+    """)
+    List<AffiliationRequest> findByEstablishment(@Param("establishmentId") UUID establishmentId);
+
+    /** Historico do vinculo do profissional, todos os estados, mais novo primeiro (DEC-19). */
+    @Query("""
+        SELECT ar FROM AffiliationRequest ar
+        JOIN FETCH ar.professional p
+        JOIN FETCH p.baseUser
+        JOIN FETCH ar.establishment e
+        WHERE ar.professional.id = :professionalId
+        ORDER BY ar.createdAt DESC
+    """)
+    List<AffiliationRequest> findByProfessional(@Param("professionalId") UUID professionalId);
+
     @Query("""
         SELECT ar FROM AffiliationRequest ar
         JOIN FETCH ar.professional p

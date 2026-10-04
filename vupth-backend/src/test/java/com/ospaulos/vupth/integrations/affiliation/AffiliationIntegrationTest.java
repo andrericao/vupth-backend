@@ -435,6 +435,59 @@ class AffiliationIntegrationTest {
     // CANCEL FLOW — profD solicita, profD cancela
     // ─────────────────────────────────────────────────────────────
 
+    // ─────────────────────────────────────────────────────────────
+    // DEC-19 · historico-de-vinculo — o dono ve aceitos e recusados
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(35)
+    @DisplayName("GET /establishment/{id}/affiliations?status=ALL — 200 o dono ve o recusado, com a data")
+    void listEstablishmentHistory_includesRejected() throws Exception {
+        Assumptions.assumeTrue(rejectAffiliationId != null);
+
+        mvc.perform(get("/establishment/{id}/affiliations", estab2Id)
+                        .param("status", "ALL")
+                        .header("Authorization", owner2Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '" + rejectAffiliationId + "')].status").value(hasItem("REJECTED")))
+                .andExpect(jsonPath("$[?(@.id == '" + rejectAffiliationId + "')].resolvedAt").value(hasSize(1)))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(36)
+    @DisplayName("GET /establishment/{id}/affiliations?status=REJECTED filtra; sem status continua so PENDING")
+    void listEstablishmentHistory_filterAndDefault() throws Exception {
+        Assumptions.assumeTrue(rejectAffiliationId != null);
+
+        mvc.perform(get("/establishment/{id}/affiliations", estab2Id)
+                        .param("status", "rejected")
+                        .header("Authorization", owner2Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].status", everyItem(is("REJECTED"))))
+                .andExpect(jsonPath("$[?(@.id == '" + rejectAffiliationId + "')]").exists());
+
+        mvc.perform(get("/establishment/{id}/affiliations", estab2Id)
+                        .header("Authorization", owner2Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].status", everyItem(is("PENDING"))));
+    }
+
+    @Test
+    @Order(37)
+    @DisplayName("GET /establishment/{id}/affiliations — 403 dono de OUTRA loja; 400 status invalido")
+    void listEstablishmentHistory_otherOwner403_invalidStatus400() throws Exception {
+        mvc.perform(get("/establishment/{id}/affiliations", estab2Id)
+                        .param("status", "ALL")
+                        .header("Authorization", owner1Token))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(get("/establishment/{id}/affiliations", estab2Id)
+                        .param("status", "FOO")
+                        .header("Authorization", owner2Token))
+                .andExpect(status().isBadRequest());
+    }
+
     @Test
     @Order(40)
     @DisplayName("POST /professional/me/affiliations — 201 profD solicita afiliação ao estab1")

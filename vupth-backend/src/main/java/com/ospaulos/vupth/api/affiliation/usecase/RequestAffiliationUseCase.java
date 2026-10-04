@@ -28,6 +28,7 @@ public class RequestAffiliationUseCase {
     private final ProfessionalRepository professionalRepository;
     private final EstablishmentRepository establishmentRepository;
     private final AffiliationRequestRepository affiliationRepository;
+    private final com.ospaulos.vupth.domain.affiliation.service.AffiliationNotifier notifier;
 
     @Transactional
     public AffiliationRequestResponse execute(UUID professionalId, UUID establishmentId) {
@@ -53,6 +54,7 @@ public class RequestAffiliationUseCase {
 
         AffiliationRequest request = new AffiliationRequest(professional, establishment, AffiliationType.REQUEST);
         AffiliationRequest saved = affiliationRepository.save(request);
+        notifier.created(saved); // DEC-19: o dono sabe do pedido por push e e-mail
 
         log.info("[Affiliation] request created — id={}", saved.getId());
         return AffiliationRequestResponse.fromEntity(saved);

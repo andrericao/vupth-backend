@@ -4593,6 +4593,69 @@
      ]
     },
     {
+     "name": "owner lists affiliation history (status=ALL, DEC-19)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations?status=ALL",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "affiliations"
+       ],
+       "query": [
+        {
+         "key": "status",
+         "value": "ALL"
+        }
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 - historico do vinculo\", () => pm.response.to.have.status(200));",
+         "pm.test(\"DEC-19: cada item traz status e resolvedAt (aceitos e recusados com a data)\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r).to.be.an(\"array\");",
+         "  r.forEach(a => { pm.expect(a).to.have.property(\"status\"); pm.expect(a).to.have.property(\"resolvedAt\"); });",
+         "});"
+        ]
+       }
+      }
+     ]
+    },
+    {
      "name": "owner rejects affiliation request",
      "request": {
       "method": "PATCH",
