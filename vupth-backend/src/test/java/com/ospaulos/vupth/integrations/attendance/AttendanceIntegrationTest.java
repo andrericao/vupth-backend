@@ -960,6 +960,52 @@ class AttendanceIntegrationTest {
     }
 
     @Test
+    @Order(80)
+    @DisplayName("GET /attendances?establishmentId=X&page=0&size=1 — historico-rapido: envelope paginado, mesma ordem da lista")
+    void listAttendances_paged() throws Exception {
+        MvcResult full = mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        var all = mapper.readTree(full.getResponse().getContentAsString());
+        assertThat(all.size()).as("o cenario ja criou atendimentos").isGreaterThan(1);
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .param("page", "0")
+                        .param("size", "1")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(all.get(0).get("id").asText()))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(1))
+                .andExpect(jsonPath("$.totalItems").value(all.size()))
+                .andExpect(jsonPath("$.totalPages").value(all.size()))
+                .andExpect(jsonPath("$.hasNext").value(true));
+
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .param("page", "1")
+                        .param("size", "1")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").value(all.get(1).get("id").asText()));
+    }
+
+    @Test
+    @Order(80)
+    @DisplayName("GET /attendances?size=0 — 422 (size de 1 a 100)")
+    void listAttendances_invalidSize_422() throws Exception {
+        mvc.perform(get("/attendances")
+                        .param("establishmentId", establishmentId)
+                        .param("size", "0")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
     @Order(81)
     @DisplayName("GET /attendances?establishmentId=X&status=FINISHED — 200 filtra por status")
     void listAttendances_byStatus() throws Exception {

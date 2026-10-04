@@ -1516,6 +1516,55 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse listAttendancesPage(
+            UUID userId,
+            UUID establishmentId,
+            UUID professionalId,
+            UUID clientId,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            AttendanceStatus status,
+            com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage page) {
+
+        log.info("[Attendance] listAttendancesPage — userId={} establishmentId={} professionalId={} page={} size={}",
+                userId, establishmentId, professionalId, page.page(), page.size());
+
+        // O historico do proprio cliente ja e pequeno e tem multas/avaliacao por item: corta em memoria.
+        if (clientId != null) {
+            List<AttendanceListResponse> all =
+                    listAttendances(userId, establishmentId, professionalId, clientId, dateFrom, dateTo, status);
+            int totalPages = page.totalPages(all.size());
+            return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
+                    page.slice(all), page.page(), page.size(), all.size(), totalPages,
+                    page.page() + 1 < totalPages);
+        }
+
+        Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
+        final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
+
+        // Mesmo recorte de datas do listAttendances (dia da LOJA, sentinelas sem filtro).
+        OffsetDateTime from = dateFrom != null
+                ? BusinessClock.startOfDay(dateFrom)
+                : OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
+        OffsetDateTime to = dateTo != null
+                ? BusinessClock.endOfDayExclusive(dateTo)
+                : OffsetDateTime.of(2100, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
+
+        // Duas idas, qualquer que seja o tamanho do historico: os ids da pagina e os detalhes deles.
+        org.springframework.data.domain.Page<UUID> ids = attendanceRepository.findIdPageByFilters(
+                resolvedEstablishmentId, professionalId, status, from, to,
+                org.springframework.data.domain.PageRequest.of(page.page(), page.size()));
+        List<AttendanceListResponse> items = ids.isEmpty()
+                ? List.of()
+                : attendanceRepository.findAllByIdsWithDetails(ids.getContent()).stream()
+                        .map(AttendanceListResponse::fromEntity)
+                        .collect(Collectors.toList());
+
+        return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
+                items, page.page(), page.size(), ids.getTotalElements(), ids.getTotalPages(), ids.hasNext());
+    }
+
+    @Override
     public List<AttendanceListResponse> listClientAttendances(
             UUID clientId,
             AttendanceStatus status,

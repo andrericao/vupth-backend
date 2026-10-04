@@ -39,15 +39,29 @@ public class AttendanceController {
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
     private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
 
+    /**
+     * GET /attendances — sem {@code page}/{@code size}, a lista inteira de sempre; com um dos dois
+     * (historico-rapido, 04/10), o envelope {items, page, size, totalItems, totalPages, hasNext},
+     * cortado no banco. size de 1 a 100 (padrao 20); fora disso, 422.
+     */
     @GetMapping
-    public ResponseEntity<List<AttendanceListResponse>> listAttendances(
+    public ResponseEntity<?> listAttendances(
             @RequestParam(required = false) UUID establishmentId,
             @RequestParam(required = false) UUID professionalId,
             @RequestParam(required = false) UUID clientId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) AttendanceStatus status,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        var pagination = com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage.from(page, size);
+        if (pagination != null) {
+            return ResponseEntity.ok(attendanceService.listAttendancesPage(
+                    principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo,
+                    status, pagination));
+        }
 
         log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} client={} dateFrom={} dateTo={} status={}",
                 principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo, status);

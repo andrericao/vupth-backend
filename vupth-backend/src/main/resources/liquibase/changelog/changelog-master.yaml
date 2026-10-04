@@ -377,3 +377,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/015-add-show_position-to-professional.yaml
       relativeToChangeLogFile: true
+
+  # Historico rapido: indices por data no GET /attendances (Partner, historico-rapido, 04/10)
+  - include:
+      file: changesets/99-performance/002-create-history-indexes.yaml
+      relativeToChangeLogFile: true

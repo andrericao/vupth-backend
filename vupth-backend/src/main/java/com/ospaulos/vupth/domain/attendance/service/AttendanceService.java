@@ -207,6 +207,20 @@ public interface AttendanceService {
             LocalDate dateTo,
             AttendanceStatus status);
 
+    /**
+     * Historico paginado (historico-rapido): os mesmos filtros e a mesma ordem de
+     * {@link #listAttendances}, cortados no banco.
+     */
+    public com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse listAttendancesPage(
+            UUID userId,
+            UUID establishmentId,
+            UUID professionalId,
+            UUID clientId,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            AttendanceStatus status,
+            com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage page);
+
     public List<AttendanceListResponse> listClientAttendances(
             UUID clientId,
             AttendanceStatus status,
