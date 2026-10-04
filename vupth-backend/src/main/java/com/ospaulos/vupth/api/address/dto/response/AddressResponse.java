@@ -5,7 +5,15 @@ import com.ospaulos.vupth.domain.address.valueObject.LocationStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
+import java.util.UUID;
+
 public record AddressResponse(
+
+        /**
+         * Id do endereco — o que o {@code PATCH /establishments/{id}/addresses/{addressId}} recebe.
+         * Sem ele no read-back, o Partner so corrigia pelo POST, que cria outro endereco (S38).
+         */
+        UUID addressId,
 
         @NotBlank(message = "Street is required")
         String street,
@@ -46,6 +54,7 @@ public record AddressResponse(
             return null;
         }
         return new AddressResponse(
+                address.getId(),
                 address.getStreet(),
                 address.getNumber(),
                 address.getComplement(),

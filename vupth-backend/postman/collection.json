@@ -926,6 +926,10 @@
          "  const r = pm.response.json();",
          "  pm.expect(r[0]).to.have.property(\"address\");",
          "});",
+         "pm.test(\"address embutido traz o addressId — o que o PATCH do endereco recebe (S38)\", () => {",
+         "  const a = pm.response.json()[0].address;",
+         "  if (a !== null) pm.expect(a.addressId).to.be.a(\"string\").and.not.empty;",
+         "});",
          "",
          "pm.test(\"Schema: expoe is_open efetivo (BUG5 parte B, boolean)\", () => {",
          "  const r = pm.response.json();",
@@ -959,6 +963,10 @@
          "pm.test(\"Schema: expoe address (Partner BUG4, pode ser null)\", () => {",
          "  const r = pm.response.json();",
          "  pm.expect(r).to.have.property(\"address\");",
+         "});",
+         "pm.test(\"address embutido traz o addressId (S38)\", () => {",
+         "  const a = pm.response.json().address;",
+         "  if (a !== null) pm.expect(a.addressId).to.be.a(\"string\").and.not.empty;",
          "});"
         ],
         "type": "text/javascript"

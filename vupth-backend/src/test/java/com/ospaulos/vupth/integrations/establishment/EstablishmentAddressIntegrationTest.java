@@ -51,6 +51,7 @@ class EstablishmentAddressIntegrationTest {
 
     String ownerToken, establishmentId;
     AddressRequest createdAddress;
+    String createdAddressId;
 
     @BeforeAll
     void setup() throws Exception {
@@ -87,6 +88,7 @@ class EstablishmentAddressIntegrationTest {
                 .andReturn();
 
         String body = result.getResponse().getContentAsString();
+        this.createdAddressId = mapper.readTree(body).get("addressId").asText();
         log.info("[EstabAddress] createAddress_success — created OK");
         assertThat(body).contains(establishmentId);
     }
@@ -111,6 +113,8 @@ class EstablishmentAddressIntegrationTest {
                 .andExpect(jsonPath("$[0].address.street").value(createdAddress.street()))
                 .andExpect(jsonPath("$[0].address.city").value(createdAddress.city()))
                 .andExpect(jsonPath("$[0].address.zipCode").value(createdAddress.zipCode()))
+                // S38: o id embutido e o mesmo que o POST devolveu — o que o PATCH do endereco recebe
+                .andExpect(jsonPath("$[0].address.addressId").value(createdAddressId))
                 .andDo(print());
     }
 
@@ -125,6 +129,7 @@ class EstablishmentAddressIntegrationTest {
                 .andExpect(jsonPath("$.id").value(establishmentId))
                 .andExpect(jsonPath("$.address.street").value(createdAddress.street()))
                 .andExpect(jsonPath("$.address.neighborhood").value(createdAddress.neighborhood()))
+                .andExpect(jsonPath("$.address.addressId").value(createdAddressId))
                 .andDo(print());
     }
 
