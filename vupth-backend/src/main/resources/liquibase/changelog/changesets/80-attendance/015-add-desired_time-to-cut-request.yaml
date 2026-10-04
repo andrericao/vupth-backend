@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # Pedido de corte com dia e horario desejados (D6, 07/09; Partner S26): para quando o cliente quer
+  # o corte. Nulo = "assim que abrir" (o pedido antigo) e nos pedidos anteriores.
+  - changeSet:
+      id: 015-add-desired_time-to-cut-request
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: cut_request
+                columnName: desired_time
+      changes:
+        - addColumn:
+            tableName: cut_request
+            columns:
+              - column:
+                  name: desired_time
+                  type: TIMESTAMP WITH TIME ZONE

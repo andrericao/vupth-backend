@@ -104,6 +104,7 @@ public class CutRequestServiceImpl implements CutRequestService {
         cut.setStatus(CutRequestStatus.PENDING);
         cut.setCreatedAt(now);
         cut.setExpiresAt(now.plusMinutes(VALIDITY_MINUTES));
+        cut.setDesiredTime(request.desiredTime());
         CutRequest saved = cutRequestRepository.save(cut);
 
         notifyProfessional(saved);

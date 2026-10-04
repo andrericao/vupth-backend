@@ -16740,6 +16740,7 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
          "  pm.test(\"PENDING + expires_at\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.a(\"string\"); });",
+         "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time).to.match(/^2099-01-15T/));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
         "type": "text/javascript"
@@ -16765,7 +16766,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"2099-01-15T14:30:00Z\"}"
       }
      },
      "response": []

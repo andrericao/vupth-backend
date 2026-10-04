@@ -40,7 +40,11 @@ public record CutRequestResponse(
         OffsetDateTime createdAt,
 
         @JsonProperty("resulting_attendance_id")
-        UUID resultingAttendanceId
+        UUID resultingAttendanceId,
+
+        /** Dia e horario desejados pelo cliente (D6; Partner S26). null = "assim que abrir". */
+        @JsonProperty("desired_time")
+        OffsetDateTime desiredTime
 ) {
     public static CutRequestResponse fromEntity(CutRequest c) {
         return new CutRequestResponse(
@@ -54,7 +58,8 @@ public record CutRequestResponse(
                 c.getStatus() != null ? c.getStatus().name() : null,
                 c.getExpiresAt(),
                 c.getCreatedAt(),
-                c.getResultingAttendance() != null ? c.getResultingAttendance().getId() : null
+                c.getResultingAttendance() != null ? c.getResultingAttendance().getId() : null,
+                c.getDesiredTime()
         );
     }
 }

@@ -77,6 +77,13 @@ public class CutRequest implements Serializable {
     @Column(name = "responded_at")
     private OffsetDateTime respondedAt;
 
+    /**
+     * Dia e horario em que o cliente quer o corte (D6; Partner S26). {@code null} = "assim que
+     * abrir". So informa o profissional — o aceite continua pondo o cliente na fila.
+     */
+    @Column(name = "desired_time")
+    private OffsetDateTime desiredTime;
+
     /** Attendance criado no aceite (traceabilidade). Null enquanto PENDING/REFUSED/EXPIRED. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resulting_attendance_id")
