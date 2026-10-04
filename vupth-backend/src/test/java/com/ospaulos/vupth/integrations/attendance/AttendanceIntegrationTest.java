@@ -1130,6 +1130,9 @@ class AttendanceIntegrationTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0].clientId").value(clientId))
                 .andExpect(jsonPath("$[0].establishmentId").exists())
+                // campos-do-historico: o nome da loja vem junto, sem outra chamada
+                .andExpect(jsonPath("$[0].establishmentName").isString())
+                .andExpect(jsonPath("$[0].establishmentName").isNotEmpty())
                 .andExpect(jsonPath("$[0].professionalId").exists())
                 .andExpect(jsonPath("$[0].services").isArray())
                 .andExpect(jsonPath("$[0].status").exists())

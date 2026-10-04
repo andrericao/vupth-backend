@@ -10752,6 +10752,7 @@
          "        pm.expect(item).to.have.property('clientId');",
          "        pm.expect(item).to.have.property('professionalId');",
          "        pm.expect(item).to.have.property('establishmentId');",
+         "        pm.expect(item.establishmentName).to.be.a('string').and.not.empty;",
          "        pm.expect(item).to.have.property('services');",
          "        pm.expect(item).to.have.property('status');",
          "        pm.expect(item).to.have.property('totalValue');",
