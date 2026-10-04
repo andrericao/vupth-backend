@@ -345,6 +345,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_NOT_FOUND");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.queue.swap.exception.SwapDurationIncompatibleException.class)
+    public ResponseEntity<ErrorResponse> handleSwapDurationIncompatible(
+            com.ospaulos.vupth.domain.queue.swap.exception.SwapDurationIncompatibleException ex,
+            HttpServletRequest req) {
+        log.warn("[422] SwapDurationIncompatible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_SWAP_DURATION_INCOMPATIBLE");
+    }
+
     @ExceptionHandler(SwapOfferNotAllowedException.class)
     public ResponseEntity<ErrorResponse> handleSwapOfferNotAllowed(
             SwapOfferNotAllowedException ex, HttpServletRequest req) {

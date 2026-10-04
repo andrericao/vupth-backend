@@ -6,6 +6,7 @@ import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.queue.offer.dto.request.SwapOfferCreateRequest;
+import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -76,6 +77,8 @@ class SwapOfferInQueueIntegrationTest {
 
     String ownerProfToken, professionalId, establishmentId;
     List<UUID> serviceItemIds;
+    List<UUID> longServiceItemIds;
+    List<UUID> fortyMinuteServiceItemIds;
 
     /** Cliente em fila: id do attendance + token do dono + clientId. */
     private record Q(String id, String token, String clientId) {}
@@ -100,16 +103,36 @@ class SwapOfferInQueueIntegrationTest {
         var s1 = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, ownerProfToken,
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
         this.serviceItemIds = List.of(UUID.fromString(s1.id()));
+
+        // D14: um servico longo (2h, incompativel com o de 30) e um de 40 (no limite de 10 min)
+        this.longServiceItemIds = List.of(serviceItemWithMinutes("Progressiva", 120));
+        this.fortyMinuteServiceItemIds = List.of(serviceItemWithMinutes("Corte e barba", 40));
+    }
+
+    private UUID serviceItemWithMinutes(String name, int minutes) throws Exception {
+        MvcResult r = mvc.perform(post("/establishment/" + establishmentId + "/service-items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content(mapper.writeValueAsString(new ServiceItemRequest(
+                                UUID.fromString(establishmentId), ServiceItemType.CORTE_TESOURA, name,
+                                BigDecimal.valueOf(50), minutes, null, null))))
+                .andReturn();
+        assertThat(r.getResponse().getStatus()).isEqualTo(201);
+        return UUID.fromString(new JSONObject(r.getResponse().getContentAsString()).getString("id"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────
 
     /** Cliente novo entra na fila (walk-in), 201. A ordem de chamada define a posicao (0, 1, 2...). */
     private Q enqueue() throws Exception {
+        return enqueue(serviceItemIds);
+    }
+
+    private Q enqueue(List<UUID> services) throws Exception {
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         AttendanceRequest request = new AttendanceRequest(
                 UUID.fromString(professionalId), UUID.fromString(establishmentId),
-                UUID.fromString(client.id()), serviceItemIds, AttendanceStatus.SCHEDULED,
+                UUID.fromString(client.id()), services, AttendanceStatus.SCHEDULED,
                 OffsetDateTime.now(), 30, OffsetDateTime.now(), null);
         MvcResult r = mvc.perform(post("/attendances")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -336,6 +359,42 @@ class SwapOfferInQueueIntegrationTest {
     }
 
     // ── Cancelar / listar minhas ──────────────────────────────────
+
+    // ── D14: duracao compativel (ate 10 min de diferenca) ─────────
+
+    @Test @Order(35)
+    @DisplayName("D14: 30 min x 2h -> a oferta nao aparece na lista e o aceite da 422 QUEUE_SWAP_DURATION_INCOMPATIBLE")
+    void accept_incompatibleDuration_422() throws Exception {
+        Q a = enqueue();                     // idx 0, 30 min
+        Q b = enqueue(longServiceItemIds);   // idx 1, 120 min
+
+        String offer = createInQueueId(b.token(), b.id(), SwapOfferDirection.EARLIER);
+        assertThat(listContains(listAcceptable(a.token()), offer))
+                .as("oferta incompativel fora da lista").isFalse();
+
+        MvcResult r = accept(a.token(), offer);
+        assertThat(r.getResponse().getStatus()).isEqualTo(422);
+        assertThat(new JSONObject(r.getResponse().getContentAsString()).getString("code"))
+                .isEqualTo("QUEUE_SWAP_DURATION_INCOMPATIBLE");
+
+        assertThat(waitingIndexOf(a.id())).as("a fila nao muda").isZero();
+        assertThat(waitingIndexOf(b.id())).isEqualTo(1);
+        assertThat(swapOfferRepository.findById(UUID.fromString(offer)).orElseThrow().getStatus())
+                .as("a oferta continua aberta").isEqualTo(SwapOfferStatus.OPEN);
+    }
+
+    @Test @Order(36)
+    @DisplayName("D14: 30 min x 40 min (10 de diferenca) -> aparece na lista e troca")
+    void accept_tenMinuteGap_swaps() throws Exception {
+        Q a = enqueue();                            // idx 0, 30 min
+        Q b = enqueue(fortyMinuteServiceItemIds);   // idx 1, 40 min
+
+        String offer = createInQueueId(b.token(), b.id(), SwapOfferDirection.EARLIER);
+        assertThat(listContains(listAcceptable(a.token()), offer)).isTrue();
+
+        assertThat(accept(a.token(), offer).getResponse().getStatus()).isEqualTo(200);
+        assertThat(waitingIndexOf(b.id())).isZero();
+    }
 
     @Test @Order(40)
     @DisplayName("Cancelar a propria oferta -> 204 CANCELLED; some do /me")
