@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -153,6 +154,25 @@ class EstablishmentAddressIntegrationTest {
     // ─────────────────────────────────────────────────────────────
     // Auth errors
     // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(18)
+    @DisplayName("gps-depois-do-cadastro: PATCH so com latitude/longitude troca a coordenada e mantem o resto do endereco")
+    void patchOnlyCoordinates_overridesLocation() throws Exception {
+        mvc.perform(patch("/establishments/{id}/addresses/{addressId}", establishmentId, createdAddressId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"latitude\":-23.561684,\"longitude\":-46.655981}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/establishment/id/{id}", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.address.addressId").value(createdAddressId))
+                .andExpect(jsonPath("$.address.latitude").value(-23.561684))
+                .andExpect(jsonPath("$.address.longitude").value(-46.655981))
+                .andExpect(jsonPath("$.address.locationStatus").value("LOCATED"))
+                .andExpect(jsonPath("$.address.street").value(createdAddress.street()));
+    }
 
     @Test
     @Order(20)
