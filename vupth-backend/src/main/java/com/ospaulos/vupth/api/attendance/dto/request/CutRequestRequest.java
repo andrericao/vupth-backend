@@ -18,7 +18,7 @@ public record CutRequestRequest(
 
         // D6 (Partner S26): dia e horario desejados (camelCase como o resto do corpo e o desiredTime da
         // intencao; a resposta devolve desired_time); opcional — ausente = "assim que abrir".
-        // No passado -> 400 (a validacao padrao).
+        // No passado -> 422 VALIDATION_ERROR (a validacao padrao do @Valid).
         @Future(message = "desiredTime must be in the future")
         OffsetDateTime desiredTime
 ) {

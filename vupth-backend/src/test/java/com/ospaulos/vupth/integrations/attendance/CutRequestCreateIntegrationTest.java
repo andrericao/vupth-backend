@@ -131,13 +131,15 @@ class CutRequestCreateIntegrationTest {
 
     @Test
     @Order(12)
-    @DisplayName("D6 (S26): dia e horario no passado -> 400")
-    void desiredTimeInThePast_badRequest() throws Exception {
+    @DisplayName("D6 (S26): dia e horario no passado -> 422 VALIDATION_ERROR")
+    void desiredTimeInThePast_validationError() throws Exception {
         mvc.perform(post("/attendances/cut-requests")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", clientToken)
                         .content(bodyWithDesiredTime("2020-01-15T14:30:00-03:00")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.desiredTime").exists());
     }
 
     @Test
