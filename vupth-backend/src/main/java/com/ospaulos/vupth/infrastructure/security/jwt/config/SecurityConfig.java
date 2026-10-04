@@ -106,6 +106,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/reports").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
+                        // convite-sem-conta: os convites por e-mail que esperam a conta — so o dono
+                        .requestMatchers(HttpMethod.GET, "/establishment/*/email-invitations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/reports").hasRole("OWNER")
                         // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
                         .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
@@ -218,6 +220,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/professionals/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/*/affiliations").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.POST, "/establishment/*/email-invitations").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.DELETE, "/email-invitations/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/service-types/*/keywords").hasRole("PROFESSIONAL")
 
                         // ── Fallback ──────────────────────────────────────────────────────

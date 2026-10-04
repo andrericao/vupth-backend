@@ -5193,6 +5193,487 @@
    ]
   },
   {
+   "name": "03f - convite sem conta (S30)",
+   "item": [
+    {
+     "name": "dono convida e-mail SEM conta -> 201 WAITING_ACCOUNT",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email_upper}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const e = \"s30_novato_\" + pm.variables.replaceIn(\"{{$guid}}\").substring(0, 8) + \"@vupth.test\";",
+         "pm.collectionVariables.set(\"s30_email\", e);",
+         "pm.collectionVariables.set(\"s30_email_upper\", \"  \" + e.toUpperCase() + \" \");",
+         "pm.collectionVariables.set(\"s30_pass\", \"Test1234!\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const r = pm.response.json();",
+         "pm.test(\"outcome WAITING_ACCOUNT\", () => pm.expect(r.outcome).to.equal(\"WAITING_ACCOUNT\"));",
+         "pm.test(\"e-mail normalizado (minusculas)\", () => pm.expect(r.emailInvitation.email).to.equal(pm.collectionVariables.get(\"s30_email\")));",
+         "pm.test(\"status PENDING\", () => pm.expect(r.emailInvitation.status).to.equal(\"PENDING\"));",
+         "pm.collectionVariables.set(\"s30_email_invitation_id\", r.emailInvitation.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "convidar o mesmo e-mail de novo -> o mesmo convite",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"mesmo id (idempotente)\", () => pm.expect(pm.response.json().emailInvitation.id).to.equal(pm.collectionVariables.get(\"s30_email_invitation_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono lista os convites por e-mail -> contem o convite",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"contem o convite\", () => pm.expect(pm.response.json().map(i => i.id)).to.include(pm.collectionVariables.get(\"s30_email_invitation_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] e-mail invalido -> 422 VALIDATION_ERROR",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"nao-e-email\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "setup: novato cria a conta com o e-mail convidado",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email}}\",\"password\":\"{{s30_pass}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201 - novato registrado\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "setup: login novato",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email}}\",\"password\":\"{{s30_pass}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 - login novato\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) pm.collectionVariables.set(\"s30_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "novato cria o perfil profissional -> 201",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{s30_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"{{$randomFirstName}}\",\"specialty\":\"Corte Masculino\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201 - perfil profissional criado\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "novato ve o convite comum PENDING da loja",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{s30_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/affiliations",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "const inv = r.find(a => a.establishmentId === pm.collectionVariables.get(\"owner_establishment_id\"));",
+         "pm.test(\"convite da loja presente\", () => pm.expect(inv).to.not.be.undefined);",
+         "pm.test(\"INVITATION PENDING\", () => { pm.expect(inv.type).to.equal(\"INVITATION\"); pm.expect(inv.status).to.equal(\"PENDING\"); });",
+         "if (inv) pm.collectionVariables.set(\"s30_affiliation_id\", inv.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "o convite por e-mail saiu da lista do dono (virou convite comum)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"nao contem mais o convite\", () => pm.expect(pm.response.json().map(i => i.id)).to.not.include(pm.collectionVariables.get(\"s30_email_invitation_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono convida outro e-mail (para cancelar)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"s30_cancelar_{{$timestamp}}@vupth.test\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.collectionVariables.set(\"s30_cancel_id\", pm.response.json().emailInvitation.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono cancela o convite por e-mail -> 200 CANCELLED",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/email-invitations/{{s30_cancel_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"status CANCELLED\", () => pm.expect(pm.response.json().status).to.equal(\"CANCELLED\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] cancelar de novo -> 400",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/email-invitations/{{s30_cancel_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "cleanup: dono cancela o convite comum do novato",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/affiliations/{{s30_affiliation_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 ou 204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
    "name": "04 - service item",
    "item": [
     {

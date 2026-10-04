@@ -382,3 +382,8 @@ databaseChangeLog:
   - include:
       file: changesets/99-performance/002-create-history-indexes.yaml
       relativeToChangeLogFile: true
+
+  # Convite por e-mail para quem ainda nao tem conta (convite-sem-conta, Partner S30, 04/10)
+  - include:
+      file: changesets/90-affiliation/002-create-email-invitation.yaml
+      relativeToChangeLogFile: true

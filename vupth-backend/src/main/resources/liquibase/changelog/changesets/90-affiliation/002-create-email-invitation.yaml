@@ -1,0 +1,70 @@
+databaseChangeLog:
+  # Convite para quem ainda nao tem conta (convite-sem-conta, Partner S30): o dono convida pelo
+  # e-mail; o convite vira o AffiliationRequest INVITATION comum quando a pessoa cria o perfil
+  # profissional com esse e-mail.
+  - changeSet:
+      id: 090-002-create-email-invitation
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: email_invitation
+      changes:
+        - createTable:
+            tableName: email_invitation
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: VARCHAR(150)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMPTZ
+                  constraints:
+                    nullable: false
+              - column:
+                  name: converted_at
+                  type: TIMESTAMPTZ
+              - column:
+                  name: affiliation_request_id
+                  type: UUID
+        - addForeignKeyConstraint:
+            baseTableName: email_invitation
+            baseColumnNames: establishment_id
+            constraintName: fk_email_invitation_establishment
+            referencedTableName: establishment
+            referencedColumnNames: id
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: email_invitation
+            baseColumnNames: affiliation_request_id
+            constraintName: fk_email_invitation_affiliation
+            referencedTableName: affiliation_request
+            referencedColumnNames: id
+            onDelete: SET NULL
+        - createIndex:
+            tableName: email_invitation
+            indexName: idx_email_invitation_email_status
+            columns:
+              - column:
+                  name: email
+              - column:
+                  name: status

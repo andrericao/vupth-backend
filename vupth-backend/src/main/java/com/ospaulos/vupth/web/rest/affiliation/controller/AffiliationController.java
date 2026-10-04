@@ -2,7 +2,11 @@ package com.ospaulos.vupth.web.rest.affiliation.controller;
 
 import com.ospaulos.vupth.api.affiliation.dto.request.CreateAffiliationInvitationDTO;
 import com.ospaulos.vupth.api.affiliation.dto.request.CreateAffiliationRequestDTO;
+import com.ospaulos.vupth.api.affiliation.dto.request.CreateEmailInvitationDTO;
 import com.ospaulos.vupth.api.affiliation.dto.response.AffiliationRequestResponse;
+import com.ospaulos.vupth.api.affiliation.dto.response.EmailInvitationResponse;
+import com.ospaulos.vupth.api.affiliation.dto.response.InviteByEmailResponse;
+import com.ospaulos.vupth.api.affiliation.usecase.InviteByEmailUseCase;
 import com.ospaulos.vupth.api.affiliation.usecase.InviteProfessionalUseCase;
 import com.ospaulos.vupth.api.affiliation.usecase.RequestAffiliationUseCase;
 import com.ospaulos.vupth.api.affiliation.usecase.ResolveAffiliationUseCase;
@@ -40,6 +44,7 @@ public class AffiliationController {
     private final RequestAffiliationUseCase requestAffiliationUseCase;
     private final InviteProfessionalUseCase inviteProfessionalUseCase;
     private final ResolveAffiliationUseCase resolveAffiliationUseCase;
+    private final InviteByEmailUseCase inviteByEmailUseCase;
     private final AffiliationRequestRepository affiliationRepository;
     private final com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository establishmentRepository;
 
@@ -90,6 +95,38 @@ public class AffiliationController {
         AffiliationRequestResponse response =
                 inviteProfessionalUseCase.execute(user.getUserId(), establishmentId, request.professionalId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Convite pelo e-mail, para quem ainda nao tem conta (convite-sem-conta, Partner S30). 201 com
+     * {@code outcome}: INVITATION_SENT (o e-mail ja e de um profissional — virou o convite comum) ou
+     * WAITING_ACCOUNT (guardado; vira convite comum quando a pessoa criar o perfil profissional).
+     */
+    @PostMapping("/establishment/{establishmentId}/email-invitations")
+    public ResponseEntity<InviteByEmailResponse> inviteByEmail(
+            @PathVariable UUID establishmentId,
+            @AuthenticationPrincipal UserDetailsImpl user,
+            @RequestBody @Valid CreateEmailInvitationDTO request) {
+
+        log.info("[Affiliation] POST /establishment/{}/email-invitations — owner={}", establishmentId, user.getUserId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(inviteByEmailUseCase.invite(user.getUserId(), establishmentId, request.email()));
+    }
+
+    /** Os convites por e-mail que ainda esperam a conta (so o dono da loja). */
+    @GetMapping("/establishment/{establishmentId}/email-invitations")
+    public ResponseEntity<List<EmailInvitationResponse>> listEmailInvitations(
+            @PathVariable UUID establishmentId,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(inviteByEmailUseCase.listPending(user.getUserId(), establishmentId));
+    }
+
+    /** O dono cancela um convite por e-mail que ainda espera a conta. */
+    @DeleteMapping("/email-invitations/{id}")
+    public ResponseEntity<EmailInvitationResponse> cancelEmailInvitation(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(inviteByEmailUseCase.cancel(user.getUserId(), id));
     }
 
     /**

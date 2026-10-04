@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalS
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
+import com.ospaulos.vupth.domain.affiliation.service.EmailInvitationConverter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -43,6 +44,7 @@ class RegisterProfessionalUseCaseTest {
 
     @Mock UserRepository userRepository;
     @Mock ProfessionalIntervalService intervalService;
+    @Mock EmailInvitationConverter emailInvitationConverter;
     @InjectMocks RegisterProfessionalUseCase useCase;
 
     private BaseUser user;
@@ -81,6 +83,7 @@ class RegisterProfessionalUseCaseTest {
             assertThat(result.establishmentId()).isNull();
             assertThat(result.establishmentName()).isNull();
             verify(userRepository).save(any(BaseUser.class));
+            verify(emailInvitationConverter).convertFor(any()); // convite-sem-conta
         }
 
         @Test

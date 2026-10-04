@@ -57,6 +57,33 @@ public class AffiliationNotifier {
         }
     }
 
+    /**
+     * Convite para quem ainda nao tem conta (convite-sem-conta): so e-mail — sem conta nao ha
+     * aparelho para o push. Diz como entrar; o convite comum aparece quando o perfil for criado.
+     */
+    public void invitedByEmail(String email, String establishmentName) {
+        String body = establishmentName + " convidou você para trabalhar com o VUPTH.\n\n"
+                + "Baixe o app VUPTH Parceiro, entre (ou crie a sua conta) com este e-mail (" + email + ") e "
+                + "crie o perfil profissional: o convite estará esperando para você aceitar.";
+        Runnable send = () -> {
+            try {
+                emailSender.send(email, "VUPTH — Convite de " + establishmentName, body);
+            } catch (Exception e) {
+                log.warn("[Affiliation] e-mail de convite sem conta para {} falhou: {}", email, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
     /** Aceite ou recusa: avisa quem iniciou. */
     public void resolved(AffiliationRequest ar) {
         boolean accepted = ar.getStatus() == AffiliationStatus.ACCEPTED;
