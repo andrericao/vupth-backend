@@ -75,6 +75,15 @@ public interface AttendanceService {
     public AttendanceInQueueResponse moveToEndOfQueue(UUID attendanceId, UUID clientId);
 
     /**
+     * Adicionar servico a atendimento ja na fila (adicionar-servico-na-fila, Client C8). So o proprio
+     * cliente (JWT), so em {@code SCHEDULED}. Os itens precisam ser do profissional do atendimento; os
+     * que ja estao nele sao ignorados. O tempo a mais so cabe se ninguem estiver depois na fila e
+     * nenhuma intencao comecar antes do novo fim (regra do Andre, 15/09) — senao 409
+     * {@code ATTENDANCE_NO_ROOM_FOR_SERVICE} e nada muda.
+     */
+    public AttendanceInQueueResponse addServiceItems(UUID attendanceId, UUID clientId, List<UUID> serviceItemIds);
+
+    /**
      * Partner S7 — promover ao 1o lugar. O PROFISSIONAL dono da fila move um atendimento em espera
      * para o indice 0 (proximo a ser atendido), empurrando os demais — sem inicia-lo. Inverso do
      * {@link #moveToEndOfQueue}: o {@code scheduledTime} recebe {@code cabeca.scheduledTime - 1min}.

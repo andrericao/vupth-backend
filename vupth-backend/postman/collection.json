@@ -11251,6 +11251,159 @@
      }
     },
     {
+     "name": "adicionar servico ja presente no atendimento -> 200 sem mudar (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - no-op\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"services continua com 1 item\", () => pm.expect(r.services).to.have.lengthOf(1));",
+         "pm.test(\"status SCHEDULED\", () => pm.expect(r.status).to.equal(\"SCHEDULED\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[\"{{service_item_id}}\"]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] adicionar servico no atendimento de OUTRO usuario -> 403 (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[\"{{service_item_id}}\"]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] adicionar servico com lista vazia -> 422 VALIDATION_ERROR (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] adicionar servico que nao existe -> 404 SERVICE_ITEM_NOT_FOUND (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code SERVICE_ITEM_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.equal(\"SERVICE_ITEM_NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[\"00000000-0000-0000-0000-000000000000\"]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "leave queue (client - SCHEDULED)",
      "event": [
       {

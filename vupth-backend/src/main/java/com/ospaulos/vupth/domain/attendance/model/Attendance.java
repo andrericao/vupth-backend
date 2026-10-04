@@ -92,7 +92,7 @@ public class Attendance implements Serializable {
      * Divisao do preco CONGELADA na criacao (Receita LIQUIDA): a soma, servico a servico, do que o
      * profissional recebe, dos 4% da empresa de pagamento e da parte do app. As tres somam o
      * {@code totalValue}. Nulas quando algum servico e legado (sem recebe) — meia soma seria um
-     * numero com cara de dado. So o {@link #onCreate} escreve aqui.
+     * numero com cara de dado. So o {@link #onCreate} e o {@link #addServiceItems} escrevem aqui.
      */
     @Setter(AccessLevel.NONE)
     @Column(name = "pro_receives", precision = 10, scale = 2)
@@ -270,6 +270,44 @@ public class Attendance implements Serializable {
         this.proReceives = pro;
         this.intermediaryFee = intermediary;
         this.platformFee = platform;
+    }
+
+    /**
+     * Adicionar servico a atendimento ja na fila (adicionar-servico-na-fila, Client C8). O preco dos
+     * itens novos e congelado agora e SOMADO ao que ja estava congelado — o total antigo nao e
+     * recalculado (ver {@link #onUpdate}). A divisao (pro/intermediario/plataforma) so continua se o
+     * atendimento e todos os itens novos a tem; senao fica nula, como no {@link #freezePriceSplit}.
+     *
+     * @return os minutos acrescentados a estimativa
+     */
+    public int addServiceItems(List<ServiceItem> items) {
+        int addedMinutes = 0;
+        BigDecimal addedValue = BigDecimal.ZERO;
+        boolean splitKept = this.proReceives != null;
+        BigDecimal pro = splitKept ? this.proReceives : null;
+        BigDecimal intermediary = splitKept ? this.intermediaryFee : null;
+        BigDecimal platform = splitKept ? this.platformFee : null;
+        for (ServiceItem item : items) {
+            this.serviceItems.add(item);
+            addedMinutes += item.getEstimatedMinutes() != null ? item.getEstimatedMinutes() : 0;
+            if (item.getPrice() != null && item.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+                addedValue = addedValue.add(item.getPrice());
+            }
+            PriceSplit split = item.getPriceSplit();
+            if (split == null) {
+                splitKept = false;
+            } else if (splitKept) {
+                pro = pro.add(split.proReceives());
+                intermediary = intermediary.add(split.intermediaryFee());
+                platform = platform.add(split.platformFee());
+            }
+        }
+        this.estimatedMinutes = getEstimatedTotalMinutes() + addedMinutes;
+        this.totalValue = getTotalValue().add(addedValue);
+        this.proReceives = splitKept ? pro : null;
+        this.intermediaryFee = splitKept ? intermediary : null;
+        this.platformFee = splitKept ? platform : null;
+        return addedMinutes;
     }
 
     protected void calculateEstimatedMinutes() {

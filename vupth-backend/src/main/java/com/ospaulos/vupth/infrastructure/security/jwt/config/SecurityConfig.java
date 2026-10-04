@@ -144,6 +144,7 @@ public class SecurityConfig {
                         // Item #43 — cliente remaneja a propria vez (espera longa): horario-alvo ou fim da fila
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/reschedule").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/move-to-end").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/service-items").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/*/rating").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 

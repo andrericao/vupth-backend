@@ -13,6 +13,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelled
 import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceNoRoomForServiceException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
@@ -1088,6 +1089,65 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         log.info("[Attendance] moveToEndOfQueue — attendance={} foi para o fim (scheduledTime={})",
                 attendanceId, saved.getScheduledTime());
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
+    public AttendanceInQueueResponse addServiceItems(UUID attendanceId, UUID clientId, List<UUID> serviceItemIds) {
+        log.info("[Attendance] addServiceItems — attendanceId={} clientId={} items={}", attendanceId, clientId, serviceItemIds);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only add services to your own attendance.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        Professional professional = attendance.getProfessional();
+        List<ServiceItem> requested = serviceItemRepository.findAllById(serviceItemIds);
+        if (requested.size() != Set.copyOf(serviceItemIds).size()) {
+            throw new ServiceItemNotFoundException();
+        }
+        assertServiceItemsBelongToProfessional(requested, professional);
+
+        Set<UUID> current = attendance.getServiceItems().stream()
+                .map(ServiceItem::getId)
+                .collect(Collectors.toSet());
+        List<ServiceItem> added = requested.stream().filter(si -> !current.contains(si.getId())).toList();
+        if (added.isEmpty()) {
+            log.info("[Attendance] addServiceItems — attendance={} ja tinha todos os itens (no-op)", attendanceId);
+            return buildAttendanceInQueueResponse(attendance);
+        }
+
+        // Regra do Andre (15/09): o tempo a mais so cabe se houver tempo livre depois. Quem esta na fila
+        // atras perderia a vez prometida — entao so o ULTIMO da fila de espera adiciona.
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                professional.getId(), attendance.getEstablishment().getId());
+        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
+        if (last != null && !last.getId().equals(attendance.getId())) {
+            log.warn("[Attendance] addServiceItems — attendance={} tem gente depois (ultimo={})", attendanceId, last.getId());
+            throw AttendanceNoRoomForServiceException.someoneBehind(attendanceId);
+        }
+
+        // ...e nenhuma intencao (agenda) pode comecar antes do novo fim da fila.
+        int addedMinutes = added.stream()
+                .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
+                .sum();
+        OffsetDateTime newEnd = projectedQueueEnd(professional).plusMinutes(addedMinutes);
+        boolean intentionAhead = attendanceRepository.findIntentionsByProfessional(professional.getId()).stream()
+                .anyMatch(i -> i.getDesiredTime() != null && i.getDesiredTime().isBefore(newEnd));
+        if (intentionAhead) {
+            log.warn("[Attendance] addServiceItems — attendance={} esbarra numa intencao antes de {}", attendanceId, newEnd);
+            throw AttendanceNoRoomForServiceException.intentionAhead(attendanceId);
+        }
+
+        attendance.addServiceItems(added);
+        Attendance saved = attendanceRepository.save(attendance);
+        log.info("[Attendance] addServiceItems — attendance={} +{} itens, +{} min (estimado={} total={})",
+                attendanceId, added.size(), addedMinutes, saved.getEstimatedTotalMinutes(), saved.getTotalValue());
         return buildAttendanceInQueueResponse(saved);
     }
 

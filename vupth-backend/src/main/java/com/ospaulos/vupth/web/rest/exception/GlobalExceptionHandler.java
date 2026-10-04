@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundExcept
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceNoRoomForServiceException;
 import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
@@ -725,6 +726,14 @@ public class GlobalExceptionHandler {
      * daqui a pouco, quando o atendimento atual terminar. O log carrega os ids; a mensagem ao
      * usuario, nao.
      */
+    @ExceptionHandler(AttendanceNoRoomForServiceException.class)
+    public ResponseEntity<ErrorResponse> handleAttendanceNoRoomForService(
+            AttendanceNoRoomForServiceException ex, HttpServletRequest req) {
+        log.warn("[409] AttendanceNoRoomForService | {} {} | attendance={}",
+                req.getMethod(), req.getRequestURI(), ex.getAttendanceId());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ATTENDANCE_NO_ROOM_FOR_SERVICE");
+    }
+
     @ExceptionHandler(ClientAlreadyInQueueException.class)
     public ResponseEntity<ErrorResponse> handleClientAlreadyInQueue(
             ClientAlreadyInQueueException ex, HttpServletRequest req) {
