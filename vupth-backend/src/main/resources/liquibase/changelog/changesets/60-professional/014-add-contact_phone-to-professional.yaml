@@ -1,0 +1,21 @@
+databaseChangeLog:
+  # Contato do profissional para o cliente (pedido do Andre, 26/09): telefone/WhatsApp que o proprio
+  # profissional escolhe expor no PATCH /professional/me. null = nao expoe (padrao).
+  - changeSet:
+      id: 014-add-contact_phone-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: contact_phone
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: contact_phone
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: true

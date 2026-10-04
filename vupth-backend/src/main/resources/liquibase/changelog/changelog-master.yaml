@@ -362,3 +362,8 @@ databaseChangeLog:
   - include:
       file: changesets/00-foundation/005-add-geocoding_failed-to-address.yaml
       relativeToChangeLogFile: true
+
+  # Contato do profissional na tela do cliente — so o que ele escolhe expor (Client, 26/09)
+  - include:
+      file: changesets/60-professional/014-add-contact_phone-to-professional.yaml
+      relativeToChangeLogFile: true

@@ -77,6 +77,14 @@ public class Professional extends AbstractAggregateRoot<Professional> {
     @Column(name = "closing_grace_until")
     private OffsetDateTime closingGraceUntil;
 
+    /**
+     * Contato (telefone/WhatsApp) que o proprio profissional escolhe mostrar ao cliente na tela dele
+     * (pedido de 26/09). Nao e o {@code BaseUser.phone}: aquele e da conta e nunca sai publico.
+     * {@code null} = nao expoe.
+     */
+    @Column(name = "contact_phone", length = 20)
+    private String contactPhone;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")
     @JsonBackReference("establishment-professionals")

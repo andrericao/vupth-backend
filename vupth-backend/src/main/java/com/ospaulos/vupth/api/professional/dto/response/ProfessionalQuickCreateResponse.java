@@ -38,8 +38,22 @@ public record ProfessionalQuickCreateResponse(
         @JsonProperty("operation_mode")
         com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
 
-        String message
+        String message,
+
+        // Contato exposto ao cliente (PATCH /professional/me); null = nao expoe
+        @JsonProperty("contact_phone")
+        String contactPhone
 ) {
+    public ProfessionalQuickCreateResponse(
+            UUID id, String name, String specialty, String nickname, UUID establishmentId,
+            String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,
+            Boolean acceptingNew,
+            com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
+            String message) {
+        this(id, name, specialty, nickname, establishmentId, establishmentName, isAvailable,
+                workStatus, acceptingNew, operationMode, message, null);
+    }
+
     public static ProfessionalQuickCreateResponse fromEntity(Professional p) {
         return new ProfessionalQuickCreateResponse(
                 p.getId(),

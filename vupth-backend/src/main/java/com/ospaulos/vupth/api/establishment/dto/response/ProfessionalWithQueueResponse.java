@@ -72,7 +72,11 @@ public record ProfessionalWithQueueResponse(
 
         // D9 (25/09): AGENDA_ONLY = o app desabilita "entrar na fila" e oferece so agendar
         @JsonProperty("operation_mode")
-        com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode
+        com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
+
+        // Contato que o profissional escolheu expor (PATCH /professional/me); null = nao expoe
+        @JsonProperty("contact_phone")
+        String contactPhone
 
 ) {
 
@@ -156,7 +160,8 @@ public record ProfessionalWithQueueResponse(
                 professional.getRatingCount(),
                 serviceItemDtos,
                 professional.getBaseUser() != null ? professional.getBaseUser().getProfileImageUrl() : null,
-                professional.getOperationMode()
+                professional.getOperationMode(),
+                professional.getContactPhone()
         );
     }
 }
