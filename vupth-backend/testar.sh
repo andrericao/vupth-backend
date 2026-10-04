@@ -47,10 +47,11 @@ passou mvn
 # --- 2. newman local: refaz a imagem do backend_dev com o codigo da pasta e espera o readiness ---
 docker compose -f docker-compose.dev.yml up -d --build backend || { echo "❌ docker compose nao subiu o backend_dev"; exit 1; }
 
-echo "Esperando http://localhost:8080/actuator/health/readiness ..."
+# /actuator/health, nao o /readiness: os probes so estao ligados no staging; no dev o /readiness da 404.
+echo "Esperando http://localhost:8080/actuator/health ..."
 pronto=0
 for _ in $(seq 1 60); do
-  if curl -fs http://localhost:8080/actuator/health/readiness 2>/dev/null | grep -q '"UP"'; then pronto=1; break; fi
+  if curl -fs http://localhost:8080/actuator/health 2>/dev/null | grep -q '"UP"'; then pronto=1; break; fi
   sleep 5
 done
 if (( ! pronto )); then
