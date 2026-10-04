@@ -41,4 +41,11 @@ USER vupth
 
 EXPOSE 8080
 
-ENTRYPOINT ["sh", "-c", "cd /app/application && exec java -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 $( [ -f app.jsa ] && echo -XX:SharedArchiveFile=app.jsa ) -jar app.jar"]
+# Memoria (pr70-deploy-timeout, 04/10): o Render Free mata o container acima de 512 MiB. Com 75% de heap
+# (384 MiB) mais metaspace, code cache e threads, o boot passava do teto ("Out of memory (used over 512Mi)")
+# e o staging ficou preso no deploy anterior. O padrao cabe em 512 MiB: heap em 50%, code cache e
+# metaspace com teto, Serial GC (o de menos memoria fora do heap). Com mais memoria (Railway), troque
+# pelo JAVA_OPTS do painel.
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=32m -Xss512k -XX:+ExitOnOutOfMemoryError"
+
+ENTRYPOINT ["sh", "-c", "cd /app/application && exec java $JAVA_OPTS $( [ -f app.jsa ] && echo -XX:SharedArchiveFile=app.jsa ) -jar app.jar"]
