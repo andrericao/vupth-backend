@@ -372,3 +372,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/015-add-desired_time-to-cut-request.yaml
       relativeToChangeLogFile: true
+
+  # Interruptor "expor a posicao na fila" por profissional (decisao de 05/09; Partner, 04/10)
+  - include:
+      file: changesets/60-professional/015-add-show_position-to-professional.yaml
+      relativeToChangeLogFile: true

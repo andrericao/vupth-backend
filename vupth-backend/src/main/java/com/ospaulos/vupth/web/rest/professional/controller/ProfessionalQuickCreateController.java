@@ -146,7 +146,8 @@ public class ProfessionalQuickCreateController {
                 professional.getAcceptingNew(),
                 professional.getOperationMode(),
                 null,
-                professional.getContactPhone()
+                professional.getContactPhone(),
+                professional.getShowPosition()
         ));
     }
 

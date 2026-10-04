@@ -42,7 +42,11 @@ public record ProfessionalQuickCreateResponse(
 
         // Contato exposto ao cliente (PATCH /professional/me); null = nao expoe
         @JsonProperty("contact_phone")
-        String contactPhone
+        String contactPhone,
+
+        // Interruptor "expor a posicao na fila" (decisao de 05/09); null onde nao foi lido
+        @JsonProperty("show_position")
+        Boolean showPosition
 ) {
     public ProfessionalQuickCreateResponse(
             UUID id, String name, String specialty, String nickname, UUID establishmentId,
@@ -51,7 +55,7 @@ public record ProfessionalQuickCreateResponse(
             com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
             String message) {
         this(id, name, specialty, nickname, establishmentId, establishmentName, isAvailable,
-                workStatus, acceptingNew, operationMode, message, null);
+                workStatus, acceptingNew, operationMode, message, null, null);
     }
 
     public static ProfessionalQuickCreateResponse fromEntity(Professional p) {

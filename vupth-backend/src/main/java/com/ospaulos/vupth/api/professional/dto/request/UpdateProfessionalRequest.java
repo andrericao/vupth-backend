@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Size;
  *   - name          → atualiza o firstName do usuario (nome exibido do profissional)
  *   - specialty     → atualiza a especialidade (String livre)
  *   - contact_phone → telefone/WhatsApp que o cliente ve na tela do profissional; "" deixa de expor
+ *   - show_position → interruptor "expor a posicao na fila" (decisao de 05/09)
  *
  * Campos null sao ignorados (nao sobrescrevem o valor atual).
  */
@@ -25,10 +26,13 @@ public record UpdateProfessionalRequest(
         @JsonProperty("contact_phone")
         @Size(max = 20, message = "Contact phone must be at most 20 characters")
         @Pattern(regexp = "^$|^\\+?[0-9 ()-]{8,20}$", message = "Contact phone must contain only digits, spaces, (, ), - and an optional leading +")
-        String contactPhone
+        String contactPhone,
+
+        @JsonProperty("show_position")
+        Boolean showPosition
 
 ) {
     public UpdateProfessionalRequest(String name, String specialty) {
-        this(name, specialty, null);
+        this(name, specialty, null, null);
     }
 }

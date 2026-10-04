@@ -76,7 +76,12 @@ public record ProfessionalWithQueueResponse(
 
         // Contato que o profissional escolheu expor (PATCH /professional/me); null = nao expoe
         @JsonProperty("contact_phone")
-        String contactPhone
+        String contactPhone,
+
+        // Interruptor do profissional (decisao de 05/09): false = o app do cliente esconde a posicao
+        // em todos os lugares; estimated_wait_minutes continua sempre
+        @JsonProperty("show_position")
+        boolean showPosition
 
 ) {
 
@@ -161,7 +166,8 @@ public record ProfessionalWithQueueResponse(
                 serviceItemDtos,
                 professional.getBaseUser() != null ? professional.getBaseUser().getProfileImageUrl() : null,
                 professional.getOperationMode(),
-                professional.getContactPhone()
+                professional.getContactPhone(),
+                !Boolean.FALSE.equals(professional.getShowPosition())
         );
     }
 }

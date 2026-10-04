@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # Interruptor "expor a posicao na fila" (decisao do Andre, 05/09): o profissional decide se o
+  # cliente ve a posicao. Padrao = mostrar; esconder e a escolha ativa. O tempo estimado nunca esconde.
+  - changeSet:
+      id: 015-add-show_position-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: show_position
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: show_position
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

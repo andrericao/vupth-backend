@@ -145,6 +145,58 @@ class ProfessionalContactPhoneIntegrationTest {
                 .andExpect(jsonPath("$.professionals[0].contact_phone").value(nullValue()));
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // expor-posicao (decisao de 05/09) — o interruptor mora no mesmo PATCH /professional/me
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(50)
+    @DisplayName("show_position vem true por padrao no professionals-with-queue e no /professional/me")
+    void showPosition_defaultTrue() throws Exception {
+        mvc.perform(get("/establishment/id/{id}/professionals-with-queue", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals[0].show_position").value(true));
+        mvc.perform(get("/professional/me").header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.show_position").value(true));
+    }
+
+    @Test
+    @Order(51)
+    @DisplayName("PATCH show_position=false esconde; o cliente le false e o tempo estimado continua")
+    void showPosition_toggleOff() throws Exception {
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"show_position\":false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.show_position").value(false));
+
+        mvc.perform(get("/establishment/id/{id}/professionals-with-queue", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals[0].show_position").value(false))
+                .andExpect(jsonPath("$.professionals[0].estimated_wait_minutes").isNumber());
+    }
+
+    @Test
+    @Order(52)
+    @DisplayName("PATCH sem show_position nao mexe; show_position=true volta a mostrar")
+    void showPosition_untouchedThenOn() throws Exception {
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"specialty\":\"Corte\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.show_position").value(false));
+
+        mvc.perform(patch("/professional/me")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"show_position\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.show_position").value(true));
+    }
+
     @AfterAll
     void tearDown() {
         serviceItemRepository.deleteAll();

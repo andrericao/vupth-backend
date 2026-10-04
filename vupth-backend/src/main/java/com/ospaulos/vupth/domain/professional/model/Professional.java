@@ -85,6 +85,14 @@ public class Professional extends AbstractAggregateRoot<Professional> {
     @Column(name = "contact_phone", length = 20)
     private String contactPhone;
 
+    /**
+     * Interruptor "expor a posicao na fila" (decisao de 05/09): {@code true} (padrao) o cliente ve a
+     * posicao; {@code false} ela some de todos os lugares do app do cliente — o tempo estimado fica
+     * sempre. O push de "proximo da fila" obedece a ele (QueuePushService).
+     */
+    @Column(name = "show_position", nullable = false)
+    private Boolean showPosition = true;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")
     @JsonBackReference("establishment-professionals")
