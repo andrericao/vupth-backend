@@ -7,6 +7,7 @@ import com.ospaulos.vupth.api.establishment.dto.response.EstablishmentResponse;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentsQueueSummaryUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentsQueueSummaryUseCase.QueueSummary;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.shared.SearchText;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
@@ -187,7 +188,7 @@ public class EstablishmentServiceImpl implements EstablishmentService {
         boolean hasNeighborhood = hasText(neighborhood);
 
         if (hasName) {
-            return establishmentRepository.findByNameContainingIgnoreCaseAndStatusNot(name);
+            return establishmentRepository.findByNameContainingIgnoreCaseAndStatusNot(SearchText.fold(name));
         }
         if (serviceType != null && hasNeighborhood) {
             return establishmentRepository.findActiveByServiceTypeAndNeighborhood(serviceType, neighborhood);

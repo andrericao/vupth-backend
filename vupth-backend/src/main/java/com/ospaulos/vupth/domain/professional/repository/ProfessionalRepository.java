@@ -98,7 +98,8 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     // timer de auto-fechamento (analogo a findEarliestIntention / findFirstByStatusOrderByExpiresAtAsc).
     Optional<Professional> findFirstByClosingGraceUntilIsNotNullOrderByClosingGraceUntilAsc();
 
-    // Busca de profissionais por nome (ou apelido, BAK-4) e/ou especialidade. Os parametros ja vem como
+    // Busca de profissionais por nome (ou apelido, BAK-4; sem acento — :nameLike chega dobrado pelo
+    // SearchText.fold e o translate tira os mesmos acentos da coluna) e/ou especialidade. Os parametros ja vem como
     // padroes LIKE prontos ("%" = sem filtro) — nunca null, para evitar problemas de
     // inferencia de tipo do Postgres (null vira bytea e quebra o LOWER). COALESCE
     // trata firstName/specialty nulos. Usado pelo owner para convidar — por isso so
@@ -112,8 +113,8 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     @Query("""
         SELECT p FROM Professional p
         JOIN FETCH p.baseUser u
-        WHERE (LOWER(COALESCE(u.firstName, '')) LIKE LOWER(:nameLike)
-               OR LOWER(COALESCE(u.nickname, '')) LIKE LOWER(:nameLike))
+        WHERE (FUNCTION('translate', LOWER(COALESCE(u.firstName, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') LIKE :nameLike
+               OR FUNCTION('translate', LOWER(COALESCE(u.nickname, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') LIKE :nameLike)
           AND LOWER(COALESCE(p.specialty, '')) LIKE LOWER(:specialtyLike)
           AND u.isActive = true
           AND p.establishment IS NULL

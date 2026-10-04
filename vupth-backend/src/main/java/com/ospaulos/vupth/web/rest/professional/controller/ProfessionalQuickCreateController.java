@@ -17,6 +17,7 @@ import com.ospaulos.vupth.api.professional.usecase.UpdateMyProfileUseCase;
 import com.ospaulos.vupth.api.professional.usecase.UpdateProfessionalStatusUseCase;
 import com.ospaulos.vupth.api.report.dto.response.ProfessionalReportResponse;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
+import com.ospaulos.vupth.domain.shared.SearchText;
 import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
@@ -105,7 +106,8 @@ public class ProfessionalQuickCreateController {
         log.info("GET /professional — search name={} specialty={}", name, specialty);
 
         // Prepara padroes LIKE: "%" quando sem filtro, "%termo%" quando filtrando.
-        String nameLike = (name != null && !name.isBlank()) ? "%" + name.trim() + "%" : "%";
+        // O nome vai sem acento e em minusculas (SearchText.fold): "joao" acha "João".
+        String nameLike = (name != null && !name.isBlank()) ? "%" + SearchText.fold(name) + "%" : "%";
         String specialtyLike = (specialty != null && !specialty.isBlank()) ? "%" + specialty.trim() + "%" : "%";
 
         List<ProfessionalSearchResponse> result = professionalRepository

@@ -187,6 +187,54 @@ class ProfessionalNicknameProjectionIntegrationTest {
                 .andDo(print());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // busca-sem-acento (Partner 24/09) — "joao" acha "João"
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(30)
+    @DisplayName("GET /establishment?name=<sem acento> — acha o apelido com acento")
+    void establishmentSearch_ignoresAccents() throws Exception {
+        String tag = java.util.UUID.randomUUID().toString().substring(0, 8);
+        mvc.perform(patch("/profile/general-infos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"nickname\":\"Joãozé" + tag + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/establishment").param("name", "JOAOZE" + tag))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(establishmentId))
+                .andDo(print());
+    }
+
+    @Test
+    @Order(31)
+    @DisplayName("GET /professional?name=<com acento> — a busca do dono acha o apelido sem acento, e o contrario")
+    void ownerSearch_ignoresAccents() throws Exception {
+        String tag = java.util.UUID.randomUUID().toString().substring(0, 8);
+        var freeProf = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        mvc.perform(post("/professional/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freeProf.token())
+                        .content("{\"name\":\"Avulso\",\"specialty\":\"Corte\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(patch("/profile/general-infos")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", freeProf.token())
+                        .content("{\"nickname\":\"Conceicao" + tag + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/professional")
+                        .param("name", "conceição" + tag)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].nickname").value("Conceicao" + tag))
+                .andDo(print());
+    }
+
     @AfterAll
     void tearDown() {
         serviceItemRepository.deleteAll();

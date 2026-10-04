@@ -59,18 +59,19 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         """)
     List<Establishment> findAllActive();
 
-    // Busca por nome (case-insensitive, parcial) excluindo INACTIVE. Casa tambem o nome e o APELIDO
+    // Busca por nome (sem caixa e sem acento, parcial) excluindo INACTIVE. Casa tambem o nome e o APELIDO
     // dos profissionais da loja (BAK-4 · S13): quem procura "Dedeco" acha a barbearia onde ele atende.
+    // :name chega dobrado pelo SearchText.fold; o translate tira da coluna os mesmos acentos (busca-sem-acento).
     @Query("""
         SELECT e FROM Establishment e
         LEFT JOIN FETCH e.services
         LEFT JOIN FETCH e.owner
-        WHERE (LOWER(e.name) LIKE LOWER(CONCAT('%', :name, '%'))
+        WHERE (FUNCTION('translate', LOWER(e.name), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') LIKE CONCAT('%', :name, '%')
                OR EXISTS (
                    SELECT 1 FROM Professional p JOIN p.baseUser u
                    WHERE p.establishment = e
-                     AND (LOWER(COALESCE(u.nickname, '')) LIKE LOWER(CONCAT('%', :name, '%'))
-                          OR LOWER(COALESCE(u.firstName, '')) LIKE LOWER(CONCAT('%', :name, '%')))))
+                     AND (FUNCTION('translate', LOWER(COALESCE(u.nickname, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') LIKE CONCAT('%', :name, '%')
+                          OR FUNCTION('translate', LOWER(COALESCE(u.firstName, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') LIKE CONCAT('%', :name, '%'))))
           AND e.status <> 'INACTIVE'
         ORDER BY e.createdAt DESC
         """)
