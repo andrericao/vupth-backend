@@ -313,6 +313,33 @@ class AttendanceRatingIntegrationTest {
         assertThat(svc.getRatingAverage()).isEqualTo(4.0);
     }
 
+    @Test
+    @Order(20)
+    @DisplayName("GET /establishment traz a avaliacao da loja: media ponderada, votos e rating_best (campos-do-historico)")
+    void establishmentListing_exposesStoreRating() throws Exception {
+        String name = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow().getName();
+        long count = profCount();
+        double expected = Math.round((double) profSum() / count * 100.0) / 100.0;
+
+        MvcResult r = mvc.perform(get("/establishment").param("name", name))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        org.json.JSONArray list = new org.json.JSONArray(r.getResponse().getContentAsString());
+        JSONObject store = null;
+        for (int i = 0; i < list.length(); i++) {
+            if (list.getJSONObject(i).getString("id").equals(establishmentId)) {
+                store = list.getJSONObject(i);
+            }
+        }
+        assertThat(store).as("a loja aparece na busca pelo nome").isNotNull();
+        assertThat(count).as("os testes anteriores deixaram votos").isPositive();
+        assertThat(store.getLong("rating_count")).isEqualTo(count);
+        assertThat(store.getDouble("rating_average")).isEqualTo(expected);
+        // um profissional so: o melhor e ele mesmo
+        assertThat(store.getDouble("rating_best")).isEqualTo(expected);
+    }
+
     @AfterAll
     void tearDown() {
         attendanceRatingRepository.deleteAll();

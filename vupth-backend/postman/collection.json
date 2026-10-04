@@ -1108,6 +1108,13 @@
          "});",
          "pm.test(\"#11: itens trazem estimated_wait_minutes\", () => {",
          "  pm.response.json().forEach(e => pm.expect(e).to.have.property(\"estimated_wait_minutes\"));",
+         "});",
+         "pm.test(\"campos-do-historico: itens trazem rating_average, rating_count e rating_best\", () => {",
+         "  pm.response.json().forEach(e => {",
+         "    pm.expect(e).to.have.property(\"rating_average\");",
+         "    pm.expect(e.rating_count).to.be.a(\"number\");",
+         "    pm.expect(e).to.have.property(\"rating_best\");",
+         "  });",
          "});"
         ],
         "type": "text/javascript"

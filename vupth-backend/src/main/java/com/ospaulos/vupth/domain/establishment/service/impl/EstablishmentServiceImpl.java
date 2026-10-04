@@ -117,14 +117,17 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
         // B10: UM resumo para a lista inteira. Antes era uma chamada ao use case de DETALHE por
         // loja — ver GetEstablishmentsQueueSummaryUseCase para o que mudou e o que foi preservado.
-        Map<UUID, QueueSummary> summaries = queueSummaryUseCase.execute(
-                found.stream().map(Establishment::getId).toList());
+        List<UUID> ids = found.stream().map(Establishment::getId).toList();
+        Map<UUID, QueueSummary> summaries = queueSummaryUseCase.execute(ids);
+        Map<UUID, RatingTotals> ratings = ratingsOf(ids);
 
         List<EstablishmentResponse> responses = found.stream()
                 .map(e -> {
                     QueueSummary summary = summaries.getOrDefault(e.getId(), QueueSummary.EMPTY);
+                    RatingTotals rating = ratings.getOrDefault(e.getId(), RatingTotals.EMPTY);
                     return EstablishmentResponse.fromEntity(
-                            e, summary.minWaitMinutes(), summary.availableProfessionals());
+                            e, summary.minWaitMinutes(), summary.availableProfessionals())
+                            .withRating(rating.average(), rating.count(), rating.best());
                 })
                 .toList();
 
@@ -173,6 +176,41 @@ public class EstablishmentServiceImpl implements EstablishmentService {
                         .map(EstablishmentAddress::getAddress)
                         .anyMatch(location::matches))
                 .toList();
+    }
+
+    /**
+     * Avaliacao por loja (campos-do-historico): soma das notas e dos votos dos profissionais, para a
+     * media PONDERADA, e a maior media entre eles ({@code rating_best}). Uma consulta para a lista.
+     */
+    record RatingTotals(long sum, long count, Double best) {
+        static final RatingTotals EMPTY = new RatingTotals(0L, 0L, null);
+
+        RatingTotals plus(long professionalSum, long professionalCount) {
+            double professionalAverage = round2((double) professionalSum / professionalCount);
+            return new RatingTotals(sum + professionalSum, count + professionalCount,
+                    best == null ? professionalAverage : Math.max(best, professionalAverage));
+        }
+
+        Double average() {
+            return count == 0 ? null : round2((double) sum / count);
+        }
+
+        private static double round2(double value) {
+            return Math.round(value * 100.0) / 100.0;
+        }
+    }
+
+    private Map<UUID, RatingTotals> ratingsOf(List<UUID> establishmentIds) {
+        if (establishmentIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, RatingTotals> totals = new java.util.HashMap<>();
+        for (Object[] row : professionalRepository.findRatingsByEstablishmentIds(establishmentIds)) {
+            totals.merge((UUID) row[0],
+                    RatingTotals.EMPTY.plus(((Number) row[1]).longValue(), ((Number) row[2]).longValue()),
+                    (a, b) -> a.plus(b.sum(), b.count()));
+        }
+        return totals;
     }
 
     private static boolean hasText(String value) {

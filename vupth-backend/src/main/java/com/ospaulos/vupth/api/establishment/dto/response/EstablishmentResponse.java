@@ -69,7 +69,20 @@ public record EstablishmentResponse(
         // nao tem coordenada — nesse caso ela vai para o FIM da lista em vez de sumir (so some se a
         // busca tambem mandar um radiusKm explicito).
         @JsonProperty("distance_km")
-        Double distanceKm
+        Double distanceKm,
+
+        // Avaliacao da loja (campos-do-historico, pedido do Client 11/07), so na listagem publica:
+        // rating_average = soma das notas / soma dos votos dos profissionais (PONDERADA, nao media
+        // de medias), 2 casas; rating_count = total de votos; rating_best = a maior media entre os
+        // profissionais. rating_average e rating_best null sem voto (ou fora da listagem).
+        @JsonProperty("rating_average")
+        Double ratingAverage,
+
+        @JsonProperty("rating_count")
+        Long ratingCount,
+
+        @JsonProperty("rating_best")
+        Double ratingBest
 ) {
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return fromEntity(establishment, null, null);
@@ -95,6 +108,9 @@ public record EstablishmentResponse(
                 establishment.isOpenNow(),
                 establishment.getStatus() != null ? establishment.getStatus().name() : null,
                 AddressResponse.fromEntity(establishment.getMainAddress()),
+                null,
+                null,
+                null,
                 null
         );
     }
@@ -108,6 +124,14 @@ public record EstablishmentResponse(
         return new EstablishmentResponse(
                 id, services, name, serviceType, urlImage, ownerId, phone, instagram,
                 openingTime, closingTime, estimatedWaitMinutes, availableProfessionals,
-                openStatus, isOpen, status, address, distanceKm);
+                openStatus, isOpen, status, address, distanceKm, ratingAverage, ratingCount, ratingBest);
+    }
+
+    /** Copia com a avaliacao da loja — calculada em lote na listagem publica, depois do mapeamento. */
+    public EstablishmentResponse withRating(Double ratingAverage, Long ratingCount, Double ratingBest) {
+        return new EstablishmentResponse(
+                id, services, name, serviceType, urlImage, ownerId, phone, instagram,
+                openingTime, closingTime, estimatedWaitMinutes, availableProfessionals,
+                openStatus, isOpen, status, address, distanceKm, ratingAverage, ratingCount, ratingBest);
     }
 }

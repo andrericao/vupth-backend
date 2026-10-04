@@ -49,6 +49,20 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     List<Object[]> findWithServiceByEstablishmentIds(
             @Param("establishmentIds") Collection<UUID> establishmentIds);
 
+    /**
+     * Notas dos profissionais das lojas da listagem ({@code [establishmentId, ratingSum, ratingCount]}),
+     * so de quem ja tem voto — a media da loja e o {@code rating_best} saem daqui em memoria
+     * (campos-do-historico). Uma consulta para a pagina inteira, como o resumo de fila (B10).
+     */
+    @Query("""
+        SELECT p.establishment.id, p.ratingSum, p.ratingCount
+        FROM Professional p
+        WHERE p.establishment.id IN :establishmentIds
+          AND p.ratingCount > 0
+        """)
+    List<Object[]> findRatingsByEstablishmentIds(
+            @Param("establishmentIds") Collection<UUID> establishmentIds);
+
     // Find available professionals in an establishment
     @Query("SELECT p FROM Professional p WHERE p.establishment.id = :establishmentId AND p.isAvailable = true")
     List<Professional> findAvailableByEstablishmentId(@Param("establishmentId") UUID establishmentId);
