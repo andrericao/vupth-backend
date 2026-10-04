@@ -120,13 +120,15 @@ class ProfessionalContactPhoneIntegrationTest {
 
     @Test
     @Order(30)
-    @DisplayName("PATCH /professional/me — 400 contato com letra")
-    void patchMe_invalidContact_400() throws Exception {
+    @DisplayName("PATCH /professional/me — 422 VALIDATION_ERROR contato com letra")
+    void patchMe_invalidContact_422() throws Exception {
         mvc.perform(patch("/professional/me")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken)
                         .content("{\"contact_phone\":\"liga pra mim\"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.contactPhone").exists());
     }
 
     @Test
