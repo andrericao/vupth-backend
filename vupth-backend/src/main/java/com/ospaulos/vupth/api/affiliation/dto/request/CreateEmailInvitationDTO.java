@@ -10,4 +10,9 @@ public record CreateEmailInvitationDTO(
         @Email(message = "email must be valid")
         @Size(max = 150, message = "email must be at most 150 characters")
         String email
-) {}
+) {
+    /** Tira os espacos antes do @Email: " Fulano@X.com " e o mesmo e-mail, nao um invalido. */
+    public CreateEmailInvitationDTO {
+        email = email == null ? null : email.trim();
+    }
+}
