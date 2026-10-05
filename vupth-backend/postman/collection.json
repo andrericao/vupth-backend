@@ -24881,7 +24881,10 @@
     "packages": {},
     "requests": {},
     "exec": [
-     ""
+     "// CI (decisao de 05/10): com ci_secret (--env-var no Actions), todo request leva o header X-Vupth-CI",
+     "// e passa por fora do rate limit de auth do staging/prod. Local: sem ci_secret, nada muda.",
+     "const ciSecret = pm.variables.get('ci_secret');",
+     "if (ciSecret) { pm.request.headers.upsert({ key: 'X-Vupth-CI', value: ciSecret }); }"
     ]
    }
   },

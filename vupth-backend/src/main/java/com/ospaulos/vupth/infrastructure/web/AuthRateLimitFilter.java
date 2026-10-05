@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -32,38 +34,59 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code X-Forwarded-For} (o Render e o Railway ficam na frente). Com duas instancias cada uma conta
  * a sua parte — o teto efetivo dobra, o que ainda barra a sondagem em massa. Desligado em dev e
  * teste ({@code enabled=false}): o Newman local e a suite fazem centenas de logins do mesmo IP.</p>
+ *
+ * <p>O Newman do CI (staging e prod) passa por fora do limite com o header {@code X-Vupth-CI} igual ao
+ * segredo {@code vupth.auth.rate-limit.ci-secret} (env {@code RATE_LIMIT_CI_SECRET}) — decisao do
+ * Andre de 05/10 (pr70-rollback-recusado): a colecao faz ~28 POSTs de auth do mesmo IP e o 429 travava
+ * a homolog-last-good. Segredo vazio = ninguem passa por fora.</p>
  */
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 1)
 public class AuthRateLimitFilter extends OncePerRequestFilter {
 
+    static final String CI_HEADER = "X-Vupth-CI";
     private static final Set<String> LIMITED = Set.of("/auth/login", "/auth/register", "/auth/forgot-password");
 
     private final boolean enabled;
     private final int maxRequests;
     private final long windowMillis;
     private final Clock clock;
+    private final byte[] ciSecret;
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
     @Autowired
     public AuthRateLimitFilter(
             @Value("${vupth.auth.rate-limit.enabled:true}") boolean enabled,
             @Value("${vupth.auth.rate-limit.max-requests:10}") int maxRequests,
-            @Value("${vupth.auth.rate-limit.window-seconds:60}") long windowSeconds) {
-        this(enabled, maxRequests, windowSeconds, Clock.systemUTC());
+            @Value("${vupth.auth.rate-limit.window-seconds:60}") long windowSeconds,
+            @Value("${vupth.auth.rate-limit.ci-secret:}") String ciSecret) {
+        this(enabled, maxRequests, windowSeconds, Clock.systemUTC(), ciSecret);
     }
 
     AuthRateLimitFilter(boolean enabled, int maxRequests, long windowSeconds, Clock clock) {
+        this(enabled, maxRequests, windowSeconds, clock, "");
+    }
+
+    AuthRateLimitFilter(boolean enabled, int maxRequests, long windowSeconds, Clock clock, String ciSecret) {
         this.enabled = enabled;
         this.maxRequests = maxRequests;
         this.windowMillis = windowSeconds * 1000;
         this.clock = clock;
+        this.ciSecret = ciSecret == null ? new byte[0] : ciSecret.getBytes(StandardCharsets.UTF_8);
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !enabled || !"POST".equals(request.getMethod()) || !LIMITED.contains(request.getRequestURI());
+        return !enabled || !"POST".equals(request.getMethod()) || !LIMITED.contains(request.getRequestURI())
+                || isCi(request);
+    }
+
+    /** O header do CI so vale com segredo configurado; a comparacao em tempo constante nao vaza o segredo. */
+    private boolean isCi(HttpServletRequest request) {
+        String header = request.getHeader(CI_HEADER);
+        return ciSecret.length > 0 && header != null
+                && MessageDigest.isEqual(ciSecret, header.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override

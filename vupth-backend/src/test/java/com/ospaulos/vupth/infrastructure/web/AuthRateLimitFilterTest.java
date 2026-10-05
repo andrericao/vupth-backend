@@ -97,4 +97,51 @@ class AuthRateLimitFilterTest {
 
         assertThat(passed).hasValue(3);
     }
+
+    @Test
+    @DisplayName("o CI com o header X-Vupth-CI igual ao segredo passa por fora do limite")
+    void ciHeaderWithSecretSkipsLimit() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC), "s3gredo");
+        AtomicInteger passed = new AtomicInteger();
+
+        for (int i = 0; i < 5; i++) {
+            MockHttpServletRequest request = post("/auth/register", "4.4.4.4");
+            request.addHeader(AuthRateLimitFilter.CI_HEADER, "s3gredo");
+            assertThat(run(filter, request, passed).getStatus()).isEqualTo(200);
+        }
+
+        assertThat(passed).hasValue(5);
+    }
+
+    @Test
+    @DisplayName("header do CI com valor errado conta como qualquer outro pedido")
+    void ciHeaderWithWrongValueIsLimited() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC), "s3gredo");
+        AtomicInteger passed = new AtomicInteger();
+
+        MockHttpServletRequest first = post("/auth/login", "5.5.5.5");
+        first.addHeader(AuthRateLimitFilter.CI_HEADER, "chute");
+        MockHttpServletRequest second = post("/auth/login", "5.5.5.5");
+        second.addHeader(AuthRateLimitFilter.CI_HEADER, "chute");
+        run(filter, first, passed);
+
+        assertThat(run(filter, second, passed).getStatus()).isEqualTo(429);
+        assertThat(passed).hasValue(1);
+    }
+
+    @Test
+    @DisplayName("sem segredo configurado, nem header vazio passa por fora")
+    void noSecretConfiguredNeverSkips() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC), "");
+        AtomicInteger passed = new AtomicInteger();
+
+        MockHttpServletRequest first = post("/auth/login", "6.6.6.6");
+        first.addHeader(AuthRateLimitFilter.CI_HEADER, "");
+        MockHttpServletRequest second = post("/auth/login", "6.6.6.6");
+        second.addHeader(AuthRateLimitFilter.CI_HEADER, "");
+        run(filter, first, passed);
+
+        assertThat(run(filter, second, passed).getStatus()).isEqualTo(429);
+        assertThat(passed).hasValue(1);
+    }
 }

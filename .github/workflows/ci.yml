@@ -171,6 +171,7 @@ jobs:
         run: |
           newman run postman/collection.json \
             --env-var "base_url=$HOMOLOG_URL" \
+            --env-var "ci_secret=${{ secrets.VUPTH_CI_SECRET }}" \
             --reporters cli \
             --verbose \
             --bail
@@ -385,6 +386,7 @@ jobs:
         run: |
           newman run postman/collection.json \
             --env-var "base_url=$PROD_URL" \
+            --env-var "ci_secret=${{ secrets.VUPTH_CI_SECRET }}" \
             --reporters cli \
             --verbose \
             --bail
