@@ -392,3 +392,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/016-create-professional-hours-by-day.yaml
       relativeToChangeLogFile: true
+
+  # Origem da coordenada do endereco: GPS | GEOCODER (origem-da-coordenada, Partner S39)
+  - include:
+      file: changesets/00-foundation/006-add-location_source-to-address.yaml
+      relativeToChangeLogFile: true

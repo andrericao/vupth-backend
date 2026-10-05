@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.address.service;
 
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.address.repository.AddressRepository;
+import com.ospaulos.vupth.domain.address.valueObject.LocationSource;
 import com.ospaulos.vupth.infrastructure.geocoding.Coordinates;
 import com.ospaulos.vupth.infrastructure.geocoding.GeocodeQuery;
 import com.ospaulos.vupth.infrastructure.geocoding.Geocoder;
@@ -198,6 +199,7 @@ public class AddressGeocodingService {
                         address.setLatitude(coordinates.latitude());
                         address.setLongitude(coordinates.longitude());
                         address.setGeocodingFailed(false);
+                        address.setLocationSource(LocationSource.GEOCODER);
                         addressRepository.save(address);
                         log.info("[Geocoding] endereco {} geocodificado -> {},{}",
                                 addressId, coordinates.latitude(), coordinates.longitude());

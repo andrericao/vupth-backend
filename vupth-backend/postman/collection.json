@@ -22095,7 +22095,8 @@
          "    pm.expect(b.longitude).to.eql(-43.2764);",
          "  });",
          "}",
-         "pm.test(\"locationStatus LOCATED — com a coordenada do aparelho a loja ja entra na busca por raio\", () => pm.expect(pm.response.json().locationStatus).to.eql(\"LOCATED\"));"
+         "pm.test(\"locationStatus LOCATED — com a coordenada do aparelho a loja ja entra na busca por raio\", () => pm.expect(pm.response.json().locationStatus).to.eql(\"LOCATED\"));",
+         "pm.test(\"locationSource GPS — a coordenada veio do aparelho (origem-da-coordenada, S39)\", () => pm.expect(pm.response.json().locationSource).to.eql(\"GPS\"));"
         ],
         "type": "text/javascript"
        }
