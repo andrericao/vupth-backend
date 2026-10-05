@@ -1,0 +1,84 @@
+databaseChangeLog:
+  # Agenda do profissional (agenda-do-profissional, Andre 05/10): o mesmo modelo do horario da loja
+  # (029) por profissional — a semana em 7 linhas e uma linha por data de excecao. Sem linhas = nao
+  # configurada, e vale o horario da loja. Nada a preencher: ninguem tinha agenda propria antes.
+  - changeSet:
+      id: 016-create-professional_weekly_hours
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: professional_weekly_hours
+            columns:
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: day_of_week
+                  type: VARCHAR(9)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: closed
+                  type: BOOLEAN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: opens
+                  type: TIME
+              - column:
+                  name: closes
+                  type: TIME
+        - addPrimaryKey:
+            tableName: professional_weekly_hours
+            columnNames: professional_id, day_of_week
+            constraintName: pk_professional_weekly_hours
+        - addForeignKeyConstraint:
+            baseTableName: professional_weekly_hours
+            baseColumnNames: professional_id
+            constraintName: fk_weekly_hours_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
+
+  - changeSet:
+      id: 016-create-professional_date_hours
+      author: andrericao
+      changes:
+        - createTable:
+            tableName: professional_date_hours
+            columns:
+              - column:
+                  name: professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: hours_date
+                  type: DATE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: closed
+                  type: BOOLEAN
+                  constraints:
+                    nullable: false
+              - column:
+                  name: opens
+                  type: TIME
+              - column:
+                  name: closes
+                  type: TIME
+        - addPrimaryKey:
+            tableName: professional_date_hours
+            columnNames: professional_id, hours_date
+            constraintName: pk_professional_date_hours
+        - addForeignKeyConstraint:
+            baseTableName: professional_date_hours
+            baseColumnNames: professional_id
+            constraintName: fk_date_hours_professional
+            referencedTableName: professional
+            referencedColumnNames: id
+            onDelete: CASCADE
+

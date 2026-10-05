@@ -17,6 +17,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceNoRoomForService
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideProfessionalHoursException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionHorizonExceededException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionBeforeQueueEndException;
 import com.ospaulos.vupth.domain.attendance.exception.ProfessionalAgendaFullException;
@@ -435,7 +436,17 @@ public class AttendanceServiceImpl implements AttendanceService {
                         slot.start(), slot.durationMinutes(), PublicAgendaResponse.BREAK)));
         blocks.sort(java.util.Comparator.comparing(PublicAgendaResponse.Block::start));
 
-        return new PublicAgendaResponse(frameFor(professional), blocks);
+        // agenda-do-profissional: o horario que vale de fato em cada dia (loja ∩ agenda dele), ate o horizonte.
+        BusinessHours effective = professional.getEffectiveHours();
+        List<PublicAgendaResponse.Day> days = new java.util.ArrayList<>();
+        for (int i = 0; i <= INTENTION_HORIZON_DAYS; i++) {
+            java.time.LocalDate date = today.plusDays(i);
+            DayHours day = effective.on(date);
+            days.add(day == null
+                    ? new PublicAgendaResponse.Day(date, false, null, null)
+                    : new PublicAgendaResponse.Day(date, day.closed(), day.opens(), day.closes()));
+        }
+        return new PublicAgendaResponse(frameFor(professional), blocks, days);
     }
 
     @Override
@@ -520,6 +531,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (!establishment.isWithinBusinessHours(desiredTime)) {
             throw new IntentionOutsideBusinessHoursException(desiredTime);
         }
+        // agenda-do-profissional: dentro da loja, mas tambem dentro da agenda dele (sem agenda = a da loja).
+        BusinessHours effectiveHours = BusinessHours.effective(
+                establishment.getBusinessHours(), professional.getWorkingHours());
+        if (!effectiveHours.isWithin(BusinessClock.dateAt(desiredTime), BusinessClock.timeAt(desiredTime))) {
+            throw new IntentionOutsideProfessionalHoursException(desiredTime);
+        }
 
         // Invariante (definicao Andre 2026-07-13): o horario pretendido nao pode ser ANTERIOR ao
         // termino previsto dos atendimentos ja na fila viva. O horario EXATO do fim previsto e
@@ -556,7 +573,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         } while (!estimatedStart.equals(previous));
 
         // CHEIO/FULL: o fim projetado do encaixe ultrapassa o fechamento do dia pretendido? (definicao Andre)
-        if (!fitsBeforeClosing(establishment, estimatedStart, duration)) {
+        if (!fitsBeforeClosing(effectiveHours, estimatedStart, duration)) {
             throw new ProfessionalAgendaFullException(desiredTime);
         }
         return estimatedStart;
@@ -584,8 +601,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * esta na madrugada de uma virada de meia-noite (#2: horario por dia). Loja sem horario ou 24h
      * sempre cabe; dia fechado nunca cabe.
      */
-    private boolean fitsBeforeClosing(Establishment establishment, OffsetDateTime start, int durationMinutes) {
-        BusinessHours hours = establishment.getBusinessHours();
+    private boolean fitsBeforeClosing(BusinessHours hours, OffsetDateTime start, int durationMinutes) {
         if (!hours.isConfigured()) {
             return true;
         }

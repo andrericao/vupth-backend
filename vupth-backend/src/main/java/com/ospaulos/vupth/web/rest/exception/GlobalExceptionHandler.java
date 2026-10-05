@@ -34,6 +34,8 @@ import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotOpenExc
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHoursRequiredException;
 import com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException;
+import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideProfessionalHoursException;
+import com.ospaulos.vupth.domain.professional.exception.ProfessionalHoursOutsideEstablishmentException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotReadyException;
 import com.ospaulos.vupth.domain.establishment.exception.InvalidShowcaseFilterException;
 import com.ospaulos.vupth.domain.interval.exception.IntervalConflictException;
@@ -274,6 +276,20 @@ public class GlobalExceptionHandler {
             TargetTimeNotFeasibleException ex, HttpServletRequest req) {
         log.warn("[422] TargetTimeNotFeasible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_TARGET_NOT_FEASIBLE");
+    }
+
+    @ExceptionHandler(IntentionOutsideProfessionalHoursException.class)
+    public ResponseEntity<ErrorResponse> handleIntentionOutsideProfessionalHours(
+            IntentionOutsideProfessionalHoursException ex, HttpServletRequest req) {
+        log.warn("[422] IntentionOutsideProfessionalHours | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INTENTION_OUTSIDE_PROFESSIONAL_HOURS");
+    }
+
+    @ExceptionHandler(ProfessionalHoursOutsideEstablishmentException.class)
+    public ResponseEntity<ErrorResponse> handleProfessionalHoursOutsideEstablishment(
+            ProfessionalHoursOutsideEstablishmentException ex, HttpServletRequest req) {
+        log.warn("[422] ProfessionalHoursOutsideEstablishment | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "PROFESSIONAL_HOURS_OUTSIDE_ESTABLISHMENT");
     }
 
     @ExceptionHandler(IntentionOutsideBusinessHoursException.class)

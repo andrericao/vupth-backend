@@ -24595,6 +24595,341 @@
    ]
   },
   {
+   "name": "20 - agenda do profissional (agenda-do-profissional)",
+   "item": [
+    {
+     "name": "setup: register prof (agenda)",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ah_email\",\"ahprof_\"+Date.now()+\"@vupth.test\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ah_prof_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ah_email}}\",\"password\":\"Senha123!\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: login prof (agenda)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200) pm.collectionVariables.set(\"ah_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ah_email}}\",\"password\":\"Senha123!\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: quick-create loja (agenda)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"ah_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ah_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Loja Agenda {{$randomInt}}\",\"serviceType\":\"BARBER\"}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: dono vira profissional (agenda)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ah_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Prof Agenda\",\"establishmentId\":\"{{ah_estab_id}}\",\"specialty\":\"Barber\"}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: horario da loja 08-20 todos os dias",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ah_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ah_estab_id}}/hours/weekly",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\":[{\"day\":\"MONDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"},{\"day\":\"TUESDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"},{\"day\":\"WEDNESDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"},{\"day\":\"THURSDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"},{\"day\":\"FRIDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"},{\"day\":\"SATURDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"},{\"day\":\"SUNDAY\",\"closed\":false,\"opens\":\"08:00\",\"closes\":\"20:00\"}]}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "sem agenda propria: GET publico -> configured false, upcoming = loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"nao configurada\", () => pm.expect(r.configured).to.be.false);",
+         "pm.test(\"upcoming efetivo = loja\", () => pm.expect(r.upcoming[0].opens).to.equal(\"08:00\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/professional/{{ah_prof_id}}/hours",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] agenda passa da loja (07:00) -> 422 PROFESSIONAL_HOURS_OUTSIDE_ESTABLISHMENT",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.equal(\"PROFESSIONAL_HOURS_OUTSIDE_ESTABLISHMENT\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ah_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/hours/weekly",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\":[{\"day\":\"MONDAY\",\"closed\":false,\"opens\":\"07:00\",\"closes\":\"17:00\"},{\"day\":\"TUESDAY\",\"closed\":false,\"opens\":\"07:00\",\"closes\":\"17:00\"},{\"day\":\"WEDNESDAY\",\"closed\":false,\"opens\":\"07:00\",\"closes\":\"17:00\"},{\"day\":\"THURSDAY\",\"closed\":false,\"opens\":\"07:00\",\"closes\":\"17:00\"},{\"day\":\"FRIDAY\",\"closed\":false,\"opens\":\"07:00\",\"closes\":\"17:00\"},{\"day\":\"SATURDAY\",\"closed\":true},{\"day\":\"SUNDAY\",\"closed\":true}]}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "agenda 09-17 dias uteis, fim de semana fechado -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"configurada, 7 dias\", () => { pm.expect(r.configured).to.be.true; pm.expect(r.weekly).to.have.length(7); });"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ah_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/hours/weekly",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\":[{\"day\":\"MONDAY\",\"closed\":false,\"opens\":\"09:00\",\"closes\":\"17:00\"},{\"day\":\"TUESDAY\",\"closed\":false,\"opens\":\"09:00\",\"closes\":\"17:00\"},{\"day\":\"WEDNESDAY\",\"closed\":false,\"opens\":\"09:00\",\"closes\":\"17:00\"},{\"day\":\"THURSDAY\",\"closed\":false,\"opens\":\"09:00\",\"closes\":\"17:00\"},{\"day\":\"FRIDAY\",\"closed\":false,\"opens\":\"09:00\",\"closes\":\"17:00\"},{\"day\":\"SATURDAY\",\"closed\":true},{\"day\":\"SUNDAY\",\"closed\":true}]}"
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "agenda publica: days com o horario efetivo (31 dias)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"31 dias\", () => pm.expect(r.days).to.have.length(31));",
+         "pm.test(\"fim de semana fechado, dia util 09-17\", () => r.days.forEach(d => {",
+         "  const dow = new Date(d.date + \"T12:00:00Z\").getUTCDay();",
+         "  if (dow === 0 || dow === 6) pm.expect(d.closed).to.be.true;",
+         "  else { pm.expect(d.opens).to.equal(\"09:00\"); pm.expect(d.closes).to.equal(\"17:00\"); }",
+         "}));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/attendances/intentions/professional/{{ah_prof_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -25242,6 +25577,22 @@
   },
   {
    "key": "loc_estab_name",
+   "value": ""
+  },
+  {
+   "key": "ah_email",
+   "value": ""
+  },
+  {
+   "key": "ah_prof_id",
+   "value": ""
+  },
+  {
+   "key": "ah_token",
+   "value": ""
+  },
+  {
+   "key": "ah_estab_id",
    "value": ""
   }
  ],

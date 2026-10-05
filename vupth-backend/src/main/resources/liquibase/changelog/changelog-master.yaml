@@ -387,3 +387,8 @@ databaseChangeLog:
   - include:
       file: changesets/90-affiliation/002-create-email-invitation.yaml
       relativeToChangeLogFile: true
+
+  # Agenda do profissional: semana + excecoes por data (agenda-do-profissional, Andre 05/10)
+  - include:
+      file: changesets/60-professional/016-create-professional-hours-by-day.yaml
+      relativeToChangeLogFile: true
