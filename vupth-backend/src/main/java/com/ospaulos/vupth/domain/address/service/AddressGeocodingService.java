@@ -17,11 +17,14 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Preenche {@code latitude}/{@code longitude} de um {@link Address} (backlog #2 — fatia A). E o unico
@@ -55,7 +58,7 @@ public class AddressGeocodingService {
     @Value("${vupth.geocoding.backfill-on-boot:false}")
     private boolean backfillOnBoot;
 
-    private ExecutorService worker;
+    private ScheduledExecutorService worker;
 
     public AddressGeocodingService(AddressRepository addressRepository,
                                    Geocoder geocoder,
@@ -67,7 +70,7 @@ public class AddressGeocodingService {
 
     @PostConstruct
     void init() {
-        this.worker = Executors.newSingleThreadExecutor(runnable -> {
+        this.worker = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "geocoding-1");
             thread.setDaemon(true);
             return thread;
@@ -135,10 +138,30 @@ public class AddressGeocodingService {
     }
 
     /**
+     * Uma unica nova tentativa depois da pausa que o geocoder pediu (429 — geocoder-429). A segunda
+     * falha marca o endereco como nao resolvido: nada de laco contra um servico que esta recusando.
+     *
+     * @return {@code false} se nao deu para agendar (executor parado) — quem chamou marca a falha
+     */
+    boolean scheduleRetry(UUID addressId, Duration delay) {
+        try {
+            worker.schedule(() -> resolveAndSave(addressId, true), delay.toMillis(), TimeUnit.MILLISECONDS);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("[Geocoding] nao foi possivel reagendar o endereco {}: {}", addressId, e.toString());
+            return false;
+        }
+    }
+
+    /**
      * Corpo do worker: le o endereco, consulta o geocoder <b>fora</b> da transacao (chamada de rede
      * nao segura conexao de banco) e grava o resultado numa transacao curta.
      */
     void resolveAndSave(UUID addressId) {
+        resolveAndSave(addressId, false);
+    }
+
+    void resolveAndSave(UUID addressId, boolean isRetry) {
         try {
             GeocodeQuery query = transactionTemplate.execute(status ->
                     addressRepository.findById(addressId).map(this::toQuery).orElse(null));
@@ -151,6 +174,19 @@ public class AddressGeocodingService {
 
             Optional<Coordinates> resolved = geocoder.geocode(query);
             if (resolved.isEmpty()) {
+                Optional<Instant> pausedUntil = geocoder.unavailableUntil();
+                if (pausedUntil.isPresent() && !isRetry) {
+                    // Folga de 1 s sobre a pausa: chegar no limite exato pegaria o 429 de novo.
+                    Duration delay = Duration.between(Instant.now(), pausedUntil.get()).plusSeconds(1);
+                    if (delay.isNegative()) {
+                        delay = Duration.ofSeconds(1);
+                    }
+                    if (scheduleRetry(addressId, delay)) {
+                        log.info("[Geocoding] endereco {} adiado {} s — geocoder em pausa (429)",
+                                addressId, delay.toSeconds());
+                        return;
+                    }
+                }
                 log.info("[Geocoding] endereco {} nao pode ser resolvido — segue sem coordenada", addressId);
                 markFailed(addressId);
                 return;

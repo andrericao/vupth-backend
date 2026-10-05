@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -132,6 +133,36 @@ class AddressGeocodingServiceTest {
         service.resolveAndSave(addressId); // nao lanca
 
         // Fora do ar conta como nao resolvido: sem retentativa, PENDING ficaria para sempre.
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.UNRESOLVED);
+    }
+
+    @Test
+    @DisplayName("Geocoder em pausa (429): nao marca UNRESOLVED — reagenda UMA vez para depois da pausa")
+    void pausedGeocoderReschedulesOnce() {
+        service.init();
+        Address address = addressWithoutCoordinates();
+        when(addressRepository.findById(addressId)).thenReturn(Optional.of(address));
+        when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        when(geocoder.unavailableUntil()).thenReturn(Optional.of(Instant.now().plusSeconds(120)));
+
+        service.resolveAndSave(addressId);
+
+        // "volte mais tarde" nao e "nao achei": o dono nao pode ver UNRESOLVED por causa do IP do Render.
+        verify(addressRepository, never()).save(any());
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.PENDING);
+        service.shutdown();
+    }
+
+    @Test
+    @DisplayName("Na nova tentativa, ainda em pausa: marca UNRESOLVED — sem laco contra o 429")
+    void retryStillPausedMarksFailed() {
+        Address address = addressWithoutCoordinates();
+        when(addressRepository.findById(addressId)).thenReturn(Optional.of(address));
+        when(geocoder.geocode(any())).thenReturn(Optional.empty());
+        lenient().when(geocoder.unavailableUntil()).thenReturn(Optional.of(Instant.now().plusSeconds(120)));
+
+        service.resolveAndSave(addressId, true);
+
         assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.UNRESOLVED);
     }
 
