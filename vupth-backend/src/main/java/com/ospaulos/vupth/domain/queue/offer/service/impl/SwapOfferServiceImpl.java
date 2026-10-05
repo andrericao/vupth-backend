@@ -28,6 +28,8 @@ import com.ospaulos.vupth.domain.queue.offer.model.SwapOffer;
 import com.ospaulos.vupth.domain.queue.offer.repository.SwapOfferRepository;
 import com.ospaulos.vupth.domain.queue.offer.service.SwapOfferService;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
+import com.ospaulos.vupth.domain.queue.swap.SwapDurationRule;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapDurationIncompatibleException;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import lombok.AllArgsConstructor;
@@ -198,6 +200,9 @@ public class SwapOfferServiceImpl implements SwapOfferService {
                 .filter(o -> o.getRequesterClient() == null
                         || !o.getRequesterClient().getId().equals(callerClientId)) // nao ofertas minhas
                 .filter(o -> isEligible(o, myPos, queue))
+                // D14: so as ofertas com duracao compativel chegam na lista
+                .filter(o -> SwapDurationRule.compatible(
+                        requesterMinutes(o), callerAttendance.getEstimatedTotalMinutes()))
                 .map(SwapOfferResponse::from)
                 .toList();
     }
@@ -238,6 +243,12 @@ public class SwapOfferServiceImpl implements SwapOfferService {
         if (!isEligible(offer, callerPos, queue)) {
             throw new SwapOfferNotAllowedException(
                     "Voce nao e elegivel para aceitar esta oferta (posicao/direcao incompativel).");
+        }
+        // D14: ate 10 min de diferenca de duracao — senao a troca empurra todo mundo de tras.
+        int requesterMinutes = requesterMinutes(offer);
+        int callerMinutes = callerAttendance.getEstimatedTotalMinutes();
+        if (!SwapDurationRule.compatible(requesterMinutes, callerMinutes)) {
+            throw new SwapDurationIncompatibleException(requesterMinutes, callerMinutes);
         }
 
         // O atendimento do solicitante DEPOIS da troca — e o que ele recebe na notificacao. Na fatia 1
@@ -385,6 +396,19 @@ public class SwapOfferServiceImpl implements SwapOfferService {
             case EARLIER -> requesterPos > callerPos;
             case LATER -> requesterPos < callerPos;
         };
+    }
+
+    /**
+     * Duracao estimada do lado do solicitante: a do atendimento dele (fatia 1) ou a soma dos servicos
+     * escolhidos na oferta de fora da fila (fatia 2, o atendimento so nasce no aceite).
+     */
+    private static int requesterMinutes(SwapOffer offer) {
+        if (offer.isFromQueue()) {
+            return offer.getRequesterAttendance().getEstimatedTotalMinutes();
+        }
+        return offer.getServiceItems() == null ? 0 : offer.getServiceItems().stream()
+                .mapToInt(item -> item.getEstimatedMinutes() != null ? item.getEstimatedMinutes() : 0)
+                .sum();
     }
 
     /**

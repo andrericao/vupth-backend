@@ -37,7 +37,7 @@ import java.util.UUID;
  *  Spring Data JPA sees id != null → calls em.merge() instead of em.persist().
  *  em.merge() on a brand-new @MapsId entity causes a detached-entity conflict in Hibernate 6.
  *  The safe pattern mirrors Client and Owner: create via addXxxProfile() on BaseUser,
- *  let cascade=ALL handle the persist, then reload and configure.
+ *  let cascade=ALL handle the persist, then use the managed copy returned by save().
  */
 @Slf4j
 @Service
@@ -80,12 +80,13 @@ public class QuickCreateProfessionalUseCase {
         //    addProfessionalProfile() sets user.professional = new Professional(user),
         //    which also adds PROFESSIONAL role. cascade=ALL on BaseUser.professional
         //    issues em.persist() (not merge) — avoids the @MapsId + merge() conflict.
-        //    After save, user.professional IS the persisted managed instance — no extra findById needed.
         user.addProfessionalProfile();
-        Professional professional = user.getProfessional(); // in-memory reference BEFORE save
-        professional.setSpecialty(request.specialty());     // set BEFORE cascade persist
-        professional.setEstablishment(establishment);       // set BEFORE cascade persist
-        userRepository.save(user);                          // cascade persists Professional with all fields set
+        Professional draft = user.getProfessional();        // in-memory reference BEFORE save
+        draft.setSpecialty(request.specialty());            // set BEFORE cascade persist
+        draft.setEstablishment(establishment);              // set BEFORE cascade persist
+        // save() de um usuario ja existente e um merge: o Professional gerenciado e a COPIA devolvida, nao o
+        // rascunho. Os intervalos abaixo precisam apontar para o gerenciado (Hibernate 6.6 recusa o transiente).
+        Professional professional = userRepository.save(user).getProfessional();
 
         // Seed refeicoes padrao (almoco/janta) — spec item #11a
         intervalService.seedDefaultMeals(professional);

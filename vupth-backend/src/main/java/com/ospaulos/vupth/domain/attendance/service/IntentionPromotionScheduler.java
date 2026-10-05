@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.attendance.service;
 
+import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Gatilho de promocao das intencoes de atendimento (backlog #4, fatia 3) — <b>EVENT-DRIVEN, nao polling</b>.
@@ -64,6 +66,13 @@ public class IntentionPromotionScheduler {
 
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> pending;
+
+    /** Trava (reentrante) no lugar de synchronized: com threads virtuais, I/O dentro de um monitor prende a portadora. */
+    private final ReentrantLock lock = new ReentrantLock();
+
+    /** Trava entre instancias. Opcional so para os testes unitarios, que montam o scheduler na mao. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ClusterLock clusterLock;
 
     public IntentionPromotionScheduler(AttendanceRepository attendanceRepository,
                                        AttendanceService attendanceService,
@@ -113,7 +122,16 @@ public class IntentionPromotionScheduler {
      * recalcula a cabeca. Se nao ha intencao, fica sem timer. Se a cabeca ja esta vencida (horario proximo ou
      * ja passou), dispara "ja" (em 1s). Chamado pos-commit de create/edit/cancel e no boot.
      */
-    public synchronized void reschedule() {
+    public void reschedule() {
+        lock.lock();
+        try {
+            rescheduleLocked();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void rescheduleLocked() {
         cancelPending();
         Optional<Attendance> head = attendanceRepository.findEarliestIntention();
         if (head.isEmpty() || head.get().getDesiredTime() == null) {
@@ -131,7 +149,25 @@ public class IntentionPromotionScheduler {
      * (cobre rajadas apos ociosidade), reconsultando a cabeca a cada passo, e reagenda pro proximo horario.
      * Executado na thread do scheduler. Sincronizado com {@link #reschedule()} para nao correr com um create/edit.
      */
-    synchronized void runPromotionCycle() {
+    void runPromotionCycle() {
+        lock.lock();
+        try {
+            if (clusterLock == null) {
+                runPromotionCycleLocked();
+                return;
+            }
+            if (clusterLock.runExclusive("intention-promotion", this::runPromotionCycleLocked)) {
+                return;
+            }
+            // Outra instancia esta rodando este ciclo: ela processa o que venceu; aqui so se tenta de novo.
+            log.info("[IntentionPromo] ciclo — outra instancia tem a trava; nova tentativa em 30s");
+            pending = taskScheduler.schedule(this::runPromotionCycle, Instant.now().plusSeconds(30));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void runPromotionCycleLocked() {
         pending = null;
         while (true) {
             Optional<Attendance> headOpt = attendanceRepository.findEarliestIntention();

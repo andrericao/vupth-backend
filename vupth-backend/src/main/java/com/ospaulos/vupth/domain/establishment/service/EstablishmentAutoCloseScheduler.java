@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.establishment.service;
 
+import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
@@ -17,6 +18,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Auto-fechamento por horario (S1 fatia 5 / BUG1 — "a loja nao pode dormir aberta") — <b>EVENT-DRIVEN,
@@ -64,6 +66,13 @@ public class EstablishmentAutoCloseScheduler {
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> pending;
 
+    /** Trava (reentrante) no lugar de synchronized: com threads virtuais, I/O dentro de um monitor prende a portadora. */
+    private final ReentrantLock lock = new ReentrantLock();
+
+    /** Trava entre instancias. Opcional so para os testes unitarios, que montam o scheduler na mao. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ClusterLock clusterLock;
+
     public EstablishmentAutoCloseScheduler(AutoCloseService autoCloseService,
                                            QueueWebSocketPublisher queuePublisher,
                                            PushNotificationPublisher pushPublisher) {
@@ -106,7 +115,16 @@ public class EstablishmentAutoCloseScheduler {
      * anterior e recalcula o proximo evento. Sem evento -> fica ocioso. Se ja venceu, dispara "ja" (em
      * 1s). Chamado pos-commit de mudanca de status/accepting-new e no boot.
      */
-    public synchronized void reschedule() {
+    public void reschedule() {
+        lock.lock();
+        try {
+            rescheduleLocked();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void rescheduleLocked() {
         cancelPending();
         Optional<OffsetDateTime> next = autoCloseService.nextEventAt();
         if (next.isEmpty()) {
@@ -122,7 +140,25 @@ public class EstablishmentAutoCloseScheduler {
      * Roda as duas fases do auto-fechamento e reagenda para o proximo evento. Executado na thread do
      * scheduler. Sincronizado com {@link #reschedule()} para nao correr com um create/edit da camada web.
      */
-    synchronized void runCycle() {
+    void runCycle() {
+        lock.lock();
+        try {
+            if (clusterLock == null) {
+                runCycleLocked();
+                return;
+            }
+            if (clusterLock.runExclusive("auto-close", this::runCycleLocked)) {
+                return;
+            }
+            // Outra instancia esta rodando este ciclo: ela processa o que venceu; aqui so se tenta de novo.
+            log.info("[AutoClose] ciclo — outra instancia tem a trava; nova tentativa em 30s");
+            pending = taskScheduler.schedule(this::runCycle, Instant.now().plusSeconds(30));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void runCycleLocked() {
         pending = null;
         try {
             autoCloseService.promptDueClosings().forEach(this::notifyPrompt);

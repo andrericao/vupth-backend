@@ -1,0 +1,45 @@
+databaseChangeLog:
+
+  # Historico rapido (Partner, 26/09 — historico-rapido): a Semana e o Mes do Partner leem
+  # GET /attendances por profissional ou por loja num intervalo de datas, ordenado por scheduled_time.
+  # Os indices de 001 comecam por (coluna, status): sem filtro de status o intervalo de datas nao usa
+  # a segunda coluna e o Postgres varre todo o historico da pessoa. Estes cobrem o recorte por data
+  # e entregam o ORDER BY pronto.
+
+  - changeSet:
+      id: 99-perf-008-attendance-professional-scheduled
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: attendance
+                indexName: idx_attendance_professional_scheduled
+      changes:
+        - createIndex:
+            tableName: attendance
+            indexName: idx_attendance_professional_scheduled
+            columns:
+              - column:
+                  name: professional_id
+              - column:
+                  name: scheduled_time
+
+  - changeSet:
+      id: 99-perf-009-attendance-establishment-scheduled
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - indexExists:
+                tableName: attendance
+                indexName: idx_attendance_establishment_scheduled
+      changes:
+        - createIndex:
+            tableName: attendance
+            indexName: idx_attendance_establishment_scheduled
+            columns:
+              - column:
+                  name: establishment_id
+              - column:
+                  name: scheduled_time

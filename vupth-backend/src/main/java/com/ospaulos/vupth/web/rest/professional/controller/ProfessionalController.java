@@ -127,6 +127,8 @@ public class ProfessionalController {
 
         ServiceItemResponse response = serviceItemService.updateServiceItem(
                 principal.getUserId(), professionalId, itemId, request);
+        // Tempo/preco novo chega na hora a quem esta com a loja aberta (o snapshot leva os servicos).
+        queuePublisher.broadcastQueue(response.establishmentId());
         return ResponseEntity.ok(response);
     }
 

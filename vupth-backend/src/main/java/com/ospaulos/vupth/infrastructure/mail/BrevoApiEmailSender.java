@@ -78,11 +78,16 @@ public class BrevoApiEmailSender implements EmailSender {
 
     @Override
     public void sendPasswordResetCode(String toEmail, String code) {
+        send(toEmail, PasswordResetMessage.SUBJECT, PasswordResetMessage.body(code));
+    }
+
+    @Override
+    public void send(String toEmail, String subject, String body) {
         Map<String, Object> payload = Map.of(
                 "sender", Map.of("email", from, "name", fromName),
                 "to", List.of(Map.of("email", toEmail)),
-                "subject", PasswordResetMessage.SUBJECT,
-                "textContent", PasswordResetMessage.body(code));
+                "subject", subject,
+                "textContent", body);
         try {
             BrevoSendResponse response = restClient.post()
                     .uri(url)
@@ -93,15 +98,15 @@ public class BrevoApiEmailSender implements EmailSender {
                     .retrieve()
                     .body(BrevoSendResponse.class);
             String messageId = response == null ? null : response.messageId();
-            log.info("[MAIL:brevo] reset code enviado para {} (messageId={})", toEmail, messageId);
+            log.info("[MAIL:brevo] '{}' enviado para {} (messageId={})", subject, toEmail, messageId);
         } catch (RestClientResponseException e) {
             // O corpo do Brevo e o unico lugar onde aparece o MOTIVO ("Key not found", "sender not
             // valid"). Sem ele sobra o status, que nao separa chave errada de remetente nao verificado.
-            log.error("[MAIL:brevo] falha ao enviar reset code para {}: HTTP {} — {}",
-                    toEmail, e.getStatusCode().value(), e.getResponseBodyAsString());
+            log.error("[MAIL:brevo] falha ao enviar '{}' para {}: HTTP {} — {}",
+                    subject, toEmail, e.getStatusCode().value(), e.getResponseBodyAsString());
             throw new EmailDeliveryException("Brevo recusou o envio (HTTP " + e.getStatusCode().value() + ")", e);
         } catch (Exception e) {
-            log.error("[MAIL:brevo] falha ao enviar reset code para {}: {}", toEmail, e.getMessage());
+            log.error("[MAIL:brevo] falha ao enviar '{}' para {}: {}", subject, toEmail, e.getMessage());
             throw new EmailDeliveryException("Falha ao chamar a API do Brevo", e);
         }
     }

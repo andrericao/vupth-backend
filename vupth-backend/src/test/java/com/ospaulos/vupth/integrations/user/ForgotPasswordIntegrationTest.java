@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@link EmailSender} é mockado ({@code @MockBean}) para capturar o código gerado — assim o teste
  * exercita o ciclo completo sem SMTP real (em produção/homolog o provider é {@code none}).
  *
- * <p>Cobre: anti-enumeração (200 para e-mail inexistente, sem envio); envio do código; ciclo feliz
+ * <p>Cobre: e-mail inexistente → 404 {@code EMAIL_NOT_FOUND}, sem envio (D2, BAK-6); envio do código; ciclo feliz
  * (reset → login com a senha nova funciona, senha antiga falha, código não pode ser reusado);
  * código errado → 400; e-mail desconhecido no reset → 400; validação de campos → 422.
  */
@@ -67,9 +67,14 @@ class ForgotPasswordIntegrationTest {
     }
 
     @Test
-    @DisplayName("forgot-password — e-mail inexistente responde 200 e NÃO envia (anti-enumeração)")
-    void forgotPassword_unknownEmail_200_noLeak() throws Exception {
-        forgot("naoexiste-" + faker.number().digits(8) + "@vupth.test");
+    @DisplayName("forgot-password — e-mail inexistente responde 404 EMAIL_NOT_FOUND e NÃO envia (D2)")
+    void forgotPassword_unknownEmail_404_noSend() throws Exception {
+        mvc.perform(post("/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(
+                                new ForgotPasswordRequest("naoexiste-" + faker.number().digits(8) + "@vupth.test"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("EMAIL_NOT_FOUND"));
         verifyNoInteractions(emailSender);
     }
 

@@ -59,12 +59,20 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         """)
     List<Establishment> findAllActive();
 
-    // Busca por nome (case-insensitive, parcial) excluindo INACTIVE
+    // Busca por nome (sem caixa e sem acento, parcial) excluindo INACTIVE. Casa tambem o nome e o APELIDO
+    // dos profissionais da loja (BAK-4 · S13): quem procura "Dedeco" acha a barbearia onde ele atende.
+    // :name chega dobrado pelo SearchText.fold; o translate tira da coluna os mesmos acentos (busca-sem-acento).
+    // CAST AS String: no Hibernate 6 o FUNCTION() sai tipado como Object e o LIKE recusa (mvn-131-erros).
     @Query("""
         SELECT e FROM Establishment e
         LEFT JOIN FETCH e.services
         LEFT JOIN FETCH e.owner
-        WHERE LOWER(e.name) LIKE LOWER(CONCAT('%', :name, '%'))
+        WHERE (CAST(FUNCTION('translate', LOWER(e.name), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE CONCAT('%', :name, '%')
+               OR EXISTS (
+                   SELECT 1 FROM Professional p JOIN p.baseUser u
+                   WHERE p.establishment = e
+                     AND (CAST(FUNCTION('translate', LOWER(COALESCE(u.nickname, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE CONCAT('%', :name, '%')
+                          OR CAST(FUNCTION('translate', LOWER(COALESCE(u.firstName, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE CONCAT('%', :name, '%'))))
           AND e.status <> 'INACTIVE'
         ORDER BY e.createdAt DESC
         """)

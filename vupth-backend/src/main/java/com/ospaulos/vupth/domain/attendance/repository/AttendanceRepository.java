@@ -4,6 +4,8 @@ import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -409,7 +411,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
           AND a.status = COALESCE(:status, a.status)
           AND a.scheduledTime >= :dateFrom
           AND a.scheduledTime < :dateTo
-        ORDER BY a.scheduledTime DESC
+        ORDER BY a.scheduledTime DESC, a.id
     """)
     List<Attendance> findByFilters(
             @Param("establishmentId") UUID establishmentId,
@@ -418,6 +420,52 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo
     );
+
+    /**
+     * Historico paginado (historico-rapido): os mesmos filtros do {@link #findByFilters}, mas so os
+     * ids da pagina. Paginar a consulta com JOIN FETCH de colecao faria o Hibernate trazer tudo e
+     * cortar em memoria — por isso a pagina sai em duas idas: ids aqui, detalhes no
+     * {@link #findAllByIdsWithDetails}. O {@code a.id} no ORDER BY desempata horarios iguais, para
+     * a mesma linha nao aparecer em duas paginas.
+     */
+    @Query(value = """
+        SELECT a.id FROM Attendance a
+        WHERE a.establishment.id = COALESCE(:establishmentId, a.establishment.id)
+          AND a.professional.id = COALESCE(:professionalId, a.professional.id)
+          AND a.status = COALESCE(:status, a.status)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+        ORDER BY a.scheduledTime DESC, a.id
+    """, countQuery = """
+        SELECT COUNT(a) FROM Attendance a
+        WHERE a.establishment.id = COALESCE(:establishmentId, a.establishment.id)
+          AND a.professional.id = COALESCE(:professionalId, a.professional.id)
+          AND a.status = COALESCE(:status, a.status)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    Page<UUID> findIdPageByFilters(
+            @Param("establishmentId") UUID establishmentId,
+            @Param("professionalId") UUID professionalId,
+            @Param("status") AttendanceStatus status,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo,
+            Pageable pageable
+    );
+
+    /** Os detalhes da pagina de {@link #findIdPageByFilters}, na mesma ordem. */
+    @Query("""
+        SELECT DISTINCT a FROM Attendance a
+        LEFT JOIN FETCH a.client c
+        LEFT JOIN FETCH c.baseUser
+        LEFT JOIN FETCH a.professional p
+        LEFT JOIN FETCH p.baseUser
+        LEFT JOIN FETCH a.establishment
+        LEFT JOIN FETCH a.serviceItems
+        WHERE a.id IN :ids
+        ORDER BY a.scheduledTime DESC, a.id
+    """)
+    List<Attendance> findAllByIdsWithDetails(@Param("ids") java.util.Collection<UUID> ids);
 
     @Query("""
         SELECT DISTINCT a FROM Attendance a

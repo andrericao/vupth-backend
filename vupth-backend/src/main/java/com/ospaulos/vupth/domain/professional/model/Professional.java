@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.professional.event.WorkStatusChangedEvent;
 import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import jakarta.persistence.*;
@@ -12,6 +13,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.data.domain.AbstractAggregateRoot;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -23,7 +25,7 @@ import java.util.stream.Collectors;
 @Entity
 @AllArgsConstructor
 @Table(name = "professional")
-public class Professional {
+public class Professional extends AbstractAggregateRoot<Professional> {
 
     @Id
     private UUID id;
@@ -75,6 +77,22 @@ public class Professional {
     @Column(name = "closing_grace_until")
     private OffsetDateTime closingGraceUntil;
 
+    /**
+     * Contato (telefone/WhatsApp) que o proprio profissional escolhe mostrar ao cliente na tela dele
+     * (pedido de 26/09). Nao e o {@code BaseUser.phone}: aquele e da conta e nunca sai publico.
+     * {@code null} = nao expoe.
+     */
+    @Column(name = "contact_phone", length = 20)
+    private String contactPhone;
+
+    /**
+     * Interruptor "expor a posicao na fila" (decisao de 05/09): {@code true} (padrao) o cliente ve a
+     * posicao; {@code false} ela some de todos os lugares do app do cliente — o tempo estimado fica
+     * sempre. O push de "proximo da fila" obedece a ele (QueuePushService).
+     */
+    @Column(name = "show_position", nullable = false)
+    private Boolean showPosition = true;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "establishment_id")
     @JsonBackReference("establishment-professionals")
@@ -105,7 +123,28 @@ public class Professional {
 
     public Professional(BaseUser baseUser) {
         this.baseUser = baseUser;
-        this.id = baseUser.getId();
+        // O id NAO e atribuido aqui: o @MapsId o deriva do baseUser no persist. Com o id preenchido, o
+        // Hibernate 6.6 trata o objeto novo como ja salvo e o merge em cascata falha ("Row was updated or
+        // deleted by another transaction"), porque a linha ainda nao existe.
+    }
+
+    /** Antes do flush o campo ainda esta nulo; o id e sempre o do usuario (MapsId). */
+    public UUID getId() {
+        return id != null ? id : (baseUser != null ? baseUser.getId() : null);
+    }
+
+    /**
+     * Troca o status de trabalho e, se mudou, registra o {@link WorkStatusChangedEvent} — publicado no
+     * {@code save} do repositorio. E dele que sai o expediente real dos relatorios (Partner S4).
+     */
+    public void setWorkStatus(ProfessionalStatus workStatus) {
+        ProfessionalStatus from = this.workStatus;
+        this.workStatus = workStatus;
+        if (from != workStatus) {
+            registerEvent(new WorkStatusChangedEvent(getId(),
+                    establishment != null ? establishment.getId() : null,
+                    from, workStatus, OffsetDateTime.now()));
+        }
     }
 
     public String getName(){

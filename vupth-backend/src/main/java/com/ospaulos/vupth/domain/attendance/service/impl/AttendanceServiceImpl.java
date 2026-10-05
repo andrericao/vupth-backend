@@ -13,6 +13,7 @@ import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelled
 import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceNoRoomForServiceException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException;
 import com.ospaulos.vupth.domain.attendance.exception.TargetTimeNotFeasibleException;
 import com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException;
@@ -1092,6 +1093,65 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public AttendanceInQueueResponse addServiceItems(UUID attendanceId, UUID clientId, List<UUID> serviceItemIds) {
+        log.info("[Attendance] addServiceItems — attendanceId={} clientId={} items={}", attendanceId, clientId, serviceItemIds);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+
+        if (attendance.getClient() == null || !attendance.getClient().getId().equals(clientId)) {
+            throw new EstablishmentAccessDeniedException("You can only add services to your own attendance.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        Professional professional = attendance.getProfessional();
+        List<ServiceItem> requested = serviceItemRepository.findAllById(serviceItemIds);
+        if (requested.size() != Set.copyOf(serviceItemIds).size()) {
+            throw new ServiceItemNotFoundException();
+        }
+        assertServiceItemsBelongToProfessional(requested, professional);
+
+        Set<UUID> current = attendance.getServiceItems().stream()
+                .map(ServiceItem::getId)
+                .collect(Collectors.toSet());
+        List<ServiceItem> added = requested.stream().filter(si -> !current.contains(si.getId())).toList();
+        if (added.isEmpty()) {
+            log.info("[Attendance] addServiceItems — attendance={} ja tinha todos os itens (no-op)", attendanceId);
+            return buildAttendanceInQueueResponse(attendance);
+        }
+
+        // Regra do Andre (15/09): o tempo a mais so cabe se houver tempo livre depois. Quem esta na fila
+        // atras perderia a vez prometida — entao so o ULTIMO da fila de espera adiciona.
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                professional.getId(), attendance.getEstablishment().getId());
+        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
+        if (last != null && !last.getId().equals(attendance.getId())) {
+            log.warn("[Attendance] addServiceItems — attendance={} tem gente depois (ultimo={})", attendanceId, last.getId());
+            throw AttendanceNoRoomForServiceException.someoneBehind(attendanceId);
+        }
+
+        // ...e nenhuma intencao (agenda) pode comecar antes do novo fim da fila.
+        int addedMinutes = added.stream()
+                .mapToInt(si -> si.getEstimatedMinutes() != null ? si.getEstimatedMinutes() : 0)
+                .sum();
+        OffsetDateTime newEnd = projectedQueueEnd(professional).plusMinutes(addedMinutes);
+        boolean intentionAhead = attendanceRepository.findIntentionsByProfessional(professional.getId()).stream()
+                .anyMatch(i -> i.getDesiredTime() != null && i.getDesiredTime().isBefore(newEnd));
+        if (intentionAhead) {
+            log.warn("[Attendance] addServiceItems — attendance={} esbarra numa intencao antes de {}", attendanceId, newEnd);
+            throw AttendanceNoRoomForServiceException.intentionAhead(attendanceId);
+        }
+
+        attendance.addServiceItems(added);
+        Attendance saved = attendanceRepository.save(attendance);
+        log.info("[Attendance] addServiceItems — attendance={} +{} itens, +{} min (estimado={} total={})",
+                attendanceId, added.size(), addedMinutes, saved.getEstimatedTotalMinutes(), saved.getTotalValue());
+        return buildAttendanceInQueueResponse(saved);
+    }
+
+    @Override
     public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromCutRequest(
             Professional professional, Establishment establishment, Client client, List<ServiceItem> serviceItems) {
         log.info("[Attendance] createScheduledFromCutRequest — professional={} client={}",
@@ -1513,6 +1573,55 @@ public class AttendanceServiceImpl implements AttendanceService {
         return attendances.stream()
                 .map(AttendanceListResponse::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse listAttendancesPage(
+            UUID userId,
+            UUID establishmentId,
+            UUID professionalId,
+            UUID clientId,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            AttendanceStatus status,
+            com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage page) {
+
+        log.info("[Attendance] listAttendancesPage — userId={} establishmentId={} professionalId={} page={} size={}",
+                userId, establishmentId, professionalId, page.page(), page.size());
+
+        // O historico do proprio cliente ja e pequeno e tem multas/avaliacao por item: corta em memoria.
+        if (clientId != null) {
+            List<AttendanceListResponse> all =
+                    listAttendances(userId, establishmentId, professionalId, clientId, dateFrom, dateTo, status);
+            int totalPages = page.totalPages(all.size());
+            return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
+                    page.slice(all), page.page(), page.size(), all.size(), totalPages,
+                    page.page() + 1 < totalPages);
+        }
+
+        Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
+        final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
+
+        // Mesmo recorte de datas do listAttendances (dia da LOJA, sentinelas sem filtro).
+        OffsetDateTime from = dateFrom != null
+                ? BusinessClock.startOfDay(dateFrom)
+                : OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
+        OffsetDateTime to = dateTo != null
+                ? BusinessClock.endOfDayExclusive(dateTo)
+                : OffsetDateTime.of(2100, 1, 1, 0, 0, 0, 0, java.time.ZoneOffset.UTC);
+
+        // Duas idas, qualquer que seja o tamanho do historico: os ids da pagina e os detalhes deles.
+        org.springframework.data.domain.Page<UUID> ids = attendanceRepository.findIdPageByFilters(
+                resolvedEstablishmentId, professionalId, status, from, to,
+                org.springframework.data.domain.PageRequest.of(page.page(), page.size()));
+        List<AttendanceListResponse> items = ids.isEmpty()
+                ? List.of()
+                : attendanceRepository.findAllByIdsWithDetails(ids.getContent()).stream()
+                        .map(AttendanceListResponse::fromEntity)
+                        .collect(Collectors.toList());
+
+        return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
+                items, page.page(), page.size(), ids.getTotalElements(), ids.getTotalPages(), ids.hasNext());
     }
 
     @Override

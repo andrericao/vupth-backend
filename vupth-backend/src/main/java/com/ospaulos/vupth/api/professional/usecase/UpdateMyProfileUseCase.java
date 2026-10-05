@@ -17,6 +17,8 @@ import java.util.UUID;
  *
  * - name      → firstName do BaseUser
  * - specialty → specialty do Professional
+ * - contact_phone → contato exposto ao cliente (em branco deixa de expor)
+ * - show_position → interruptor "expor a posicao na fila"
  *
  * Campos null/em branco sao ignorados. Para specialty, a string e trimada
  * (em branco vira null para limpar a especialidade).
@@ -50,6 +52,15 @@ public class UpdateMyProfileUseCase {
             professional.setSpecialty(trimmed.isBlank() ? null : trimmed);
         }
 
+        if (request.contactPhone() != null) {
+            String trimmed = request.contactPhone().trim();
+            professional.setContactPhone(trimmed.isBlank() ? null : trimmed);
+        }
+
+        if (request.showPosition() != null) {
+            professional.setShowPosition(request.showPosition());
+        }
+
         professionalRepository.save(professional);
 
         log.info("[UpdateMyProfile] profile updated — id={} name={} specialty={}",
@@ -66,7 +77,9 @@ public class UpdateMyProfileUseCase {
                 professional.getWorkStatus(),
                 professional.getAcceptingNew(),
                 professional.getOperationMode(),
-                null
+                null,
+                professional.getContactPhone(),
+                professional.getShowPosition()
         );
     }
 }

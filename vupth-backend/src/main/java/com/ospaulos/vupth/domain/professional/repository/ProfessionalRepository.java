@@ -49,6 +49,20 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     List<Object[]> findWithServiceByEstablishmentIds(
             @Param("establishmentIds") Collection<UUID> establishmentIds);
 
+    /**
+     * Notas dos profissionais das lojas da listagem ({@code [establishmentId, ratingSum, ratingCount]}),
+     * so de quem ja tem voto — a media da loja e o {@code rating_best} saem daqui em memoria
+     * (campos-do-historico). Uma consulta para a pagina inteira, como o resumo de fila (B10).
+     */
+    @Query("""
+        SELECT p.establishment.id, p.ratingSum, p.ratingCount
+        FROM Professional p
+        WHERE p.establishment.id IN :establishmentIds
+          AND p.ratingCount > 0
+        """)
+    List<Object[]> findRatingsByEstablishmentIds(
+            @Param("establishmentIds") Collection<UUID> establishmentIds);
+
     // Find available professionals in an establishment
     @Query("SELECT p FROM Professional p WHERE p.establishment.id = :establishmentId AND p.isAvailable = true")
     List<Professional> findAvailableByEstablishmentId(@Param("establishmentId") UUID establishmentId);
@@ -98,7 +112,8 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     // timer de auto-fechamento (analogo a findEarliestIntention / findFirstByStatusOrderByExpiresAtAsc).
     Optional<Professional> findFirstByClosingGraceUntilIsNotNullOrderByClosingGraceUntilAsc();
 
-    // Busca de profissionais por nome e/ou especialidade. Os parametros ja vem como
+    // Busca de profissionais por nome (ou apelido, BAK-4; sem acento — :nameLike chega dobrado pelo
+    // SearchText.fold e o translate tira os mesmos acentos da coluna) e/ou especialidade. Os parametros ja vem como
     // padroes LIKE prontos ("%" = sem filtro) — nunca null, para evitar problemas de
     // inferencia de tipo do Postgres (null vira bytea e quebra o LOWER). COALESCE
     // trata firstName/specialty nulos. Usado pelo owner para convidar — por isso so
@@ -112,7 +127,8 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
     @Query("""
         SELECT p FROM Professional p
         JOIN FETCH p.baseUser u
-        WHERE LOWER(COALESCE(u.firstName, '')) LIKE LOWER(:nameLike)
+        WHERE (CAST(FUNCTION('translate', LOWER(COALESCE(u.firstName, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE :nameLike
+               OR CAST(FUNCTION('translate', LOWER(COALESCE(u.nickname, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE :nameLike)
           AND LOWER(COALESCE(p.specialty, '')) LIKE LOWER(:specialtyLike)
           AND u.isActive = true
           AND p.establishment IS NULL

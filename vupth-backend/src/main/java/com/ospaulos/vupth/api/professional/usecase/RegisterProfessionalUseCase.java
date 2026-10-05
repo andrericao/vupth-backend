@@ -4,6 +4,7 @@ import com.ospaulos.vupth.api.professional.dto.request.ProfessionalRegisterReque
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
+import com.ospaulos.vupth.domain.affiliation.service.EmailInvitationConverter;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.service.impl.ProfessionalIntervalService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
@@ -35,6 +36,7 @@ public class RegisterProfessionalUseCase {
 
     private final UserRepository userRepository;
     private final ProfessionalIntervalService intervalService;
+    private final EmailInvitationConverter emailInvitationConverter;
 
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, ProfessionalRegisterRequest request) {
@@ -61,14 +63,17 @@ public class RegisterProfessionalUseCase {
         // 4. Create professional profile via cascade (same pattern as QuickCreate)
         //    establishment = null — will be set later by owner via /establishment/{id}/professionals
         user.addProfessionalProfile();
-        Professional professional = user.getProfessional();
-        professional.setSpecialty(request.specialty());
+        user.getProfessional().setSpecialty(request.specialty());
         // professional.establishment intentionally left null
 
-        userRepository.save(user);
+        // save() de um usuario ja existente e um merge: o gerenciado e a copia devolvida (ver QuickCreate).
+        Professional professional = userRepository.save(user).getProfessional();
 
         // Seed refeicoes padrao (almoco/janta) — spec item #11a
         intervalService.seedDefaultMeals(professional);
+
+        // convite-sem-conta: o convite por e-mail que esperava esta pessoa vira convite comum
+        emailInvitationConverter.convertFor(professional);
 
         log.info("[RegisterProfessional] professional created — id={} name={} (no establishment yet)",
                 professional.getId(), user.getFirstName());

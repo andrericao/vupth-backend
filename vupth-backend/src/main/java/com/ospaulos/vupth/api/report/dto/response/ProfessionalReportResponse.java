@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.report.dto.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Relatorio agregado do proprio profissional (GET /professional/me/reports).
@@ -22,5 +23,7 @@ public record ProfessionalReportResponse(
         BigDecimal netRevenue,
         // Atendimentos SEM divisao (servico legado / anteriores a 16/09): se > 0, o liquido esta
         // incompleto e o app deve dizer isso em vez de mostrar o numero como o todo.
-        long attendancesWithoutSplit
+        long attendancesWithoutSplit,
+        // Expediente real do profissional por dia (Partner S4).
+        List<WorkdayResponse> workdays
 ) {}

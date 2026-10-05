@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.attendance.cut.service;
 
+import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.domain.attendance.cut.CutRequestStatus;
 import com.ospaulos.vupth.domain.attendance.cut.model.CutRequest;
 import com.ospaulos.vupth.domain.attendance.cut.repository.CutRequestRepository;
@@ -16,6 +17,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Auto-nega dos pedidos de corte (BUG5 C2, fatia 3) — <b>EVENT-DRIVEN, nao polling</b>, mesmo padrao do
@@ -53,6 +55,13 @@ public class CutRequestExpiryScheduler {
 
     private ThreadPoolTaskScheduler taskScheduler;
     private ScheduledFuture<?> pending;
+
+    /** Trava (reentrante) no lugar de synchronized: com threads virtuais, I/O dentro de um monitor prende a portadora. */
+    private final ReentrantLock lock = new ReentrantLock();
+
+    /** Trava entre instancias. Opcional so para os testes unitarios, que montam o scheduler na mao. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ClusterLock clusterLock;
 
     public CutRequestExpiryScheduler(CutRequestRepository cutRequestRepository,
                                      CutRequestService cutRequestService) {
@@ -94,7 +103,16 @@ public class CutRequestExpiryScheduler {
      * a cabeca. Sem PENDING -> fica ocioso. Se a cabeca ja venceu, dispara "ja" (em 1s). Chamado pos-commit de
      * create/accept/refuse e no boot.
      */
-    public synchronized void reschedule() {
+    public void reschedule() {
+        lock.lock();
+        try {
+            rescheduleLocked();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void rescheduleLocked() {
         cancelPending();
         Optional<CutRequest> head = cutRequestRepository.findFirstByStatusOrderByExpiresAtAsc(CutRequestStatus.PENDING);
         if (head.isEmpty()) {
@@ -110,7 +128,25 @@ public class CutRequestExpiryScheduler {
      * Expira todos os PENDING ja vencidos e reagenda para a proxima cabeca. Executado na thread do scheduler.
      * Sincronizado com {@link #reschedule()} para nao correr com um create/accept/refuse.
      */
-    synchronized void runExpiryCycle() {
+    void runExpiryCycle() {
+        lock.lock();
+        try {
+            if (clusterLock == null) {
+                runExpiryCycleLocked();
+                return;
+            }
+            if (clusterLock.runExclusive("cut-request-expiry", this::runExpiryCycleLocked)) {
+                return;
+            }
+            // Outra instancia esta rodando este ciclo: ela processa o que venceu; aqui so se tenta de novo.
+            log.info("[CutExpiry] ciclo — outra instancia tem a trava; nova tentativa em 30s");
+            pending = taskScheduler.schedule(this::runExpiryCycle, Instant.now().plusSeconds(30));
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void runExpiryCycleLocked() {
         pending = null;
         try {
             int expired = cutRequestService.expireDueCutRequests();

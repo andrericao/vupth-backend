@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,6 +52,7 @@ class EstablishmentAddressIntegrationTest {
 
     String ownerToken, establishmentId;
     AddressRequest createdAddress;
+    String createdAddressId;
 
     @BeforeAll
     void setup() throws Exception {
@@ -87,6 +89,7 @@ class EstablishmentAddressIntegrationTest {
                 .andReturn();
 
         String body = result.getResponse().getContentAsString();
+        this.createdAddressId = mapper.readTree(body).get("addressId").asText();
         log.info("[EstabAddress] createAddress_success — created OK");
         assertThat(body).contains(establishmentId);
     }
@@ -111,6 +114,8 @@ class EstablishmentAddressIntegrationTest {
                 .andExpect(jsonPath("$[0].address.street").value(createdAddress.street()))
                 .andExpect(jsonPath("$[0].address.city").value(createdAddress.city()))
                 .andExpect(jsonPath("$[0].address.zipCode").value(createdAddress.zipCode()))
+                // S38: o id embutido e o mesmo que o POST devolveu — o que o PATCH do endereco recebe
+                .andExpect(jsonPath("$[0].address.addressId").value(createdAddressId))
                 .andDo(print());
     }
 
@@ -125,6 +130,7 @@ class EstablishmentAddressIntegrationTest {
                 .andExpect(jsonPath("$.id").value(establishmentId))
                 .andExpect(jsonPath("$.address.street").value(createdAddress.street()))
                 .andExpect(jsonPath("$.address.neighborhood").value(createdAddress.neighborhood()))
+                .andExpect(jsonPath("$.address.addressId").value(createdAddressId))
                 .andDo(print());
     }
 
@@ -148,6 +154,25 @@ class EstablishmentAddressIntegrationTest {
     // ─────────────────────────────────────────────────────────────
     // Auth errors
     // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @Order(18)
+    @DisplayName("gps-depois-do-cadastro: PATCH so com latitude/longitude troca a coordenada e mantem o resto do endereco")
+    void patchOnlyCoordinates_overridesLocation() throws Exception {
+        mvc.perform(patch("/establishments/{id}/addresses/{addressId}", establishmentId, createdAddressId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"latitude\":-23.561684,\"longitude\":-46.655981}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/establishment/id/{id}", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.address.addressId").value(createdAddressId))
+                .andExpect(jsonPath("$.address.latitude").value(-23.561684))
+                .andExpect(jsonPath("$.address.longitude").value(-46.655981))
+                .andExpect(jsonPath("$.address.locationStatus").value("LOCATED"))
+                .andExpect(jsonPath("$.address.street").value(createdAddress.street()));
+    }
 
     @Test
     @Order(20)

@@ -347,3 +347,43 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/012-add-operation_mode-to-professional.yaml
       relativeToChangeLogFile: true
+
+  # Trava entre instancias dos schedulers (ShedLock, 02/10)
+  - include:
+      file: changesets/00-foundation/004-create-shedlock.yaml
+      relativeToChangeLogFile: true
+
+  # Expediente real do profissional nos relatorios (Partner S4, 02/10)
+  - include:
+      file: changesets/60-professional/013-create-professional_shift.yaml
+      relativeToChangeLogFile: true
+
+  # Geocodificacao silenciosa: o dono sabe quando o endereco nao virou coordenada (Partner S25, 03/10)
+  - include:
+      file: changesets/00-foundation/005-add-geocoding_failed-to-address.yaml
+      relativeToChangeLogFile: true
+
+  # Contato do profissional na tela do cliente — so o que ele escolhe expor (Client, 26/09)
+  - include:
+      file: changesets/60-professional/014-add-contact_phone-to-professional.yaml
+      relativeToChangeLogFile: true
+
+  # Pedido de corte com dia e horario desejados (D6; Partner S26, 04/10)
+  - include:
+      file: changesets/80-attendance/015-add-desired_time-to-cut-request.yaml
+      relativeToChangeLogFile: true
+
+  # Interruptor "expor a posicao na fila" por profissional (decisao de 05/09; Partner, 04/10)
+  - include:
+      file: changesets/60-professional/015-add-show_position-to-professional.yaml
+      relativeToChangeLogFile: true
+
+  # Historico rapido: indices por data no GET /attendances (Partner, historico-rapido, 04/10)
+  - include:
+      file: changesets/99-performance/002-create-history-indexes.yaml
+      relativeToChangeLogFile: true
+
+  # Convite por e-mail para quem ainda nao tem conta (convite-sem-conta, Partner S30, 04/10)
+  - include:
+      file: changesets/90-affiliation/002-create-email-invitation.yaml
+      relativeToChangeLogFile: true

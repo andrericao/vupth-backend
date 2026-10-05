@@ -106,11 +106,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/reports").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
+                        // convite-sem-conta: os convites por e-mail que esperam a conta — so o dono
+                        .requestMatchers(HttpMethod.GET, "/establishment/*/email-invitations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/reports").hasRole("OWNER")
                         // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
                         .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/users/**").permitAll()
+                        // A consulta de usuario (lista, por e-mail, por id) devolvia e-mail e papeis de
+                        // qualquer conta sem token — e nenhum app nem o Postman a usa. Fechada para todos
+                        // (mapa-endpoint-papel, 03/10). Os enderecos (/users/me/**) pedem login.
+                        .requestMatchers(HttpMethod.GET, "/users", "/users/email/**", "/users/id/**").denyAll()
                         .requestMatchers(HttpMethod.GET, "/professional/*/service-items").permitAll()
                         .requestMatchers(HttpMethod.GET, "/service-types/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/professional-queue/add-quest-attendance").permitAll()
@@ -139,6 +144,7 @@ public class SecurityConfig {
                         // Item #43 — cliente remaneja a propria vez (espera longa): horario-alvo ou fim da fila
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/reschedule").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/move-to-end").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/service-items").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/*/rating").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
@@ -215,6 +221,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/establishment/*/professionals").hasRole("OWNER")
                         .requestMatchers(HttpMethod.DELETE, "/establishment/*/professionals/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/establishment/*/affiliations").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.POST, "/establishment/*/email-invitations").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.DELETE, "/email-invitations/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/service-types/*/keywords").hasRole("PROFESSIONAL")
 
                         // ── Fallback ──────────────────────────────────────────────────────

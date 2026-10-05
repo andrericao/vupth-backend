@@ -4,6 +4,7 @@ package com.ospaulos.vupth.domain.address.service;
 
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.address.repository.AddressRepository;
+import com.ospaulos.vupth.domain.address.valueObject.LocationStatus;
 import com.ospaulos.vupth.infrastructure.geocoding.Coordinates;
 import com.ospaulos.vupth.infrastructure.geocoding.GeocodeQuery;
 import com.ospaulos.vupth.infrastructure.geocoding.Geocoder;
@@ -67,6 +68,13 @@ class AddressGeocodingServiceTest {
         verify(addressRepository).save(saved.capture());
         assertThat(saved.getValue().getLatitude()).isEqualTo(-22.8422);
         assertThat(saved.getValue().getLongitude()).isEqualTo(-43.2764);
+        assertThat(LocationStatus.of(saved.getValue())).isEqualTo(LocationStatus.LOCATED);
+    }
+
+    @Test
+    @DisplayName("LocationStatus: sem coordenada e sem falha = PENDING (geocoding na fila)")
+    void freshAddressIsPending() {
+        assertThat(LocationStatus.of(addressWithoutCoordinates())).isEqualTo(LocationStatus.PENDING);
     }
 
     @Test
@@ -101,25 +109,30 @@ class AddressGeocodingServiceTest {
     }
 
     @Test
-    @DisplayName("Geocoder nao resolveu: NAO grava nada, endereco segue sem coordenada")
-    void unresolvedLeavesAddressUntouched() {
-        when(addressRepository.findById(addressId)).thenReturn(Optional.of(addressWithoutCoordinates()));
+    @DisplayName("Geocoder nao resolveu: segue sem coordenada e fica marcado UNRESOLVED para o dono ver")
+    void unresolvedIsMarkedFailed() {
+        Address address = addressWithoutCoordinates();
+        when(addressRepository.findById(addressId)).thenReturn(Optional.of(address));
         when(geocoder.geocode(any())).thenReturn(Optional.empty());
 
         service.resolveAndSave(addressId);
 
-        verify(addressRepository, never()).save(any());
+        verify(addressRepository).save(address);
+        assertThat(address.getLatitude()).isNull();
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.UNRESOLVED);
     }
 
     @Test
     @DisplayName("Geocoder EXPLODIU: a falha e engolida (nao pode matar a thread do worker)")
     void geocoderFailureIsSwallowed() {
-        when(addressRepository.findById(addressId)).thenReturn(Optional.of(addressWithoutCoordinates()));
+        Address address = addressWithoutCoordinates();
+        when(addressRepository.findById(addressId)).thenReturn(Optional.of(address));
         when(geocoder.geocode(any())).thenThrow(new RuntimeException("BrasilAPI fora do ar"));
 
         service.resolveAndSave(addressId); // nao lanca
 
-        verify(addressRepository, never()).save(any());
+        // Fora do ar conta como nao resolvido: sem retentativa, PENDING ficaria para sempre.
+        assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.UNRESOLVED);
     }
 
     @Test

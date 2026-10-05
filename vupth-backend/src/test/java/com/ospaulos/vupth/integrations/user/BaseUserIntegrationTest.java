@@ -29,9 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * Covers:
  * - POST /auth/login       → token extraction via correct JSON path (tokens.access_token)
- * - GET  /users/email/{e}  → found, not found, auth required
- * - GET  /users/id/{id}    → found, not found, invalid UUID format
- * - GET  /users            → list all (open endpoint)
+ * - GET  /users, /users/email/{e}, /users/id/{id} → fechadas (401 sem token, 403 com token)
+ * - GET  /users/me/addresses → pede login
  *
  * Setup: registers one user via TestUserUtils.registerAndLoginUser so token parsing
  * follows the definitive LoginResponse structure (tokens.access_token).
@@ -112,93 +111,49 @@ class BaseUserIntegrationTest {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // GET /users/email/{email}
+    // GET /users, /users/email/{email}, /users/id/{id} — fechadas
+    // Devolviam e-mail e papeis de qualquer conta sem token e nenhum app as usa
+    // (mapa-endpoint-papel, 03/10): 401 sem token, 403 com token.
     // ─────────────────────────────────────────────────────────────
 
     @Test
     @Order(10)
-    @DisplayName("GET /users/email/{email} — 200 found by email")
-    void getUserByEmail_found() throws Exception {
-        log.info("[BaseUser] getUserByEmail_found — email={}", email);
-
-        mvc.perform(get("/users/email/{email}", email)
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.id").value(id))
-                .andDo(print());
+    @DisplayName("GET /users/email/{email} — 401 sem token, 403 com token")
+    void getUserByEmail_closed() throws Exception {
+        mvc.perform(get("/users/email/{email}", email))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/users/email/{email}", email).header("Authorization", token))
+                .andExpect(status().isForbidden());
     }
-
-    @Test
-    @Order(11)
-    @DisplayName("GET /users/email/{email} — 404 email not registered")
-    void getUserByEmail_notFound() throws Exception {
-        log.info("[BaseUser] getUserByEmail_notFound");
-
-        mvc.perform(get("/users/email/{email}", "nobody@nowhere.com")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNotFound())
-                .andDo(print());
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // GET /users/id/{id}
-    // ─────────────────────────────────────────────────────────────
 
     @Test
     @Order(20)
-    @DisplayName("GET /users/id/{id} — 200 found by ID")
-    void getUserById_found() throws Exception {
-        log.info("[BaseUser] getUserById_found — id={}", id);
-
-        mvc.perform(get("/users/id/{id}", id)
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(id))
-                .andExpect(jsonPath("$.email").value(email))
-                .andDo(print());
+    @DisplayName("GET /users/id/{id} — 401 sem token, 403 com token")
+    void getUserById_closed() throws Exception {
+        mvc.perform(get("/users/id/{id}", id))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/users/id/{id}", id).header("Authorization", token))
+                .andExpect(status().isForbidden());
     }
-
-    @Test
-    @Order(21)
-    @DisplayName("GET /users/id/{id} — 404 unknown ID")
-    void getUserById_notFound() throws Exception {
-        log.info("[BaseUser] getUserById_notFound");
-        String unknownId = "00000000-0000-0000-0000-000000000000";
-
-        mvc.perform(get("/users/id/{id}", unknownId)
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isNotFound())
-                .andDo(print());
-    }
-
-    @Test
-    @Order(22)
-    @DisplayName("GET /users/id/{id} — 400 id is not a valid UUID")
-    void getUserById_invalidUuidFormat() throws Exception {
-        log.info("[BaseUser] getUserById_invalidUuidFormat");
-
-        mvc.perform(get("/users/id/{id}", "not-a-uuid")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(result ->
-                        assertThat(result.getResponse().getStatus()).isNotEqualTo(500))
-                .andDo(print());
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // GET /users
-    // ─────────────────────────────────────────────────────────────
 
     @Test
     @Order(30)
-    @DisplayName("GET /users — 200 returns list (at least one user)")
-    void getAllUsers_returnsList() throws Exception {
-        log.info("[BaseUser] getAllUsers_returnsList");
+    @DisplayName("GET /users — 401 sem token, 403 com token")
+    void getAllUsers_closed() throws Exception {
+        mvc.perform(get("/users"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/users").header("Authorization", token))
+                .andExpect(status().isForbidden());
+    }
 
-        mvc.perform(get("/users")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andDo(print());
+    @Test
+    @Order(40)
+    @DisplayName("GET /users/me/addresses — 401 sem token (antes caia no permitAll de /users/**)")
+    void getMyAddresses_requiresLogin() throws Exception {
+        mvc.perform(get("/users/me/addresses"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/users/me/addresses").header("Authorization", token))
+                .andExpect(status().isOk());
     }
 
     @AfterAll

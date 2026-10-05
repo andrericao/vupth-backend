@@ -29,6 +29,7 @@ public class InviteProfessionalUseCase {
     private final EstablishmentRepository establishmentRepository;
     private final ProfessionalRepository professionalRepository;
     private final AffiliationRequestRepository affiliationRepository;
+    private final com.ospaulos.vupth.domain.affiliation.service.AffiliationNotifier notifier;
 
     @Transactional
     public AffiliationRequestResponse execute(UUID ownerId, UUID establishmentId, UUID professionalId) {
@@ -67,6 +68,9 @@ public class InviteProfessionalUseCase {
         }
 
         AffiliationRequest saved = affiliationRepository.save(invitation);
+        if (!selfInvite) {
+            notifier.created(saved); // DEC-19: o convidado sabe por push e e-mail
+        }
 
         log.info("[Affiliation] invitation {} — id={} selfInvite={}",
                 selfInvite ? "auto-accepted" : "created", saved.getId(), selfInvite);

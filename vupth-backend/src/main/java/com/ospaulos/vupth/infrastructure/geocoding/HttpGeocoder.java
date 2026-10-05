@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Geocoder de producao (backlog #2), <b>gratuito e sem chave</b> — a restricao de custo zero (Andre
@@ -45,6 +46,7 @@ public class HttpGeocoder implements Geocoder {
     private final String userAgent;
 
     private long lastNominatimCallAt = 0L;
+    private final ReentrantLock nominatimLock = new ReentrantLock();
 
     public HttpGeocoder(
             @Value("${vupth.geocoding.brasilapi.url:https://brasilapi.com.br/api/cep/v2}") String brasilApiUrl,
@@ -219,12 +221,17 @@ public class HttpGeocoder implements Geocoder {
      * Segura a chamada para nao passar de 1 req/s no Nominatim. O geocoding roda numa unica thread de
      * fundo, entao dormir aqui nao atrasa request nenhum de usuario — so espaca a fila.
      */
-    private synchronized void throttleNominatim() throws InterruptedException {
-        long since = System.currentTimeMillis() - lastNominatimCallAt;
-        if (since < NOMINATIM_MIN_INTERVAL_MS) {
-            Thread.sleep(NOMINATIM_MIN_INTERVAL_MS - since);
+    private void throttleNominatim() throws InterruptedException {
+        nominatimLock.lock(); // nao synchronized: dormir num monitor prende a portadora da thread virtual
+        try {
+            long since = System.currentTimeMillis() - lastNominatimCallAt;
+            if (since < NOMINATIM_MIN_INTERVAL_MS) {
+                Thread.sleep(NOMINATIM_MIN_INTERVAL_MS - since);
+            }
+            lastNominatimCallAt = System.currentTimeMillis();
+        } finally {
+            nominatimLock.unlock();
         }
-        lastNominatimCallAt = System.currentTimeMillis();
     }
 
     private Optional<Coordinates> build(Double latitude, Double longitude) {

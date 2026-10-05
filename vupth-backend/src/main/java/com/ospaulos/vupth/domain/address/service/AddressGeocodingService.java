@@ -152,6 +152,7 @@ public class AddressGeocodingService {
             Optional<Coordinates> resolved = geocoder.geocode(query);
             if (resolved.isEmpty()) {
                 log.info("[Geocoding] endereco {} nao pode ser resolvido — segue sem coordenada", addressId);
+                markFailed(addressId);
                 return;
             }
 
@@ -160,6 +161,7 @@ public class AddressGeocodingService {
                     addressRepository.findById(addressId).ifPresent(address -> {
                         address.setLatitude(coordinates.latitude());
                         address.setLongitude(coordinates.longitude());
+                        address.setGeocodingFailed(false);
                         addressRepository.save(address);
                         log.info("[Geocoding] endereco {} geocodificado -> {},{}",
                                 addressId, coordinates.latitude(), coordinates.longitude());
@@ -168,6 +170,23 @@ public class AddressGeocodingService {
         } catch (Exception e) {
             // Best-effort de ponta a ponta: nada aqui pode escapar e matar a thread do worker.
             log.warn("[Geocoding] falha ao geocodificar o endereco {}: {}", addressId, e.toString());
+            markFailed(addressId);
+        }
+    }
+
+    /**
+     * Deixa o "nao achei" visivel para o dono (LocationStatus.UNRESOLVED). Geocoder fora do ar conta
+     * igual: sem retentativa automatica, o endereco ficaria PENDING para sempre.
+     */
+    private void markFailed(UUID addressId) {
+        try {
+            transactionTemplate.executeWithoutResult(status ->
+                    addressRepository.findById(addressId).ifPresent(address -> {
+                        address.setGeocodingFailed(true);
+                        addressRepository.save(address);
+                    }));
+        } catch (Exception e) {
+            log.warn("[Geocoding] falha ao marcar o endereco {} como nao resolvido: {}", addressId, e.toString());
         }
     }
 

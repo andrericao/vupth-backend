@@ -17,6 +17,9 @@ public record AttendanceListResponse(
         UUID professionalId,
         String professionalName,
         UUID establishmentId,
+        // Nome da loja: a tela da fila reconstruida pelo servidor (cliente que entrou por aceite de
+        // corte) e o historico do cliente mostram a loja sem outra chamada (campos-do-historico)
+        String establishmentName,
         List<AttendanceInQueueResponse.ServiceItemSummary> services,
         AttendanceStatus status,
         BigDecimal totalValue,
@@ -44,13 +47,13 @@ public record AttendanceListResponse(
                 .map(PenaltyChargeResponse::amount)
                 .reduce(new BigDecimal("0.00"), BigDecimal::add);
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
-                establishmentId, services, status, totalValue, scheduledTime, startTime, endTime,
+                establishmentId, establishmentName, services, status, totalValue, scheduledTime, startTime, endTime,
                 durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated);
     }
 
     public AttendanceListResponse withRated(boolean isRated) {
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
-                establishmentId, services, status, totalValue, scheduledTime, startTime, endTime,
+                establishmentId, establishmentName, services, status, totalValue, scheduledTime, startTime, endTime,
                 durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated);
     }
 
@@ -67,6 +70,7 @@ public record AttendanceListResponse(
                 attendance.getProfessional().getId(),
                 attendance.getProfessional().getName(),
                 attendance.getEstablishment().getId(),
+                attendance.getEstablishment().getName(),
                 attendance.getServiceItems().stream()
                         .map(AttendanceInQueueResponse.ServiceItemSummary::fromEntity)
                         .collect(Collectors.toList()),

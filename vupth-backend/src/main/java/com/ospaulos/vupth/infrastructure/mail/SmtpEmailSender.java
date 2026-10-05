@@ -53,17 +53,22 @@ public class SmtpEmailSender implements EmailSender {
 
     @Override
     public void sendPasswordResetCode(String toEmail, String code) {
+        send(toEmail, PasswordResetMessage.SUBJECT, PasswordResetMessage.body(code));
+    }
+
+    @Override
+    public void send(String toEmail, String subject, String body) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(toEmail);
-        message.setSubject(PasswordResetMessage.SUBJECT);
-        message.setText(PasswordResetMessage.body(code));
+        message.setSubject(subject);
+        message.setText(body);
         try {
             mailSender.send(message);
-            log.info("[MAIL:smtp] reset code enviado para {}", toEmail);
+            log.info("[MAIL:smtp] '{}' enviado para {}", subject, toEmail);
         } catch (MailException e) {
-            log.error("[MAIL:smtp] falha ao enviar reset code para {}: {}", toEmail, e.getMessage());
-            throw new EmailDeliveryException("Falha ao enviar e-mail de reset", e);
+            log.error("[MAIL:smtp] falha ao enviar '{}' para {}: {}", subject, toEmail, e.getMessage());
+            throw new EmailDeliveryException("Falha ao enviar e-mail", e);
         }
     }
 }

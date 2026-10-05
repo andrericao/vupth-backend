@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.address.dto.response;
 
 import com.ospaulos.vupth.domain.establishment.model.EstablishmentAddress;
+import com.ospaulos.vupth.domain.address.valueObject.LocationStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -43,7 +44,10 @@ public record EstablishmentAddressResponse(
 
         Double latitude,
 
-        Double longitude
+        Double longitude,
+
+        /** LOCATED, PENDING ou UNRESOLVED — so LOCATED entra na busca por proximidade (Partner S25). */
+        LocationStatus locationStatus
 
 ) {
         public static EstablishmentAddressResponse fromEntity(EstablishmentAddress address) {
@@ -59,7 +63,8 @@ public record EstablishmentAddressResponse(
                         address.getAddress().getState(),
                         address.getAddress().getZipCode(),
                         address.getAddress().getLatitude(),
-                        address.getAddress().getLongitude()
+                        address.getAddress().getLongitude(),
+                        LocationStatus.of(address.getAddress())
                 );
         }
 }

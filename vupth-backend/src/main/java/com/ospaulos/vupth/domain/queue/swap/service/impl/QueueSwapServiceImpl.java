@@ -11,7 +11,9 @@ import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.queue.service.QueueService;
 import com.ospaulos.vupth.domain.queue.swap.SwapRequestStatus;
+import com.ospaulos.vupth.domain.queue.swap.SwapDurationRule;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapAlreadyPendingException;
+import com.ospaulos.vupth.domain.queue.swap.exception.SwapDurationIncompatibleException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapNotAllowedException;
 import com.ospaulos.vupth.domain.queue.swap.exception.SwapRequestNotFoundException;
 import com.ospaulos.vupth.domain.queue.swap.model.QueueSwapRequest;
@@ -62,6 +64,7 @@ public class QueueSwapServiceImpl implements QueueSwapService {
         assertSameQueue(proposer, target);
         assertSwappable(proposer);
         assertSwappable(target);
+        assertDurationCompatible(proposer, target);
 
         if (swapRepository.existsPendingBetween(proposerAttendanceId, targetAttendanceId, SwapRequestStatus.PENDING)) {
             throw new SwapAlreadyPendingException();
@@ -120,6 +123,7 @@ public class QueueSwapServiceImpl implements QueueSwapService {
         assertSameQueue(proposer, target);
         assertSwappable(proposer);
         assertSwappable(target);
+        assertDurationCompatible(proposer, target);
 
         // Troca os scheduledTime -> troca de posicao na fila (mesmo padrao do #19/#38).
         OffsetDateTime proposerSlot = proposer.getScheduledTime();
@@ -183,6 +187,15 @@ public class QueueSwapServiceImpl implements QueueSwapService {
         UUID estB = b.getEstablishment() != null ? b.getEstablishment().getId() : null;
         if (profA == null || !profA.equals(profB) || estA == null || !estA.equals(estB)) {
             throw new SwapNotAllowedException("So e possivel trocar de posicao com alguem da mesma fila.");
+        }
+    }
+
+    /** D14: ate 10 min de diferenca entre as duracoes estimadas dos dois atendimentos. */
+    private void assertDurationCompatible(Attendance a, Attendance b) {
+        int minutesA = a.getEstimatedTotalMinutes();
+        int minutesB = b.getEstimatedTotalMinutes();
+        if (!SwapDurationRule.compatible(minutesA, minutesB)) {
+            throw new SwapDurationIncompatibleException(minutesA, minutesB);
         }
     }
 

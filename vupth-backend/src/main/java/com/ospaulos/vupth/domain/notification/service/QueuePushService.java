@@ -22,6 +22,9 @@ import java.util.UUID;
  * <p>Deduplica pela flag {@code Attendance.nextNotified}: cada atendimento recebe o aviso <b>uma vez</b>
  * ao alcancar a frente — nao reenvia a cada nova mutacao enquanto continuar na frente. Convidados (sem
  * conta) nao recebem. E chamado pos-mutacao junto do broadcast WS da fila; best-effort.</p>
+ *
+ * <p>Interruptor "expor a posicao na fila" (decisao de 05/09): se o profissional esconde a posicao, o
+ * aviso continua — o cliente precisa chegar —, mas o texto nao diz que ele e o proximo.</p>
  */
 @Slf4j
 @Service
@@ -57,7 +60,10 @@ public class QueuePushService {
             data.put("attendanceId", head.getId().toString());
             data.put("establishmentId", establishmentId.toString());
 
-            pushPublisher.notifyUser(clientId, "É quase a sua vez!", "Você é o próximo da fila.", data);
+            // Decisao de 05/09: com a posicao escondida pelo profissional, o push nao a revela
+            boolean showPosition = !Boolean.FALSE.equals(head.getProfessional().getShowPosition());
+            String body = showPosition ? "Você é o próximo da fila." : "Fique por perto: seu atendimento está para começar.";
+            pushPublisher.notifyUser(clientId, "É quase a sua vez!", body, data);
 
             head.setNextNotified(true);
             attendanceRepository.save(head);

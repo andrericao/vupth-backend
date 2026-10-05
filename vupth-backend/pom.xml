@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.3.5</version>
+		<version>3.5.16</version>
 		<relativePath/>
 	</parent>
 	<groupId>com.ospaulos</groupId>
@@ -28,12 +28,18 @@
 	</scm>
 
 	<properties>
-		<postgresql.version>42.7.8</postgresql.version>
+		<postgresql.version>42.7.13</postgresql.version>
 		<java.version>21</java.version>
-		<hibernate.version>6.3.1.Final</hibernate.version>
 		<liquibase.version>4.33.0</liquibase.version>
 		<liquibase.hibernate6.version>4.30.0</liquibase.hibernate6.version>
 		<awssdk.version>2.29.0</awssdk.version>
+
+		<!-- Cobertura (DEC-7, 02/10): catraca — o minimo sobe a cada medicao e nunca desce. Fracao de
+		     0 a 1, sobre o relatorio da suite inteira (mvn verify, o que o CI roda). 03/10: 87,87% linhas, 69,30% branches. -->
+		<jacoco.line.minimum>0.87</jacoco.line.minimum>
+		<jacoco.branch.minimum>0.69</jacoco.branch.minimum>
+		<!-- O JaCoCo preenche argLine com o agente; vazio quando ele nao roda (ex.: -Djacoco.skip). -->
+		<argLine></argLine>
 
 		<timestamp>${maven.build.timestamp}</timestamp>
 		<maven.build.timestamp.format>dd/MM/yyyy-HH:mm</maven.build.timestamp.format>
@@ -102,9 +108,23 @@
 			<artifactId>jackson-databind</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-cache</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.github.ben-manes.caffeine</groupId>
+			<artifactId>caffeine</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>5.16.0</version>
+		</dependency>
+		<dependency>
 			<groupId>com.github.javafaker</groupId>
 			<artifactId>javafaker</artifactId>
 			<version>1.0.2</version>
+			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.auth0</groupId>
@@ -247,8 +267,58 @@
 					     causa flakiness "Could not modify all classes / NoClassDefFoundError" no suite
 					     completo (nao reproduz em isolamento). -Xshare:off desliga o CDS no fork.
 					     -XX:+EnableDynamicAgentLoading silencia o warning de self-attach do agente. -->
-					<argLine>-Xshare:off -XX:+EnableDynamicAgentLoading</argLine>
+					<argLine>@{argLine} -Xshare:off -XX:+EnableDynamicAgentLoading</argLine>
 				</configuration>
+			</plugin>
+			<!-- Cobertura (DEC-7). Declarado DEPOIS do surefire: no mesmo phase, o relatorio roda depois
+			     dos testes. mvn test gera target/site/jacoco (index.html e jacoco.csv, o numero da caixa
+			     de Cobertura no vupth-docs); o check com o minimo fica no verify, que o CI roda — assim o
+			     mvn test em fatias (-Dtest=...) mede sem reprovar por cobertura parcial. -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.15</version>
+				<executions>
+					<execution>
+						<id>prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>test</phase>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${jacoco.line.minimum}</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${jacoco.branch.minimum}</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.liquibase</groupId>

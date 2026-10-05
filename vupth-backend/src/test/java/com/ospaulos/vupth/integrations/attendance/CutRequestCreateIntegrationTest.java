@@ -21,6 +21,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -87,6 +89,11 @@ class CutRequestCreateIntegrationTest {
                 + "\",\"serviceItemIds\":[\"" + serviceItemId + "\"]}";
     }
 
+    private String bodyWithDesiredTime(String desiredTime) {
+        return "{\"professionalId\":\"" + professionalId + "\",\"establishmentId\":\"" + establishmentId
+                + "\",\"serviceItemIds\":[\"" + myServiceItemId + "\"],\"desiredTime\":\"" + desiredTime + "\"}";
+    }
+
     private void forceOpen(boolean open) {
         Establishment e = establishmentRepository.findById(UUID.fromString(establishmentId)).orElseThrow();
         e.setOpenStatus(open ? OpenStatus.OPEN : OpenStatus.CLOSED);
@@ -104,7 +111,35 @@ class CutRequestCreateIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.expires_at").exists())
-                .andExpect(jsonPath("$.professional_id").value(professionalId));
+                .andExpect(jsonPath("$.professional_id").value(professionalId))
+                // sem dia/horario = "assim que abrir"
+                .andExpect(jsonPath("$.desired_time").value(nullValue()));
+    }
+
+    @Test
+    @Order(11)
+    @DisplayName("D6 (S26): pedido com dia e horario desejados -> 201 e o desired_time volta na resposta")
+    void closedShop_withDesiredTime_echoes() throws Exception {
+        mvc.perform(post("/attendances/cut-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(bodyWithDesiredTime("2099-01-15T14:30:00-03:00")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.desired_time").value(startsWith("2099-01-15T")));
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("D6 (S26): dia e horario no passado -> 422 VALIDATION_ERROR")
+    void desiredTimeInThePast_validationError() throws Exception {
+        mvc.perform(post("/attendances/cut-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(bodyWithDesiredTime("2020-01-15T14:30:00-03:00")))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.desiredTime").exists());
     }
 
     @Test

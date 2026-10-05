@@ -523,7 +523,7 @@
      ]
     },
     {
-     "name": "forgot-password (partner) — 200 (anti-enumeracao)",
+     "name": "forgot-password (partner) — 200",
      "event": [
       {
        "listen": "test",
@@ -566,14 +566,15 @@
      }
     },
     {
-     "name": "forgot-password — e-mail inexistente tambem 200 (nao vaza)",
+     "name": "forgot-password — e-mail inexistente 404 EMAIL_NOT_FOUND (D2)",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200 mesmo p/ e-mail inexistente\", () => pm.response.to.have.status(200));"
+         "pm.test(\"Status 404 p/ e-mail inexistente\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code EMAIL_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"EMAIL_NOT_FOUND\"));"
         ]
        }
       }
@@ -925,6 +926,10 @@
          "  const r = pm.response.json();",
          "  pm.expect(r[0]).to.have.property(\"address\");",
          "});",
+         "pm.test(\"address embutido traz o addressId — o que o PATCH do endereco recebe (S38)\", () => {",
+         "  const a = pm.response.json()[0].address;",
+         "  if (a !== null) pm.expect(a.addressId).to.be.a(\"string\").and.not.empty;",
+         "});",
          "",
          "pm.test(\"Schema: expoe is_open efetivo (BUG5 parte B, boolean)\", () => {",
          "  const r = pm.response.json();",
@@ -958,6 +963,10 @@
          "pm.test(\"Schema: expoe address (Partner BUG4, pode ser null)\", () => {",
          "  const r = pm.response.json();",
          "  pm.expect(r).to.have.property(\"address\");",
+         "});",
+         "pm.test(\"address embutido traz o addressId (S38)\", () => {",
+         "  const a = pm.response.json().address;",
+         "  if (a !== null) pm.expect(a.addressId).to.be.a(\"string\").and.not.empty;",
          "});"
         ],
         "type": "text/javascript"
@@ -1099,6 +1108,13 @@
          "});",
          "pm.test(\"#11: itens trazem estimated_wait_minutes\", () => {",
          "  pm.response.json().forEach(e => pm.expect(e).to.have.property(\"estimated_wait_minutes\"));",
+         "});",
+         "pm.test(\"campos-do-historico: itens trazem rating_average, rating_count e rating_best\", () => {",
+         "  pm.response.json().forEach(e => {",
+         "    pm.expect(e).to.have.property(\"rating_average\");",
+         "    pm.expect(e.rating_count).to.be.a(\"number\");",
+         "    pm.expect(e).to.have.property(\"rating_best\");",
+         "  });",
          "});"
         ],
         "type": "text/javascript"
@@ -2882,6 +2898,132 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "?page=0&size=2 — vitrine paginada: envelope (BAK-2, 03/10)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"envelope com items, page, size, totalItems, totalPages e hasNext\", () => {",
+         "  pm.expect(r).to.include.all.keys('items', 'page', 'size', 'totalItems', 'totalPages', 'hasNext');",
+         "  pm.expect(r.items).to.be.an('array');",
+         "});",
+         "pm.test(\"no maximo 2 itens e a conta das paginas fecha\", () => {",
+         "  pm.expect(r.items.length).to.be.at.most(2);",
+         "  pm.expect(r.page).to.eql(0);",
+         "  pm.expect(r.size).to.eql(2);",
+         "  pm.expect(r.totalPages).to.eql(Math.ceil(r.totalItems / 2));",
+         "  pm.expect(r.hasNext).to.eql(r.totalPages > 1);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?page=0&size=2",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "page",
+         "value": "0"
+        },
+        {
+         "key": "size",
+         "value": "2"
+        }
+       ]
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "sem page/size — continua a lista inteira (compativel com o app em campo)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"resposta e array, nao envelope\", () => pm.expect(pm.response.json()).to.be.an('array'));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": []
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] ?size=101 -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code ESTABLISHMENT_INVALID_FILTER\", () => {",
+         "  pm.expect(pm.response.json().code).to.eql(\"ESTABLISHMENT_INVALID_FILTER\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "auth": {
+       "type": "noauth"
+      },
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/establishment?size=101",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment"
+       ],
+       "query": [
+        {
+         "key": "size",
+         "value": "101"
+        }
+       ]
+      }
+     },
+     "response": []
     }
    ]
   },
@@ -3258,6 +3400,11 @@
          "    pm.expect(r).to.have.property('attendancesWithoutSplit');",
          "  });",
          "  pm.test('liquido nunca passa do total', () => pm.expect(Number(r.netRevenue)).to.be.at.most(Number(r.totalRevenue)));",
+         "  // Expediente real por dia (Partner S4): inicio, fim (nulo em andamento) e minutos.",
+         "  pm.test('workdays e lista com date, start e workedMinutes', () => {",
+         "    pm.expect(r.workdays).to.be.an('array');",
+         "    r.workdays.forEach(d => pm.expect(d).to.include.all.keys('date', 'start', 'end', 'workedMinutes'));",
+         "  });",
          "}"
         ],
         "type": "text/javascript"
@@ -4446,6 +4593,69 @@
      ]
     },
     {
+     "name": "owner lists affiliation history (status=ALL, DEC-19)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/affiliations?status=ALL",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "affiliations"
+       ],
+       "query": [
+        {
+         "key": "status",
+         "value": "ALL"
+        }
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 - historico do vinculo\", () => pm.response.to.have.status(200));",
+         "pm.test(\"DEC-19: cada item traz status e resolvedAt (aceitos e recusados com a data)\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r).to.be.an(\"array\");",
+         "  r.forEach(a => { pm.expect(a).to.have.property(\"status\"); pm.expect(a).to.have.property(\"resolvedAt\"); });",
+         "});"
+        ]
+       }
+      }
+     ]
+    },
+    {
      "name": "owner rejects affiliation request",
      "request": {
       "method": "PATCH",
@@ -4976,6 +5186,487 @@
          "}"
         ],
         "type": "text/javascript"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "03f - convite sem conta (S30)",
+   "item": [
+    {
+     "name": "dono convida e-mail SEM conta -> 201 WAITING_ACCOUNT",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email_upper}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const e = \"s30_novato_\" + pm.variables.replaceIn(\"{{$guid}}\").substring(0, 8) + \"@vupth.test\";",
+         "pm.collectionVariables.set(\"s30_email\", e);",
+         "pm.collectionVariables.set(\"s30_email_upper\", \"  \" + e.toUpperCase() + \" \");",
+         "pm.collectionVariables.set(\"s30_pass\", \"Test1234!\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const r = pm.response.json();",
+         "pm.test(\"outcome WAITING_ACCOUNT\", () => pm.expect(r.outcome).to.equal(\"WAITING_ACCOUNT\"));",
+         "pm.test(\"e-mail normalizado (minusculas)\", () => pm.expect(r.emailInvitation.email).to.equal(pm.collectionVariables.get(\"s30_email\")));",
+         "pm.test(\"status PENDING\", () => pm.expect(r.emailInvitation.status).to.equal(\"PENDING\"));",
+         "pm.collectionVariables.set(\"s30_email_invitation_id\", r.emailInvitation.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "convidar o mesmo e-mail de novo -> o mesmo convite",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"mesmo id (idempotente)\", () => pm.expect(pm.response.json().emailInvitation.id).to.equal(pm.collectionVariables.get(\"s30_email_invitation_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono lista os convites por e-mail -> contem o convite",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"contem o convite\", () => pm.expect(pm.response.json().map(i => i.id)).to.include(pm.collectionVariables.get(\"s30_email_invitation_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] e-mail invalido -> 422 VALIDATION_ERROR",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"nao-e-email\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "setup: novato cria a conta com o e-mail convidado",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email}}\",\"password\":\"{{s30_pass}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201 - novato registrado\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "setup: login novato",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{s30_email}}\",\"password\":\"{{s30_pass}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 - login novato\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) pm.collectionVariables.set(\"s30_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "novato cria o perfil profissional -> 201",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{s30_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"{{$randomFirstName}}\",\"specialty\":\"Corte Masculino\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201 - perfil profissional criado\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "novato ve o convite comum PENDING da loja",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{s30_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/affiliations",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "const inv = r.find(a => a.establishmentId === pm.collectionVariables.get(\"owner_establishment_id\"));",
+         "pm.test(\"convite da loja presente\", () => pm.expect(inv).to.not.be.undefined);",
+         "pm.test(\"INVITATION PENDING\", () => { pm.expect(inv.type).to.equal(\"INVITATION\"); pm.expect(inv.status).to.equal(\"PENDING\"); });",
+         "if (inv) pm.collectionVariables.set(\"s30_affiliation_id\", inv.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "o convite por e-mail saiu da lista do dono (virou convite comum)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"nao contem mais o convite\", () => pm.expect(pm.response.json().map(i => i.id)).to.not.include(pm.collectionVariables.get(\"s30_email_invitation_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono convida outro e-mail (para cancelar)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/email-invitations",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"s30_cancelar_{{$timestamp}}@vupth.test\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.collectionVariables.set(\"s30_cancel_id\", pm.response.json().emailInvitation.id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono cancela o convite por e-mail -> 200 CANCELLED",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/email-invitations/{{s30_cancel_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"status CANCELLED\", () => pm.expect(pm.response.json().status).to.equal(\"CANCELLED\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] cancelar de novo -> 400",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/email-invitations/{{s30_cancel_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "cleanup: dono cancela o convite comum do novato",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/affiliations/{{s30_affiliation_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 ou 204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ]
        }
       }
      ]
@@ -5803,7 +6494,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 201 - Endereço adicionado\", () => pm.response.to.have.status(201));"
+         "pm.test(\"Status 201 - Endereço adicionado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"locationStatus PENDING — sem coordenada do aparelho, o geocoding roda depois\", () => pm.expect(pm.response.json().locationStatus).to.eql(\"PENDING\"));"
         ],
         "type": "text/javascript"
        }
@@ -6188,6 +6880,16 @@
          "pm.test(\"Cada professional expoe nickname (apelido)\", () => {",
          "  const r = pm.response.json();",
          "  r.professionals.forEach(p => pm.expect(p).to.have.property(\"nickname\"));",
+         "});",
+         "",
+         "pm.test(\"Cada professional expoe contact_phone (o que ele escolheu mostrar; pode ser null)\", () => {",
+         "  const r = pm.response.json();",
+         "  r.professionals.forEach(p => pm.expect(p).to.have.property(\"contact_phone\"));",
+         "});",
+         "",
+         "pm.test(\"Cada professional expoe show_position (interruptor da posicao, boolean)\", () => {",
+         "  const r = pm.response.json();",
+         "  r.professionals.forEach(p => pm.expect(p.show_position).to.be.a(\"boolean\"));",
          "});",
          "",
          "pm.test(\"Item #31: todo professional exibido tem service_items NÃO vazio\", () => {",
@@ -10302,6 +11004,11 @@
          "    pm.expect(r).to.have.property('attendancesWithoutSplit');",
          "  });",
          "  pm.test('liquido nunca passa do total', () => pm.expect(Number(r.netRevenue)).to.be.at.most(Number(r.totalRevenue)));",
+         "  // Expediente real por dia (Partner S4): inicio, fim (nulo em andamento) e minutos.",
+         "  pm.test('workdays e lista com date, start e workedMinutes', () => {",
+         "    pm.expect(r.workdays).to.be.an('array');",
+         "    r.workdays.forEach(d => pm.expect(d).to.include.all.keys('date', 'start', 'end', 'workedMinutes'));",
+         "  });",
          "}"
         ],
         "type": "text/javascript"
@@ -10544,6 +11251,159 @@
      }
     },
     {
+     "name": "adicionar servico ja presente no atendimento -> 200 sem mudar (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - no-op\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"services continua com 1 item\", () => pm.expect(r.services).to.have.lengthOf(1));",
+         "pm.test(\"status SCHEDULED\", () => pm.expect(r.status).to.equal(\"SCHEDULED\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[\"{{service_item_id}}\"]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] adicionar servico no atendimento de OUTRO usuario -> 403 (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[\"{{service_item_id}}\"]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] adicionar servico com lista vazia -> 422 VALIDATION_ERROR (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.equal(\"VALIDATION_ERROR\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] adicionar servico que nao existe -> 404 SERVICE_ITEM_NOT_FOUND (C8)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code SERVICE_ITEM_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.equal(\"SERVICE_ITEM_NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemIds\":[\"00000000-0000-0000-0000-000000000000\"]}"
+      },
+      "url": "{{base_url}}/attendances/{{attendance_id_leave}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "leave queue (client - SCHEDULED)",
      "event": [
       {
@@ -10601,6 +11461,7 @@
          "        pm.expect(item).to.have.property('clientId');",
          "        pm.expect(item).to.have.property('professionalId');",
          "        pm.expect(item).to.have.property('establishmentId');",
+         "        pm.expect(item.establishmentName).to.be.a('string').and.not.empty;",
          "        pm.expect(item).to.have.property('services');",
          "        pm.expect(item).to.have.property('status');",
          "        pm.expect(item).to.have.property('totalValue');",
@@ -16581,6 +17442,7 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
          "  pm.test(\"PENDING + expires_at\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.a(\"string\"); });",
+         "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time).to.match(/^2099-01-15T/));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
         "type": "text/javascript"
@@ -16606,7 +17468,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"2099-01-15T14:30:00Z\"}"
       }
      },
      "response": []
@@ -16913,21 +17775,17 @@
      "response": []
     },
     {
-     "name": "setup: cria intencao p/ agenda (client) -> 201",
+     "name": "setup: tira a excecao de hoje (owner) -> 204/404",
      "event": [
       {
        "listen": "prerequest",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "// ⚠️ +8h, nao +3h. Esta pasta tinha um acoplamento INVISIVEL com o tamanho da fila viva:",
-         "// a intencao e recusada com 422 INTENTION_BEFORE_QUEUE_END quando o horario pretendido cai",
-         "// antes do termino previsto da fila — e o termino previsto soma os atendimentos vivos MAIS",
-         "// as refeicoes do profissional. Medido em homolog (17/08): com 4 atendimentos de 30min na",
-         "// fila + a refeicao de 60min, o alvo de +3h perdia por SETE SEGUNDOS. O setup desta pasta",
-         "// nao quer testar essa regra (ela tem pasta propria) — quer uma intencao que exista para a",
-         "// agenda ser lida. Com folga de 8h ela para de depender do que as pastas anteriores deixaram.",
-         "pm.collectionVariables.set(\"agenda_desired\", new Date(Date.now() + 8*3600*1000).toISOString());"
+         "// A abertura da loja de pastas anteriores grava uma EXCECAO para hoje (ex.: 09:40-18:00), e a excecao vence o",
+         "// general-infos 24h do passo anterior. Com ela, a intencao das ~17:40 (+8h) nao cabe antes das 18:00 e leva",
+         "// 409 PROFESSIONAL_AGENDA_FULL (newman de 03/10, um sabado). Hoje no fuso da loja (America/Sao_Paulo, -03:00).",
+         "pm.collectionVariables.set('agenda_today', new Date(Date.now() - 3*3600*1000).toISOString().slice(0, 10));"
         ]
        }
       },
@@ -16936,7 +17794,63 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test('Status 204 ou 404 (sem excecao hoje)', () => pm.expect(pm.response.code).to.be.oneOf([204, 404]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/dates/{{agenda_today}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: cria intencao p/ agenda (client) -> 201",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// ⚠️ O alvo nao e um numero fixo. Esta pasta tinha um acoplamento INVISIVEL com o tamanho da fila viva:",
+         "// a intencao e recusada com 422 INTENTION_BEFORE_QUEUE_END quando o horario pretendido cai",
+         "// antes do termino previsto da fila — e o termino previsto soma os atendimentos vivos MAIS",
+         "// as refeicoes do profissional. Medido em homolog (17/08): +3h perdia por SETE SEGUNDOS; em 02/10",
+         "// o +8h fixo tambem perdeu (422, rodada perto do meio-dia). O setup desta pasta nao quer testar essa",
+         "// regra (ela tem pasta propria) — quer uma intencao que exista para a agenda ser lida. Entao le o",
+         "// piso na barra publica (o MESMO projectedQueueEnd que o servidor confere) e pede 30 min depois dele,",
+         "// nunca antes de +8h. A loja ficou 24h no passo anterior, entao qualquer hora cabe no expediente.",
+         "const base = pm.variables.get('base_url');",
+         "const profId = pm.collectionVariables.get('prof_professional_id');",
+         "const minimo = Date.now() + 8*3600*1000;",
+         "pm.collectionVariables.set('agenda_desired', new Date(minimo).toISOString());",
+         "pm.sendRequest({ url: base + '/attendances/intentions/professional/' + profId, method: 'GET' }, (err, res) => {",
+         "  if (err || res.code !== 200) { console.log('08m: barra publica indisponivel, fica +8h', err || res.code); return; }",
+         "  const piso = Date.parse(res.json().frame.projectedQueueEnd);",
+         "  if (!isNaN(piso)) pm.collectionVariables.set('agenda_desired', new Date(Math.max(minimo, piso + 30*60*1000)).toISOString());",
+         "});"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Se falhar, o nome do teste carrega o code do erro (INTENTION_BEFORE_QUEUE_END, _OUTSIDE_BUSINESS_HOURS...).",
+         "const code201 = pm.response.code === 201 ? '' : ' (veio ' + pm.response.code + ' ' + (() => { try { return pm.response.json().code || ''; } catch (e) { return ''; } })() + ')';",
+         "pm.test('Status 201' + code201, () => pm.response.to.have.status(201));",
          "if (pm.response.code === 201) {",
          "  const r = pm.response.json();",
          "  pm.collectionVariables.set(\"agenda_intention_id\", r.id);",
@@ -21176,7 +22090,8 @@
          "    pm.expect(b.latitude).to.eql(-22.8422);",
          "    pm.expect(b.longitude).to.eql(-43.2764);",
          "  });",
-         "}"
+         "}",
+         "pm.test(\"locationStatus LOCATED — com a coordenada do aparelho a loja ja entra na busca por raio\", () => pm.expect(pm.response.json().locationStatus).to.eql(\"LOCATED\"));"
         ],
         "type": "text/javascript"
        }
@@ -23966,7 +24881,10 @@
     "packages": {},
     "requests": {},
     "exec": [
-     ""
+     "// CI (decisao de 05/10): com ci_secret (--env-var no Actions), todo request leva o header X-Vupth-CI",
+     "// e passa por fora do rate limit de auth do staging/prod. Local: sem ci_secret, nada muda.",
+     "const ciSecret = pm.variables.get('ci_secret');",
+     "if (ciSecret) { pm.request.headers.upsert({ key: 'X-Vupth-CI', value: ciSecret }); }"
     ]
    }
   },

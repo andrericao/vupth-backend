@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.affiliation.exception.AffiliationNotFoundExcept
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyCancelledException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyRatedException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceCancelNotAllowedException;
+import com.ospaulos.vupth.domain.attendance.exception.AttendanceNoRoomForServiceException;
 import com.ospaulos.vupth.domain.attendance.exception.ClientAlreadyInQueueException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceAlreadyInProgressException;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
@@ -72,6 +73,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import com.ospaulos.vupth.domain.user.exception.EmailNotRegisteredException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.validation.FieldError;
@@ -344,6 +346,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_NOT_FOUND");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.queue.swap.exception.SwapDurationIncompatibleException.class)
+    public ResponseEntity<ErrorResponse> handleSwapDurationIncompatible(
+            com.ospaulos.vupth.domain.queue.swap.exception.SwapDurationIncompatibleException ex,
+            HttpServletRequest req) {
+        log.warn("[422] SwapDurationIncompatible | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "QUEUE_SWAP_DURATION_INCOMPATIBLE");
+    }
+
     @ExceptionHandler(SwapOfferNotAllowedException.class)
     public ResponseEntity<ErrorResponse> handleSwapOfferNotAllowed(
             SwapOfferNotAllowedException ex, HttpServletRequest req) {
@@ -483,6 +493,18 @@ public class GlobalExceptionHandler {
             BadCredentialsException ex, HttpServletRequest req) {
         log.warn("[401] BadCredentials | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNAUTHORIZED, "Invalid email or password", "BAD_CREDENTIALS");
+    }
+
+    /**
+     * E-mail sem conta (BAK-6 · D2): no login fica 401, como a senha errada (o app ja trata 401 ali),
+     * so que com o code proprio; no "esqueci minha senha", 404.
+     */
+    @ExceptionHandler(EmailNotRegisteredException.class)
+    public ResponseEntity<ErrorResponse> handleEmailNotRegistered(
+            EmailNotRegisteredException ex, HttpServletRequest req) {
+        HttpStatus status = req.getRequestURI().endsWith("/auth/login") ? HttpStatus.UNAUTHORIZED : HttpStatus.NOT_FOUND;
+        log.warn("[{}] EmailNotRegistered | {} {}", status.value(), req.getMethod(), req.getRequestURI());
+        return build(status, "E-mail not registered", "EMAIL_NOT_FOUND");
     }
 
     @ExceptionHandler(DisabledException.class)
@@ -704,6 +726,14 @@ public class GlobalExceptionHandler {
      * daqui a pouco, quando o atendimento atual terminar. O log carrega os ids; a mensagem ao
      * usuario, nao.
      */
+    @ExceptionHandler(AttendanceNoRoomForServiceException.class)
+    public ResponseEntity<ErrorResponse> handleAttendanceNoRoomForService(
+            AttendanceNoRoomForServiceException ex, HttpServletRequest req) {
+        log.warn("[409] AttendanceNoRoomForService | {} {} | attendance={}",
+                req.getMethod(), req.getRequestURI(), ex.getAttendanceId());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ATTENDANCE_NO_ROOM_FOR_SERVICE");
+    }
+
     @ExceptionHandler(ClientAlreadyInQueueException.class)
     public ResponseEntity<ErrorResponse> handleClientAlreadyInQueue(
             ClientAlreadyInQueueException ex, HttpServletRequest req) {

@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.web.rest.attendance.controller;
 
+import com.ospaulos.vupth.api.attendance.dto.request.AddServiceItemsRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
@@ -39,15 +40,29 @@ public class AttendanceController {
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
     private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
 
+    /**
+     * GET /attendances — sem {@code page}/{@code size}, a lista inteira de sempre; com um dos dois
+     * (historico-rapido, 04/10), o envelope {items, page, size, totalItems, totalPages, hasNext},
+     * cortado no banco. size de 1 a 100 (padrao 20); fora disso, 422.
+     */
     @GetMapping
-    public ResponseEntity<List<AttendanceListResponse>> listAttendances(
+    public ResponseEntity<?> listAttendances(
             @RequestParam(required = false) UUID establishmentId,
             @RequestParam(required = false) UUID professionalId,
             @RequestParam(required = false) UUID clientId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(required = false) AttendanceStatus status,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        var pagination = com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage.from(page, size);
+        if (pagination != null) {
+            return ResponseEntity.ok(attendanceService.listAttendancesPage(
+                    principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo,
+                    status, pagination));
+        }
 
         log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} client={} dateFrom={} dateTo={} status={}",
                 principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo, status);
@@ -226,6 +241,33 @@ public class AttendanceController {
                 attendanceId, principal.getUserId());
 
         // #42: a posicao mudou → propostas de troca pendentes deixam de valer
+        queueSwapService.expirePendingForAttendance(attendanceId);
+        swapOfferService.expireOpenOffersForAttendance(attendanceId);
+        // WS: a fila mudou → atualiza a fila ao vivo da loja
+        queuePublisher.broadcastQueue(response.establishmentId());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PATCH /attendances/{attendanceId}/service-items
+     *
+     * Adicionar servico a atendimento ja na fila (adicionar-servico-na-fila, Client C8). So o proprio
+     * cliente (JWT), so em SCHEDULED; 409 ATTENDANCE_NO_ROOM_FOR_SERVICE se houver alguem depois na fila
+     * ou uma intencao antes do novo fim. Requer ROLE_CLIENT.
+     */
+    @PatchMapping("/{attendanceId}/service-items")
+    public ResponseEntity<AttendanceInQueueResponse> addServiceItems(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal,
+            @RequestBody @Valid AddServiceItemsRequest request) {
+
+        log.info("ATTENDANCE CONTROLLER ADD-SERVICE-ITEMS {} by client={}", attendanceId, principal.getUserId());
+
+        AttendanceInQueueResponse response = attendanceService.addServiceItems(
+                attendanceId, principal.getUserId(), request.serviceItemIds());
+
+        // A duracao mudou → a troca casada pela duracao (D14) deixa de valer
         queueSwapService.expirePendingForAttendance(attendanceId);
         swapOfferService.expireOpenOffersForAttendance(attendanceId);
         // WS: a fila mudou → atualiza a fila ao vivo da loja

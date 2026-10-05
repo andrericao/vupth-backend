@@ -45,6 +45,7 @@ class InviteProfessionalUseCaseTest {
     @Mock ProfessionalRepository professionalRepository;
     @Mock AffiliationRequestRepository affiliationRepository;
 
+    @Mock com.ospaulos.vupth.domain.affiliation.service.AffiliationNotifier notifier;
     @InjectMocks InviteProfessionalUseCase useCase;
 
     private Establishment establishment;

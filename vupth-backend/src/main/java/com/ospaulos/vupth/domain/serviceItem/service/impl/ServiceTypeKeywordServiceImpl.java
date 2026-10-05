@@ -5,6 +5,7 @@ import com.ospaulos.vupth.domain.establishment.valueObject.ServiceType;
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlreadyExistsException;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceTypeKeyword;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceTypeKeywordRepository;
+import com.ospaulos.vupth.domain.serviceItem.service.ServiceTypeKeywordCatalog;
 import com.ospaulos.vupth.domain.serviceItem.service.ServiceTypeKeywordService;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ import java.util.UUID;
 public class ServiceTypeKeywordServiceImpl implements ServiceTypeKeywordService {
 
     private final ServiceTypeKeywordRepository repository;
+    private final ServiceTypeKeywordCatalog catalog;
 
     @Override
     @Transactional(readOnly = true)
@@ -72,17 +74,27 @@ public class ServiceTypeKeywordServiceImpl implements ServiceTypeKeywordService 
         }
 
         repository.save(new ServiceTypeKeyword(type, normalized, userId));
+        catalog.evict();
         log.info("[ServiceTypeKeyword] add type={} keyword='{}' by={}", type, normalized, userId);
 
-        return toResponse(type, mergedKeywords(type), normalized);
+        // Direto do banco, nao do cache: o evict so vale apos o commit, e ler o cache aqui dentro
+        // poderia guardar nele uma linha que ainda nao foi commitada.
+        Set<String> merged = baseKeywords(type);
+        repository.findByServiceItemType(type).forEach(k -> merged.add(k.getKeyword()));
+        return toResponse(type, merged, normalized);
     }
 
-    /** Sinonimos-base (enum) + adicionados (tabela), normalizados e ordenados. */
+    /** Sinonimos-base (enum) + adicionados (catalogo em cache), normalizados e ordenados. */
     private Set<String> mergedKeywords(ServiceItemType type) {
-        Set<String> merged = new TreeSet<>();
-        type.getKeywords().forEach(k -> merged.add(normalize(k)));
-        repository.findByServiceItemType(type).forEach(k -> merged.add(k.getKeyword()));
+        Set<String> merged = baseKeywords(type);
+        merged.addAll(catalog.addedKeywords().getOrDefault(type, Set.of()));
         return merged;
+    }
+
+    private Set<String> baseKeywords(ServiceItemType type) {
+        Set<String> base = new TreeSet<>();
+        type.getKeywords().forEach(k -> base.add(normalize(k)));
+        return base;
     }
 
     private ServiceTypeSearchResponse toResponse(ServiceItemType type, Set<String> keywords, String matched) {

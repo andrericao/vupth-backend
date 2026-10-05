@@ -25,10 +25,12 @@ class MailInfoContributorTest {
     /** Dubles com nome de classe distinto: o campo {@code sender} tem de vir DELES, nao do provider. */
     static class FakeBrevoSender implements EmailSender {
         @Override public void sendPasswordResetCode(String toEmail, String code) { }
+        @Override public void send(String toEmail, String subject, String body) { }
     }
 
     static class FakeSmtpSender implements EmailSender {
         @Override public void sendPasswordResetCode(String toEmail, String code) { }
+        @Override public void send(String toEmail, String subject, String body) { }
     }
 
     @SuppressWarnings("unchecked")

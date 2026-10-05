@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # Geocodificacao silenciosa (Partner S25): marca o endereco que o geocoder nao achou, para o dono
+  # saber que a loja nao entra na busca por proximidade (LocationStatus.UNRESOLVED).
+  - changeSet:
+      id: 005-add-geocoding_failed-to-address
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: addresses
+                columnName: geocoding_failed
+      changes:
+        - addColumn:
+            tableName: addresses
+            columns:
+              - column:
+                  name: geocoding_failed
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

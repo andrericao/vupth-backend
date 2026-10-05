@@ -84,6 +84,13 @@ public class Address {
 
     private Double longitude;
 
+    /**
+     * O geocoder tentou e nao achou o endereco (ou caiu). Volta a {@code false} quando a coordenada
+     * chega ou quando o dono corrige o endereco. Ver {@code LocationStatus}.
+     */
+    @Column(name = "geocoding_failed", nullable = false)
+    private boolean geocodingFailed;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

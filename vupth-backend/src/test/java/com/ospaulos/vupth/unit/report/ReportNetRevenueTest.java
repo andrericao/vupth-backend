@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepositor
 import com.ospaulos.vupth.domain.owner.model.Owner;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalShiftRepository;
 import com.ospaulos.vupth.domain.report.service.impl.ReportServiceImpl;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
@@ -46,6 +47,7 @@ class ReportNetRevenueTest {
     @Mock AttendanceRepository attendanceRepository;
     @Mock ProfessionalRepository professionalRepository;
     @Mock EstablishmentRepository establishmentRepository;
+    @Mock ProfessionalShiftRepository shiftRepository;
 
     @InjectMocks ReportServiceImpl reportService;
 
