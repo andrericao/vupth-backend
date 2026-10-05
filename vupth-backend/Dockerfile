@@ -46,6 +46,11 @@ EXPOSE 8080
 # e o staging ficou preso no deploy anterior. O padrao cabe em 512 MiB: heap em 50%, code cache e
 # metaspace com teto, Serial GC (o de menos memoria fora do heap). Com mais memoria (Railway), troque
 # pelo JAVA_OPTS do painel.
-ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=50.0 -XX:+UseSerialGC -XX:ReservedCodeCacheSize=64m -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=32m -Xss512k -XX:+ExitOnOutOfMemoryError"
+# pr70-rollback-recusado (05/10): mesmo assim o processo caia no meio do Newman do Actions (502 no 180o
+# request em 04/10, no 156o em 05/10, endpoints diferentes) — parado ja eram ~427 MiB, e sob carga o C2
+# compila em arenas nativas que passam do teto. So o C1 (TieredStopAtLevel=1): bem menos memoria nativa
+# e menos CPU para compilar (o boot levava 234 s com 0,1 CPU), ao custo de pico de desempenho que nao
+# importa aqui. Heap em 45% (~230 MiB) e code cache em 48m deixam folga para o resto.
+ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=45.0 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=32m -Xss512k -XX:+ExitOnOutOfMemoryError"
 
 ENTRYPOINT ["sh", "-c", "cd /app/application && exec java $JAVA_OPTS $( [ -f app.jsa ] && echo -XX:SharedArchiveFile=app.jsa ) -jar app.jar"]
