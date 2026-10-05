@@ -54,4 +54,14 @@ public record BusinessHoursResponse(
         }
         return new BusinessHoursResponse(hours.isConfigured(), weekly, exceptions, upcoming);
     }
+
+    /**
+     * Agenda do profissional (agenda-do-profissional): {@code configured}, {@code weekly} e {@code exceptions}
+     * sao os DELE; {@code upcoming} ja vem efetivo — a intersecao com o horario da loja, o que vale de fato.
+     */
+    public static BusinessHoursResponse forProfessional(BusinessHours own, BusinessHours effective, LocalDate today) {
+        BusinessHoursResponse mine = from(own, today);
+        return new BusinessHoursResponse(mine.configured(), mine.weekly(), mine.exceptions(),
+                from(effective, today).upcoming());
+    }
 }

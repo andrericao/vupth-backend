@@ -132,6 +132,35 @@ public final class BusinessHours {
         return Collections.unmodifiableMap(new LinkedHashMap<>(exceptions));
     }
 
+    /**
+     * O horario que vale de fato para um profissional (agenda-do-profissional): dia a dia, a intersecao do
+     * horario da loja com o dele. Quem nao configurou nao recorta nada.
+     */
+    public static BusinessHours effective(BusinessHours store, BusinessHours professional) {
+        if (professional == null || !professional.isConfigured()) {
+            return store == null ? notConfigured() : store;
+        }
+        if (store == null || !store.isConfigured()) {
+            return professional;
+        }
+        Map<DayOfWeek, DayHours> week = new EnumMap<>(DayOfWeek.class);
+        for (DayOfWeek day : DayOfWeek.values()) {
+            week.put(day, DayHours.intersect(store.week.get(day), professional.week.get(day)));
+        }
+        Map<LocalDate, DayHours> exceptions = new TreeMap<>();
+        java.util.Set<LocalDate> dates = new java.util.TreeSet<>(store.exceptions.keySet());
+        dates.addAll(professional.exceptions.keySet());
+        for (LocalDate date : dates) {
+            exceptions.put(date, DayHours.intersect(store.on(date), professional.on(date)));
+        }
+        return new BusinessHours(week, exceptions);
+    }
+
+    /** O dia da semana (null se nao configurado). */
+    public DayHours onWeekday(DayOfWeek day) {
+        return week.get(day);
+    }
+
     private void requireConfigured() {
         if (!isConfigured()) {
             throw new InvalidBusinessHoursException(

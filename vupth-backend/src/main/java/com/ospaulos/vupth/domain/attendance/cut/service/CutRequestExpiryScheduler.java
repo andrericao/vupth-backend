@@ -114,7 +114,7 @@ public class CutRequestExpiryScheduler {
 
     private void rescheduleLocked() {
         cancelPending();
-        Optional<CutRequest> head = cutRequestRepository.findFirstByStatusOrderByExpiresAtAsc(CutRequestStatus.PENDING);
+        Optional<CutRequest> head = cutRequestRepository.findFirstByStatusAndExpiresAtIsNotNullOrderByExpiresAtAsc(CutRequestStatus.PENDING);
         if (head.isEmpty()) {
             log.info("[CutExpiry] reschedule — nenhum pedido PENDING; timer ocioso");
             return;

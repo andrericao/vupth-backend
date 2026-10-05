@@ -49,6 +49,7 @@ public class RegisterAddressUseCase {
                     );
 
         Address address = addressMapper.toAddressEntity(request);
+        address.markGpsIfCoordinatesSent(request.latitude(), request.longitude());
 
         Set<UUID> existingIds = user.getUserAddresses().stream()
                 .map(UserAddress::getId)

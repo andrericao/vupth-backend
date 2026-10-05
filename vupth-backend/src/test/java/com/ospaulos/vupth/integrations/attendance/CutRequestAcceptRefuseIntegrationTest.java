@@ -130,6 +130,28 @@ class CutRequestAcceptRefuseIntegrationTest {
     }
 
     @Test
+    @Order(15)
+    @DisplayName("DEC-27: pedido para outro dia (sem vencimento) -> o aceite funciona, sem tratar o nulo como vencido")
+    void acceptNoExpiryRequest() throws Exception {
+        String tomorrow = com.ospaulos.vupth.domain.shared.BusinessClock.at(
+                com.ospaulos.vupth.domain.shared.BusinessClock.today().plusDays(1), java.time.LocalTime.of(10, 0)).toString();
+        String body = "{\"professionalId\":\"" + professionalId + "\",\"establishmentId\":\"" + establishmentId
+                + "\",\"serviceItemIds\":[\"" + serviceItemId + "\"],\"desiredTime\":\"" + tomorrow + "\"}";
+        MvcResult r = mvc.perform(post("/attendances/cut-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String id = new JSONObject(r.getResponse().getContentAsString()).getString("id");
+
+        mvc.perform(patch("/attendances/cut-requests/{id}/accept", id)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACCEPTED"));
+    }
+
+    @Test
     @Order(20)
     @DisplayName("recusa -> 200 REFUSED + nenhum atendimento criado")
     void refuse_noAttendance() throws Exception {

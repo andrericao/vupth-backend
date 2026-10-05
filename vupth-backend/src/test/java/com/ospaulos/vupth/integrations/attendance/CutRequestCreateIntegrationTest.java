@@ -8,6 +8,7 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;
@@ -144,19 +145,34 @@ class CutRequestCreateIntegrationTest {
 
     @Test
     @Order(20)
-    @DisplayName("loja aberta agora -> 409 CUT_REQUEST_NOT_ALLOWED (entra normal)")
-    void openShop_conflict() throws Exception {
+    @DisplayName("DEC-27: loja aberta agora (profissional em Fora) -> 201, quem decide e o profissional")
+    void openShop_professionalOff_created() throws Exception {
         forceOpen(true);
         try {
             mvc.perform(post("/attendances/cut-requests")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("Authorization", clientToken)
                             .content(body(professionalId, establishmentId, myServiceItemId)))
-                    .andExpect(status().isConflict())
-                    .andExpect(jsonPath("$.code").value("CUT_REQUEST_NOT_ALLOWED"));
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.status").value("PENDING"))
+                    .andExpect(jsonPath("$.expires_at").isNotEmpty());
         } finally {
             forceOpen(false);
         }
+    }
+
+    @Test
+    @Order(21)
+    @DisplayName("DEC-27: pedido para um dia seguinte -> 201 sem vencimento (expires_at nulo, ativo ate ele decidir)")
+    void nextDay_noExpiry() throws Exception {
+        String tomorrow = BusinessClock.at(BusinessClock.today().plusDays(1), java.time.LocalTime.of(10, 0)).toString();
+        mvc.perform(post("/attendances/cut-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(bodyWithDesiredTime(tomorrow)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.expires_at").value(nullValue()));
     }
 
     @Test

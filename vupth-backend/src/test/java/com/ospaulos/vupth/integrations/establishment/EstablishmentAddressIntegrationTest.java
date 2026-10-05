@@ -171,6 +171,8 @@ class EstablishmentAddressIntegrationTest {
                 .andExpect(jsonPath("$.address.latitude").value(-23.561684))
                 .andExpect(jsonPath("$.address.longitude").value(-46.655981))
                 .andExpect(jsonPath("$.address.locationStatus").value("LOCATED"))
+                // origem-da-coordenada (Partner S39): veio do aparelho, vale em qualquer aparelho do dono
+                .andExpect(jsonPath("$.address.locationSource").value("GPS"))
                 .andExpect(jsonPath("$.address.street").value(createdAddress.street()));
     }
 

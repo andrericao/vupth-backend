@@ -7,7 +7,10 @@ import com.ospaulos.vupth.api.attendance.dto.request.CreateIntentionRequest;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
 import com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus;
+import com.ospaulos.vupth.domain.professional.model.ProfessionalInterval;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalIntervalRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -57,6 +60,7 @@ class IntentionAgendaIntegrationTest {
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired TransactionTemplate tx;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
+    @Autowired ProfessionalRepository professionalRepository;
     @Autowired AttendanceRepository attendanceRepository;
 
     private final Faker faker = new Faker();
@@ -186,6 +190,7 @@ class IntentionAgendaIntegrationTest {
                 .andExpect(jsonPath("$.blocks.length()").value(3))
                 .andExpect(jsonPath("$.blocks[0].start").exists())
                 .andExpect(jsonPath("$.blocks[0].durationMinutes").isNumber())
+                .andExpect(jsonPath("$.blocks[0].type").value("INTENTION"))
                 .andExpect(jsonPath("$.blocks[0].id").doesNotExist())
                 .andExpect(jsonPath("$.blocks[0].clientId").doesNotExist())
                 .andExpect(jsonPath("$.blocks[0].clientName").doesNotExist())
@@ -215,5 +220,43 @@ class IntentionAgendaIntegrationTest {
     void publicAgenda_meStillProtected() throws Exception {
         mvc.perform(get("/attendances/intentions/professional/me"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Order(60)
+    @DisplayName("agenda-publica-com-expediente: a refeicao vira bloco BREAK, e a intencao na refeicao e estimada para depois dela")
+    void publicAgenda_mealIsBlockedAndPushed() throws Exception {
+        // Almoco recorrente a 5 h de agora (relogio da loja); amanha, no mesmo horario, ele cai a ~29 h —
+        // longe das 3 intencoes do setup (2 h, 4 h e 26 h, 30 min cada).
+        OffsetDateTime anchor = OffsetDateTime.now().plusHours(5);
+        LocalTime mealTime = BusinessClock.timeAt(anchor).withSecond(0).withNano(0);
+        UUID mealId = tx.execute(st -> professionalIntervalRepository.save(ProfessionalInterval.createRecurring(
+                professionalRepository.findById(UUID.fromString(professionalId)).orElseThrow(),
+                60, mealTime, "DAILY", "Almoco do teste")).getId());
+        try {
+            mvc.perform(get("/attendances/intentions/professional/{id}", professionalId))
+                    .andExpect(status().isOk())
+                    .andExpect(result -> {
+                        var blocks = new JSONObject(result.getResponse().getContentAsString()).getJSONArray("blocks");
+                        int breaks = 0;
+                        for (int i = 0; i < blocks.length(); i++) {
+                            var b = blocks.getJSONObject(i);
+                            if ("BREAK".equals(b.getString("type"))) {
+                                breaks++;
+                                assertThat(b.getInt("durationMinutes")).isEqualTo(60);
+                            }
+                        }
+                        // De hoje ate o horizonte (30 dias): 30 ou 31 almocos, conforme o de hoje ja passou.
+                        assertThat(breaks).isBetween(30, 31);
+                    });
+
+            OffsetDateTime mealTomorrow = BusinessClock.at(BusinessClock.dateAt(anchor).plusDays(1), mealTime);
+            UUID intention = createIntention(otherClientToken, mealTomorrow.plusMinutes(10));
+            createdIntentions.add(intention);
+            OffsetDateTime estimated = attendanceRepository.findById(intention).orElseThrow().getScheduledTime();
+            assertThat(estimated.toInstant()).isEqualTo(mealTomorrow.plusMinutes(60).toInstant());
+        } finally {
+            professionalIntervalRepository.deleteById(mealId);
+        }
     }
 }

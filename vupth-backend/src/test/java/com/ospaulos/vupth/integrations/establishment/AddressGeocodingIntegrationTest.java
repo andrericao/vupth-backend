@@ -6,6 +6,7 @@ import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.api.address.dto.request.AddressRequest;
 import com.ospaulos.vupth.domain.address.model.Address;
 import com.ospaulos.vupth.domain.address.repository.AddressRepository;
+import com.ospaulos.vupth.domain.address.valueObject.LocationSource;
 import com.ospaulos.vupth.domain.address.valueObject.LocationStatus;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentAddressRepository;
 import com.ospaulos.vupth.infrastructure.geocoding.Coordinates;
@@ -76,6 +77,8 @@ class AddressGeocodingIntegrationTest {
         assertThat(address.getLatitude()).isEqualTo(PENHA_LAT);
         assertThat(address.getLongitude()).isEqualTo(PENHA_LNG);
         assertThat(LocationStatus.of(address)).isEqualTo(LocationStatus.LOCATED);
+        // origem-da-coordenada (Partner S39): achada pelo texto, nao pelo aparelho.
+        assertThat(address.getLocationSource()).isEqualTo(LocationSource.GEOCODER);
     }
 
     @Test
@@ -141,7 +144,9 @@ class AddressGeocodingIntegrationTest {
                         .content(mapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 // A resposta sai antes do worker: sem coordenada do aparelho, o dono ve PENDING.
-                .andExpect(jsonPath("$.locationStatus").value("PENDING"));
+                .andExpect(jsonPath("$.locationStatus").value("PENDING"))
+                // Sem coordenada ainda, sem origem (origem-da-coordenada).
+                .andExpect(jsonPath("$.locationSource").doesNotExist());
 
         // O EstablishmentAddressResponse nao expoe o id do Address — busca-se pelo vinculo da loja,
         // que e recem-criada e portanto tem exatamente um endereco.

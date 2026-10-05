@@ -8,7 +8,6 @@ import com.ospaulos.vupth.domain.attendance.cut.model.CutRequest;
 import com.ospaulos.vupth.domain.attendance.cut.repository.CutRequestRepository;
 import com.ospaulos.vupth.domain.attendance.cut.service.CutRequestService;
 import com.ospaulos.vupth.domain.attendance.exception.CutRequestExpiredException;
-import com.ospaulos.vupth.domain.attendance.exception.CutRequestNotAllowedException;
 import com.ospaulos.vupth.domain.attendance.exception.CutRequestNotPendingException;
 import com.ospaulos.vupth.domain.attendance.exception.ServiceItemNotOfProfessionalException;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
@@ -33,6 +32,8 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.ospaulos.vupth.domain.shared.BusinessClock;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -75,14 +76,12 @@ public class CutRequestServiceImpl implements CutRequestService {
             throw new ProfessionalNotAffiliatedException(professional.getId());
         }
 
-        // Gate C2: so faz sentido pedir corte com a loja FECHADA agora. Aberta -> entra normal (409).
         // D9 (25/09): pedido de corte vira entrada na fila — nao existe para quem trabalha so com agenda.
         if (professional.getOperationMode() == com.ospaulos.vupth.domain.professional.valueObject.OperationMode.AGENDA_ONLY) {
             throw new com.ospaulos.vupth.domain.professional.exception.ProfessionalAgendaOnlyException(professional.getId());
         }
-        if (establishment.isOpenNow()) {
-            throw new CutRequestNotAllowedException(establishment.getId());
-        }
+        // DEC-27 (Andre, 05/10): o cliente SEMPRE pode pedir — loja aberta ou fechada, profissional em Fora,
+        // fila fechada — e quem decide e o profissional. Saiu o 409 CUT_REQUEST_NOT_ALLOWED da loja aberta.
 
         List<ServiceItem> serviceItems = serviceItemRepository.findAllById(request.serviceItemIds());
         if (serviceItems.isEmpty()) {
@@ -103,7 +102,7 @@ public class CutRequestServiceImpl implements CutRequestService {
         cut.setServiceItems(serviceItems);
         cut.setStatus(CutRequestStatus.PENDING);
         cut.setCreatedAt(now);
-        cut.setExpiresAt(now.plusMinutes(VALIDITY_MINUTES));
+        cut.setExpiresAt(expiresAtFor(request.desiredTime(), now));
         cut.setDesiredTime(request.desiredTime());
         CutRequest saved = cutRequestRepository.save(cut);
 
@@ -131,7 +130,7 @@ public class CutRequestServiceImpl implements CutRequestService {
         CutRequest cut = loadOwnedPending(cutRequestId, professionalId);
 
         OffsetDateTime now = OffsetDateTime.now();
-        if (now.isAfter(cut.getExpiresAt())) {
+        if (cut.getExpiresAt() != null && now.isAfter(cut.getExpiresAt())) {
             // Defensivo: mesmo antes do timer da fatia 3 rodar, um aceite fora da janela auto-nega.
             cut.setStatus(CutRequestStatus.EXPIRED);
             cut.setRespondedAt(now);
@@ -207,6 +206,17 @@ public class CutRequestServiceImpl implements CutRequestService {
             log.info("[CutRequest] expire — id={} PENDING -> EXPIRED (expiresAt={})", cut.getId(), cut.getExpiresAt());
         }
         return due.size();
+    }
+
+    /**
+     * DEC-27: o pedido para HOJE (ou sem dia) vale {@value #VALIDITY_MINUTES} min; para um dia seguinte,
+     * cuja agenda ainda nao abriu, fica ativo ate o profissional decidir ({@code null} = sem vencimento).
+     */
+    static OffsetDateTime expiresAtFor(OffsetDateTime desiredTime, OffsetDateTime now) {
+        if (desiredTime != null && BusinessClock.dateAt(desiredTime).isAfter(BusinessClock.dateAt(now))) {
+            return null;
+        }
+        return now.plusMinutes(VALIDITY_MINUTES);
     }
 
     /** Carrega o pedido (eager nos serviceItems), valida dono e estado PENDING. */

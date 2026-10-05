@@ -47,6 +47,7 @@ public class EstablishmentAddressServiceImpl implements EstablishmentAddressServ
                 .orElseThrow(() -> new EntityNotFoundException("Establishment not found or not owned by this user"));
 
         Address address = addressMapper.toAddressEntity(request);
+        address.markGpsIfCoordinatesSent(request.latitude(), request.longitude());
 
         EstablishmentAddress estAddress = new EstablishmentAddress(address);
         estAddress.setEstablishment(establishment);

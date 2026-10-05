@@ -1,5 +1,7 @@
 package com.ospaulos.vupth.domain.address.model;
 
+import com.ospaulos.vupth.domain.address.valueObject.LocationSource;
+
 import com.ospaulos.vupth.api.address.dto.request.UpdateAddressRequest;
 import com.ospaulos.vupth.api.address.dto.request.UpdateEstablishmentAddressRequest;
 import org.hibernate.annotations.BatchSize;
@@ -91,6 +93,11 @@ public class Address {
     @Column(name = "geocoding_failed", nullable = false)
     private boolean geocodingFailed;
 
+    /** De onde veio a coordenada (origem-da-coordenada, Partner S39); nulo = sem coordenada ou desconhecida. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "location_source", length = 16)
+    private LocationSource locationSource;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -140,6 +147,7 @@ public class Address {
         if (request.longitude() != null) {
             this.longitude = request.longitude();
         }
+        markGpsIfCoordinatesSent(request.latitude(), request.longitude());
     }
 
     public void update(UpdateAddressRequest request) {
@@ -172,6 +180,14 @@ public class Address {
         }
         if (request.longitude() != null) {
             this.longitude = request.longitude();
+        }
+        markGpsIfCoordinatesSent(request.latitude(), request.longitude());
+    }
+
+    /** A coordenada veio no corpo do pedido = do aparelho do dono. */
+    public void markGpsIfCoordinatesSent(Double latitude, Double longitude) {
+        if (latitude != null && longitude != null) {
+            this.locationSource = LocationSource.GPS;
         }
     }
 }
