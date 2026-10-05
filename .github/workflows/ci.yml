@@ -60,7 +60,7 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
         uses: actions/setup-java@v6
@@ -92,7 +92,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Deploy to Render (HOMOLOG)
         run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
@@ -107,7 +107,7 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Newman
         run: npm install -g newman
@@ -220,7 +220,7 @@ jobs:
       MAX_ROLLBACK_DISTANCE: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -299,7 +299,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # O railway up nao leva contexto de git (o commit sairia "unknown"). O arquivo vai no upload e o
       # /actuator/info o le: e o que deixa o test-prod reconhecer a build NOVA pelo commit.
@@ -327,7 +327,7 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Newman
         run: npm install -g newman
@@ -434,7 +434,7 @@ jobs:
       MAX_ROLLBACK_AGE_DAYS: 14
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
