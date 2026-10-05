@@ -2,11 +2,14 @@ package com.ospaulos.vupth.infrastructure.storage;
 
 import com.ospaulos.vupth.domain.shared.storage.ImageStorage;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
+import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -33,20 +36,30 @@ public class R2ImageStorage implements ImageStorage {
     private final String bucket;
     private final String publicBaseUrl;
 
+    @Autowired
     public R2ImageStorage(
             @Value("${vupth.storage.r2.account-id}") String accountId,
             @Value("${vupth.storage.r2.access-key-id}") String accessKeyId,
             @Value("${vupth.storage.r2.secret-access-key}") String secretAccessKey,
             @Value("${vupth.storage.r2.bucket}") String bucket,
             @Value("${vupth.storage.r2.public-base-url}") String publicBaseUrl) {
-        String endpoint = "https://" + normalizeAccountId(accountId) + ".r2.cloudflarestorage.com";
+        this(URI.create("https://" + normalizeAccountId(accountId) + ".r2.cloudflarestorage.com"),
+                accessKeyId, secretAccessKey, bucket, publicBaseUrl);
+    }
+
+    /** Testes: endpoint de um servidor local no lugar do R2. */
+    R2ImageStorage(URI endpoint, String accessKeyId, String secretAccessKey, String bucket, String publicBaseUrl) {
         this.client = S3Client.builder()
-                .endpointOverride(URI.create(endpoint))
+                .endpointOverride(endpoint)
                 .region(Region.of("auto"))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKeyId, secretAccessKey)))
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .httpClient(UrlConnectionHttpClient.create())
+                // awssdk-com-ajuste-do-r2: desde a 2.30 o SDK manda um checksum CRC32 em todo upload (header
+                // ou trailer em aws-chunked), que o R2 recusava. So quando a operacao exige — como antes.
+                .requestChecksumCalculation(RequestChecksumCalculation.WHEN_REQUIRED)
+                .responseChecksumValidation(ResponseChecksumValidation.WHEN_REQUIRED)
                 .build();
         this.bucket = bucket;
         this.publicBaseUrl = publicBaseUrl.endsWith("/")
