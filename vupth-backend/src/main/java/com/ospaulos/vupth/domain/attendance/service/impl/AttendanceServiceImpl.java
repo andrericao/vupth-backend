@@ -418,14 +418,22 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // O mesmo "reservado" que o algoritmo da intencao usa para encaixar (estimativa congelada,
         // senao o horario pretendido) — a barra mostra exatamente o que o create vai considerar.
-        List<PublicAgendaResponse.Block> blocks = attendanceRepository.findIntentionsByProfessional(professionalId)
-                .stream()
-                .map(a -> new PublicAgendaResponse.Block(
-                        a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
-                        a.getEstimatedTotalMinutes()))
-                .filter(b -> b.start() != null)
-                .sorted(java.util.Comparator.comparing(PublicAgendaResponse.Block::start))
-                .toList();
+        List<PublicAgendaResponse.Block> blocks = new java.util.ArrayList<>(
+                attendanceRepository.findIntentionsByProfessional(professionalId)
+                        .stream()
+                        .map(a -> new PublicAgendaResponse.Block(
+                                a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
+                                a.getEstimatedTotalMinutes(), PublicAgendaResponse.INTENTION))
+                        .filter(b -> b.start() != null)
+                        .toList());
+        // Refeicoes e pausas (agenda-publica-com-expediente): as mesmas janelas que o encaixe pula, de hoje
+        // ate o horizonte — o app deixa de oferecer o horario do almoco.
+        OffsetDateTime now = OffsetDateTime.now();
+        java.time.LocalDate today = BusinessClock.dateAt(now);
+        QueueUtils.breakSlots(professional.getIntervals(), today, today.plusDays(INTENTION_HORIZON_DAYS), now)
+                .forEach(slot -> blocks.add(new PublicAgendaResponse.Block(
+                        slot.start(), slot.durationMinutes(), PublicAgendaResponse.BREAK)));
+        blocks.sort(java.util.Comparator.comparing(PublicAgendaResponse.Block::start));
 
         return new PublicAgendaResponse(frameFor(professional), blocks);
     }
@@ -536,7 +544,16 @@ public class AttendanceServiceImpl implements AttendanceService {
                         a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime(),
                         a.getEstimatedTotalMinutes()))
                 .collect(Collectors.toList());
-        OffsetDateTime estimatedStart = QueueUtils.assignAgendaSlot(desiredTime, duration, reserved);
+        // Fora das refeicoes/pausas tambem (agenda-publica-com-expediente), como a intencao de fila: agendar
+        // 12:30 com almoco 12:00-13:00 estima 13:00. Repete ate estabilizar — sair da refeicao pode cair
+        // num horario reservado, e vice-versa.
+        OffsetDateTime estimatedStart = desiredTime;
+        OffsetDateTime previous;
+        do {
+            previous = estimatedStart;
+            estimatedStart = QueueUtils.assignAgendaSlot(estimatedStart, duration, reserved);
+            estimatedStart = QueueUtils.pushPastBreaks(estimatedStart, duration, professional.getIntervals());
+        } while (!estimatedStart.equals(previous));
 
         // CHEIO/FULL: o fim projetado do encaixe ultrapassa o fechamento do dia pretendido? (definicao Andre)
         if (!fitsBeforeClosing(establishment, estimatedStart, duration)) {

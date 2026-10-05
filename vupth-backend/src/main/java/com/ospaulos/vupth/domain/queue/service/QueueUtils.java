@@ -312,7 +312,29 @@ public class QueueUtils {
         if (start == null || intervals == null || intervals.isEmpty()) {
             return start;
         }
-        LocalDate day = BusinessClock.dateAt(start);
+        List<OffsetDateTime[]> windows = breakWindowsOn(BusinessClock.dateAt(start), intervals);
+        OffsetDateTime candidate = start;
+        boolean moved = true;
+        while (moved) {
+            moved = false;
+            OffsetDateTime end = candidate.plusMinutes(Math.max(0, durationMinutes));
+            for (OffsetDateTime[] w : windows) {
+                if (candidate.isBefore(w[1]) && w[0].isBefore(end)) {
+                    candidate = w[1];
+                    moved = true;
+                    break;
+                }
+            }
+        }
+        return candidate;
+    }
+
+    /**
+     * Janelas de refeicao/pausa que valem no dia {@code day}: a em curso e a avulsa pelo horario real, e
+     * as recorrentes previstas projetadas no dia (fora as puladas #41 e as ja feitas ou iniciadas). Base
+     * do {@link #pushPastBreaks} e dos blocos de refeicao da agenda publica.
+     */
+    private static List<OffsetDateTime[]> breakWindowsOn(LocalDate day, Collection<ProfessionalInterval> intervals) {
         List<OffsetDateTime[]> windows = new ArrayList<>();
         for (ProfessionalInterval iv : intervals) {
             if (iv == null) {
@@ -334,20 +356,30 @@ public class QueueUtils {
                 windows.add(new OffsetDateTime[]{from, from.plusMinutes(iv.getDurationMinutes())});
             }
         }
-        OffsetDateTime candidate = start;
-        boolean moved = true;
-        while (moved) {
-            moved = false;
-            OffsetDateTime end = candidate.plusMinutes(Math.max(0, durationMinutes));
-            for (OffsetDateTime[] w : windows) {
-                if (candidate.isBefore(w[1]) && w[0].isBefore(end)) {
-                    candidate = w[1];
-                    moved = true;
-                    break;
+        return windows;
+    }
+
+    /**
+     * Refeicoes e pausas do profissional de {@code from} a {@code to} (inclusive), como blocos ocupados
+     * da agenda (agenda-publica-com-expediente): as mesmas janelas do {@link #pushPastBreaks}, dia a dia,
+     * so as que ainda nao terminaram em {@code now}. A em curso e a avulsa aparecem uma vez.
+     */
+    public static List<AgendaSlot> breakSlots(Collection<ProfessionalInterval> intervals, LocalDate from,
+                                              LocalDate to, OffsetDateTime now) {
+        java.util.Set<AgendaSlot> slots = new java.util.LinkedHashSet<>();
+        if (intervals == null || intervals.isEmpty()) {
+            return new ArrayList<>();
+        }
+        for (LocalDate day = from; !day.isAfter(to); day = day.plusDays(1)) {
+            for (OffsetDateTime[] w : breakWindowsOn(day, intervals)) {
+                if (w[1].isAfter(now)) {
+                    slots.add(new AgendaSlot(w[0], (int) Duration.between(w[0], w[1]).toMinutes()));
                 }
             }
         }
-        return candidate;
+        List<AgendaSlot> sorted = new ArrayList<>(slots);
+        sorted.sort(Comparator.comparing(AgendaSlot::start));
+        return sorted;
     }
 
     private static int lockedMealContribution(ProfessionalInterval meal, Collection<ProfessionalInterval> all,

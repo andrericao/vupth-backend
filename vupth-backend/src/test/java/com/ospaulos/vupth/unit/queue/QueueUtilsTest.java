@@ -519,6 +519,41 @@ class QueueUtilsTest {
                 .isEqualTo(at("2026-06-16", "13:20"));
     }
 
+    // ── refeicoes como blocos da agenda publica (agenda-publica-com-expediente) ──
+
+    @Test
+    @DisplayName("breakSlots: almoco recorrente vira um bloco por dia, fora o dia pulado e o que ja passou")
+    void breakSlots_onePerDayExceptSkippedAndPast() {
+        var meal = recurring("12:00", 60);
+        meal.skipOn(LocalDate.parse("2026-06-17"));
+
+        var slots = QueueUtils.breakSlots(List.of(meal), LocalDate.parse("2026-06-16"),
+                LocalDate.parse("2026-06-19"), at("2026-06-16", "14:00"));
+
+        // 16/06 ja passou (14:00 > 13:00), 17/06 pulado: sobram 18 e 19.
+        assertThat(slots).containsExactly(
+                new QueueUtils.AgendaSlot(at("2026-06-18", "12:00"), 60),
+                new QueueUtils.AgendaSlot(at("2026-06-19", "12:00"), 60));
+    }
+
+    @Test
+    @DisplayName("breakSlots: pausa avulsa aparece uma vez so, mesmo cobrindo varios dias do intervalo")
+    void breakSlots_unexpectedOnce() {
+        var pause = unexpected(at("2026-06-16", "15:00"), 20);
+
+        var slots = QueueUtils.breakSlots(List.of(pause), LocalDate.parse("2026-06-16"),
+                LocalDate.parse("2026-06-18"), at("2026-06-16", "08:00"));
+
+        assertThat(slots).containsExactly(new QueueUtils.AgendaSlot(at("2026-06-16", "15:00"), 20));
+    }
+
+    @Test
+    @DisplayName("breakSlots: sem intervalos -> lista vazia")
+    void breakSlots_empty() {
+        assertThat(QueueUtils.breakSlots(List.of(), LocalDate.parse("2026-06-16"),
+                LocalDate.parse("2026-06-18"), at("2026-06-16", "08:00"))).isEmpty();
+    }
+
     // ── Refeicoes Modelo B — janela flexivel (Partner S3, spec de 28/06) ──
 
     @Test
