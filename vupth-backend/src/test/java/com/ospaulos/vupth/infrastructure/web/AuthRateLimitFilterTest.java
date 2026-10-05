@@ -67,21 +67,73 @@ class AuthRateLimitFilterTest {
     }
 
     @Test
-    @DisplayName("conta por IP (primeiro do X-Forwarded-For) e por rota")
+    @DisplayName("conta por IP e por rota; sem ip-header configurado, o IP e o da conexao")
     void countsPerIpAndRoute() throws Exception {
         AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC));
         AtomicInteger passed = new AtomicInteger();
 
-        MockHttpServletRequest viaProxyA = post("/auth/login", "10.0.0.1");
-        viaProxyA.addHeader("X-Forwarded-For", "2.2.2.2, 10.0.0.1");
-        MockHttpServletRequest viaProxyB = post("/auth/login", "10.0.0.1");
-        viaProxyB.addHeader("X-Forwarded-For", "3.3.3.3");
-
-        run(filter, viaProxyA, passed);
-        run(filter, viaProxyB, passed);
+        run(filter, post("/auth/login", "2.2.2.2"), passed);
+        run(filter, post("/auth/login", "3.3.3.3"), passed);
         run(filter, post("/auth/register", "2.2.2.2"), passed);
+        MockHttpServletRequest forged = post("/auth/login", "2.2.2.2");
+        forged.addHeader("X-Forwarded-For", "9.9.9.9");
 
+        assertThat(run(filter, forged, passed).getStatus()).isEqualTo(429);
         assertThat(passed).hasValue(3);
+    }
+
+    @Test
+    @DisplayName("ip-forjado-no-limite: com X-Forwarded-For, vale o ULTIMO valor — trocar o primeiro nao escapa")
+    void forwardedForUsesLastHop() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC), "",
+                "X-Forwarded-For");
+        AtomicInteger passed = new AtomicInteger();
+
+        MockHttpServletRequest first = post("/auth/login", "10.0.0.1");
+        first.addHeader("X-Forwarded-For", "1.1.1.1, 7.7.7.7");
+        MockHttpServletRequest forged = post("/auth/login", "10.0.0.1");
+        forged.addHeader("X-Forwarded-For", "8.8.8.8, 7.7.7.7");
+        run(filter, first, passed);
+
+        assertThat(run(filter, forged, passed).getStatus()).isEqualTo(429);
+        assertThat(passed).hasValue(1);
+    }
+
+    @Test
+    @DisplayName("ip-forjado-no-limite: com CF-Connecting-IP, o X-Forwarded-For forjado e ignorado")
+    void cloudflareHeaderIgnoresForwardedFor() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC), "",
+                "CF-Connecting-IP");
+        AtomicInteger passed = new AtomicInteger();
+
+        MockHttpServletRequest first = post("/auth/register", "10.0.0.1");
+        first.addHeader("CF-Connecting-IP", "7.7.7.7");
+        first.addHeader("X-Forwarded-For", "1.1.1.1");
+        MockHttpServletRequest forged = post("/auth/register", "10.0.0.1");
+        forged.addHeader("CF-Connecting-IP", " 7.7.7.7 ");
+        forged.addHeader("X-Forwarded-For", "2.2.2.2");
+        MockHttpServletRequest other = post("/auth/register", "10.0.0.1");
+        other.addHeader("CF-Connecting-IP", "6.6.6.6");
+        run(filter, first, passed);
+
+        assertThat(run(filter, forged, passed).getStatus()).isEqualTo(429);
+        run(filter, other, passed);
+        assertThat(passed).hasValue(2);
+    }
+
+    @Test
+    @DisplayName("ip-header configurado mas ausente no pedido: cai no IP da conexao")
+    void missingHeaderFallsBackToRemoteAddr() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 1, 60, Clock.fixed(T0, ZoneOffset.UTC), "",
+                "CF-Connecting-IP");
+        AtomicInteger passed = new AtomicInteger();
+
+        run(filter, post("/auth/login", "4.4.4.4"), passed);
+        MockHttpServletRequest blank = post("/auth/login", "4.4.4.4");
+        blank.addHeader("CF-Connecting-IP", " ");
+
+        assertThat(run(filter, blank, passed).getStatus()).isEqualTo(429);
+        assertThat(passed).hasValue(1);
     }
 
     @Test

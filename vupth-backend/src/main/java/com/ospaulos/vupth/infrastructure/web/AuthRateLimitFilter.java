@@ -30,8 +30,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Janela fixa por IP e rota, em memoria (custo zero, sem dependencia nova): ate
  * {@code vupth.auth.rate-limit.max-requests} pedidos a cada {@code window-seconds}; o excedente
- * recebe 429 {@code TOO_MANY_REQUESTS} com {@code Retry-After}. O IP vem do primeiro valor do
- * {@code X-Forwarded-For} (o Render e o Railway ficam na frente). Com duas instancias cada uma conta
+ * recebe 429 {@code TOO_MANY_REQUESTS} com {@code Retry-After}. O IP vem do header que o proxy da
+ * plataforma escreve, {@code vupth.auth.rate-limit.ip-header} (ip-forjado-no-limite, 05/10): o primeiro
+ * valor do {@code X-Forwarded-For} e o que o cliente mandar, e trocar o header a cada pedido escapava do
+ * limite. No Render (Cloudflare na frente) e o {@code CF-Connecting-IP}, que o Cloudflare escreve e nao
+ * deixa forjar; no Railway e o {@code X-Forwarded-For} lido pelo ULTIMO valor, o que a borda acrescenta.
+ * Sem header configurado (ou ausente no pedido), conta o IP da conexao. Com duas instancias cada uma conta
  * a sua parte — o teto efetivo dobra, o que ainda barra a sondagem em massa. Desligado em dev e
  * teste ({@code enabled=false}): o Newman local e a suite fazem centenas de logins do mesmo IP.</p>
  *
@@ -53,6 +57,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private final long windowMillis;
     private final Clock clock;
     private final byte[] ciSecret;
+    private final String ipHeader;
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
     @Autowired
@@ -60,8 +65,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             @Value("${vupth.auth.rate-limit.enabled:true}") boolean enabled,
             @Value("${vupth.auth.rate-limit.max-requests:10}") int maxRequests,
             @Value("${vupth.auth.rate-limit.window-seconds:60}") long windowSeconds,
-            @Value("${vupth.auth.rate-limit.ci-secret:}") String ciSecret) {
-        this(enabled, maxRequests, windowSeconds, Clock.systemUTC(), ciSecret);
+            @Value("${vupth.auth.rate-limit.ci-secret:}") String ciSecret,
+            @Value("${vupth.auth.rate-limit.ip-header:}") String ipHeader) {
+        this(enabled, maxRequests, windowSeconds, Clock.systemUTC(), ciSecret, ipHeader);
     }
 
     AuthRateLimitFilter(boolean enabled, int maxRequests, long windowSeconds, Clock clock) {
@@ -69,6 +75,12 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     }
 
     AuthRateLimitFilter(boolean enabled, int maxRequests, long windowSeconds, Clock clock, String ciSecret) {
+        this(enabled, maxRequests, windowSeconds, clock, ciSecret, "");
+    }
+
+    AuthRateLimitFilter(boolean enabled, int maxRequests, long windowSeconds, Clock clock, String ciSecret,
+                        String ipHeader) {
+        this.ipHeader = ipHeader == null ? "" : ipHeader.trim();
         this.enabled = enabled;
         this.maxRequests = maxRequests;
         this.windowMillis = windowSeconds * 1000;
@@ -116,12 +128,17 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    private static String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
+    /** O X-Forwarded-For vale pelo ultimo valor (o da borda); os outros headers, pelo valor inteiro. */
+    private String clientIp(HttpServletRequest request) {
+        String value = ipHeader.isEmpty() ? null : request.getHeader(ipHeader);
+        if (value == null || value.isBlank()) {
+            return request.getRemoteAddr();
         }
-        return request.getRemoteAddr();
+        if ("X-Forwarded-For".equalsIgnoreCase(ipHeader)) {
+            String[] hops = value.split(",");
+            return hops[hops.length - 1].trim();
+        }
+        return value.trim();
     }
 
     private record Window(long start, int count) {}
