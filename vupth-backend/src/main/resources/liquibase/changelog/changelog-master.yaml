@@ -397,3 +397,8 @@ databaseChangeLog:
   - include:
       file: changesets/00-foundation/006-add-location_source-to-address.yaml
       relativeToChangeLogFile: true
+
+  # Pedido de corte para outro dia sem vencimento (DEC-27, corte-com-profissional-fora)
+  - include:
+      file: changesets/80-attendance/016-drop-not-null-expires_at-cut-request.yaml
+      relativeToChangeLogFile: true

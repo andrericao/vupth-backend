@@ -17441,7 +17441,7 @@
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
-         "  pm.test(\"PENDING + expires_at\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.a(\"string\"); });",
+         "  pm.test(\"PENDING, sem vencimento — pedido para outro dia (DEC-27)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.null; });",
          "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time).to.match(/^2099-01-15T/));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],

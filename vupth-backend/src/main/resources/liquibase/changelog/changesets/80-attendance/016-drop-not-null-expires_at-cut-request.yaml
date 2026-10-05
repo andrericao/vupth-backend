@@ -1,0 +1,11 @@
+databaseChangeLog:
+  # DEC-27 (Andre, 05/10): o pedido de corte para um dia seguinte fica ativo ate o profissional decidir,
+  # sem vencimento — expires_at nulo. O de hoje continua valendo 5 min.
+  - changeSet:
+      id: 016-drop-not-null-expires_at-cut-request
+      author: andrericao
+      changes:
+        - dropNotNullConstraint:
+            tableName: cut_request
+            columnName: expires_at
+            columnDataType: TIMESTAMP WITH TIME ZONE
