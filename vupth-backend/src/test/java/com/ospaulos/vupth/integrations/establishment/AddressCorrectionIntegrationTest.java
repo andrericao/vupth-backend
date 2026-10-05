@@ -431,7 +431,25 @@ class AddressCorrectionIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        return new OwnerAddressFixture(owner.token(), establishment.id(), addressIdOf(result));
+        UUID addressId = addressIdOf(result);
+        if (latitude == null || longitude == null) {
+            // Sem coordenada, o cadastro dispara o worker de geocoding (pos-commit). Ele tem de terminar
+            // antes do teste re-stubar o geocoder: um when(geocoder...) enquanto a thread do worker chama
+            // o mesmo mock prende o stub na chamada errada (ClassCastException, pego no mvn de 05/10).
+            awaitWorkerDone(addressId);
+        }
+        return new OwnerAddressFixture(owner.token(), establishment.id(), addressId);
+    }
+
+    /** Espera o worker desistir do endereco sem coordenada (o geocoder padrao do teste nao resolve). */
+    private void awaitWorkerDone(UUID addressId) throws InterruptedException {
+        for (int i = 0; i < 100; i++) {
+            if (addressRepository.findById(addressId).orElseThrow().isGeocodingFailed()) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+        throw new AssertionError("o worker nao terminou o geocoding do endereco " + addressId + " em 5s");
     }
 
     private UUID addressIdOf(MvcResult result) throws Exception {
