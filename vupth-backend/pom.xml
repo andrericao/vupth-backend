@@ -32,7 +32,7 @@
 		<java.version>21</java.version>
 		<liquibase.version>4.33.0</liquibase.version>
 		<liquibase.hibernate6.version>4.30.0</liquibase.hibernate6.version>
-		<awssdk.version>2.29.0</awssdk.version>
+		<awssdk.version>2.55.10</awssdk.version>
 
 		<!-- Cobertura (DEC-7, 02/10): catraca — o minimo sobe a cada medicao e nunca desce. Fracao de
 		     0 a 1, sobre o relatorio da suite inteira (mvn verify, o que o CI roda). 03/10: 87,87% linhas, 69,30% branches. -->
@@ -100,7 +100,7 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>1.18.42</version>
+			<version>1.18.48</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -129,7 +129,7 @@
 		<dependency>
 			<groupId>com.auth0</groupId>
 			<artifactId>java-jwt</artifactId>
-			<version>4.5.0</version>
+			<version>4.6.1</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -180,7 +180,7 @@
 						<path>
 							<groupId>org.projectlombok</groupId>
 							<artifactId>lombok</artifactId>
-							<version>1.18.42</version>
+							<version>1.18.48</version>
 						</path>
 						<path>
 							<groupId>org.projectlombok</groupId>

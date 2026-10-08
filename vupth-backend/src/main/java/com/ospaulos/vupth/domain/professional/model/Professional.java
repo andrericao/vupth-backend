@@ -4,11 +4,16 @@ import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
+import com.ospaulos.vupth.domain.establishment.model.DayHoursColumns;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
+import com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.WeekdayHours;
 import com.ospaulos.vupth.domain.professional.event.WorkStatusChangedEvent;
 import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -106,6 +111,26 @@ public class Professional extends AbstractAggregateRoot<Professional> {
 
     @OneToMany(mappedBy = "professional", cascade = CascadeType.ALL)
     private List<ServiceItem> services = new ArrayList<>();
+
+    /**
+     * A agenda do proprio profissional (agenda-do-profissional, Andre 05/10): o mesmo modelo do horario da
+     * loja (semana + excecoes por data). Nenhuma linha = nao configurada, e vale o horario da loja. So se le
+     * e escreve pelo {@link BusinessHours} ({@link #getWorkingHours} / {@link #applyWorkingHours}).
+     */
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "professional_weekly_hours", joinColumns = @JoinColumn(name = "professional_id"))
+    @MapKeyEnumerated(EnumType.STRING)
+    @MapKeyColumn(name = "day_of_week")
+    private Map<java.time.DayOfWeek, DayHoursColumns> weeklyHours = new EnumMap<>(java.time.DayOfWeek.class);
+
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "professional_date_hours", joinColumns = @JoinColumn(name = "professional_id"))
+    @MapKeyColumn(name = "hours_date")
+    private Map<java.time.LocalDate, DayHoursColumns> dateHours = new HashMap<>();
 
     /**
      * Agregados denormalizados de avaliacao (item #6). {@code ratingSum} = soma das notas recebidas,
@@ -239,4 +264,27 @@ public class Professional extends AbstractAggregateRoot<Professional> {
      calcular tempo de fila para agendados
      ATTENDANCE TEM APENAS LISTA DE ATENDIMENTOS AGENDADOS PRECISAMOS DO IN_PROGRESS
      */
+
+    public BusinessHours getWorkingHours() {
+        List<WeekdayHours> week = weeklyHours.entrySet().stream()
+                .map(e -> new WeekdayHours(e.getKey(), e.getValue().toDayHours()))
+                .toList();
+        Map<java.time.LocalDate, DayHours> exceptions = new HashMap<>();
+        dateHours.forEach((date, columns) -> exceptions.put(date, columns.toDayHours()));
+        return BusinessHours.of(week, exceptions);
+    }
+
+    public void applyWorkingHours(BusinessHours hours) {
+        weeklyHours.clear();
+        hours.week().forEach(w -> weeklyHours.put(w.day(), DayHoursColumns.from(w.hours())));
+        dateHours.clear();
+        hours.allExceptions().forEach((date, h) -> dateHours.put(date, DayHoursColumns.from(h)));
+    }
+
+    /** O horario que vale de fato: a intersecao do da loja com o dele (agenda-do-profissional). */
+    public BusinessHours getEffectiveHours() {
+        return BusinessHours.effective(
+                establishment != null ? establishment.getBusinessHours() : BusinessHours.notConfigured(),
+                getWorkingHours());
+    }
 }

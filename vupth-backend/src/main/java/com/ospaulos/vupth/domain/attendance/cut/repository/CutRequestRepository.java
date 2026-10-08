@@ -31,8 +31,9 @@ public interface CutRequestRepository extends JpaRepository<CutRequest, UUID> {
     /**
      * "Cabeca" da fila de expiracao = o PENDING que vence primeiro. E o unico horario que o timer
      * do {@code CutRequestExpiryScheduler} precisa saber para (re)armar o despertador. Vazio = ocioso.
+     * Sem os de {@code expiresAt} nulo (pedido para outro dia, DEC-27): esses nao vencem.
      */
-    java.util.Optional<CutRequest> findFirstByStatusOrderByExpiresAtAsc(CutRequestStatus status);
+    java.util.Optional<CutRequest> findFirstByStatusAndExpiresAtIsNotNullOrderByExpiresAtAsc(CutRequestStatus status);
 
     /** Carrega com os serviceItems (para o aceite montar o Attendance sem LazyInit). */
     @Query("SELECT c FROM CutRequest c LEFT JOIN FETCH c.serviceItems WHERE c.id = :id")

@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # Origem da coordenada (origem-da-coordenada, Partner S39): GPS = veio do aparelho; GEOCODER = o
+  # servidor achou pelo texto. Nulo = sem coordenada, ou gravada antes desta coluna (origem desconhecida).
+  - changeSet:
+      id: 006-add-location_source-to-address
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: addresses
+                columnName: location_source
+      changes:
+        - addColumn:
+            tableName: addresses
+            columns:
+              - column:
+                  name: location_source
+                  type: VARCHAR(16)

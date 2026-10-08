@@ -1,15 +1,22 @@
 package com.ospaulos.vupth.infrastructure.geocoding;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
@@ -27,6 +34,14 @@ import java.util.concurrent.locks.ReentrantLock;
  *       intervalo minimo em {@link #throttleNominatim()}.</li>
  * </ol>
  *
+ * <p><b>429 do Nominatim (geocoder-429).</b> O 1 req/s e por processo, mas o Nominatim conta por IP — e
+ * o IP de saida do Render/Railway e dividido com outros clientes. Por isso, alem do intervalo: (a) o
+ * reverso guarda o resultado por coordenada arredondada ({@link #REVERSE_CACHE_DECIMALS} casas, ~11 m),
+ * entao o dono que repete a tela nao gasta outro request; (b) um 429 (ou 403, o bloqueio da policy)
+ * abre uma <b>pausa</b> — o {@code Retry-After} do servidor ou {@code cooldown-seconds} — em que
+ * nenhum pedido sai, e quem chamou recebe vazio na hora. Sem retentativa em laco: quem quiser tentar
+ * de novo consulta {@link #unavailableUntil()}.</p>
+ *
  * <p><b>Nunca lanca</b> (contrato do {@link Geocoder}): qualquer falha vira {@code Optional.empty()}
  * + log. E chamado de uma thread de fundo, entao a latencia nao aparece no cadastro; ainda assim os
  * timeouts existem para nao prender a fila de geocoding num servico pendurado.</p>
@@ -39,31 +54,81 @@ public class HttpGeocoder implements Geocoder {
     /** Policy do Nominatim: no maximo 1 req/s. Guardamos uma folga sobre o minimo exigido. */
     private static final long NOMINATIM_MIN_INTERVAL_MS = 1_100;
 
+    /** 4 casas decimais ~ 11 m: o mesmo balcao da mesma loja cai na mesma chave. */
+    static final int REVERSE_CACHE_DECIMALS = 4;
+    private static final int REVERSE_CACHE_MAX_ENTRIES = 1_000;
+    private static final Duration REVERSE_CACHE_TTL = Duration.ofHours(24);
+    /** Teto do Retry-After aceito: um valor absurdo do servidor nao pode desligar o geocoding por dias. */
+    private static final Duration MAX_COOLDOWN = Duration.ofHours(1);
+
     private final RestClient restClient;
     private final String brasilApiUrl;
     private final String nominatimUrl;
     private final String nominatimReverseUrl;
     private final String userAgent;
+    private final Duration defaultCooldown;
+    private final Clock clock;
 
     private long lastNominatimCallAt = 0L;
     private final ReentrantLock nominatimLock = new ReentrantLock();
 
+    /** Pausa aberta por um 429/403 do Nominatim; {@code null} = liberado. */
+    private volatile Instant nominatimBlockedUntil;
+
+    private record CachedReverse(ReverseGeocodeResult result, Instant expiresAt) {
+    }
+
+    /** LRU pequeno em memoria — o reverso so e chamado na tela de cadastro do endereco. */
+    private final Map<String, CachedReverse> reverseCache =
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, CachedReverse> eldest) {
+                    return size() > REVERSE_CACHE_MAX_ENTRIES;
+                }
+            };
+
+    @Autowired
     public HttpGeocoder(
             @Value("${vupth.geocoding.brasilapi.url:https://brasilapi.com.br/api/cep/v2}") String brasilApiUrl,
             @Value("${vupth.geocoding.nominatim.url:https://nominatim.openstreetmap.org/search}") String nominatimUrl,
             @Value("${vupth.geocoding.nominatim.reverse-url:https://nominatim.openstreetmap.org/reverse}") String nominatimReverseUrl,
             @Value("${vupth.geocoding.user-agent:vupth-backend/1.0 (contato: no-reply@vupth.app)}") String userAgent,
-            @Value("${vupth.geocoding.timeout-seconds:5}") int timeoutSeconds) {
+            @Value("${vupth.geocoding.timeout-seconds:5}") int timeoutSeconds,
+            @Value("${vupth.geocoding.nominatim.cooldown-seconds:120}") int cooldownSeconds) {
 
+        this(restClientWithTimeout(timeoutSeconds), brasilApiUrl, nominatimUrl, nominatimReverseUrl, userAgent,
+                Duration.ofSeconds(cooldownSeconds), Clock.systemUTC());
+    }
+
+    /** Mantido para os testes antigos: pausa padrao de 120 s. */
+    public HttpGeocoder(String brasilApiUrl, String nominatimUrl, String nominatimReverseUrl,
+                        String userAgent, int timeoutSeconds) {
+        this(brasilApiUrl, nominatimUrl, nominatimReverseUrl, userAgent, timeoutSeconds, 120);
+    }
+
+    /** Testes: RestClient com servidor falso e relogio controlado. */
+    HttpGeocoder(RestClient restClient, String brasilApiUrl, String nominatimUrl, String nominatimReverseUrl,
+                 String userAgent, Duration defaultCooldown, Clock clock) {
+        this.restClient = restClient;
         this.brasilApiUrl = brasilApiUrl;
         this.nominatimUrl = nominatimUrl;
         this.nominatimReverseUrl = nominatimReverseUrl;
         this.userAgent = userAgent;
+        this.defaultCooldown = defaultCooldown;
+        this.clock = clock;
+    }
 
+    private static RestClient restClientWithTimeout(int timeoutSeconds) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(timeoutSeconds));
         factory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
-        this.restClient = RestClient.builder().requestFactory(factory).build();
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
+    @Override
+    public Optional<Instant> unavailableUntil() {
+        Instant until = nominatimBlockedUntil;
+        return until != null && until.isAfter(clock.instant()) ? Optional.of(until) : Optional.empty();
     }
 
     @Override
@@ -98,6 +163,15 @@ public class HttpGeocoder implements Geocoder {
     @Override
     public Optional<ReverseGeocodeResult> reverse(Coordinates coordinates) {
         if (coordinates == null || !coordinates.isPlausible()) {
+            return Optional.empty();
+        }
+        String cacheKey = reverseCacheKey(coordinates);
+        Optional<ReverseGeocodeResult> cached = cachedReverse(cacheKey);
+        if (cached.isPresent()) {
+            log.info("[Geocoding] reverso de {},{} veio do cache", coordinates.latitude(), coordinates.longitude());
+            return cached;
+        }
+        if (inCooldown("reverso")) {
             return Optional.empty();
         }
         try {
@@ -136,8 +210,14 @@ public class HttpGeocoder implements Geocoder {
 
             log.info("[Geocoding] reverso resolveu {},{} -> {}",
                     coordinates.latitude(), coordinates.longitude(), result.displayName());
+            putCachedReverse(cacheKey, result);
             return Optional.of(result);
 
+        } catch (HttpClientErrorException e) {
+            openCooldownIfBlocked(e);
+            log.warn("[Geocoding] reverso falhou para {},{}: {}",
+                    coordinates.latitude(), coordinates.longitude(), e.toString());
+            return Optional.empty();
         } catch (Exception e) {
             log.warn("[Geocoding] reverso falhou para {},{}: {}",
                     coordinates.latitude(), coordinates.longitude(), e.toString());
@@ -177,6 +257,9 @@ public class HttpGeocoder implements Geocoder {
 
     /** Fallback: busca livre no Nominatim/OSM, restrita ao Brasil e ao primeiro resultado. */
     private Optional<Coordinates> byStreetAddress(GeocodeQuery query) {
+        if (inCooldown("busca")) {
+            return Optional.empty();
+        }
         try {
             throttleNominatim();
 
@@ -211,6 +294,10 @@ public class HttpGeocoder implements Geocoder {
                     street, query.city(), c.latitude(), c.longitude()));
             return resolved;
 
+        } catch (HttpClientErrorException e) {
+            openCooldownIfBlocked(e);
+            log.warn("[Geocoding] Nominatim falhou para '{}': {}", query.street(), e.toString());
+            return Optional.empty();
         } catch (Exception e) {
             log.warn("[Geocoding] Nominatim falhou para '{}': {}", query.street(), e.toString());
             return Optional.empty();
@@ -231,6 +318,67 @@ public class HttpGeocoder implements Geocoder {
             lastNominatimCallAt = System.currentTimeMillis();
         } finally {
             nominatimLock.unlock();
+        }
+    }
+
+    private boolean inCooldown(String what) {
+        Optional<Instant> until = unavailableUntil();
+        until.ifPresent(u -> log.info("[Geocoding] {} pulado: Nominatim em pausa ate {} (429)", what, u));
+        return until.isPresent();
+    }
+
+    /**
+     * 429 = passou do limite; 403 = a policy bloqueou o cliente. Nos dois, insistir so prolonga o
+     * bloqueio — abre a pausa pelo Retry-After (segundos) ou pelo padrao configurado.
+     */
+    private void openCooldownIfBlocked(HttpClientErrorException e) {
+        if (e.getStatusCode().value() != HttpStatus.TOO_MANY_REQUESTS.value()
+                && e.getStatusCode().value() != HttpStatus.FORBIDDEN.value()) {
+            return;
+        }
+        Duration pause = defaultCooldown;
+        String retryAfter = e.getResponseHeaders() == null ? null : e.getResponseHeaders().getFirst("Retry-After");
+        if (retryAfter != null) {
+            try {
+                long seconds = Long.parseLong(retryAfter.trim());
+                if (seconds > 0) {
+                    pause = Duration.ofSeconds(seconds);
+                }
+            } catch (NumberFormatException ignored) {
+                // Retry-After em data HTTP: fica o padrao.
+            }
+        }
+        if (pause.compareTo(MAX_COOLDOWN) > 0) {
+            pause = MAX_COOLDOWN;
+        }
+        Instant until = clock.instant().plus(pause);
+        nominatimBlockedUntil = until;
+        log.warn("[Geocoding] Nominatim respondeu {} — pausa ate {} ({} s), sem novos pedidos ate la",
+                e.getStatusCode().value(), until, pause.toSeconds());
+    }
+
+    static String reverseCacheKey(Coordinates coordinates) {
+        String format = "%." + REVERSE_CACHE_DECIMALS + "f,%." + REVERSE_CACHE_DECIMALS + "f";
+        return String.format(Locale.ROOT, format, coordinates.latitude(), coordinates.longitude());
+    }
+
+    private Optional<ReverseGeocodeResult> cachedReverse(String key) {
+        synchronized (reverseCache) {
+            CachedReverse entry = reverseCache.get(key);
+            if (entry == null) {
+                return Optional.empty();
+            }
+            if (!entry.expiresAt().isAfter(clock.instant())) {
+                reverseCache.remove(key);
+                return Optional.empty();
+            }
+            return Optional.of(entry.result());
+        }
+    }
+
+    private void putCachedReverse(String key, ReverseGeocodeResult result) {
+        synchronized (reverseCache) {
+            reverseCache.put(key, new CachedReverse(result, clock.instant().plus(REVERSE_CACHE_TTL)));
         }
     }
 

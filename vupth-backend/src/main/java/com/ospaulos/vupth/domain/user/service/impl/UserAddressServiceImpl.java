@@ -38,6 +38,7 @@ public class UserAddressServiceImpl implements UserAddressService {
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
         Address address = addressMapper.toAddressEntity(request);
+        address.markGpsIfCoordinatesSent(request.latitude(), request.longitude());
 
         UserAddress userAddress = user.addAddress(address);
 

@@ -70,8 +70,11 @@ public class CutRequest implements Serializable {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    /** Validade do pedido: {@code createdAt + 5min}. Passou disso sem resposta -> EXPIRED (timer). */
-    @Column(name = "expires_at", nullable = false)
+    /**
+     * Validade do pedido: {@code createdAt + 5min} para hoje; {@code null} para um dia seguinte, que fica
+     * ativo ate o profissional decidir (DEC-27). Passou da validade sem resposta -> EXPIRED (timer).
+     */
+    @Column(name = "expires_at")
     private OffsetDateTime expiresAt;
 
     @Column(name = "responded_at")

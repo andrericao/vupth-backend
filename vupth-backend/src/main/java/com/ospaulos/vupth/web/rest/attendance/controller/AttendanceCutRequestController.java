@@ -38,8 +38,10 @@ public class AttendanceCutRequestController {
 
     /**
      * POST /attendances/cut-requests — o cliente autenticado (clientId do JWT) solicita um corte.
-     * 201 com o pedido (PENDING + expiresAt). Erros: 409 loja aberta agora (`CUT_REQUEST_NOT_ALLOWED`),
-     * 422 servico de outro profissional, 404 profissional/servico/loja inexistente. Requer ROLE_CLIENT.
+     * 201 com o pedido (PENDING + expiresAt; {@code expiresAt} nulo = pedido para outro dia, ativo ate o
+     * profissional decidir — DEC-27). Sempre aceito, com a loja aberta ou fechada e o profissional em Fora
+     * ou com a fila fechada (DEC-27). Erros: 422 servico de outro profissional, 404
+     * profissional/servico/loja inexistente. Requer ROLE_CLIENT.
      */
     @PostMapping
     public ResponseEntity<CutRequestResponse> createCutRequest(
