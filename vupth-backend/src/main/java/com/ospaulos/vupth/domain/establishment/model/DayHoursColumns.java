@@ -24,7 +24,7 @@ public class DayHoursColumns {
     @Column(name = "closes")
     private LocalTime closes;
 
-    static DayHoursColumns from(DayHours hours) {
+    public static DayHoursColumns from(DayHours hours) {
         DayHoursColumns columns = new DayHoursColumns();
         columns.closed = hours.closed();
         columns.opens = hours.opens();
@@ -32,7 +32,7 @@ public class DayHoursColumns {
         return columns;
     }
 
-    DayHours toDayHours() {
+    public DayHours toDayHours() {
         return new DayHours(closed, opens, closes);
     }
 }

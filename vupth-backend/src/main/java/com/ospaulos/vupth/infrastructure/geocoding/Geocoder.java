@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.geocoding;
 
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -24,4 +25,13 @@ public interface Geocoder {
      * como sempre fez.
      */
     Optional<ReverseGeocodeResult> reverse(Coordinates coordinates);
+
+    /**
+     * Ate quando o servico externo pediu para nao ser chamado (429 — geocoder-429). Vazio = liberado,
+     * ou o "nao resolveu" foi resposta de verdade. E o que separa "nao achei" de "volte mais tarde":
+     * quem roda em fundo pode reagendar uma vez em vez de marcar o endereco como nao resolvido.
+     */
+    default Optional<Instant> unavailableUntil() {
+        return Optional.empty();
+    }
 }

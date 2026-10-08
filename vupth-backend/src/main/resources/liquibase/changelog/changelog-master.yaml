@@ -387,3 +387,18 @@ databaseChangeLog:
   - include:
       file: changesets/90-affiliation/002-create-email-invitation.yaml
       relativeToChangeLogFile: true
+
+  # Agenda do profissional: semana + excecoes por data (agenda-do-profissional, Andre 05/10)
+  - include:
+      file: changesets/60-professional/016-create-professional-hours-by-day.yaml
+      relativeToChangeLogFile: true
+
+  # Origem da coordenada do endereco: GPS | GEOCODER (origem-da-coordenada, Partner S39)
+  - include:
+      file: changesets/00-foundation/006-add-location_source-to-address.yaml
+      relativeToChangeLogFile: true
+
+  # Pedido de corte para outro dia sem vencimento (DEC-27, corte-com-profissional-fora)
+  - include:
+      file: changesets/80-attendance/016-drop-not-null-expires_at-cut-request.yaml
+      relativeToChangeLogFile: true

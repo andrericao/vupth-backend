@@ -56,6 +56,43 @@ public record DayHours(boolean closed, LocalTime opens, LocalTime closes) {
 
     private static final int MINUTES_PER_DAY = 24 * 60;
 
+    /**
+     * O que vale nos dois horarios ao mesmo tempo (agenda-do-profissional: a loja e o profissional).
+     * {@code null} e "sem horario" (qualquer hora): devolve o outro. Fechado em um = fechado. 24h em um =
+     * o outro. Sem sobreposicao = fechado.
+     */
+    public static DayHours intersect(DayHours a, DayHours b) {
+        if (a == null) return b;
+        if (b == null) return a;
+        if (a.closed || b.closed) return closedDay();
+        if (a.isAllDay()) return b;
+        if (b.isAllDay()) return a;
+        int from = Math.max(a.startMinute(), b.startMinute());
+        int to = Math.min(a.endMinute(), b.endMinute());
+        if (to <= from) return closedDay();
+        return open(LocalTime.ofSecondOfDay((from % MINUTES_PER_DAY) * 60L),
+                LocalTime.ofSecondOfDay((to % MINUTES_PER_DAY) * 60L));
+    }
+
+    /** {@code inner} cabe inteiro neste horario? Fechado sempre cabe; {@code null} (sem horario) cabe tudo. */
+    public boolean contains(DayHours inner) {
+        if (inner == null || inner.closed) return true;
+        if (closed) return false;
+        if (isAllDay()) return true;
+        if (inner.isAllDay()) return false;
+        return intersect(this, inner).equals(inner);
+    }
+
+    private int startMinute() {
+        return opens.toSecondOfDay() / 60;
+    }
+
+    /** Fim em minutos desde a meia-noite do dia; passa de 1440 quando vira a meia-noite. */
+    private int endMinute() {
+        int close = closes.toSecondOfDay() / 60;
+        return crossesMidnight() ? close + MINUTES_PER_DAY : close;
+    }
+
     /** A hora {@code t} deste mesmo dia esta dentro? (a madrugada de uma virada e do dia seguinte) */
     boolean coversSameDay(LocalTime t) {
         if (closed) return false;
