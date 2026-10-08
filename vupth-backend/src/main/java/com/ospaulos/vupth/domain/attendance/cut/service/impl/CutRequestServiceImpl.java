@@ -138,23 +138,36 @@ public class CutRequestServiceImpl implements CutRequestService {
             throw new CutRequestExpiredException(cutRequestId);
         }
 
-        // Aceite explicito = autorizacao: nasce um Attendance SCHEDULED na cauda (bypassa o gate C1).
-        Attendance attendance = attendanceService.createScheduledFromCutRequest(
-                cut.getProfessional(), cut.getEstablishment(), cut.getClient(), cut.getServiceItems());
+        // Pedido para outro dia (aceite-vira-agendamento): vira agendamento (INTENTION) naquele dia e
+        // horario. Para hoje ou sem dia: aceite explicito = autorizacao, nasce um SCHEDULED na cauda
+        // (bypassa o gate C1).
+        boolean otherDay = isForAnotherDay(cut.getDesiredTime(), now);
+        Attendance attendance = otherDay
+                ? attendanceService.createIntentionFromCutRequest(cut.getProfessional(), cut.getEstablishment(),
+                        cut.getClient(), cut.getServiceItems(), cut.getDesiredTime())
+                : attendanceService.createScheduledFromCutRequest(
+                        cut.getProfessional(), cut.getEstablishment(), cut.getClient(), cut.getServiceItems());
 
         cut.setStatus(CutRequestStatus.ACCEPTED);
         cut.setRespondedAt(now);
         cut.setResultingAttendance(attendance);
         CutRequest saved = cutRequestRepository.save(cut);
 
-        queuePublisher.broadcastQueue(cut.getEstablishment().getId());
+        String accepted = otherDay
+                ? "Seu pedido de corte foi aceito — voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
+                : "Seu pedido de corte foi aceito — voce entrou na fila.";
+        if (!otherDay) {
+            queuePublisher.broadcastQueue(cut.getEstablishment().getId());
+        }
         queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
-                "CUT_ACCEPTED", attendance.getId(), cut.getEstablishment().getId(),
-                "Seu pedido de corte foi aceito — voce entrou na fila.").withCutRequestId(cut.getId()));
+                "CUT_ACCEPTED", attendance.getId(), cut.getEstablishment().getId(), accepted)
+                .withCutRequestId(cut.getId()));
         pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte aceito",
-                "Voce entrou na fila.",
+                otherDay ? "Voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
+                        : "Voce entrou na fila.",
                 Map.of("type", "CUT_ACCEPTED",
                         "attendanceId", String.valueOf(attendance.getId()),
+                        "attendanceStatus", String.valueOf(attendance.getStatus()),
                         "establishmentId", String.valueOf(cut.getEstablishment().getId())));
 
         log.info("[CutRequest] accept — id={} ACCEPTED -> attendance={}", cutRequestId, attendance.getId());
@@ -213,10 +226,23 @@ public class CutRequestServiceImpl implements CutRequestService {
      * cuja agenda ainda nao abriu, fica ativo ate o profissional decidir ({@code null} = sem vencimento).
      */
     static OffsetDateTime expiresAtFor(OffsetDateTime desiredTime, OffsetDateTime now) {
-        if (desiredTime != null && BusinessClock.dateAt(desiredTime).isAfter(BusinessClock.dateAt(now))) {
+        if (isForAnotherDay(desiredTime, now)) {
             return null;
         }
         return now.plusMinutes(VALIDITY_MINUTES);
+    }
+
+    private static final java.time.format.DateTimeFormatter DAY_AND_TIME =
+            java.time.format.DateTimeFormatter.ofPattern("dd/MM 'as' HH:mm");
+
+    /** "10/10 as 14:30", no fuso da loja — o texto do aviso do agendamento. */
+    static String formatDay(OffsetDateTime at) {
+        return at.atZoneSameInstant(BusinessClock.zone()).format(DAY_AND_TIME);
+    }
+
+    /** O pedido e para um dia depois de hoje (no fuso da loja)? Sem dia = hoje. */
+    static boolean isForAnotherDay(OffsetDateTime desiredTime, OffsetDateTime now) {
+        return desiredTime != null && BusinessClock.dateAt(desiredTime).isAfter(BusinessClock.dateAt(now));
     }
 
     /** Carrega o pedido (eager nos serviceItems), valida dono e estado PENDING. */

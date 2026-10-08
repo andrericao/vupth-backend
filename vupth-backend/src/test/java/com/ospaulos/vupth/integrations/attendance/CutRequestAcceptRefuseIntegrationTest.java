@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -145,11 +146,56 @@ class CutRequestAcceptRefuseIntegrationTest {
                 .andReturn();
         String id = new JSONObject(r.getResponse().getContentAsString()).getString("id");
 
-        mvc.perform(patch("/attendances/cut-requests/{id}/accept", id)
+        MvcResult accepted = mvc.perform(patch("/attendances/cut-requests/{id}/accept", id)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ACCEPTED"));
+                .andExpect(jsonPath("$.status").value("ACCEPTED"))
+                .andReturn();
+
+        // aceite-vira-agendamento: o pedido de outro dia vira INTENTION naquele horario, nao entra na fila de hoje.
+        UUID attendanceId = UUID.fromString(new JSONObject(accepted.getResponse().getContentAsString())
+                .getString("resulting_attendance_id"));
+        var attendance = attendanceRepository.findById(attendanceId).orElseThrow();
+        assertThat(attendance.getStatus()).isEqualTo(com.ospaulos.vupth.domain.attendance.AttendanceStatus.INTENTION);
+        assertThat(attendance.getDesiredTime().toInstant())
+                .isEqualTo(java.time.OffsetDateTime.parse(tomorrow).toInstant());
+        assertThat(queueSize()).isZero();
     }
+
+    @Test
+    @Order(16)
+    @DisplayName("aceite-vira-agendamento: outro dia fora do expediente -> 422 do agendamento, e o pedido segue PENDING")
+    void acceptOtherDayOutsideHours_keepsPending() throws Exception {
+        // A loja passa a ter expediente 09-18 todo dia (os casos seguintes nao dependem de horario).
+        StringBuilder days = new StringBuilder();
+        for (java.time.DayOfWeek day : java.time.DayOfWeek.values()) {
+            days.append(String.format("{\"day\":\"%s\",\"closed\":false,\"opens\":\"09:00\",\"closes\":\"18:00\"},", day));
+        }
+        mvc.perform(put("/establishment/{id}/hours/weekly", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerProfToken)
+                        .content("{\"days\":[" + days.substring(0, days.length() - 1) + "]}"))
+                .andExpect(status().isOk());
+        String tomorrowAt3am = com.ospaulos.vupth.domain.shared.BusinessClock.at(
+                com.ospaulos.vupth.domain.shared.BusinessClock.today().plusDays(1), java.time.LocalTime.of(3, 0)).toString();
+        String body = "{\"professionalId\":\"" + professionalId + "\",\"establishmentId\":\"" + establishmentId
+                + "\",\"serviceItemIds\":[\"" + serviceItemId + "\"],\"desiredTime\":\"" + tomorrowAt3am + "\"}";
+        MvcResult r = mvc.perform(post("/attendances/cut-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String id = new JSONObject(r.getResponse().getContentAsString()).getString("id");
+
+        mvc.perform(patch("/attendances/cut-requests/{id}/accept", id)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("INTENTION_OUTSIDE_BUSINESS_HOURS"));
+
+        assertThat(cutRequestRepository.findById(UUID.fromString(id)).orElseThrow().getStatus())
+                .isEqualTo(com.ospaulos.vupth.domain.attendance.cut.CutRequestStatus.PENDING);
+        assertThat(attendanceRepository.count()).isZero();    }
 
     @Test
     @Order(20)

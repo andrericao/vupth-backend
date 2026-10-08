@@ -1198,6 +1198,34 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public com.ospaulos.vupth.domain.attendance.model.Attendance createIntentionFromCutRequest(
+            Professional professional, Establishment establishment, Client client,
+            List<ServiceItem> serviceItems, OffsetDateTime desiredTime) {
+        log.info("[Attendance] createIntentionFromCutRequest — professional={} client={} desiredTime={}",
+                professional.getId(), client.getId(), desiredTime);
+
+        OffsetDateTime estimatedStart = runIntentionAlgorithm(
+                professional, establishment, serviceItems, desiredTime, null);
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
+                new com.ospaulos.vupth.domain.attendance.model.Attendance();
+        attendance.setProfessional(professional);
+        attendance.setEstablishment(establishment);
+        attendance.setClient(client);
+        // COPIA a lista, como no createScheduledAt: a colecao gerenciada e do CutRequest.
+        attendance.setServiceItems(new java.util.ArrayList<>(serviceItems));
+        attendance.setStatus(AttendanceStatus.INTENTION);
+        attendance.setDesiredTime(desiredTime);
+        attendance.setScheduledTime(estimatedStart);
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        log.info("[Attendance] createIntentionFromCutRequest — created id={} estimatedStart={}",
+                saved.getId(), estimatedStart);
+        return saved;
+    }
+
+    @Override
     public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromSwapOffer(
             Professional professional, Establishment establishment, Client client,
             List<ServiceItem> serviceItems, java.time.OffsetDateTime slot) {
