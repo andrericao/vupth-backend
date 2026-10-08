@@ -24952,6 +24952,196 @@
    ]
   },
   {
+   "name": "21 - exclusao pela web (exclusao-por-link)",
+   "item": [
+    {
+     "name": "pedir link para e-mail sem conta -> 202 (nao revela)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/request",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "request"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"naoexiste_{{$timestamp}}@vupth.test\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 202\", () => pm.response.to.have.status(202));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] pedir link com e-mail invalido -> 422",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/request",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "request"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"nao-e-email\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] abrir link que nao existe -> 410",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/token-que-nao-existe",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "token-que-nao-existe"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 410\", () => pm.response.to.have.status(410));",
+         "pm.test(\"ACCOUNT_DELETION_LINK_INVALID\", () => pm.expect(pm.response.json().code).to.equal(\"ACCOUNT_DELETION_LINK_INVALID\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] confirmar com link que nao existe -> 410",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/confirm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "confirm"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"token\":\"token-que-nao-existe\",\"password\":\"Senha123!\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 410\", () => pm.response.to.have.status(410));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
