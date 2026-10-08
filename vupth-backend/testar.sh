@@ -5,12 +5,13 @@
 #   bash testar.sh -Dtest='*Establishment*'   # so as classes que casam + newman
 #   bash testar.sh --sem-newman [...]   # so o mvn test
 #
-# Falhou: o log vai para .logs-teste/<AAAA-MM-DD_HHMMSS>_<mvn|newman>_FALHA.txt — o hook do vupth-docs
-# le essa pasta e acorda a sessao do Backend. Verde: apaga as falhas antigas do mesmo tipo.
+# Falhou: o log vai para logs/testes/<AAAA-MM-DD_HHMMSS>_<mvn|newman>_FALHA.txt, commitado (DEC-28 · tudo-no-github)
+# — o hook do vupth-docs le essa pasta e acorda a sessao do Backend, no PC ou na nuvem. Verde: apaga as falhas
+# antigas do mesmo tipo.
 set -uo pipefail
 
 cd "$(dirname "$0")"
-LOGS=.logs-teste
+LOGS=logs/testes
 mkdir -p "$LOGS"
 
 NEWMAN=1
