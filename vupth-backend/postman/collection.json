@@ -17442,10 +17442,21 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
          "  pm.test(\"PENDING, sem vencimento — pedido para outro dia (DEC-27)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.null; });",
-         "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time).to.match(/^2099-01-15T/));",
+         "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time.slice(0,10)).to.equal(pm.collectionVariables.get(\"cut_desired_time\").slice(0,10)));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
         "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Outro dia (amanha, 14:30 UTC): o aceite vira agendamento e passa pelo horizonte de 30 dias (aceite-vira-agendamento).",
+         "const d=new Date(Date.now()+86400000); d.setUTCHours(14,30,0,0);",
+         "pm.collectionVariables.set(\"cut_desired_time\", d.toISOString().replace(/\\.\\d{3}Z$/,\"Z\"));"
+        ]
        }
       }
      ],
@@ -17468,7 +17479,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"2099-01-15T14:30:00Z\"}"
+       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"{{cut_desired_time}}\"}"
       }
      },
      "response": []
@@ -17538,7 +17549,7 @@
      "response": []
     },
     {
-     "name": "profissional ACEITA -> 200 ACCEPTED (nasce atendimento)",
+     "name": "profissional ACEITA -> 200 ACCEPTED (pedido de outro dia vira agendamento)",
      "event": [
       {
        "listen": "test",
@@ -17700,7 +17711,7 @@
      "response": []
     },
     {
-     "name": "cleanup: remove o atendimento aceito",
+     "name": "cleanup: cliente cancela o agendamento nascido do aceite",
      "event": [
       {
        "listen": "test",
@@ -17721,11 +17732,21 @@
       "header": [
        {
         "key": "Authorization",
-        "value": "Bearer {{cut_owner_token}}",
+        "value": "Bearer {{cut_client_token}}",
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/professional-queue/{{cut_attendance_id}}/remove",
+      "url": {
+       "raw": "{{base_url}}/attendances/intentions/{{cut_attendance_id}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "intentions",
+        "{{cut_attendance_id}}"
+       ]
+      },
       "auth": {
        "type": "noauth"
       }
