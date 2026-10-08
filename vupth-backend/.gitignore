@@ -37,9 +37,7 @@ Thumbs.db
 # ==============================
 *.log
 test-results.log
-# logs/testes/ e commitada (DEC-28 · tudo-no-github): o log de falha do testar.sh chega a nuvem pelo GitHub
-logs/*
-!logs/testes/
+logs/
 
 # ==============================
 # MAVEN WRAPPER

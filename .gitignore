@@ -10,3 +10,7 @@ docs/
 .idea/
 *.iml
 
+# ==============================
+# LOG DE FALHA DO TESTE (DEC-22 · testar.sh)
+# ==============================
+.logs-teste/
