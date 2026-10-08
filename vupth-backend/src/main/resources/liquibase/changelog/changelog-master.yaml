@@ -402,3 +402,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/016-drop-not-null-expires_at-cut-request.yaml
       relativeToChangeLogFile: true
+
+  # Exclusao de conta pela web: link de uso unico no e-mail cadastrado (exclusao-por-link)
+  - include:
+      file: changesets/20-auth/025-create-account_deletion_token.yaml
+      relativeToChangeLogFile: true
