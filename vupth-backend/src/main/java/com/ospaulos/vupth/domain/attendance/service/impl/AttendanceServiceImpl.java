@@ -308,6 +308,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new ProfessionalNotAffiliatedException(professionalId);
         }
         Establishment establishment = professional.getEstablishment();
+        assertAcceptsClients(establishment);
 
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new ClientNotFoundException(clientId));
@@ -637,6 +638,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         Establishment establishment = professional.getEstablishment();
+        assertAcceptsClients(establishment);
 
         // Bug fix: was == (reference comparison) — now uses .equals()
         if (!establishment.getId().equals(request.establishmentId())) {
@@ -1198,6 +1200,35 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
+    public com.ospaulos.vupth.domain.attendance.model.Attendance createIntentionFromCutRequest(
+            Professional professional, Establishment establishment, Client client,
+            List<ServiceItem> serviceItems, OffsetDateTime desiredTime) {
+        log.info("[Attendance] createIntentionFromCutRequest — professional={} client={} desiredTime={}",
+                professional.getId(), client.getId(), desiredTime);
+        assertAcceptsClients(establishment);
+
+        OffsetDateTime estimatedStart = runIntentionAlgorithm(
+                professional, establishment, serviceItems, desiredTime, null);
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance attendance =
+                new com.ospaulos.vupth.domain.attendance.model.Attendance();
+        attendance.setProfessional(professional);
+        attendance.setEstablishment(establishment);
+        attendance.setClient(client);
+        // COPIA a lista, como no createScheduledAt: a colecao gerenciada e do CutRequest.
+        attendance.setServiceItems(new java.util.ArrayList<>(serviceItems));
+        attendance.setStatus(AttendanceStatus.INTENTION);
+        attendance.setDesiredTime(desiredTime);
+        attendance.setScheduledTime(estimatedStart);
+
+        com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        initializeLazyAssociations(saved);
+        log.info("[Attendance] createIntentionFromCutRequest — created id={} estimatedStart={}",
+                saved.getId(), estimatedStart);
+        return saved;
+    }
+
+    @Override
     public com.ospaulos.vupth.domain.attendance.model.Attendance createScheduledFromSwapOffer(
             Professional professional, Establishment establishment, Client client,
             List<ServiceItem> serviceItems, java.time.OffsetDateTime slot) {
@@ -1733,6 +1764,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         Hibernate.initialize(attendance.getServiceItems());
         if (attendance.getClient() != null) {
             Hibernate.initialize(attendance.getClient().getBaseUser());
+        }
+    }
+
+    /** desativar-conta: loja desativada ou removida nao recebe fila nem agendamento (409 ESTABLISHMENT_UNAVAILABLE). */
+    private static void assertAcceptsClients(Establishment establishment) {
+        if (!establishment.acceptsClients()) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentUnavailableException(establishment.getId());
         }
     }
 }

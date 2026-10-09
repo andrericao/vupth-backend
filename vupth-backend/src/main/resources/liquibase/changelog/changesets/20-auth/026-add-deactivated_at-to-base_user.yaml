@@ -1,0 +1,18 @@
+databaseChangeLog:
+  # Conta desativada pelo titular (desativar-conta): null = em uso. A desativada entra e le ("so consultar").
+  - changeSet:
+      id: 026-add-deactivated_at-to-base_user
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: base_user
+                columnName: deactivated_at
+      changes:
+        - addColumn:
+            tableName: base_user
+            columns:
+              - column:
+                  name: deactivated_at
+                  type: TIMESTAMP WITH TIME ZONE

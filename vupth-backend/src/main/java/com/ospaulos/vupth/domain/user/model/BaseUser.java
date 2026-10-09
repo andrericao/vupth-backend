@@ -104,6 +104,13 @@ public class BaseUser implements Serializable {
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
 
+    /**
+     * Conta desativada pelo titular (desativar-conta): {@code null} = em uso. Diferente da apagada, a
+     * desativada continua entrando e lendo ("so consultar"); o que mexe na operacao da 403.
+     */
+    @Column(name = "deactivated_at")
+    private OffsetDateTime deactivatedAt;
+
     @OneToMany(mappedBy = "baseUser", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserRole> roles = new HashSet<>();
 
@@ -488,6 +495,11 @@ public class BaseUser implements Serializable {
         this.password = scrambledPassword;
         this.isActive = false;
         this.deletedAt = OffsetDateTime.now();
+    }
+
+    /** {@code true} quando o titular desativou a conta e ainda nao reativou. */
+    public boolean isAccountDeactivated() {
+        return this.deactivatedAt != null;
     }
 
     /** {@code true} quando a conta ja foi apagada pelo titular. */

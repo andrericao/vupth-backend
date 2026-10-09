@@ -100,6 +100,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/forgot-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/reset-password").permitAll()
+                        // exclusao-por-link: a pagina web nao tem login — o link e a senha sao a prova
+                        .requestMatchers(HttpMethod.POST, "/auth/account-deletion/request", "/auth/account-deletion/confirm").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")

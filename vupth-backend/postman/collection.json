@@ -17442,10 +17442,21 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
          "  pm.test(\"PENDING, sem vencimento — pedido para outro dia (DEC-27)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.null; });",
-         "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time).to.match(/^2099-01-15T/));",
+         "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time.slice(0,10)).to.equal(pm.collectionVariables.get(\"cut_desired_time\").slice(0,10)));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
         "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Outro dia (amanha, 14:30 UTC): o aceite vira agendamento e passa pelo horizonte de 30 dias (aceite-vira-agendamento).",
+         "const d=new Date(Date.now()+86400000); d.setUTCHours(14,30,0,0);",
+         "pm.collectionVariables.set(\"cut_desired_time\", d.toISOString().replace(/\\.\\d{3}Z$/,\"Z\"));"
+        ]
        }
       }
      ],
@@ -17468,7 +17479,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"2099-01-15T14:30:00Z\"}"
+       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"{{cut_desired_time}}\"}"
       }
      },
      "response": []
@@ -17538,7 +17549,7 @@
      "response": []
     },
     {
-     "name": "profissional ACEITA -> 200 ACCEPTED (nasce atendimento)",
+     "name": "profissional ACEITA -> 200 ACCEPTED (pedido de outro dia vira agendamento)",
      "event": [
       {
        "listen": "test",
@@ -17700,7 +17711,7 @@
      "response": []
     },
     {
-     "name": "cleanup: remove o atendimento aceito",
+     "name": "cleanup: cliente cancela o agendamento nascido do aceite",
      "event": [
       {
        "listen": "test",
@@ -17721,11 +17732,21 @@
       "header": [
        {
         "key": "Authorization",
-        "value": "Bearer {{cut_owner_token}}",
+        "value": "Bearer {{cut_client_token}}",
         "type": "text"
        }
       ],
-      "url": "{{base_url}}/professional-queue/{{cut_attendance_id}}/remove",
+      "url": {
+       "raw": "{{base_url}}/attendances/intentions/{{cut_attendance_id}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "intentions",
+        "{{cut_attendance_id}}"
+       ]
+      },
       "auth": {
        "type": "noauth"
       }
@@ -24927,6 +24948,650 @@
       }
      },
      "response": []
+    }
+   ]
+  },
+  {
+   "name": "21 - exclusao pela web (exclusao-por-link)",
+   "item": [
+    {
+     "name": "pedir link para e-mail sem conta -> 202 (nao revela)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/request",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "request"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"naoexiste_{{$timestamp}}@vupth.test\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 202\", () => pm.response.to.have.status(202));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] pedir link com e-mail invalido -> 422",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/request",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "request"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"nao-e-email\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] abrir link que nao existe -> 410",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/token-que-nao-existe",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "token-que-nao-existe"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 410\", () => pm.response.to.have.status(410));",
+         "pm.test(\"ACCOUNT_DELETION_LINK_INVALID\", () => pm.expect(pm.response.json().code).to.equal(\"ACCOUNT_DELETION_LINK_INVALID\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] confirmar com link que nao existe -> 410",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/account-deletion/confirm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "account-deletion",
+        "confirm"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"token\":\"token-que-nao-existe\",\"password\":\"Senha123!\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 410\", () => pm.response.to.have.status(410));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "22 - desativar a conta (desativar-conta)",
+   "item": [
+    {
+     "name": "setup: register (desativar)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/register",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "register"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.collectionVariables.set(\"da_email\",\"desativa_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"da_pass\",\"Senha123!\");"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "setup: login (desativar)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/login",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "login"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){ pm.test(\"deactivated false\", () => pm.expect(pm.response.json().deactivated).to.equal(false)); pm.collectionVariables.set(\"da_token\", pm.response.json().tokens.access_token); }"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] desativar com senha errada -> 401",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/profile/deactivate/me",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "deactivate",
+        "me"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"errada\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"CURRENT_PASSWORD_INVALID\", () => pm.expect(pm.response.json().code).to.equal(\"CURRENT_PASSWORD_INVALID\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "desativar -> 204",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/profile/deactivate/me",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "deactivate",
+        "me"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_pass}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "login da desativada -> 200 deactivated true",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/login",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "login"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if(pm.response.code===200){ pm.test(\"deactivated true\", () => pm.expect(pm.response.json().deactivated).to.equal(true)); pm.collectionVariables.set(\"da_token\", pm.response.json().tokens.access_token); }"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "so consultar: ler o perfil -> 200",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/profile/me",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "me"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] so consultar: editar o perfil -> 403 ACCOUNT_DEACTIVATED",
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/profile/general-infos",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "general-infos"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\":\"Outro\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+         "pm.test(\"ACCOUNT_DEACTIVATED\", () => pm.expect(pm.response.json().code).to.equal(\"ACCOUNT_DEACTIVATED\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "reativar -> 204",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/profile/reactivate/me",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "profile",
+        "reactivate",
+        "me"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "login depois de reativar -> deactivated false",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json",
+        "type": "text"
+       },
+       {
+        "key": "X-Vupth-CI",
+        "value": "{{ci_secret}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/auth/login",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "auth",
+        "login"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"deactivated false\", () => pm.expect(pm.response.json().deactivated).to.equal(false));"
+        ]
+       }
+      }
+     ]
     }
    ]
   },

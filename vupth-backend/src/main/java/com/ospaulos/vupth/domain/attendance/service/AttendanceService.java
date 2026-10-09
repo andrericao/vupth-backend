@@ -106,6 +106,15 @@ public interface AttendanceService {
      * desta chamada), e nao "agora" como no walk-in. O aceite do outro cliente e a autorizacao —
      * bypassa o gate C1 pelo mesmo motivo do corte aceito. Reusa o meal-lock (#37).
      */
+    /**
+     * Pedido de corte para OUTRO dia aceito (aceite-vira-agendamento, Andre 05/10): nasce uma
+     * {@code INTENTION} naquele dia e horario, pelo MESMO algoritmo da intencao do cliente — o
+     * expediente, o horizonte e o "cheio" valem igual (422/409), e o pedido continua PENDING se recusar.
+     */
+    public Attendance createIntentionFromCutRequest(Professional professional, Establishment establishment,
+                                                    Client client, List<ServiceItem> serviceItems,
+                                                    java.time.OffsetDateTime desiredTime);
+
     public Attendance createScheduledFromSwapOffer(Professional professional, Establishment establishment,
                                                    Client client, List<ServiceItem> serviceItems,
                                                    java.time.OffsetDateTime slot);

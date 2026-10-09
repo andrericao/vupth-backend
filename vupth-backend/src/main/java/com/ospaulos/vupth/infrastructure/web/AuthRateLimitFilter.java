@@ -50,7 +50,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     static final String CI_HEADER = "X-Vupth-CI";
-    private static final Set<String> LIMITED = Set.of("/auth/login", "/auth/register", "/auth/forgot-password");
+    private static final Set<String> LIMITED = Set.of("/auth/login", "/auth/register", "/auth/forgot-password",
+            "/auth/account-deletion/request", "/auth/account-deletion/confirm");
 
     private final boolean enabled;
     private final int maxRequests;

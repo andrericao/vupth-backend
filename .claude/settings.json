@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/../vupth-docs/tools/hook-novidades.sh 2>/dev/null || true", "timeout": 30}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/../vupth-docs/tools/hook-novidades.sh 2>/dev/null || true", "timeout": 30}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/../vupth-docs/tools/vigia.sh", "asyncRewake": true, "timeout": 21600}]}]
+  }
+}

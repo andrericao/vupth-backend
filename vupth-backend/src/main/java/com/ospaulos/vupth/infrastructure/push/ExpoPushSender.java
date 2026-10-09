@@ -60,9 +60,13 @@ public class ExpoPushSender implements PushSender {
      */
     static final String INFO_CATEGORY_ID = "CIENCIA";
 
-    /** As que pedem decisao (aceitar/recusar, fechar ou nao) seguem sem categoria — o app abre nelas. */
+    /**
+     * As que pedem decisao (aceitar/recusar, fechar ou nao) seguem sem categoria — o app abre nelas.
+     * O CUT_REQUESTED saiu daqui (S40, 08/10): o Partner trata o pedido de corte como aviso com OK, e o
+     * toque no corpo abre as Solicitacoes de corte, onde ele decide.
+     */
     static final Set<String> DECISION_TYPES = Set.of(
-            "CUT_REQUESTED", "CLOSING_PROMPT", "SWAP_REQUESTED", "EARLIER_TURN_OFFERED");
+            "CLOSING_PROMPT", "SWAP_REQUESTED", "EARLIER_TURN_OFFERED");
 
     private final RestClient restClient;
     private final String expoUrl;

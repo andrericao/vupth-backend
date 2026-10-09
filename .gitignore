@@ -2,7 +2,9 @@
 # DOCUMENTAÇÃO LOCAL (PRD, docs)
 # Não sobe para o repositório
 # ==============================
-docs/
+docs/*
+# PRD v14 guardado como historico (pc-descartavel, DEC-28): a fonte unica e o vupth-docs desde 06/09
+!docs/historico/
 
 # ==============================
 # IDE

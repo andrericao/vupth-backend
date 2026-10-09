@@ -111,8 +111,21 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Notificacao que pede decisao (pedido de corte) segue sem categoria")
+    @DisplayName("Notificacao que pede decisao (troca de posicao) segue sem categoria")
     void decisionHasNoCategory() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Pedido de troca", "Aceite ou recuse.",
+                Map.of("type", "SWAP_REQUESTED"));
+
+        assertThat(body.get()).doesNotContain("categoryId");
+    }
+
+    @Test
+    @DisplayName("Pedido de corte sai com categoryId CIENCIA — o OK aparece com o app fechado (S40)")
+    void cutRequestCarriesCienciaCategory() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -120,7 +133,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Novo pedido de corte", "Aceite ou recuse.",
                 Map.of("type", "CUT_REQUESTED"));
 
-        assertThat(body.get()).doesNotContain("categoryId");
+        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
     }
 
     @Test

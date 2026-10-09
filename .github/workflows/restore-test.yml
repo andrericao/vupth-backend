@@ -1,0 +1,102 @@
+# Restauracao testada (Evolucao, Degrau 1 · backup-do-banco, 08/10): backup que nunca foi restaurado nao conta.
+# Uma vez por mes, baixa o ultimo backup diario do R2, restaura num Postgres descartavel dentro do job,
+# sobe o backend contra ele e roda o Newman. Nada toca a producao nem o staging. Push, e-mail e geocoder
+# ficam desligados: o banco restaurado tem os tokens e e-mails reais dos usuarios.
+# DESLIGADO ate o Andre ligar BACKUP_ENABLED=true (os mesmos segredos do backup.yml, mais os do JWT).
+name: restore-test
+
+on:
+  schedule:
+    - cron: '0 7 1 * *'   # dia 1, 04:00 em Sao Paulo
+  workflow_dispatch:
+
+jobs:
+  restore:
+    if: vars.BACKUP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: vupth
+          POSTGRES_USER: vupth
+          POSTGRES_PASSWORD: vupth
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      BUCKET: ${{ secrets.BACKUP_R2_BUCKET }}
+      R2_ENDPOINT: https://${{ secrets.BACKUP_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Baixa o ultimo backup diario
+        run: |
+          ultimo=$(aws s3 ls "s3://$BUCKET/daily/" --endpoint-url "$R2_ENDPOINT" | awk '{print $4}' | grep '\.dump$' | sort | tail -n 1)
+          [ -n "$ultimo" ] || { echo "nenhum backup em daily/"; exit 1; }
+          echo "restaurando $ultimo"
+          aws s3 cp "s3://$BUCKET/daily/$ultimo" vupth.dump --endpoint-url "$R2_ENDPOINT" --only-show-errors
+
+      - name: Restaura no Postgres do job
+        run: |
+          docker run --rm --network host -v "$PWD":/w -e PGPASSWORD=vupth postgres:17 \
+            pg_restore --no-owner --no-acl --exit-on-error -h localhost -U vupth -d vupth /w/vupth.dump
+          # O minimo para chamar de restaurado: as migrations e os usuarios vieram.
+          docker run --rm --network host -e PGPASSWORD=vupth postgres:17 \
+            psql -h localhost -U vupth -d vupth -v ON_ERROR_STOP=1 -c 'select count(*) as migrations from databasechangelog' -c 'select count(*) as usuarios from base_user'
+
+      - uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Chaves do JWT
+        working-directory: vupth-backend
+        run: |
+          mkdir -p src/main/resources/keys
+          echo "${{ secrets.JWT_PRIVATE_KEY_B64 }}" | base64 -d > src/main/resources/keys/private.key
+          echo "${{ secrets.JWT_PUBLIC_KEY_B64 }}"  | base64 -d > src/main/resources/keys/public.key
+
+      - name: Sobe o backend contra o banco restaurado
+        working-directory: vupth-backend
+        env:
+          SPRING_PROFILES_ACTIVE: staging
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGDATABASE: vupth
+          PGUSER: vupth
+          PGPASSWORD: vupth
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/vupth
+          PUSH_PROVIDER: none
+          MAIL_PROVIDER: none
+          GEOCODING_PROVIDER: none
+          RATE_LIMIT_CI_SECRET: restore-test
+        run: |
+          mvn -q -B package -DskipTests
+          nohup java -jar target/*.jar > backend.log 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fs http://localhost:8080/actuator/health/readiness | grep -q '"UP"' && { echo "backend UP"; exit 0; }
+            sleep 5
+          done
+          tail -n 200 backend.log; exit 1
+
+      - name: Newman contra o banco restaurado
+        working-directory: vupth-backend
+        run: |
+          npx --yes newman@6 run postman/collection.json --env-var "base_url=http://localhost:8080" --env-var "ci_secret=restore-test" --reporters cli
+
+      - name: Log do backend (na falha)
+        if: failure()
+        working-directory: vupth-backend
+        run: tail -n 300 backend.log || true
