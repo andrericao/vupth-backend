@@ -58,6 +58,9 @@ import com.ospaulos.vupth.domain.serviceItem.exception.ServiceItemNotFoundExcept
 import com.ospaulos.vupth.domain.serviceItem.exception.ServiceTypeKeywordAlreadyExistsException;
 import com.ospaulos.vupth.api.professional.exception.UserAlreadyProfessionalException;
 import com.ospaulos.vupth.api.user.exception.AccountDeleteNotAllowedException;
+import com.ospaulos.vupth.api.user.exception.AccountDeactivateNotAllowedException;
+import com.ospaulos.vupth.api.user.exception.AccountDeactivatedException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentUnavailableException;
 import com.ospaulos.vupth.api.user.exception.AccountDeletionLinkInvalidException;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
 import com.ospaulos.vupth.api.user.exception.InvalidBirthDateException;
@@ -687,6 +690,29 @@ public class GlobalExceptionHandler {
             AccountDeletionLinkInvalidException ex, HttpServletRequest req) {
         log.warn("[410] AccountDeletionLinkInvalid | {} {}", req.getMethod(), req.getRequestURI());
         return build(HttpStatus.GONE, ex.getMessage(), "ACCOUNT_DELETION_LINK_INVALID");
+    }
+
+    // desativar-conta: os mesmos portoes do apagar, com o codigo proprio.
+    @ExceptionHandler(AccountDeactivateNotAllowedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountDeactivateNotAllowed(
+            AccountDeactivateNotAllowedException ex, HttpServletRequest req) {
+        log.warn("[409] AccountDeactivateNotAllowed | {} {} — {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "ACCOUNT_DEACTIVATE_NOT_ALLOWED");
+    }
+
+    // desativar-conta, "so consultar": a conta desativada le, mas nao opera — o app oferece "Reativar".
+    @ExceptionHandler(AccountDeactivatedException.class)
+    public ResponseEntity<ErrorResponse> handleAccountDeactivated(AccountDeactivatedException ex, HttpServletRequest req) {
+        log.warn("[403] AccountDeactivated | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), "ACCOUNT_DEACTIVATED");
+    }
+
+    // desativar-conta: loja desativada pelo dono (ou removida) nao recebe fila, pedido nem agendamento.
+    @ExceptionHandler(EstablishmentUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleEstablishmentUnavailable(
+            EstablishmentUnavailableException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentUnavailable | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.CONFLICT, "This establishment is not available right now.", "ESTABLISHMENT_UNAVAILABLE");
     }
 
     @ExceptionHandler(AccountDeleteNotAllowedException.class)

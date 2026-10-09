@@ -44,7 +44,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
     LEFT JOIN FETCH e.addresses ea
     LEFT JOIN FETCH ea.address
     WHERE e.owner.id = :ownerId
-      AND e.status <> 'INACTIVE'
+      AND e.status NOT IN ('INACTIVE', 'REMOVED')
     ORDER BY e.createdAt DESC
     """)
     List<Establishment> findByOwnerId(@Param("ownerId") UUID ownerId);
@@ -54,7 +54,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         SELECT e FROM Establishment e
         LEFT JOIN FETCH e.services
         LEFT JOIN FETCH e.owner
-        WHERE e.status <> 'INACTIVE'
+        WHERE e.status NOT IN ('INACTIVE', 'DEACTIVATED', 'REMOVED')
         ORDER BY e.createdAt DESC
         """)
     List<Establishment> findAllActive();
@@ -73,7 +73,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
                    WHERE p.establishment = e
                      AND (CAST(FUNCTION('translate', LOWER(COALESCE(u.nickname, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE CONCAT('%', :name, '%')
                           OR CAST(FUNCTION('translate', LOWER(COALESCE(u.firstName, '')), 'áàâãäåéèêëíìîïóòôõöúùûüçñýÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑÝ', 'aaaaaaeeeeiiiiooooouuuucnyaaaaaaeeeeiiiiooooouuuucny') AS String) LIKE CONCAT('%', :name, '%'))))
-          AND e.status <> 'INACTIVE'
+          AND e.status NOT IN ('INACTIVE', 'DEACTIVATED', 'REMOVED')
         ORDER BY e.createdAt DESC
         """)
     List<Establishment> findByNameContainingIgnoreCaseAndStatusNot(
@@ -85,7 +85,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         LEFT JOIN FETCH e.services s
         LEFT JOIN FETCH e.owner
         WHERE :serviceType MEMBER OF e.services
-          AND e.status <> 'INACTIVE'
+          AND e.status NOT IN ('INACTIVE', 'DEACTIVATED', 'REMOVED')
         ORDER BY e.createdAt DESC
         """)
     List<Establishment> findActiveByServiceType(
@@ -100,7 +100,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         JOIN e.addresses ea
         JOIN ea.address a
         WHERE LOWER(a.neighborhood) LIKE LOWER(CONCAT('%', :neighborhood, '%'))
-          AND e.status <> 'INACTIVE'
+          AND e.status NOT IN ('INACTIVE', 'DEACTIVATED', 'REMOVED')
         ORDER BY e.createdAt DESC
         """)
     List<Establishment> findActiveByNeighborhood(
@@ -115,7 +115,7 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
         JOIN ea.address a
         WHERE :serviceType MEMBER OF e.services
           AND LOWER(a.neighborhood) LIKE LOWER(CONCAT('%', :neighborhood, '%'))
-          AND e.status <> 'INACTIVE'
+          AND e.status NOT IN ('INACTIVE', 'DEACTIVATED', 'REMOVED')
         ORDER BY e.createdAt DESC
         """)
     List<Establishment> findActiveByServiceTypeAndNeighborhood(

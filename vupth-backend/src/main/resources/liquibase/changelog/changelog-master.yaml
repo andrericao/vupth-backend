@@ -407,3 +407,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/025-create-account_deletion_token.yaml
       relativeToChangeLogFile: true
+
+  # Conta desativada pelo titular: entra e le, nao opera (desativar-conta)
+  - include:
+      file: changesets/20-auth/026-add-deactivated_at-to-base_user.yaml
+      relativeToChangeLogFile: true

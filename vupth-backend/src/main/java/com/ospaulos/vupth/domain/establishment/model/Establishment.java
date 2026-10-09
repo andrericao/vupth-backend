@@ -307,4 +307,11 @@ public class Establishment implements Serializable {
     public boolean isWithinBusinessHours(OffsetDateTime at) {
         return getBusinessHours().isWithin(BusinessClock.dateAt(at), BusinessClock.timeAt(at));
     }
+
+    /** Recebe cliente (fila, pedido de corte, agendamento)? Desativada, removida ou inativa, nao. */
+    public boolean acceptsClients() {
+        return status != com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.DEACTIVATED
+                && status != com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.REMOVED
+                && status != com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.INACTIVE;
+    }
 }

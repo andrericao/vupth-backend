@@ -308,6 +308,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new ProfessionalNotAffiliatedException(professionalId);
         }
         Establishment establishment = professional.getEstablishment();
+        assertAcceptsClients(establishment);
 
         Client client = clientRepository.findById(clientId)
                 .orElseThrow(() -> new ClientNotFoundException(clientId));
@@ -637,6 +638,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         Establishment establishment = professional.getEstablishment();
+        assertAcceptsClients(establishment);
 
         // Bug fix: was == (reference comparison) — now uses .equals()
         if (!establishment.getId().equals(request.establishmentId())) {
@@ -1203,6 +1205,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             List<ServiceItem> serviceItems, OffsetDateTime desiredTime) {
         log.info("[Attendance] createIntentionFromCutRequest — professional={} client={} desiredTime={}",
                 professional.getId(), client.getId(), desiredTime);
+        assertAcceptsClients(establishment);
 
         OffsetDateTime estimatedStart = runIntentionAlgorithm(
                 professional, establishment, serviceItems, desiredTime, null);
@@ -1761,6 +1764,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         Hibernate.initialize(attendance.getServiceItems());
         if (attendance.getClient() != null) {
             Hibernate.initialize(attendance.getClient().getBaseUser());
+        }
+    }
+
+    /** desativar-conta: loja desativada ou removida nao recebe fila nem agendamento (409 ESTABLISHMENT_UNAVAILABLE). */
+    private static void assertAcceptsClients(Establishment establishment) {
+        if (!establishment.acceptsClients()) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentUnavailableException(establishment.getId());
         }
     }
 }

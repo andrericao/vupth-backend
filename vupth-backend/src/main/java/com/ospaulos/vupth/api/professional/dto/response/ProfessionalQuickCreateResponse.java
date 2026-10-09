@@ -46,8 +46,22 @@ public record ProfessionalQuickCreateResponse(
 
         // Interruptor "expor a posicao na fila" (decisao de 05/09); null onde nao foi lido
         @JsonProperty("show_position")
-        Boolean showPosition
+        Boolean showPosition,
+
+        // desativar-conta (S42): ACTIVE | DEACTIVATED da loja onde trabalha; null sem loja ou onde nao foi lido
+        @JsonProperty("establishment_status")
+        String establishmentStatus
 ) {
+    public ProfessionalQuickCreateResponse(
+            UUID id, String name, String specialty, String nickname, UUID establishmentId,
+            String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,
+            Boolean acceptingNew,
+            com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
+            String message, String contactPhone, Boolean showPosition) {
+        this(id, name, specialty, nickname, establishmentId, establishmentName, isAvailable,
+                workStatus, acceptingNew, operationMode, message, contactPhone, showPosition, null);
+    }
+
     public ProfessionalQuickCreateResponse(
             UUID id, String name, String specialty, String nickname, UUID establishmentId,
             String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,
@@ -55,7 +69,7 @@ public record ProfessionalQuickCreateResponse(
             com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
             String message) {
         this(id, name, specialty, nickname, establishmentId, establishmentName, isAvailable,
-                workStatus, acceptingNew, operationMode, message, null, null);
+                workStatus, acceptingNew, operationMode, message, null, null, null);
     }
 
     public static ProfessionalQuickCreateResponse fromEntity(Professional p) {

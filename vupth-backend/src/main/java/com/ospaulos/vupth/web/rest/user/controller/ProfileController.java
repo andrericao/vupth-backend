@@ -27,6 +27,8 @@ public class ProfileController {
 
     private final RegisterUseCase registerUseCase;
     private final DeleteAccountUseCase deleteAccountUseCase;
+    private final DeactivateAccountUseCase deactivateAccountUseCase;
+    private final ReactivateAccountUseCase reactivateAccountUseCase;
     private final UpdateEmailUseCase updateEmailUseCase;
     private final UpdatePasswordUseCase updatePasswordUseCase;
     private final UpdateProfileGeneralInfosUseCase updateProfileGeneralInfosUseCase;
@@ -120,6 +122,27 @@ public class ProfileController {
 
         deleteAccountUseCase.execute(user.getUserId(), request.currentPassword());
 
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * POST /profile/deactivate/me — desativa a conta (reversivel; desativar-conta). Senha no corpo, como
+     * no apagar: 401 CURRENT_PASSWORD_INVALID; 409 ACCOUNT_DEACTIVATE_NOT_ALLOWED com compromisso vivo.
+     */
+    @PostMapping("/deactivate/me")
+    public ResponseEntity<Void> deactivateAccount(
+            @AuthenticationPrincipal UserDetailsImpl user,
+            @RequestBody @Valid DeleteAccountRequest request){
+        log.info("CONTROLLER PROFILE POST /deactivate/me — userId={}", user.getUserId());
+        deactivateAccountUseCase.execute(user.getUserId(), request.currentPassword());
+        return ResponseEntity.noContent().build();
+    }
+
+    /** POST /profile/reactivate/me — o "Reativar" do modal: a conta e as lojas do dono voltam. */
+    @PostMapping("/reactivate/me")
+    public ResponseEntity<Void> reactivateAccount(@AuthenticationPrincipal UserDetailsImpl user){
+        log.info("CONTROLLER PROFILE POST /reactivate/me — userId={}", user.getUserId());
+        reactivateAccountUseCase.execute(user.getUserId());
         return ResponseEntity.noContent().build();
     }
 

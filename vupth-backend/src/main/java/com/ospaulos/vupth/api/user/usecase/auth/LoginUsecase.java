@@ -69,6 +69,6 @@ public class LoginUsecase {
 
         UserProfileGeneralInfosResponse userResponse = userMapper.toGeneralInfosUserResponse(user);
 
-      return new UserProfileGeneralInfosAndToken(userResponse, refreshTokenResponse);
+      return new UserProfileGeneralInfosAndToken(userResponse, refreshTokenResponse, user.isAccountDeactivated());
     }
 }

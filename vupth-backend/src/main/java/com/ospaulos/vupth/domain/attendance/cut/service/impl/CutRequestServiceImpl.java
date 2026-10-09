@@ -65,6 +65,10 @@ public class CutRequestServiceImpl implements CutRequestService {
 
         Establishment establishment = establishmentRepository.findById(request.establishmentId())
                 .orElseThrow(() -> new EstablishmentNotFoundException(request.establishmentId()));
+        // desativar-conta: loja desativada ou removida nao recebe pedido de corte.
+        if (!establishment.acceptsClients()) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentUnavailableException(establishment.getId());
+        }
         Professional professional = professionalRepository.findById(request.professionalId())
                 .orElseThrow(() -> new ProfessionalNotFoundException(request.professionalId()));
         Client client = clientRepository.findById(clientId)

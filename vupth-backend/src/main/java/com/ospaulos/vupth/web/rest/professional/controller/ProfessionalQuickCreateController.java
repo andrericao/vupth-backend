@@ -147,7 +147,11 @@ public class ProfessionalQuickCreateController {
                 professional.getOperationMode(),
                 null,
                 professional.getContactPhone(),
-                professional.getShowPosition()
+                professional.getShowPosition(),
+                professional.getEstablishment() != null && professional.getEstablishment().getStatus() != null
+                        ? (professional.getEstablishment().getStatus() == com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.DEACTIVATED
+                                ? "DEACTIVATED" : "ACTIVE")
+                        : null
         ));
     }
 
