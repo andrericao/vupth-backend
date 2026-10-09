@@ -70,6 +70,7 @@ import com.ospaulos.vupth.api.user.exception.ResetCodeExpiredException;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
+import io.sentry.Sentry;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -857,6 +858,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
         log.error("[500] UnexpectedError | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage(), ex);
+        // BAK-2 sentry: o 500 tratado aqui nao chega ao SentryExceptionResolver; sem SENTRY_DSN e no-op.
+        Sentry.captureException(ex);
         String debugMsg = ex.getClass().getSimpleName() + ": " + ex.getMessage();
         return build(HttpStatus.INTERNAL_SERVER_ERROR, debugMsg, "INTERNAL_ERROR");
     }
