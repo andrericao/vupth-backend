@@ -24480,6 +24480,90 @@
      "response": []
     },
     {
+     "name": "[ERRO] dono com loja apaga a conta -> 409 OWNER_MUST_TRANSFER",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"OWNER_MUST_TRANSFER\", () => pm.expect(pm.response.json().code).to.equal(\"OWNER_MUST_TRANSFER\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "dono apaga a loja -> 204 (vira \"Loja removida\")",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{da_estab_id}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{da_estab_id}}"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "dono apaga a conta -> 204 (loja sem fila viva)",
      "event": [
       {
@@ -24551,7 +24635,7 @@
      "response": []
     },
     {
-     "name": "a loja orfa continua legivel por id, com owner_id ausente",
+     "name": "a loja removida continua legivel por id, como \"Loja removida\"",
      "event": [
       {
        "listen": "test",
@@ -24560,7 +24644,7 @@
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "// Continua legivel porque o historico do cliente aponta para ela.",
          "pm.test(\"openStatus CLOSED\", () => pm.expect(pm.response.json()['open_status']).to.eql(\"CLOSED\"));",
-         "pm.test(\"sem dono\", () => pm.expect(pm.response.json().ownerId == null).to.be.true);"
+         "pm.test(\"nome Loja removida\", () => pm.expect(pm.response.json().name).to.eql(\"Loja removida\"));"
         ],
         "type": "text/javascript"
        }
@@ -25175,7 +25259,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25193,8 +25277,8 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.collectionVariables.set(\"da_email\",\"desativa_\"+Date.now()+\"@vupth.test\");",
-         "pm.collectionVariables.set(\"da_pass\",\"Senha123!\");"
+         "pm.collectionVariables.set(\"dz_email\",\"desativa_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"dz_pass\",\"Senha123!\");"
         ]
        }
       }
@@ -25231,7 +25315,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25241,7 +25325,7 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "if(pm.response.code===200){ pm.test(\"deactivated false\", () => pm.expect(pm.response.json().deactivated).to.equal(false)); pm.collectionVariables.set(\"da_token\", pm.response.json().tokens.access_token); }"
+         "if(pm.response.code===200){ pm.test(\"deactivated false\", () => pm.expect(pm.response.json().deactivated).to.equal(false)); pm.collectionVariables.set(\"dz_token\", pm.response.json().tokens.access_token); }"
         ]
        }
       }
@@ -25264,7 +25348,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25317,7 +25401,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25337,7 +25421,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"current_password\":\"{{da_pass}}\"}"
+       "raw": "{\"current_password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25383,7 +25467,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25393,7 +25477,7 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "if(pm.response.code===200){ pm.test(\"deactivated true\", () => pm.expect(pm.response.json().deactivated).to.equal(true)); pm.collectionVariables.set(\"da_token\", pm.response.json().tokens.access_token); }"
+         "if(pm.response.code===200){ pm.test(\"deactivated true\", () => pm.expect(pm.response.json().deactivated).to.equal(true)); pm.collectionVariables.set(\"dz_token\", pm.response.json().tokens.access_token); }"
         ]
        }
       }
@@ -25416,7 +25500,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25463,7 +25547,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25515,7 +25599,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25577,7 +25661,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [

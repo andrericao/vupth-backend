@@ -715,6 +715,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "This establishment is not available right now.", "ESTABLISHMENT_UNAVAILABLE");
     }
 
+    // desativar-conta (d): dono com loja nao apaga a conta — passa a posse ou apaga a loja antes.
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.OwnerMustTransferException.class)
+    public ResponseEntity<ErrorResponse> handleOwnerMustTransfer(
+            com.ospaulos.vupth.domain.establishment.exception.OwnerMustTransferException ex, HttpServletRequest req) {
+        log.warn("[409] OwnerMustTransfer | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "OWNER_MUST_TRANSFER");
+    }
+
     @ExceptionHandler(AccountDeleteNotAllowedException.class)
     public ResponseEntity<ErrorResponse> handleAccountDeleteNotAllowed(
             AccountDeleteNotAllowedException ex, HttpServletRequest req) {

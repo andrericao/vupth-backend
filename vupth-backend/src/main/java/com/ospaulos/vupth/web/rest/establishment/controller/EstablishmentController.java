@@ -83,6 +83,7 @@ public class EstablishmentController {
     private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
     private final ManageBusinessHoursUseCase businessHoursUseCase;
     private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
+    private final com.ospaulos.vupth.api.establishment.usecase.DeleteEstablishmentUseCase deleteEstablishmentUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
     private final ReportService                          reportService;
     private final ServiceItemService                     serviceItemService;
@@ -470,5 +471,20 @@ public class EstablishmentController {
         EstablishmentResponse response =
                 transferOwnershipUseCase.execute(user.getUserId(), id, request.newOwnerId());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * DELETE /establishment/{id} — o dono apaga a loja (desativar-conta). Senha no corpo; 401 senha errada,
+     * 409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES com fila viva. A loja vira REMOVED ("Loja removida") e os
+     * profissionais saem dela.
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteEstablishment(
+            @PathVariable UUID id,
+            @RequestBody @Valid com.ospaulos.vupth.api.user.dto.request.profile.DeleteAccountRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        log.info("[Establishment] delete — id={} owner={}", id, user.getUserId());
+        deleteEstablishmentUseCase.execute(user.getUserId(), id, request.currentPassword());
+        return ResponseEntity.noContent().build();
     }
 }

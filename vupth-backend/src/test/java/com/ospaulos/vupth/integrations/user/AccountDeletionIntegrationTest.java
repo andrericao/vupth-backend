@@ -38,7 +38,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -383,8 +382,19 @@ class AccountDeletionIntegrationTest {
 
     @Test
     @Order(30)
-    @DisplayName("DELETE /profile/delete/me — 204 do dono: loja CLOSED, sem dono, profissionais desafiliados")
+    @DisplayName("DELETE /profile/delete/me — dono com loja: 409 OWNER_MUST_TRANSFER; apaga a loja e ai 204")
     void delete_ownerSuccess() throws Exception {
+        // desativar-conta (d): loja sem dono nao existe — com loja, o apagar da conta recusa.
+        MvcResult refused = deleteAccount(ownerToken, ownerPassword);
+        assertThat(refused.getResponse().getStatus()).isEqualTo(409);
+        assertThat(refused.getResponse().getContentAsString()).contains("OWNER_MUST_TRANSFER");
+
+        mvc.perform(delete("/establishment/{id}", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"current_password\":\"" + ownerPassword + "\"}"))
+                .andExpect(status().isNoContent());
+
         MvcResult result = deleteAccount(ownerToken, ownerPassword);
         assertThat(result.getResponse().getStatus()).isEqualTo(204);
 
@@ -396,9 +406,9 @@ class AccountDeletionIntegrationTest {
                 .isEqualTo(OpenStatus.CLOSED);
         assertThat(establishment.getStatus())
                 .as("e o que REALMENTE tira a loja da vitrine — as queries publicas filtram "
-                        + "status <> INACTIVE, nao openStatus")
-                .isEqualTo(EstablishmentStatus.INACTIVE);
-        assertThat(establishment.getOwner()).isNull();
+                        + "o status, nao o openStatus")
+                .isEqualTo(EstablishmentStatus.REMOVED);
+        assertThat(establishment.getName()).isEqualTo("Loja removida");
 
         assertThat(professionalRepository.findByEstablishmentId(UUID.fromString(establishmentId)))
                 .as("todo profissional foi desafiliado pelo LeaveEstablishmentUseCase")
@@ -428,10 +438,14 @@ class AccountDeletionIntegrationTest {
      * Regressao: a loja ficou SEM dono, e os mappers faziam {@code getOwner().getId()} cru. Bastava
      * uma loja orfa para a vitrine publica inteira responder 500 — para TODO usuario do app, nao so
      * para quem apagou a conta.
+     *
+     * <p>Desde o desativar-conta (d) a loja sem dono nao nasce mais: o dono apaga a loja (REMOVED)
+     * antes de apagar a conta, e a loja removida guarda o vinculo com a conta anonimizada — e o
+     * historico. O que segue valendo: a vitrine e o detalhe nao quebram.</p>
      */
     @Test
     @Order(32)
-    @DisplayName("A vitrine publica nao quebra com loja SEM dono (era 500 no getOwner().getId())")
+    @DisplayName("A vitrine publica nao quebra depois que o dono apaga a loja e a conta")
     void delete_publicListingSurvivesOwnerlessEstablishment() throws Exception {
         mvc.perform(get("/establishment"))
                 .andExpect(status().isOk());
@@ -439,10 +453,10 @@ class AccountDeletionIntegrationTest {
         // As duas rotas sao permitAll — de proposito, sem token: a vitrine e anonima, e o 500
         // atingia justamente quem nem tem conta.
         // `ownerId` (camelCase — este campo nao tem @JsonProperty, ao contrario de `open_status`)
-        // vem presente e NULO: nao ha politica NON_NULL configurada.
+        // segue o da conta anonimizada: a loja removida nao perde o vinculo.
         mvc.perform(get("/establishment/id/" + establishmentId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.ownerId").value(nullValue()))
+                .andExpect(jsonPath("$.ownerId").value(ownerId))
                 .andExpect(jsonPath("$.open_status").value("CLOSED"));
     }
 
@@ -453,5 +467,11 @@ class AccountDeletionIntegrationTest {
         mvc.perform(get("/establishment"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '" + establishmentId + "')]").isEmpty());
+    }
+
+    @AfterAll
+    void tearDown() {
+        attendanceRepository.deleteAll();
+        userRepository.deleteAll();
     }
 }
