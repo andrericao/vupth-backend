@@ -5,7 +5,6 @@ import com.ospaulos.vupth.api.establishment.dto.request.AddProfessionalToEstabli
 import com.ospaulos.vupth.api.establishment.dto.request.DateHoursRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentGeneralInfosRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.EstablishmentRequest;
-import com.ospaulos.vupth.api.establishment.dto.request.TransferOwnershipRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.UpdateOpenStatusRequest;
 import com.ospaulos.vupth.api.establishment.dto.request.WeeklyHoursRequest;
 import com.ospaulos.vupth.api.establishment.dto.response.BusinessHoursResponse;
@@ -17,7 +16,6 @@ import com.ospaulos.vupth.api.establishment.usecase.AddProfessionalToEstablishme
 import com.ospaulos.vupth.api.establishment.usecase.GetEstablishmentWithQueueUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.ManageBusinessHoursUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.RemoveProfessionalFromEstablishmentUseCase;
-import com.ospaulos.vupth.api.establishment.usecase.TransferEstablishmentOwnershipUseCase;
 import com.ospaulos.vupth.api.establishment.usecase.UpdateEstablishmentGeneralInfosUseCase;
 import com.ospaulos.vupth.api.professional.dto.response.ProfessionalQuickCreateResponse;
 import com.ospaulos.vupth.api.report.dto.response.EstablishmentReportResponse;
@@ -82,7 +80,6 @@ public class EstablishmentController {
     private final AddProfessionalToEstablishmentUseCase addProfessionalUseCase;
     private final UpdateEstablishmentGeneralInfosUseCase updateGeneralInfosUseCase;
     private final ManageBusinessHoursUseCase businessHoursUseCase;
-    private final TransferEstablishmentOwnershipUseCase transferOwnershipUseCase;
     private final com.ospaulos.vupth.api.establishment.usecase.DeleteEstablishmentUseCase deleteEstablishmentUseCase;
     private final RemoveProfessionalFromEstablishmentUseCase removeProfessionalUseCase;
     private final ReportService                          reportService;
@@ -459,18 +456,14 @@ public class EstablishmentController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * PATCH /establishment/{id}/owner — saiu (desativar-conta): passava a posse para qualquer id, sem o
+     * outro saber. Agora a posse passa com aceite, em {@code POST /establishment/{id}/ownership-transfer}.
+     */
     @PatchMapping("/{id}/owner")
-    public ResponseEntity<EstablishmentResponse> transferOwnership(
-            @PathVariable UUID id,
-            @RequestBody @Valid TransferOwnershipRequest request,
-            @AuthenticationPrincipal UserDetailsImpl user) {
-
-        log.info("[Establishment] transferOwnership — id={} from={} to={}",
-                id, user.getUserId(), request.newOwnerId());
-
-        EstablishmentResponse response =
-                transferOwnershipUseCase.execute(user.getUserId(), id, request.newOwnerId());
-        return ResponseEntity.ok(response);
+    public ResponseEntity<Void> transferOwnership(@PathVariable UUID id) {
+        log.info("[Establishment] PATCH owner (removido) — id={}", id);
+        return ResponseEntity.status(org.springframework.http.HttpStatus.GONE).build();
     }
 
     /**

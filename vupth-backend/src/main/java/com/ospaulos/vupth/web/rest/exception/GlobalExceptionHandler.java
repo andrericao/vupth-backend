@@ -723,6 +723,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "OWNER_MUST_TRANSFER");
     }
 
+    // desativar-conta, passar a posse: cada recusa ja traz o status e o codigo do contrato.
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.transfer.OwnershipTransferException.class)
+    public ResponseEntity<ErrorResponse> handleOwnershipTransfer(
+            com.ospaulos.vupth.domain.establishment.transfer.OwnershipTransferException ex, HttpServletRequest req) {
+        log.warn("[{}] OwnershipTransfer {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(AccountDeleteNotAllowedException.class)
     public ResponseEntity<ErrorResponse> handleAccountDeleteNotAllowed(
             AccountDeleteNotAllowedException ex, HttpServletRequest req) {

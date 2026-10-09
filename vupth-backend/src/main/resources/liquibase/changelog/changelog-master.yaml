@@ -412,3 +412,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/026-add-deactivated_at-to-base_user.yaml
       relativeToChangeLogFile: true
+
+  # Passagem de posse com aceite, sem prazo (desativar-conta)
+  - include:
+      file: changesets/50-establishment/031-create-ownership_transfer.yaml
+      relativeToChangeLogFile: true
