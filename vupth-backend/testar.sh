@@ -41,6 +41,12 @@ passou() {
 banco() {
   local tmp
   tmp=$(mktemp)
+  # Container de antes do max_connections=300 (o limite so vale na criacao): recria — o banco de teste e descartavel.
+  if docker inspect vupth_postgres_test >/dev/null 2>&1 \
+      && ! docker inspect -f '{{join .Config.Cmd " "}}' vupth_postgres_test | grep -q 'max_connections=300'; then
+    echo "Recriando o vupth_postgres_test com max_connections=300 ..."
+    docker rm -f vupth_postgres_test >/dev/null 2>&1
+  fi
   if ! docker inspect vupth_postgres_test >/dev/null 2>&1; then
     echo "Criando o container vupth_postgres_test (postgres:16-alpine, porta 5432) ..."
     if ! docker run -d --name vupth_postgres_test \
