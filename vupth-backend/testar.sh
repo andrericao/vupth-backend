@@ -35,7 +35,35 @@ passou() {
 }
 
 # --- 1. mvn test (o banco de teste e o container vupth_postgres_test, na 5432) ---
-docker start vupth_postgres_test >/dev/null 2>&1 || true
+# testar-sem-banco (10/10): o container pode nao existir no PC (so o vupth_postgres_dev, na 5433). Sem ele,
+# o mvn caia em "Connection to localhost:5432 refused" e o log parecia falha de codigo. Agora o script cria o
+# container quando falta (mesma imagem do dev, os dados do application-test.properties) e espera o banco.
+banco() {
+  local tmp
+  tmp=$(mktemp)
+  if ! docker inspect vupth_postgres_test >/dev/null 2>&1; then
+    echo "Criando o container vupth_postgres_test (postgres:16-alpine, porta 5432) ..."
+    if ! docker run -d --name vupth_postgres_test \
+        -e POSTGRES_DB=vupth_db_test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=vupth_test \
+        -p 5432:5432 postgres:16-alpine >"$tmp" 2>&1; then
+      { echo "banco de teste: nao deu para criar o container vupth_postgres_test (a porta 5432 esta ocupada?)"; cat "$tmp"; } > "$tmp.log"
+      falhou mvn "$tmp.log"
+    fi
+  elif ! docker start vupth_postgres_test >"$tmp" 2>&1; then
+    { echo "banco de teste: o container vupth_postgres_test existe mas nao iniciou"; cat "$tmp"; } > "$tmp.log"
+    falhou mvn "$tmp.log"
+  fi
+  rm -f "$tmp"
+  # -h 127.0.0.1: no primeiro boot o servidor provisorio da imagem so escuta no socket; pela TCP so o definitivo responde
+  for _ in $(seq 1 30); do
+    docker exec vupth_postgres_test pg_isready -h 127.0.0.1 -U postgres -d vupth_db_test >/dev/null 2>&1 && return 0
+    sleep 2
+  done
+  tmp=$(mktemp)
+  { echo "banco de teste: vupth_postgres_test nao respondeu em 60 s"; docker logs --tail 50 vupth_postgres_test 2>&1; } > "$tmp"
+  falhou mvn "$tmp"
+}
+banco
 tmp=$(mktemp)
 mvn test "${MVN_ARGS[@]}" 2>&1 | tee "$tmp"
 [[ ${PIPESTATUS[0]} -eq 0 ]] || falhou mvn "$tmp"
