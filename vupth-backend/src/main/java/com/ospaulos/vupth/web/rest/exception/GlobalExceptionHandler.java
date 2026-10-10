@@ -803,6 +803,53 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "CLIENT_ALREADY_IN_QUEUE");
     }
 
+    // ─── pagamento-pix (10/10) ───
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PaymentPendingException.class)
+    public ResponseEntity<PaymentPendingErrorResponse> handlePaymentPending(
+            com.ospaulos.vupth.domain.payment.exception.PaymentPendingException ex, HttpServletRequest req) {
+        log.warn("[409] PaymentPending | {} {} | pendencias={}", req.getMethod(), req.getRequestURI(),
+                ex.getPending().count());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new PaymentPendingErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), "PAYMENT_PENDING",
+                ex.getPending().count(), ex.getPending().total(), ex.getPending().items(), OffsetDateTime.now()));
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PaymentNotAvailableException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentNotAvailable(
+            com.ospaulos.vupth.domain.payment.exception.PaymentNotAvailableException ex, HttpServletRequest req) {
+        log.warn("[409] PaymentNotAvailable | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PAYMENT_NOT_AVAILABLE");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PaymentInvalidStatusException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentInvalidStatus(
+            com.ospaulos.vupth.domain.payment.exception.PaymentInvalidStatusException ex, HttpServletRequest req) {
+        log.warn("[409] PaymentInvalidStatus | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "PAYMENT_INVALID_STATUS");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PaymentAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handlePaymentAccessDenied(
+            com.ospaulos.vupth.domain.payment.exception.PaymentAccessDeniedException ex, HttpServletRequest req) {
+        log.warn("[403] PaymentAccessDenied | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), "PAYMENT_ACCESS_DENIED");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException.class)
+    public ResponseEntity<ErrorResponse> handlePixKeyNotSet(
+            com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException ex, HttpServletRequest req) {
+        log.warn("[404] PixKeyNotSet | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "PIX_KEY_NOT_SET");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException.class)
+    public ResponseEntity<ErrorResponse> handlePixKeyInvalid(
+            com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException ex, HttpServletRequest req) {
+        log.warn("[422] PixKeyInvalid | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "PIX_KEY_INVALID");
+    }
+
     // ─────────────────────────────────────────────
     // 422 UNPROCESSABLE ENTITY — field validation
     // ─────────────────────────────────────────────
@@ -886,6 +933,17 @@ public class GlobalExceptionHandler {
             String message,
             String code,
             java.math.BigDecimal exitPenaltyValue,
+            OffsetDateTime timestamp) {
+    }
+
+    /** 409 PAYMENT_PENDING: a pendencia vem junto, para o app mostrar o que falta pagar (pagamento-pix). */
+    public record PaymentPendingErrorResponse(
+            int status,
+            String message,
+            String code,
+            int count,
+            java.math.BigDecimal total,
+            java.util.List<com.ospaulos.vupth.api.payment.dto.response.PendingPaymentsResponse.Item> items,
             OffsetDateTime timestamp) {
     }
 

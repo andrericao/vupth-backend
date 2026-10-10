@@ -1,0 +1,55 @@
+databaseChangeLog:
+  # pagamento-pix (Andre, 10/10): a chave Pix no profissional e a flag do pagamento no atendimento,
+  # ao lado do status. Os atendimentos antigos ficam com payment_status nulo (fora do fluxo); os novos
+  # nascem PENDING (Attendance.onCreate).
+  - changeSet:
+      id: 034-add-pix-key-to-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: pix_key
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: pix_key_type
+                  type: VARCHAR(10)
+              - column:
+                  name: pix_key
+                  type: VARCHAR(77)
+              - column:
+                  name: pix_holder_name
+                  type: VARCHAR(25)
+  - changeSet:
+      id: 034-add-payment-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: payment_status
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column:
+                  name: payment_status
+                  type: VARCHAR(30)
+              - column:
+                  name: payment_claimed_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: payment_confirmed_at
+                  type: TIMESTAMP WITH TIME ZONE
+        # O portao do cliente e o dot do profissional filtram por aqui.
+        - createIndex:
+            tableName: attendance
+            indexName: idx_attendance_payment_status
+            columns:
+              - column:
+                  name: payment_status

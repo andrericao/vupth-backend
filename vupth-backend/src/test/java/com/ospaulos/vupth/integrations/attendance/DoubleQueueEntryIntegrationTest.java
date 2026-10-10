@@ -131,7 +131,11 @@ class DoubleQueueEntryIntegrationTest {
         var ocupando = attendanceRepository.findByProfessional_IdAndStatusInOrderByScheduledTimeAsc(
                 UUID.fromString(ownerProfessionalId),
                 List.of(AttendanceStatus.IN_PROGRESS, AttendanceStatus.PAUSED));
-        ocupando.forEach(a -> a.setStatus(AttendanceStatus.FINISHED));
+        ocupando.forEach(a -> {
+            a.setStatus(AttendanceStatus.FINISHED);
+            // pagamento-pix: arrumacao de estado — finalizado e pago, para o portao nao barrar ninguem
+            a.setPaymentStatus(com.ospaulos.vupth.domain.payment.PaymentStatus.PAID);
+        });
         attendanceRepository.saveAll(ocupando);
     }
 
@@ -284,13 +288,36 @@ class DoubleQueueEntryIntegrationTest {
         var cliente = novoCliente();
         String id = entrarNaFilaDoDono(cliente);
         patchOk("/attendances/{id}/start", id, ownerToken);
-        patchOk("/attendances/{id}/finish", id, ownerToken);
+        // pagamento-pix: terminou e pagou (o "Sim" do modal)
+        mvc.perform(patch("/attendances/{id}/finish", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"payment_received\":true}")
+                        .header("Authorization", ownerToken))
+                .andExpect(status().isOk());
 
         MvcResult r = entrarNaFila(cliente, ownerProfessionalId, ownerServiceItemIds);
 
         assertThat(r.getResponse().getStatus())
-                .as("terminou o corte, pode voltar a fila — sem isto o cliente ficaria trancado para sempre")
+                .as("terminou o corte e pagou, pode voltar a fila — sem isto o cliente ficaria trancado para sempre")
                 .isEqualTo(201);
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("pagamento-pix: depois de FINISHED sem pagar, a fila nova da 409 PAYMENT_PENDING com a pendencia")
+    void aposFinalizarSemPagar_barradoPeloPagamento() throws Exception {
+        var cliente = novoCliente();
+        String id = entrarNaFilaDoDono(cliente);
+        patchOk("/attendances/{id}/start", id, ownerToken);
+        patchOk("/attendances/{id}/finish", id, ownerToken);
+
+        MvcResult r = entrarNaFila(cliente, ownerProfessionalId, ownerServiceItemIds);
+
+        assertThat(r.getResponse().getStatus()).isEqualTo(409);
+        assertThat(r.getResponse().getContentAsString())
+                .contains("\"code\":\"PAYMENT_PENDING\"")
+                .contains("\"count\":1")
+                .contains(id);
     }
 
     @Test

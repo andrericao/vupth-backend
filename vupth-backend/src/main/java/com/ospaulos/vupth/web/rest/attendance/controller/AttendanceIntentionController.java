@@ -39,6 +39,7 @@ public class AttendanceIntentionController {
 
     private final AttendanceService attendanceService;
     private final IntentionPromotionScheduler promotionScheduler;
+    private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
 
     /**
      * POST /attendances/intentions — cria uma intencao para o cliente autenticado (clientId do JWT).
@@ -53,6 +54,9 @@ public class AttendanceIntentionController {
 
         log.info("INTENTION CONTROLLER CREATE — client={} professional={} desiredTime={}",
                 principal.getUserId(), request.professionalId(), request.desiredTime());
+
+        // pagamento-pix: com atendimento finalizado sem pagar, nada de agendar (409 PAYMENT_PENDING)
+        paymentService.assertNoPendingPayment(principal.getUserId());
 
         IntentionResponse response = attendanceService.createIntention(
                 request.professionalId(), request.serviceItemIds(), request.desiredTime(), principal.getUserId());

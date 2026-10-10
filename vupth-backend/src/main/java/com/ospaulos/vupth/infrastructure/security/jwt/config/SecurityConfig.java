@@ -162,6 +162,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/move-to-end").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/service-items").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/*/rating").hasRole("CLIENT")
+                        // pagamento-pix (10/10): a parte certa (cliente, profissional ou dono) e checada no PaymentService
+                        .requestMatchers(HttpMethod.GET, "/attendances/*/payment").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/attendances/*/payment/claim").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/attendances/*/payment/confirm").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/clients/me/pending-payments").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
+                        .requestMatchers("/professional/me/pix").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente

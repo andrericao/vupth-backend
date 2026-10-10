@@ -320,6 +320,37 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // O portao do PROFISSIONAL reusa o existsByProfessional_IdAndStatusIn acima.
     boolean existsByClient_IdAndStatusIn(UUID clientId, List<AttendanceStatus> statuses);
 
+    /**
+     * pagamento-pix: o que o cliente ainda deve — atendimentos FINALIZADOS com o pagamento em aberto
+     * (quem esta na fila e nao pagou nao conta). O portao das filas e o dot do Perfil.
+     */
+    @Query("""
+            SELECT a FROM Attendance a
+            JOIN FETCH a.professional p JOIN FETCH p.baseUser
+            JOIN FETCH a.establishment
+            WHERE a.client.id = :clientId
+              AND a.status = com.ospaulos.vupth.domain.attendance.AttendanceStatus.FINISHED
+              AND a.paymentStatus IN (com.ospaulos.vupth.domain.payment.PaymentStatus.PENDING,
+                                      com.ospaulos.vupth.domain.payment.PaymentStatus.AWAITING_CONFIRMATION)
+            ORDER BY a.endTime DESC
+            """)
+    List<Attendance> findOpenPaymentsOfClient(@Param("clientId") UUID clientId);
+
+    /**
+     * pagamento-pix: o dot do profissional — os que o cliente diz que pagou (em qualquer status) e os
+     * finalizados ainda pendentes (o "Nao" do modal).
+     */
+    @Query("""
+            SELECT a FROM Attendance a
+            LEFT JOIN FETCH a.client c LEFT JOIN FETCH c.baseUser
+            WHERE a.professional.id = :professionalId
+              AND (a.paymentStatus = com.ospaulos.vupth.domain.payment.PaymentStatus.AWAITING_CONFIRMATION
+                   OR (a.paymentStatus = com.ospaulos.vupth.domain.payment.PaymentStatus.PENDING
+                       AND a.status = com.ospaulos.vupth.domain.attendance.AttendanceStatus.FINISHED))
+            ORDER BY a.paymentClaimedAt DESC NULLS LAST, a.endTime DESC
+            """)
+    List<Attendance> findOpenPaymentsOfProfessional(@Param("professionalId") UUID professionalId);
+
     boolean existsByEstablishment_IdAndStatusIn(UUID establishmentId, List<AttendanceStatus> statuses);
 
     /**

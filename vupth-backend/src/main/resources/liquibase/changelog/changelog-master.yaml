@@ -427,3 +427,8 @@ databaseChangeLog:
   - include:
       file: changesets/95-notification/033-create-pending_push_receipt.yaml
       relativeToChangeLogFile: true
+
+  # Pagamento por Pix: a chave no profissional e a flag no atendimento (pagamento-pix)
+  - include:
+      file: changesets/80-attendance/034-payment-pix.yaml
+      relativeToChangeLogFile: true

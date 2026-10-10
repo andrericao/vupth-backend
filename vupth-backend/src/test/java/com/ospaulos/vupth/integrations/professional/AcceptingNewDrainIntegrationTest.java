@@ -228,6 +228,8 @@ class AcceptingNewDrainIntegrationTest {
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
         mvc.perform(patch("/attendances/" + queuedAttendanceId + "/finish")
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 
@@ -284,7 +286,9 @@ class AcceptingNewDrainIntegrationTest {
         String attId = new JSONObject(result.getResponse().getContentAsString()).getString("id");
         mvc.perform(patch("/attendances/" + attId + "/start").header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
-        mvc.perform(patch("/attendances/" + attId + "/finish").header("Authorization", ownerProfToken))
+        mvc.perform(patch("/attendances/" + attId + "/finish")
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}").header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
         patchStatus("OFF");
     }

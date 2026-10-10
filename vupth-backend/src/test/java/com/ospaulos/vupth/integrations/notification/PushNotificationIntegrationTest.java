@@ -234,6 +234,8 @@ class PushNotificationIntegrationTest {
         // finish -> FINISHED para t1
         clearInvocations(pushSender);
         mvc.perform(patch("/attendances/{id}/finish", att1)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
         verify(pushSender).send(argThat(l -> l.contains(t1)), eq("Atendimento concluído"), any(), any());

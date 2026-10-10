@@ -33,7 +33,10 @@ public record AttendanceInQueueResponse(
         // Client 03/07: o horario pedido caia numa refeicao/pausa e o atendimento ficou para depois dela
         // ("voce sera atendido apos o intervalo, por volta de HH:MM" = scheduledTime). So vem true na
         // resposta de quem pediu o horario (entrada com targetTime ou reschedule).
-        boolean placedAfterBreak
+        boolean placedAfterBreak,
+        // pagamento-pix (10/10): a flag do pagamento, ao lado do status (null = fora do fluxo)
+        @com.fasterxml.jackson.annotation.JsonProperty("payment_status")
+        com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus
 ) {
     public static AttendanceInQueueResponse fromEntity(Attendance attendance) {
 
@@ -60,7 +63,8 @@ public record AttendanceInQueueResponse(
                 attendance.getDurationInMinutes(),
                 attendance.isIntent(),
                 attendance.getTargetTime(),
-                attendance.isPlacedAfterBreak()
+                attendance.isPlacedAfterBreak(),
+                attendance.getEffectivePaymentStatus()
         );
     }
 
