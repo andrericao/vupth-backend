@@ -1,0 +1,60 @@
+databaseChangeLog:
+  # Registro de acesso (Marco Civil da Internet, art. 15; registro-de-acesso, 10/10): usuario, IP, porta
+  # e data e hora a cada login e renovacao do token, por 6 meses (o AccessLogPurgeScheduler apaga o resto).
+  # Sem FK no usuario: a guarda vale mesmo depois que a conta e apagada.
+  - changeSet:
+      id: 035-create-access_log
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: access_log
+      changes:
+        - createTable:
+            tableName: access_log
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_access_log
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ip
+                  type: VARCHAR(45)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: port
+                  type: INTEGER
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: access_log
+            indexName: idx_access_log_user_created
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: created_at
+        - createIndex:
+            tableName: access_log
+            indexName: idx_access_log_created
+            columns:
+              - column:
+                  name: created_at

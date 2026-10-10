@@ -20,6 +20,9 @@ import com.ospaulos.vupth.api.user.usecase.auth.LogoutUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.RefreshTokenUseCase;
 import com.ospaulos.vupth.api.user.usecase.auth.ResetPasswordUseCase;
 import com.ospaulos.vupth.api.user.usecase.profile.RegisterUseCase;
+import com.ospaulos.vupth.domain.access.service.AccessLogService;
+import com.ospaulos.vupth.infrastructure.web.AccessOrigin;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +48,8 @@ public class AuthController {
     private final ForgotPasswordUseCase forgotPasswordUseCase;
     private final ResetPasswordUseCase resetPasswordUseCase;
     private final AccountDeletionLinkUseCase accountDeletionLinkUseCase;
+    private final AccessLogService accessLogService;
+    private final AccessOrigin accessOrigin;
 
     @PostMapping("/register")
     public ResponseEntity<UserRegisterResponse> register(@RequestBody @Valid UserRegisterRequest request) throws JsonProcessingException {
@@ -57,11 +62,16 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<UserProfileGeneralInfosAndToken> login(@RequestBody @Valid LoginRequest request){
+    public ResponseEntity<UserProfileGeneralInfosAndToken> login(@RequestBody @Valid LoginRequest request,
+                                                                 HttpServletRequest http){
 
         log.info("CONTROLLER AUTH 1 - LOGIN() BEGIN");
 
         UserProfileGeneralInfosAndToken response = loginUseCase.executeLogin(request);
+        // registro-de-acesso (Marco Civil, art. 15): quem, de onde e quando
+        if (response.user() != null) {
+            accessLogService.recordLogin(response.user().id(), accessOrigin.ip(http), accessOrigin.port(http));
+        }
 
         //log.info("Test: " + response.tokens().accessToken());
 
@@ -70,8 +80,10 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<RefreshTokenResponse> refresh(
-            @Valid @RequestBody RefreshTokenRequest request) {
+            @Valid @RequestBody RefreshTokenRequest request, HttpServletRequest http) {
         RefreshTokenResponse response = refreshTokenUseCase.execute(request);
+        // registro-de-acesso (Marco Civil, art. 15): a sessao seguiu, de onde e quando
+        accessLogService.recordRefresh(response.refreshToken(), accessOrigin.ip(http), accessOrigin.port(http));
         return ResponseEntity.ok(response);
     }
 

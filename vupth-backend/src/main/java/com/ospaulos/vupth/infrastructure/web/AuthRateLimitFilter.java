@@ -131,15 +131,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     /** O X-Forwarded-For vale pelo ultimo valor (o da borda); os outros headers, pelo valor inteiro. */
     private String clientIp(HttpServletRequest request) {
-        String value = ipHeader.isEmpty() ? null : request.getHeader(ipHeader);
-        if (value == null || value.isBlank()) {
-            return request.getRemoteAddr();
-        }
-        if ("X-Forwarded-For".equalsIgnoreCase(ipHeader)) {
-            String[] hops = value.split(",");
-            return hops[hops.length - 1].trim();
-        }
-        return value.trim();
+        return ClientAddress.ip(request, ipHeader);
     }
 
     private record Window(long start, int count) {}
