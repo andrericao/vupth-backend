@@ -1,0 +1,1083 @@
+{
+ "info": {
+  "name": "Vupth backend — conferencia no staging (conferencia-por-script)",
+  "description": "O que o Andre conferia a mao, conferido no staging pela API. Cria as contas @vupth.test que usa e apaga no fim. Rodar: bash scripts/conferir-staging.sh",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "event": [
+  {
+   "listen": "prerequest",
+   "script": {
+    "type": "text/javascript",
+    "exec": [
+     "const ciSecret = pm.variables.get('ci_secret');",
+     "if (ciSecret) { pm.request.headers.upsert({ key: 'X-Vupth-CI', value: ciSecret }); }"
+    ]
+   }
+  }
+ ],
+ "item": [
+  {
+   "name": "preparo",
+   "item": [
+    {
+     "name": "dono: cadastro",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "const ts = Date.now();",
+         "pm.collectionVariables.set(\"cf_ts\", ts);",
+         "pm.collectionVariables.set(\"cf_owner_email\", \"conf_dono_\" + ts + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"cf_client_email\", \"conf_cliente_\" + ts + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"cf_pass\", \"Senha123!\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cf_owner_email}}\",\"password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "dono: login",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "if (pm.response.code === 200) pm.collectionVariables.set(\"cf_owner_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cf_owner_email}}\",\"password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "dono: loja (nome com acento)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"cf_estab_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Conferência {{cf_ts}}\",\"serviceType\":\"BARBER\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "dono vira profissional",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"cf_prof_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Beto\",\"establishmentId\":\"{{cf_estab_id}}\",\"specialty\":\"Barber\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "servico do profissional",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"cf_item_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{cf_estab_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte\",\"price\":35.00,\"estimatedMinutes\":30}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "cliente: cadastro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cf_client_email}}\",\"password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "cliente: login",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "if (pm.response.code === 200) pm.collectionVariables.set(\"cf_client_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cf_client_email}}\",\"password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "conferencias",
+   "item": [
+    {
+     "name": "Swagger no staging: a pagina abre",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/swagger-ui/index.html",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Swagger no staging: /v3/api-docs lista as rotas",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"tem paths\", () => pm.expect(Object.keys(pm.response.json().paths).length).to.be.above(10));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/v3/api-docs",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "E-mail sem conta: login da 401 EMAIL_NOT_FOUND",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(401));",
+         "pm.test(\"EMAIL_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"EMAIL_NOT_FOUND\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"ninguem_{{cf_ts}}@vupth.test\",\"password\":\"Senha123!\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "E-mail sem conta: esqueci a senha da 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(404));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/forgot-password",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"ninguem_{{cf_ts}}@vupth.test\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Esqueci a senha rapido (o e-mail sai depois da resposta)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"responde em menos de 1,5 s\", () => pm.expect(pm.response.responseTime).to.be.below(1500));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/forgot-password",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cf_client_email}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Busca sem acento: 'conferencia' acha 'Conferência'",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"a loja aparece\", () => pm.expect(pm.response.json().map(e => e.id)).to.include(pm.collectionVariables.get(\"cf_estab_id\")));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment?name=conferencia%20{{cf_ts}}&includeAll=true",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Foto da loja: envia",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "if (pm.response.code === 200) { const u = pm.response.json().url_image; pm.test(\"url_image\", () => pm.expect(u).to.be.a(\"string\")); pm.collectionVariables.set(\"cf_photo_url\", u); }"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{cf_estab_id}}/photo",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "formdata",
+       "formdata": [
+        {
+         "key": "file",
+         "type": "file",
+         "src": "postman/conferencia-foto.png"
+        }
+       ]
+      }
+     }
+    },
+    {
+     "name": "Foto da loja: a URL publica abre",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.request.url = pm.collectionVariables.get(\"cf_photo_url\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Foto da loja: tira",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(204));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{cf_estab_id}}/photo",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Abrir a fila: profissional em WORKING abre a loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"WORKING\", () => pm.expect(pm.response.json().work_status).to.eql(\"WORKING\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "A loja abriu: open_status OPEN",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"open_status OPEN\", () => pm.expect(pm.response.json().open_status).to.eql(\"OPEN\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/establishment/id/{{cf_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Pagamento: chave Pix",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/pix",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"key_type\":\"EMAIL\",\"key\":\"beto@vupth.test\",\"holder_name\":\"Beto\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Pagamento: cliente entra na fila (PENDING)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "pm.test(\"PENDING\", () => pm.expect(pm.response.json().payment_status).to.eql(\"PENDING\"));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"cf_att_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_client_token}}"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{cf_prof_id}}\",\"establishmentId\":\"{{cf_estab_id}}\",\"serviceItemIds\":[\"{{cf_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Pagamento: o Pix copia-e-cola",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"BR Code\", () => pm.expect(pm.response.json().pix_copy_paste).to.match(/^000201/));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_client_token}}"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cf_att_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Pagamento: Ja paguei",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"AWAITING_CONFIRMATION\", () => pm.expect(pm.response.json().status).to.eql(\"AWAITING_CONFIRMATION\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_client_token}}"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cf_att_id}}/payment/claim",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Pagamento: o dot do profissional",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"awaiting_count 1\", () => pm.expect(pm.response.json().awaiting_count).to.eql(1));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/pending-payments",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Pagamento: inicia",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cf_att_id}}/start",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Pagamento: finaliza com o Sim do modal",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cf_att_id}}/finish",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":true}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "Pagamento: PAID",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"PAID\", () => pm.expect(pm.response.json().status).to.eql(\"PAID\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_client_token}}"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cf_att_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Ir para Fora sem 500",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"OFF\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "limpeza",
+   "item": [
+    {
+     "name": "limpeza: apaga a loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 2xx\", () => pm.expect(pm.response.code, pm.response.text()).to.be.within(200, 299));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{cf_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "limpeza: apaga o dono",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 2xx\", () => pm.expect(pm.response.code, pm.response.text()).to.be.within(200, 299));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    },
+    {
+     "name": "limpeza: apaga o cliente",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 2xx\", () => pm.expect(pm.response.code, pm.response.text()).to.be.within(200, 299));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cf_client_token}}"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{cf_pass}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      }
+     }
+    }
+   ]
+  }
+ ],
+ "variable": [
+  {
+   "key": "base_url",
+   "value": "https://vupth-backend-ia.onrender.com"
+  }
+ ]
+}

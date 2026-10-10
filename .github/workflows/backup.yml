@@ -47,6 +47,21 @@ jobs:
             aws s3 cp vupth.dump "s3://$BUCKET/weekly/$nome" --endpoint-url "$R2_ENDPOINT" --only-show-errors
           fi
 
+      # exclusao-apos-restaurar (LGPD): quem apagou a conta (so o SHA-256 do id e a hora) fica fora do dump,
+      # num arquivo acumulado; depois de restaurar um backup antigo, o scripts/reaplicar-exclusoes.sh le este
+      # arquivo e anonimiza de novo quem apagou depois dele. Acumula com o anterior: se o proprio banco voltar
+      # de um backup, as exclusoes que ele perdeu continuam aqui.
+      - name: Ledger das exclusoes de conta
+        run: |
+          if ! docker run --rm -e DATABASE_URL postgres:18 sh -c 'psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -At -c "\copy (select id_hash, deleted_at from account_deletion_ledger) to stdout with (format csv)"' > atual.csv; then
+            echo "::warning::sem a tabela account_deletion_ledger (antes da migration 036?) — ledger nao atualizado"
+            exit 0
+          fi
+          aws s3 cp "s3://$BUCKET/ledger/account-deletions.csv" anterior.csv --endpoint-url "$R2_ENDPOINT" --only-show-errors || : > anterior.csv
+          cat anterior.csv atual.csv | awk -F, 'NF >= 2 && !visto[$1]++' > account-deletions.csv
+          echo "ledger: $(wc -l < account-deletions.csv) conta(s) apagada(s)"
+          aws s3 cp account-deletions.csv "s3://$BUCKET/ledger/account-deletions.csv" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+
       # Retencao: os nomes levam a data, entao a ordem alfabetica e a cronologica.
       - name: Retencao (7 diarios, 4 semanais)
         run: |

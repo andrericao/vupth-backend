@@ -55,6 +55,15 @@ jobs:
           docker run --rm --network host -e PGPASSWORD=vupth postgres:18 \
             psql -h localhost -U vupth -d vupth -v ON_ERROR_STOP=1 -c 'select count(*) as migrations from databasechangelog' -c 'select count(*) as usuarios from base_user'
 
+      # exclusao-apos-restaurar (LGPD): quem apagou a conta depois do backup nao pode voltar.
+      - name: Reaplica as exclusoes de conta
+        run: |
+          if aws s3 cp "s3://$BUCKET/ledger/account-deletions.csv" ledger.csv --endpoint-url "$R2_ENDPOINT" --only-show-errors; then
+            bash vupth-backend/scripts/reaplicar-exclusoes.sh "postgresql://vupth:vupth@localhost:5432/vupth" ledger.csv
+          else
+            echo "::warning::sem ledger/account-deletions.csv no bucket — nada a reaplicar"
+          fi
+
       - uses: actions/setup-java@v6
         with:
           java-version: '21'
