@@ -7,6 +7,246 @@
  },
  "item": [
   {
+   "name": "00 - fumaca (producao)",
+   "item": [
+    {
+     "name": "health",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - no ar\", () => pm.response.to.have.status(200));",
+         "pm.test(\"status UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/health",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "info",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - info publico\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/info",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "vitrine (sem token)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - vitrine publica\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Lista\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "register (fumaca)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - conta de fumaca criada\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"smoke_email\", \"fumaca_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"smoke_password\", \"Senha@123\");"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{smoke_email}}\", \"password\": \"{{smoke_password}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "login (fumaca)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - login\", () => pm.response.to.have.status(200));",
+         "pm.test(\"access_token\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+         "  pm.collectionVariables.set(\"smoke_token\", r.tokens.access_token);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{smoke_email}}\", \"password\": \"{{smoke_password}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "perfil (com token)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - rota autenticada responde\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{smoke_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "apagar a conta de fumaca",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 ou 204 - nada fica na producao\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{smoke_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{smoke_password}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "01 - auth",
    "item": [
     {
