@@ -220,7 +220,7 @@ class PushNotificationIntegrationTest {
         var c2 = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         String t2 = "ExponentPushToken[" + UUID.randomUUID() + "]";
         registerDevice(c2.token(), t2, "ios");
-        join(c2);
+        String att2 = join(c2);
         verify(pushSender, never()).send(any(), eq("É quase a sua vez!"), any(), any());
 
         // profissional inicia client1 -> STARTED para t1 + 'proximo' para t2 (agora frente)
@@ -233,12 +233,24 @@ class PushNotificationIntegrationTest {
 
         // finish -> FINISHED para t1
         clearInvocations(pushSender);
+        // (sem o "Sim" do modal: o client1 nao volta a fila neste teste, o portao nao importa)
         mvc.perform(patch("/attendances/{id}/finish", att1)
-                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
         verify(pushSender).send(argThat(l -> l.contains(t1)), eq("Atendimento concluído"), any(), any());
+
+        // pagamento-pix: com o "Sim" do modal, o cliente recebe um aviso so — "Pagamento efetuado" no lugar do
+        // "Atendimento concluído" (adendo 3)
+        clearInvocations(pushSender);
+        mvc.perform(patch("/attendances/{id}/start", att2).header("Authorization", ownerProfToken))
+                .andExpect(status().isOk());
+        clearInvocations(pushSender);
+        mvc.perform(patch("/attendances/{id}/finish", att2)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk());
+        verify(pushSender).send(argThat(l -> l.contains(t2)), eq("Pagamento efetuado"), any(), any());
+        verify(pushSender, never()).send(any(), eq("Atendimento concluído"), any(), any());
     }
 
     @Test
