@@ -3960,7 +3960,275 @@
    "name": "03d - ownership transfer + remove/leave professional",
    "item": [
     {
-     "name": "transfer ownership to partner professional",
+     "name": "owner pede a posse ao partner -> 201 PENDING",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/ownership-transfer",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "ownership-transfer"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201){ pm.test(\"PENDING\", () => pm.expect(pm.response.json().status).to.equal(\"PENDING\")); pm.collectionVariables.set(\"transfer_id\", pm.response.json().id); }"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] pedir de novo com um pendente -> 409 TRANSFER_ALREADY_PENDING",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/ownership-transfer",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "ownership-transfer"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"TRANSFER_ALREADY_PENDING\", () => pm.expect(pm.response.json().code).to.equal(\"TRANSFER_ALREADY_PENDING\"));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "partner ve o convite -> 200",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{partner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/ownership-transfers",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "ownership-transfers"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"o convite esta na lista\", () => pm.expect(pm.response.json().map(t => t.id)).to.include(pm.collectionVariables.get(\"transfer_id\")));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "partner aceita -> 204 (vira o dono)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{partner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/ownership-transfers/{{transfer_id}}/accept",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "ownership-transfers",
+        "{{transfer_id}}",
+        "accept"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "partner devolve: pede a posse ao owner -> 201",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{partner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/ownership-transfer",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "ownership-transfer"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{owner_id}}\"}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"transfer_back_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "owner aceita de volta -> 204 (owner restaurado)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/ownership-transfers/{{transfer_back_id}}/accept",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "ownership-transfers",
+        "{{transfer_back_id}}",
+        "accept"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] o PATCH antigo do dono -> 410",
      "request": {
       "method": "PATCH",
       "header": [
@@ -3990,105 +4258,17 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"newOwnerId\": \"{{partner_professional_id}}\"}"
+       "raw": "{\"newOwnerId\":\"{{partner_professional_id}}\"}"
       }
-     },
-     "auth": {
-      "type": "bearer",
-      "bearer": [
-       {
-        "key": "token",
-        "value": "{{owner_token}}",
-        "type": "string"
-       }
-      ]
      },
      "event": [
       {
        "listen": "test",
        "script": {
+        "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200 - Ownership transferred\", () => pm.response.to.have.status(200));",
-         "if (pm.response.code === 200) {",
-         "  pm.test(\"New owner matches\", () => {",
-         "    const r = pm.response.json();",
-         "    pm.expect(r.ownerId).to.equal(pm.collectionVariables.get(\"partner_professional_id\"));",
-         "  });",
-         "}"
-        ],
-        "type": "text/javascript"
-       }
-      }
-     ]
-    },
-    {
-     "name": "transfer ownership back to original owner",
-     "request": {
-      "method": "PATCH",
-      "header": [
-       {
-        "key": "Content-Type",
-        "value": "application/json"
-       },
-       {
-        "key": "Authorization",
-        "value": "Bearer {{partner_token}}",
-        "type": "text"
-       }
-      ],
-      "url": {
-       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
-       "host": [
-        "{{base_url}}"
-       ],
-       "path": [
-        "establishment",
-        "{{owner_establishment_id}}",
-        "owner"
-       ]
-      },
-      "auth": {
-       "type": "noauth"
-      },
-      "body": {
-       "mode": "raw",
-       "raw": "{\"newOwnerId\": \"{{owner_id}}\"}"
-      }
-     },
-     "auth": {
-      "type": "bearer",
-      "bearer": [
-       {
-        "key": "token",
-        "value": "{{partner_token}}",
-        "type": "string"
-       }
-      ]
-     },
-     "event": [
-      {
-       "listen": "prerequest",
-       "script": {
-        "exec": [
-         "const oid = pm.collectionVariables.get(\"owner_id\");",
-         "console.log(\"[transferBack] owner_id:\", oid);"
-        ],
-        "type": "text/javascript"
-       }
-      },
-      {
-       "listen": "test",
-       "script": {
-        "exec": [
-         "pm.test(\"Status 200 - Ownership transferred back\", () => pm.response.to.have.status(200));",
-         "if (pm.response.code === 200) {",
-         "  pm.test(\"Owner restored\", () => {",
-         "    const r = pm.response.json();",
-         "    pm.expect(r.ownerId).to.equal(pm.collectionVariables.get(\"owner_id\"));",
-         "  });",
-         "}"
-        ],
-        "type": "text/javascript"
+         "pm.test(\"Status 410\", () => pm.response.to.have.status(410));"
+        ]
        }
       }
      ]
@@ -15696,9 +15876,9 @@
      ]
     },
     {
-     "name": "transfer_ownership_notOwner (403)",
+     "name": "transfer_ownership_notOwner (404)",
      "request": {
-      "method": "PATCH",
+      "method": "POST",
       "header": [
        {
         "key": "Content-Type",
@@ -15711,14 +15891,14 @@
        }
       ],
       "url": {
-       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/owner",
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/ownership-transfer",
        "host": [
         "{{base_url}}"
        ],
        "path": [
         "establishment",
         "{{owner_establishment_id}}",
-        "owner"
+        "ownership-transfer"
        ]
       },
       "auth": {
@@ -15726,27 +15906,17 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"newOwnerId\": \"{{partner_professional_id}}\"}"
+       "raw": "{\"professionalId\":\"{{partner_professional_id}}\"}"
       }
-     },
-     "auth": {
-      "type": "bearer",
-      "bearer": [
-       {
-        "key": "token",
-        "value": "{{client_token}}",
-        "type": "string"
-       }
-      ]
      },
      "event": [
       {
        "listen": "test",
        "script": {
+        "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 403 - Not authorized\", () => pm.response.to.have.status(403));"
-        ],
-        "type": "text/javascript"
+         "pm.test(\"Status 404 - nao e o dono\", () => pm.response.to.have.status(404));"
+        ]
        }
       }
      ]
@@ -24480,6 +24650,90 @@
      "response": []
     },
     {
+     "name": "[ERRO] dono com loja apaga a conta -> 409 OWNER_MUST_TRANSFER",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"OWNER_MUST_TRANSFER\", () => pm.expect(pm.response.json().code).to.equal(\"OWNER_MUST_TRANSFER\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "dono apaga a loja -> 204 (vira \"Loja removida\")",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{da_owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/establishment/{{da_estab_id}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{da_estab_id}}"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{da_owner_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "dono apaga a conta -> 204 (loja sem fila viva)",
      "event": [
       {
@@ -24551,7 +24805,7 @@
      "response": []
     },
     {
-     "name": "a loja orfa continua legivel por id, com owner_id ausente",
+     "name": "a loja removida continua legivel por id, como \"Loja removida\"",
      "event": [
       {
        "listen": "test",
@@ -24560,7 +24814,7 @@
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "// Continua legivel porque o historico do cliente aponta para ela.",
          "pm.test(\"openStatus CLOSED\", () => pm.expect(pm.response.json()['open_status']).to.eql(\"CLOSED\"));",
-         "pm.test(\"sem dono\", () => pm.expect(pm.response.json().ownerId == null).to.be.true);"
+         "pm.test(\"nome Loja removida\", () => pm.expect(pm.response.json().name).to.eql(\"Loja removida\"));"
         ],
         "type": "text/javascript"
        }
@@ -25175,7 +25429,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25193,8 +25447,8 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.collectionVariables.set(\"da_email\",\"desativa_\"+Date.now()+\"@vupth.test\");",
-         "pm.collectionVariables.set(\"da_pass\",\"Senha123!\");"
+         "pm.collectionVariables.set(\"dz_email\",\"desativa_\"+Date.now()+\"@vupth.test\");",
+         "pm.collectionVariables.set(\"dz_pass\",\"Senha123!\");"
         ]
        }
       }
@@ -25231,7 +25485,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25241,7 +25495,7 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "if(pm.response.code===200){ pm.test(\"deactivated false\", () => pm.expect(pm.response.json().deactivated).to.equal(false)); pm.collectionVariables.set(\"da_token\", pm.response.json().tokens.access_token); }"
+         "if(pm.response.code===200){ pm.test(\"deactivated false\", () => pm.expect(pm.response.json().deactivated).to.equal(false)); pm.collectionVariables.set(\"dz_token\", pm.response.json().tokens.access_token); }"
         ]
        }
       }
@@ -25264,7 +25518,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25317,7 +25571,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25337,7 +25591,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"current_password\":\"{{da_pass}}\"}"
+       "raw": "{\"current_password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25383,7 +25637,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [
@@ -25393,7 +25647,7 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "if(pm.response.code===200){ pm.test(\"deactivated true\", () => pm.expect(pm.response.json().deactivated).to.equal(true)); pm.collectionVariables.set(\"da_token\", pm.response.json().tokens.access_token); }"
+         "if(pm.response.code===200){ pm.test(\"deactivated true\", () => pm.expect(pm.response.json().deactivated).to.equal(true)); pm.collectionVariables.set(\"dz_token\", pm.response.json().tokens.access_token); }"
         ]
        }
       }
@@ -25416,7 +25670,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25463,7 +25717,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25515,7 +25769,7 @@
        },
        {
         "key": "Authorization",
-        "value": "Bearer {{da_token}}",
+        "value": "Bearer {{dz_token}}",
         "type": "text"
        }
       ],
@@ -25577,7 +25831,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"{{da_email}}\",\"password\":\"{{da_pass}}\"}"
+       "raw": "{\"email\":\"{{dz_email}}\",\"password\":\"{{dz_pass}}\"}"
       }
      },
      "event": [

@@ -1,0 +1,68 @@
+databaseChangeLog:
+  # Passagem de posse da loja com aceite (desativar-conta, 08/10): PENDING ate o aceite, a recusa ou o
+  # cancelamento — nao vence. So um PENDING por loja (indice unico parcial).
+  - changeSet:
+      id: 031-create-ownership_transfer
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: ownership_transfer
+      changes:
+        - createTable:
+            tableName: ownership_transfer
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_ownership_transfer
+                    nullable: false
+              - column:
+                  name: establishment_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_ownership_transfer_establishment
+                    references: establishment(id)
+                    # O pedido de posse nao sobrevive a loja (os teardowns apagam a loja pelo dono).
+                    deleteCascade: true
+              - column:
+                  name: from_owner_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: to_professional_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: responded_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - createIndex:
+            tableName: ownership_transfer
+            indexName: idx_ownership_transfer_establishment
+            columns:
+              - column:
+                  name: establishment_id
+        - createIndex:
+            tableName: ownership_transfer
+            indexName: idx_ownership_transfer_to
+            columns:
+              - column:
+                  name: to_professional_id
+        - sql:
+            sql: CREATE UNIQUE INDEX uk_ownership_transfer_one_pending ON ownership_transfer (establishment_id) WHERE status = 'PENDING'

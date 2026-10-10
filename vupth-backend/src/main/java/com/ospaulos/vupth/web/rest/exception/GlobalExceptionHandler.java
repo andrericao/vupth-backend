@@ -70,6 +70,7 @@ import com.ospaulos.vupth.api.user.exception.ResetCodeExpiredException;
 import com.ospaulos.vupth.api.user.exception.EmailsAreTheSameException;
 import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.api.user.exception.NoFieldsToUpdateException;
+import io.sentry.Sentry;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -715,6 +716,22 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, "This establishment is not available right now.", "ESTABLISHMENT_UNAVAILABLE");
     }
 
+    // desativar-conta (d): dono com loja nao apaga a conta — passa a posse ou apaga a loja antes.
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.OwnerMustTransferException.class)
+    public ResponseEntity<ErrorResponse> handleOwnerMustTransfer(
+            com.ospaulos.vupth.domain.establishment.exception.OwnerMustTransferException ex, HttpServletRequest req) {
+        log.warn("[409] OwnerMustTransfer | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "OWNER_MUST_TRANSFER");
+    }
+
+    // desativar-conta, passar a posse: cada recusa ja traz o status e o codigo do contrato.
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.transfer.OwnershipTransferException.class)
+    public ResponseEntity<ErrorResponse> handleOwnershipTransfer(
+            com.ospaulos.vupth.domain.establishment.transfer.OwnershipTransferException ex, HttpServletRequest req) {
+        log.warn("[{}] OwnershipTransfer {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(AccountDeleteNotAllowedException.class)
     public ResponseEntity<ErrorResponse> handleAccountDeleteNotAllowed(
             AccountDeleteNotAllowedException ex, HttpServletRequest req) {
@@ -841,6 +858,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest req) {
         log.error("[500] UnexpectedError | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage(), ex);
+        // BAK-2 sentry: o 500 tratado aqui nao chega ao SentryExceptionResolver; sem SENTRY_DSN e no-op.
+        Sentry.captureException(ex);
         String debugMsg = ex.getClass().getSimpleName() + ": " + ex.getMessage();
         return build(HttpStatus.INTERNAL_SERVER_ERROR, debugMsg, "INTERNAL_ERROR");
     }

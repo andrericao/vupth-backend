@@ -97,6 +97,11 @@ public class DeleteAccountUseCase {
 
         assertNoActiveCommitments(user);
 
+        // desativar-conta, regra (d): loja sem dono nao existe — o dono passa a posse ou apaga a loja antes.
+        if (user.hasOwnerProfile() && !establishmentRepository.findByOwnerId(user.getId()).isEmpty()) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.OwnerMustTransferException();
+        }
+
         detachOwnedEstablishments(user);
         detachProfessional(user);
         deleteOwnedOnlyData(user);

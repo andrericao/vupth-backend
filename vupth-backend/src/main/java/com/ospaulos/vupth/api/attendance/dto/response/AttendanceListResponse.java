@@ -20,6 +20,8 @@ public record AttendanceListResponse(
         // Nome da loja: a tela da fila reconstruida pelo servidor (cliente que entrou por aceite de
         // corte) e o historico do cliente mostram a loja sem outra chamada (campos-do-historico)
         String establishmentName,
+        // desativar-conta (6): ACTIVE | DEACTIVATED | REMOVED — o app escreve "Loja desativada" ou "Loja removida"
+        String establishmentStatus,
         List<AttendanceInQueueResponse.ServiceItemSummary> services,
         AttendanceStatus status,
         BigDecimal totalValue,
@@ -47,13 +49,13 @@ public record AttendanceListResponse(
                 .map(PenaltyChargeResponse::amount)
                 .reduce(new BigDecimal("0.00"), BigDecimal::add);
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
-                establishmentId, establishmentName, services, status, totalValue, scheduledTime, startTime, endTime,
+                establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
                 durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated);
     }
 
     public AttendanceListResponse withRated(boolean isRated) {
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
-                establishmentId, establishmentName, services, status, totalValue, scheduledTime, startTime, endTime,
+                establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
                 durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated);
     }
 
@@ -71,6 +73,7 @@ public record AttendanceListResponse(
                 attendance.getProfessional().getName(),
                 attendance.getEstablishment().getId(),
                 attendance.getEstablishment().getName(),
+                establishmentStatusOf(attendance.getEstablishment()),
                 attendance.getServiceItems().stream()
                         .map(AttendanceInQueueResponse.ServiceItemSummary::fromEntity)
                         .collect(Collectors.toList()),
@@ -87,5 +90,17 @@ public record AttendanceListResponse(
                 null,
                 null
         );
+    }
+
+    /** O que o historico precisa saber da loja: ativa, desativada pelo dono ou removida. */
+    static String establishmentStatusOf(com.ospaulos.vupth.domain.establishment.model.Establishment establishment) {
+        var status = establishment.getStatus();
+        if (status == com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.DEACTIVATED) {
+            return "DEACTIVATED";
+        }
+        if (status == com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.REMOVED) {
+            return "REMOVED";
+        }
+        return "ACTIVE";
     }
 }
