@@ -45,7 +45,7 @@ banco() {
     echo "Criando o container vupth_postgres_test (postgres:16-alpine, porta 5432) ..."
     if ! docker run -d --name vupth_postgres_test \
         -e POSTGRES_DB=vupth_db_test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=vupth_test \
-        -p 5432:5432 postgres:16-alpine >"$tmp" 2>&1; then
+        -p 5432:5432 postgres:16-alpine -c max_connections=300 >"$tmp" 2>&1; then
       { echo "banco de teste: nao deu para criar o container vupth_postgres_test (a porta 5432 esta ocupada?)"; cat "$tmp"; } > "$tmp.log"
       falhou mvn "$tmp.log"
     fi
@@ -65,7 +65,9 @@ banco() {
 }
 banco
 tmp=$(mktemp)
-mvn test "${MVN_ARGS[@]}" 2>&1 | tee "$tmp"
+# clean (10/10): o target/ pode ter classe compilada no meio de uma edicao — mais nova que o fonte, com o
+# codigo velho — e o Maven responde "Nothing to compile" e testa o codigo errado. Sempre do zero.
+mvn clean test "${MVN_ARGS[@]}" 2>&1 | tee "$tmp"
 [[ ${PIPESTATUS[0]} -eq 0 ]] || falhou mvn "$tmp"
 rm -f "$tmp"
 passou mvn
