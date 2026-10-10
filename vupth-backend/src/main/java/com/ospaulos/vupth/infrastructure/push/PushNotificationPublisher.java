@@ -1,11 +1,14 @@
 package com.ospaulos.vupth.infrastructure.push;
 
 import com.ospaulos.vupth.domain.notification.model.DeviceToken;
+import com.ospaulos.vupth.domain.notification.model.PendingPushReceipt;
 import com.ospaulos.vupth.domain.notification.repository.DeviceTokenRepository;
+import com.ospaulos.vupth.domain.notification.repository.PendingPushReceiptRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +30,9 @@ import java.util.UUID;
  *
  * <p>Apagar e seguro porque o registro se refaz sozinho: {@code POST /devices} e um upsert por
  * token, entao reinstalar o app recria a linha no proximo login.</p>
+ *
+ * <p><b>recibos-da-expo:</b> cada ticket aceito com id vira uma linha de {@link PendingPushReceipt};
+ * o {@link PushReceiptChecker} le o recibo depois.</p>
  */
 @Slf4j
 @Service
@@ -35,6 +41,7 @@ public class PushNotificationPublisher {
 
     private final DeviceTokenRepository deviceTokenRepository;
     private final PushSender pushSender;
+    private final PendingPushReceiptRepository pendingReceiptRepository;
 
     /** Notifica todos os devices do usuario. */
     public void notifyUser(UUID userId, String title, String body, Map<String, Object> data) {
@@ -54,8 +61,31 @@ public class PushNotificationPublisher {
             List<PushTicket> tickets = pushSender.send(tokens, title, body, data);
             log.info("[PUSH] notifyUser user={} title='{}' devices={}", userId, title, tokens.size());
             purgeDeadTokens(userId, tickets);
+            awaitReceipts(userId, title, tickets);
         } catch (Exception e) {
             log.warn("[PUSH] falha ao notificar usuario {}: {}", userId, e.getMessage());
+        }
+    }
+
+    /** Guarda os tickets aceitos para ler o recibo depois. Nao lanca: falhar aqui nao desfaz o envio. */
+    private void awaitReceipts(UUID userId, String title, List<PushTicket> tickets) {
+        if (tickets == null || tickets.isEmpty()) {
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        String shortTitle = title == null || title.length() <= 200 ? title : title.substring(0, 200);
+        List<PendingPushReceipt> pending = tickets.stream()
+                .filter(t -> t.ok() && t.id() != null && !t.id().isBlank())
+                .map(t -> new PendingPushReceipt(t.id(), t.token(), userId, shortTitle, now))
+                .toList();
+        if (pending.isEmpty()) {
+            return;
+        }
+        try {
+            pendingReceiptRepository.saveAll(pending);
+        } catch (Exception e) {
+            log.warn("[PUSH] falha ao guardar {} ticket(s) para o recibo do usuario {}: {}",
+                    pending.size(), userId, e.getMessage());
         }
     }
 

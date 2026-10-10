@@ -1,0 +1,46 @@
+databaseChangeLog:
+  # Recibos da Expo (recibos-da-expo, 10/10). Cada push aceito guarda o id do ticket; ~15 min depois
+  # o PushReceiptChecker le o recibo em /push/getReceipts, loga se chegou a FCM/APNs, apaga o token
+  # morto (DeviceNotRegistered) e apaga a linha. Sem FK no usuario: a linha vive minutos, e apagar a
+  # conta nao pode esperar por ela (o token some pelo device_token).
+  - changeSet:
+      id: 033-create-pending_push_receipt
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: pending_push_receipt
+      changes:
+        - createTable:
+            tableName: pending_push_receipt
+            columns:
+              - column:
+                  name: ticket_id
+                  type: VARCHAR(64)
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_pending_push_receipt
+                    nullable: false
+              - column:
+                  name: token
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+              - column:
+                  name: title
+                  type: VARCHAR(200)
+              - column:
+                  name: sent_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: pending_push_receipt
+            indexName: idx_pending_push_receipt_sent_at
+            columns:
+              - column:
+                  name: sent_at

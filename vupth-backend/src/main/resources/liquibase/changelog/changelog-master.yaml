@@ -422,3 +422,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/032-expires_at-from-desired_time-cut-request.yaml
       relativeToChangeLogFile: true
+
+  # Recibos da Expo: o ticket espera o recibo (recibos-da-expo)
+  - include:
+      file: changesets/95-notification/033-create-pending_push_receipt.yaml
+      relativeToChangeLogFile: true

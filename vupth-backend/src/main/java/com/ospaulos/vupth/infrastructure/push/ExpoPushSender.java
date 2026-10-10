@@ -34,11 +34,10 @@ import java.util.Set;
  * ticket nao repete o token, entao a correspondencia e posicional. Um lote inteiramente recusado
  * ainda chega como 200.</p>
  *
- * <p><b>Segunda etapa (receipts) — NAO implementada, decisao registrada.</b> Ticket {@code ok}
- * significa "a Expo aceitou e vai repassar a APNs/FCM", nao "o aparelho recebeu". A confirmacao de
- * entrega exige guardar o {@code ticket.id} e consultar {@code /push/getReceipts} alguns minutos
- * depois — o que custa tabela nova + scheduler. Fica como fatia 2: o {@code DeviceNotRegistered}
- * tambem aparece no receipt, mas a maior parte dos tokens mortos ja e pega aqui no ticket.</p>
+ * <p><b>Segunda etapa (receipts) — recibos-da-expo, 10/10.</b> Ticket {@code ok} significa "a Expo
+ * aceitou e vai repassar a APNs/FCM", nao "o aparelho recebeu". O {@code ticket.id} volta no
+ * {@link PushTicket}; o {@link PushReceiptChecker} consulta {@code /push/getReceipts} ~15 min depois
+ * ({@link #fetchReceipts}).</p>
  */
 @Slf4j
 @Component
@@ -68,8 +67,12 @@ public class ExpoPushSender implements PushSender {
     static final Set<String> DECISION_TYPES = Set.of(
             "CLOSING_PROMPT", "SWAP_REQUESTED", "EARLIER_TURN_OFFERED");
 
+    /** A Expo aceita ate 1000 ids por consulta de recibos. */
+    static final int RECEIPTS_BATCH_SIZE = 1000;
+
     private final RestClient restClient;
     private final String expoUrl;
+    private final String receiptsUrl;
     private final String accessToken;
     private final String channelId;
 
@@ -77,15 +80,27 @@ public class ExpoPushSender implements PushSender {
         this(expoUrl, accessToken, DEFAULT_CHANNEL_ID);
     }
 
+    public ExpoPushSender(String expoUrl, String accessToken, String channelId) {
+        this(expoUrl, accessToken, channelId, receiptsUrlFor(expoUrl));
+    }
+
     @org.springframework.beans.factory.annotation.Autowired
     public ExpoPushSender(
             @Value("${vupth.push.expo.url:https://exp.host/--/api/v2/push/send}") String expoUrl,
             @Value("${vupth.push.expo.access-token:}") String accessToken,
-            @Value("${vupth.push.expo.channel-id:" + DEFAULT_CHANNEL_ID + "}") String channelId) {
+            @Value("${vupth.push.expo.channel-id:" + DEFAULT_CHANNEL_ID + "}") String channelId,
+            @Value("${vupth.push.expo.receipts-url:}") String receiptsUrl) {
         this.expoUrl = expoUrl;
+        this.receiptsUrl = receiptsUrl == null || receiptsUrl.isBlank() ? receiptsUrlFor(expoUrl) : receiptsUrl;
         this.accessToken = accessToken;
         this.channelId = channelId;
         this.restClient = RestClient.create();
+    }
+
+    /** {@code .../push/send} -> {@code .../push/getReceipts}: o mesmo host, a rota irma. */
+    public static String receiptsUrlFor(String sendUrl) {
+        int slash = sendUrl.lastIndexOf('/');
+        return (slash < 0 ? "" : sendUrl.substring(0, slash + 1)) + "getReceipts";
     }
 
     @Override
@@ -192,7 +207,7 @@ public class ExpoPushSender implements PushSender {
             String token = batchTokens.get(i);
             if (ticket != null && ticket.isOk()) {
                 accepted++;
-                tickets.add(PushTicket.accepted(token));
+                tickets.add(PushTicket.accepted(token, ticket.id()));
                 continue;
             }
             String error = ticket == null || ticket.details() == null ? null : ticket.details().error();
@@ -205,6 +220,60 @@ public class ExpoPushSender implements PushSender {
         log.info("[PUSH] Expo title='{}' — {} aceito(s), {} recusado(s) de {} enviada(s)",
                 title, accepted, data.size() - accepted, data.size());
         return tickets;
+    }
+
+    /**
+     * Le os recibos de {@code ticketIds} ({@code POST /push/getReceipts}, recibos-da-expo). Devolve so
+     * os recibos que a Expo ja tem, por id: id que nao voltou ainda nao tem recibo (ou ja expirou, depois
+     * de 24 h). Falha de rede ou corpo ilegivel devolve mapa vazio — nada se conclui, nada se apaga.
+     */
+    @Override
+    public Map<String, PushReceipt> fetchReceipts(List<String> ticketIds) {
+        if (ticketIds == null || ticketIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, PushReceipt> receipts = new HashMap<>();
+        for (int i = 0; i < ticketIds.size(); i += RECEIPTS_BATCH_SIZE) {
+            List<String> batch = ticketIds.subList(i, Math.min(i + RECEIPTS_BATCH_SIZE, ticketIds.size()));
+            receipts.putAll(fetchReceiptsBatch(batch));
+        }
+        return receipts;
+    }
+
+    private Map<String, PushReceipt> fetchReceiptsBatch(List<String> ids) {
+        ExpoReceiptsResponse response;
+        try {
+            var request = restClient.post()
+                    .uri(receiptsUrl)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON);
+            if (accessToken != null && !accessToken.isBlank()) {
+                request = request.header("Authorization", "Bearer " + accessToken);
+            }
+            response = request.body(Map.of("ids", ids)).retrieve().body(ExpoReceiptsResponse.class);
+        } catch (Exception e) {
+            log.warn("[PUSH] falha ao ler {} recibo(s) da Expo: {}", ids.size(), e.getMessage());
+            return Map.of();
+        }
+        if (response == null || response.data() == null) {
+            log.warn("[PUSH] Expo nao devolveu recibos para {} id(s): {}", ids.size(),
+                    response == null || response.errors() == null ? "corpo vazio ou ilegivel" : response.errors());
+            return Map.of();
+        }
+        Map<String, PushReceipt> receipts = new HashMap<>();
+        response.data().forEach((id, r) -> {
+            if (r == null) {
+                return;
+            }
+            receipts.put(id, new PushReceipt(id, r.isOk(),
+                    r.details() == null ? null : r.details().error(), r.message()));
+        });
+        return receipts;
+    }
+
+    /** Corpo do {@code POST /push/getReceipts}: {@code data} com um recibo por id, ou {@code errors}. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ExpoReceiptsResponse(Map<String, ExpoSendResponse.Ticket> data, List<Map<String, Object>> errors) {
     }
 
     /** Corpo do {@code POST /push/send}: {@code data} com um ticket por mensagem, ou {@code errors}. */
