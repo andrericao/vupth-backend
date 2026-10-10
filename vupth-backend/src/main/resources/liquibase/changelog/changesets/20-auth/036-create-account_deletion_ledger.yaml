@@ -1,0 +1,31 @@
+databaseChangeLog:
+  # Exclusao sobrevive a restauracao do backup (exclusao-apos-restaurar, LGPD): so o SHA-256 do id de quem
+  # apagou a conta e a hora. O backup.yml copia a tabela para o bucket (ledger/account-deletions.csv), e o
+  # scripts/reaplicar-exclusoes.sh anonimiza de novo, depois do restore, quem apagou depois do backup.
+  - changeSet:
+      id: 036-create-account_deletion_ledger
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: account_deletion_ledger
+      changes:
+        - createTable:
+            tableName: account_deletion_ledger
+            columns:
+              - column:
+                  name: id_hash
+                  type: VARCHAR(64)
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_account_deletion_ledger
+                    nullable: false
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+        # As contas ja apagadas antes desta tabela entram nela (o hash do id, a hora da exclusao).
+        - sql:
+            sql: INSERT INTO account_deletion_ledger (id_hash, deleted_at) SELECT encode(sha256(id::text::bytea), 'hex'), deleted_at FROM base_user WHERE deleted_at IS NOT NULL ON CONFLICT DO NOTHING

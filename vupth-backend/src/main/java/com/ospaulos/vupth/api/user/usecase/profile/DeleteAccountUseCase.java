@@ -83,6 +83,7 @@ public class DeleteAccountUseCase {
     private final LeaveEstablishmentUseCase leaveEstablishmentUseCase;
     private final PasswordEncoder passwordEncoder;
     private final com.ospaulos.vupth.domain.user.service.ProfilePhotoService profilePhotoService;
+    private final com.ospaulos.vupth.domain.user.repository.AccountDeletionLedgerRepository deletionLedgerRepository;
 
     @Transactional
     public void execute(UUID userId, String currentPassword) {
@@ -110,6 +111,9 @@ public class DeleteAccountUseCase {
         profilePhotoService.deleteQuietly(user.getProfileImageUrl());
         user.anonymize(passwordEncoder.encode(UUID.randomUUID().toString()));
         userRepository.save(user);
+        // exclusao-apos-restaurar: so o hash do id, para reaplicar a exclusao se um backup antigo voltar
+        deletionLedgerRepository.save(new com.ospaulos.vupth.domain.user.model.AccountDeletionLedgerEntry(
+                user.getId(), user.getDeletedAt()));
 
         log.info("[DeleteAccount] user={} anonymized — history preserved for the other parties", userId);
     }
