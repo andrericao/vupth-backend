@@ -10181,6 +10181,9 @@
          "language": "json"
         }
        }
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10229,6 +10232,9 @@
          "language": "json"
         }
        }
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10264,6 +10270,9 @@
         "me",
         "pix"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10311,6 +10320,9 @@
          "language": "json"
         }
        }
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10349,6 +10361,9 @@
         "{{attendance_id_pix}}",
         "payment"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10385,6 +10400,9 @@
         "payment",
         "claim"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10421,6 +10439,9 @@
         "payment",
         "claim"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10456,6 +10477,9 @@
         "me",
         "pending-payments"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10490,6 +10514,9 @@
         "{{attendance_id_pix}}",
         "start"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10524,6 +10551,9 @@
         "{{attendance_id_pix}}",
         "finish"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10559,6 +10589,9 @@
         "me",
         "pending-payments"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10606,6 +10639,9 @@
          "language": "json"
         }
        }
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10642,6 +10678,9 @@
         "payment",
         "confirm"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10677,6 +10716,9 @@
         "payment",
         "confirm"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10712,6 +10754,9 @@
         "me",
         "pending-payments"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10758,6 +10803,9 @@
          "language": "json"
         }
        }
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10792,6 +10840,9 @@
         "{{attendance_id_pix2}}",
         "start"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10839,6 +10890,9 @@
          "language": "json"
         }
        }
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10874,6 +10928,9 @@
         "{{attendance_id_pix2}}",
         "payment"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     },
@@ -10908,6 +10965,9 @@
         "me",
         "pix"
        ]
+      },
+      "auth": {
+       "type": "noauth"
       }
      }
     }
