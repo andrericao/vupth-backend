@@ -385,6 +385,7 @@ jobs:
         working-directory: vupth-backend
         run: |
           newman run postman/collection.json \
+            --folder "00 - fumaca (producao)" \
             --env-var "base_url=$PROD_URL" \
             --env-var "ci_secret=${{ secrets.VUPTH_CI_SECRET }}" \
             --reporters cli \
