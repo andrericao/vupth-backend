@@ -89,6 +89,33 @@ class HttpGeocoderRateLimitTest {
     }
 
     @Test
+    @DisplayName("Reverso sem endereco tambem e guardado: o mesmo ponto nao paga outro request por 1 h")
+    void reverseMissIsCachedForOneHour() {
+        nominatim.expect(ExpectedCount.twice(), requestTo(startsWith(REVERSE)))
+                .andRespond(withSuccess("{\"error\":\"Unable to geocode\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(geocoder.reverse(new Coordinates(-22.8422, -43.2764))).isEmpty();
+        assertThat(geocoder.reverse(new Coordinates(-22.84221, -43.27641))).isEmpty(); // cache
+
+        now.set(now.get().plus(HttpGeocoder.REVERSE_MISS_TTL).plusSeconds(1));
+        assertThat(geocoder.reverse(new Coordinates(-22.8422, -43.2764))).isEmpty(); // venceu: pergunta de novo
+
+        nominatim.verify();
+    }
+
+    @Test
+    @DisplayName("Falha do Nominatim (500) NAO entra no cache: o pedido seguinte tenta de novo")
+    void reverseFailureIsNotCached() {
+        nominatim.expect(ExpectedCount.twice(), requestTo(startsWith(REVERSE)))
+                .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+
+        assertThat(geocoder.reverse(new Coordinates(-22.8422, -43.2764))).isEmpty();
+        assertThat(geocoder.reverse(new Coordinates(-22.8422, -43.2764))).isEmpty();
+
+        nominatim.verify();
+    }
+
+    @Test
     @DisplayName("429 no reverso abre a pausa: o pedido seguinte nem sai, e devolve vazio na hora")
     void tooManyRequestsOpensCooldown() {
         nominatim.expect(ExpectedCount.once(), requestTo(startsWith(REVERSE)))

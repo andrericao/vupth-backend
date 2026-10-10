@@ -58,6 +58,11 @@ public class HttpGeocoder implements Geocoder {
     static final int REVERSE_CACHE_DECIMALS = 4;
     private static final int REVERSE_CACHE_MAX_ENTRIES = 1_000;
     private static final Duration REVERSE_CACHE_TTL = Duration.ofHours(24);
+    /**
+     * O "nao achei" tambem fica guardado, por menos tempo (requisicoes-lentas, 09/10: o 404 do
+     * reverso levava 1,8 s — a pausa do Nominatim mais a ida e volta — e o mesmo ponto pagava de novo).
+     */
+    static final Duration REVERSE_MISS_TTL = Duration.ofHours(1);
     /** Teto do Retry-After aceito: um valor absurdo do servidor nao pode desligar o geocoding por dias. */
     private static final Duration MAX_COOLDOWN = Duration.ofHours(1);
 
@@ -75,6 +80,7 @@ public class HttpGeocoder implements Geocoder {
     /** Pausa aberta por um 429/403 do Nominatim; {@code null} = liberado. */
     private volatile Instant nominatimBlockedUntil;
 
+    /** {@code result} null = o Nominatim respondeu e nao havia endereco ali. */
     private record CachedReverse(ReverseGeocodeResult result, Instant expiresAt) {
     }
 
@@ -166,10 +172,10 @@ public class HttpGeocoder implements Geocoder {
             return Optional.empty();
         }
         String cacheKey = reverseCacheKey(coordinates);
-        Optional<ReverseGeocodeResult> cached = cachedReverse(cacheKey);
-        if (cached.isPresent()) {
+        CachedReverse cached = cachedReverse(cacheKey);
+        if (cached != null) {
             log.info("[Geocoding] reverso de {},{} veio do cache", coordinates.latitude(), coordinates.longitude());
-            return cached;
+            return Optional.ofNullable(cached.result());
         }
         if (inCooldown("reverso")) {
             return Optional.empty();
@@ -194,6 +200,7 @@ public class HttpGeocoder implements Geocoder {
             if (body == null || !(body.get("address") instanceof Map<?, ?> address)) {
                 log.info("[Geocoding] reverso nao encontrou endereco em {},{}",
                         coordinates.latitude(), coordinates.longitude());
+                putCachedReverse(cacheKey, null, REVERSE_MISS_TTL);
                 return Optional.empty();
             }
 
@@ -210,7 +217,7 @@ public class HttpGeocoder implements Geocoder {
 
             log.info("[Geocoding] reverso resolveu {},{} -> {}",
                     coordinates.latitude(), coordinates.longitude(), result.displayName());
-            putCachedReverse(cacheKey, result);
+            putCachedReverse(cacheKey, result, REVERSE_CACHE_TTL);
             return Optional.of(result);
 
         } catch (HttpClientErrorException e) {
@@ -362,23 +369,24 @@ public class HttpGeocoder implements Geocoder {
         return String.format(Locale.ROOT, format, coordinates.latitude(), coordinates.longitude());
     }
 
-    private Optional<ReverseGeocodeResult> cachedReverse(String key) {
+    /** A entrada viva do cache, ou null (nunca consultado ou vencido). */
+    private CachedReverse cachedReverse(String key) {
         synchronized (reverseCache) {
             CachedReverse entry = reverseCache.get(key);
             if (entry == null) {
-                return Optional.empty();
+                return null;
             }
             if (!entry.expiresAt().isAfter(clock.instant())) {
                 reverseCache.remove(key);
-                return Optional.empty();
+                return null;
             }
-            return Optional.of(entry.result());
+            return entry;
         }
     }
 
-    private void putCachedReverse(String key, ReverseGeocodeResult result) {
+    private void putCachedReverse(String key, ReverseGeocodeResult result, Duration ttl) {
         synchronized (reverseCache) {
-            reverseCache.put(key, new CachedReverse(result, clock.instant().plus(REVERSE_CACHE_TTL)));
+            reverseCache.put(key, new CachedReverse(result, clock.instant().plus(ttl)));
         }
     }
 
