@@ -66,8 +66,28 @@ class ClientAddressTest {
         MockHttpServletRequest r = request();
         r.addHeader("CF-Connecting-IP", "177.10.0.1");
         r.addHeader("X-Port", "51000");
-        AccessOrigin origin = new AccessOrigin("CF-Connecting-IP", "X-Port");
+        AccessOrigin origin = new AccessOrigin("CF-Connecting-IP", "X-Port", false);
         assertThat(origin.ip(r)).isEqualTo("177.10.0.1");
         assertThat(origin.port(r)).isEqualTo(51000);
+    }
+
+    @Test
+    @DisplayName("porta-de-origem: com o log ligado, a porta continua a mesma; o log so leva nomes e numeros")
+    void logHeaders() {
+        MockHttpServletRequest r = request();
+        r.addHeader("CF-Connecting-IP", "177.10.0.1");
+        r.addHeader("X-Port", "51000");
+        r.addHeader("Authorization", "Bearer 12345");
+        r.addHeader("Content-Length", "42");
+        r.addHeader("X-Forwarded-Port", "443");
+        r.addHeader("X-Zero", "0");
+        r.addHeader("X-Big", "70000");
+        r.addHeader("X-Six-Digits", "123456");
+        AccessOrigin origin = new AccessOrigin("CF-Connecting-IP", "X-Port", true);
+        assertThat(origin.port(r)).isEqualTo(51000);
+
+        assertThat(AccessOrigin.numericHeaders(r)).containsExactly(java.util.Map.entry("x-port", "51000"));
+        assertThat(AccessOrigin.headerNames(r)).containsExactly("authorization", "cf-connecting-ip",
+                "content-length", "x-big", "x-forwarded-port", "x-port", "x-six-digits", "x-zero");
     }
 }
