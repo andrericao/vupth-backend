@@ -216,6 +216,8 @@ class PenaltyChargeIntegrationTest {
                         .header("Authorization", profToken))
                 .andExpect(status().isOk());
         mvc.perform(patch("/attendances/{id}/finish", thirdId)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", profToken))
                 .andExpect(status().isOk());

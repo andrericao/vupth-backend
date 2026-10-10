@@ -39,6 +39,8 @@ public class AttendanceController {
     private final SwapOfferService swapOfferService;
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
     private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
+    private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
+    private final com.ospaulos.vupth.domain.payment.service.PaymentNotifier paymentNotifier;
 
     /**
      * GET /attendances — sem {@code page}/{@code size}, a lista inteira de sempre; com um dos dois
@@ -111,6 +113,9 @@ public class AttendanceController {
 
         log.info("ATTENDANCE CONTROLLER CREATE — client={} prof={} estab={}",
                 principal.getUserId(), request.professionalId(), request.establishmentId());
+
+        // pagamento-pix: com atendimento finalizado sem pagar, nada de fila nova (409 PAYMENT_PENDING)
+        paymentService.assertNoPendingPayment(principal.getUserId());
 
         // clientId comes from the token, not the body — body value is ignored
         AttendanceRequest secureRequest = new AttendanceRequest(
@@ -469,18 +474,28 @@ public class AttendanceController {
     @PatchMapping("/{attendanceId}/finish")
     public ResponseEntity<?> finishAttendance(
             @PathVariable UUID attendanceId,
+            @RequestBody(required = false) com.ospaulos.vupth.api.payment.dto.request.FinishAttendanceRequest finishRequest,
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
-        log.info("ATTENDANCE CONTROLLER FINISH {} by user={}", attendanceId, principal.getUserId());
+        log.info("ATTENDANCE CONTROLLER FINISH {} by user={} paymentReceived={}", attendanceId, principal.getUserId(),
+                finishRequest != null && finishRequest.received());
 
         AttendanceInQueueResponse att = attendanceService.getById(attendanceId);
         QueueResponse response = professionalService.finishAttendance(principal.getUserId(), attendanceId);
+        // pagamento-pix (adendo 1): o "Sim" do modal termina e marca pago na mesma chamada
+        boolean paidNow = finishRequest != null && finishRequest.received()
+                && paymentService.confirmOnFinish(attendanceId, principal.getUserId());
 
         // WS: fila ao vivo + avisa o cliente que o atendimento foi concluido
         queuePublisher.broadcastQueue(response.establishmentId());
         queuePublisher.notifyClient(att.clientId(), QueueNotification.of(
                 "ATTENDANCE_FINISHED", attendanceId, att.establishmentId(),
                 "Seu atendimento foi concluído."));
+        if (paidNow) {
+            // Um aviso so ao cliente: "Pagamento efetuado", com o agradecimento (o profissional ve na tela)
+            paymentNotifier.confirmed(attendanceId);
+            return ResponseEntity.ok(response);
+        }
         // Push (mesmo aviso do WS, para o app em background)
         pushPublisher.notifyUser(att.clientId(), "Atendimento concluído", "Seu atendimento foi concluído.",
                 java.util.Map.of("type", "ATTENDANCE_FINISHED",

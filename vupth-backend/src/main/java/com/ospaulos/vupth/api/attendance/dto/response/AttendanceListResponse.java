@@ -41,7 +41,10 @@ public record AttendanceListResponse(
         BigDecimal penaltyTotal,
         // Client: o atendimento ja foi avaliado? Decide se o app mostra "Avaliar" (so FINISHED sem nota).
         // Nulo onde nao foi consultado (listagem da loja).
-        Boolean rated
+        Boolean rated,
+        // pagamento-pix (10/10): a flag do pagamento, ao lado do status (null = fora do fluxo)
+        @com.fasterxml.jackson.annotation.JsonProperty("payment_status")
+        com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus
 ) {
 
     public AttendanceListResponse withPenalties(List<PenaltyChargeResponse> charged) {
@@ -50,13 +53,13 @@ public record AttendanceListResponse(
                 .reduce(new BigDecimal("0.00"), BigDecimal::add);
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
-                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated);
+                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated, paymentStatus);
     }
 
     public AttendanceListResponse withRated(boolean isRated) {
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
-                durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated);
+                durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated, paymentStatus);
     }
 
     public static AttendanceListResponse fromEntity(Attendance attendance) {
@@ -88,7 +91,8 @@ public record AttendanceListResponse(
                 attendance.getPlatformFee(),
                 null,
                 null,
-                null
+                null,
+                attendance.getEffectivePaymentStatus()
         );
     }
 

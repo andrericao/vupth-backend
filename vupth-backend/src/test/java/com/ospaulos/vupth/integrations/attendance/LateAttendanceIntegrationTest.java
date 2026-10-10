@@ -231,6 +231,8 @@ class LateAttendanceIntegrationTest {
 
         // cleanup: libera o profissional
         mvc.perform(patch("/attendances/{id}/finish", late)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
@@ -281,6 +283,8 @@ class LateAttendanceIntegrationTest {
 
         // cleanup
         mvc.perform(patch("/attendances/{id}/finish", inProgress)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());

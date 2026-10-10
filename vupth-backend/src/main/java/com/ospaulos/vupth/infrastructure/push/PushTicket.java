@@ -17,18 +17,24 @@ package com.ospaulos.vupth.infrastructure.push;
  * @param ok     {@code true} quando a Expo aceitou a mensagem
  * @param error  codigo de {@code details.error} (ex.: {@code DeviceNotRegistered}); {@code null} se aceita
  * @param message mensagem legivel devolvida pela Expo; {@code null} se aceita
+ * @param id     o {@code id} do ticket da Expo, com o qual se le o recibo depois (recibos-da-expo);
+ *               {@code null} quando recusado ou quando o provedor nao devolve id (no-op)
  */
-public record PushTicket(String token, boolean ok, String error, String message) {
+public record PushTicket(String token, boolean ok, String error, String message, String id) {
 
     /** Codigo da Expo para token morto — o aparelho desinstalou o app ou o token foi rotacionado. */
     public static final String DEVICE_NOT_REGISTERED = "DeviceNotRegistered";
 
     public static PushTicket accepted(String token) {
-        return new PushTicket(token, true, null, null);
+        return accepted(token, null);
+    }
+
+    public static PushTicket accepted(String token, String id) {
+        return new PushTicket(token, true, null, null, id);
     }
 
     public static PushTicket rejected(String token, String error, String message) {
-        return new PushTicket(token, false, error, message);
+        return new PushTicket(token, false, error, message, null);
     }
 
     /** Este token deve sair da base: a Expo afirma que o aparelho nao recebe mais push. */

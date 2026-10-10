@@ -210,6 +210,23 @@ public class Attendance implements Serializable {
     private OffsetDateTime lastPauseTime;
 
     /**
+     * pagamento-pix (10/10): a flag do pagamento, ao lado do {@link #status} — o cliente paga antes ou
+     * depois do atendimento. Nasce {@code PENDING} na criacao ({@link #onCreate}); {@code null} nos
+     * atendimentos anteriores a este campo. Para mostrar, use {@link #getEffectivePaymentStatus()}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_status", length = 30)
+    private com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus;
+
+    /** Quando o cliente tocou "Ja paguei". */
+    @Column(name = "payment_claimed_at")
+    private OffsetDateTime paymentClaimedAt;
+
+    /** Quando o profissional (ou o dono) tocou "Recebi". */
+    @Column(name = "payment_confirmed_at")
+    private OffsetDateTime paymentConfirmedAt;
+
+    /**
      * Na criacao o preco e CONGELADO: total e divisao saem dos servicos deste momento. Preco de
      * servico muda; o que foi cobrado naquele dia nao pode mudar junto.
      */
@@ -222,6 +239,22 @@ public class Attendance implements Serializable {
         calculateTotalValue();
         freezePriceSplit();
         assertTotalValue();
+        if (this.paymentStatus == null) {
+            this.paymentStatus = com.ospaulos.vupth.domain.payment.PaymentStatus.PENDING;
+        }
+    }
+
+    /**
+     * O pagamento como os apps o veem: cancelado ou retirado ainda {@code PENDING} nao tem o que cobrar
+     * e sai como {@code null}; com "Ja paguei" ou "Recebi", fica (registro de que houve pagamento).
+     */
+    @Transient
+    public com.ospaulos.vupth.domain.payment.PaymentStatus getEffectivePaymentStatus() {
+        if (paymentStatus == com.ospaulos.vupth.domain.payment.PaymentStatus.PENDING
+                && status != null && status.leftWithoutService()) {
+            return null;
+        }
+        return paymentStatus;
     }
 
     /**

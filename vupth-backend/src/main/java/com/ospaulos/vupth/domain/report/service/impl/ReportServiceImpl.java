@@ -129,7 +129,16 @@ public class ReportServiceImpl implements ReportService {
                 withoutSplit(finished),
                 workdays(shiftRepository
                         .findByProfessionalIdAndStartedAtGreaterThanEqualAndStartedAtLessThanOrderByStartedAtAsc(
-                                professional.getId(), from(dateFrom), to(dateTo))));
+                                professional.getId(), from(dateFrom), to(dateTo))),
+                paymentPending(finished).size(),
+                totalRevenue(paymentPending(finished)));
+    }
+
+    /** pagamento-pix: os finalizados ainda nao pagos (os antigos, sem flag, ficam de fora). */
+    private List<Attendance> paymentPending(List<Attendance> attendances) {
+        return attendances.stream()
+                .filter(a -> a.getEffectivePaymentStatus() != null && a.getEffectivePaymentStatus().isOpen())
+                .toList();
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -22,4 +22,12 @@ import java.util.Map;
 public interface PushSender {
 
     List<PushTicket> send(List<String> tokens, String title, String body, Map<String, Object> data);
+
+    /**
+     * Os recibos (segunda etapa da Expo) dos tickets {@code ticketIds}, por id (recibos-da-expo). Quem
+     * nao tem recibo para ler (no-op) devolve vazio. Nunca lanca.
+     */
+    default Map<String, PushReceipt> fetchReceipts(List<String> ticketIds) {
+        return Map.of();
+    }
 }

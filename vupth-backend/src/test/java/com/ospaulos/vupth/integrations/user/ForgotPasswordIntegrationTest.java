@@ -62,7 +62,8 @@ class ForgotPasswordIntegrationTest {
     private String forgotAndCaptureCode(String email) throws Exception {
         forgot(email);
         ArgumentCaptor<String> codeCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailSender).sendPasswordResetCode(eq(email), codeCaptor.capture());
+        // O envio sai depois do commit, numa thread virtual: espera ate 5 s por ele.
+        verify(emailSender, timeout(5_000)).sendPasswordResetCode(eq(email), codeCaptor.capture());
         return codeCaptor.getValue();
     }
 

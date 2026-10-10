@@ -417,3 +417,18 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/031-create-ownership_transfer.yaml
       relativeToChangeLogFile: true
+
+  # Pedido de outro dia vence no horario pedido (pedido-vence-no-horario, emenda a DEC-27)
+  - include:
+      file: changesets/80-attendance/032-expires_at-from-desired_time-cut-request.yaml
+      relativeToChangeLogFile: true
+
+  # Recibos da Expo: o ticket espera o recibo (recibos-da-expo)
+  - include:
+      file: changesets/95-notification/033-create-pending_push_receipt.yaml
+      relativeToChangeLogFile: true
+
+  # Pagamento por Pix: a chave no profissional e a flag no atendimento (pagamento-pix)
+  - include:
+      file: changesets/80-attendance/034-payment-pix.yaml
+      relativeToChangeLogFile: true

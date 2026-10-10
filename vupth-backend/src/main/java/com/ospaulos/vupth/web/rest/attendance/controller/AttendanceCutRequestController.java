@@ -35,6 +35,7 @@ public class AttendanceCutRequestController {
 
     private final CutRequestService cutRequestService;
     private final CutRequestExpiryScheduler expiryScheduler;
+    private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
 
     /**
      * POST /attendances/cut-requests — o cliente autenticado (clientId do JWT) solicita um corte.
@@ -50,6 +51,9 @@ public class AttendanceCutRequestController {
 
         log.info("CUT-REQUEST CONTROLLER CREATE — client={} professional={} establishment={}",
                 principal.getUserId(), request.professionalId(), request.establishmentId());
+
+        // pagamento-pix: com atendimento finalizado sem pagar, nada de pedido de corte (409 PAYMENT_PENDING)
+        paymentService.assertNoPendingPayment(principal.getUserId());
 
         CutRequestResponse response = cutRequestService.createCutRequest(request, principal.getUserId());
         expiryScheduler.reschedule(); // pos-commit: arma o timer de auto-nega para a nova cabeca (fatia 3)

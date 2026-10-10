@@ -7,6 +7,246 @@
  },
  "item": [
   {
+   "name": "00 - fumaca (producao)",
+   "item": [
+    {
+     "name": "health",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - no ar\", () => pm.response.to.have.status(200));",
+         "pm.test(\"status UP\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/health",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "info",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - info publico\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/info",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "vitrine (sem token)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - vitrine publica\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Lista\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "register (fumaca)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - conta de fumaca criada\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"smoke_email\", \"fumaca_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"smoke_password\", \"Senha@123\");"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{smoke_email}}\", \"password\": \"{{smoke_password}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "login (fumaca)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - login\", () => pm.response.to.have.status(200));",
+         "pm.test(\"access_token\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+         "  pm.collectionVariables.set(\"smoke_token\", r.tokens.access_token);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{smoke_email}}\", \"password\": \"{{smoke_password}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "perfil (com token)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - rota autenticada responde\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{smoke_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "apagar a conta de fumaca",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 ou 204 - nada fica na producao\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{smoke_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{smoke_password}}\"}"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "01 - auth",
    "item": [
     {
@@ -33,7 +273,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"owner_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -351,7 +591,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -455,7 +695,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"partner_email\", \"partner_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"partner_email\", \"partner_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"partner_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -6829,7 +7069,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"client_email\", \"client_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"client_email\", \"client_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"client_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -7637,6 +7877,10 @@
       "method": "PATCH",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{prof_token}}",
         "type": "text"
@@ -7645,6 +7889,15 @@
       "url": "{{base_url}}/attendances/{{attendance_id}}/finish",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":true}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
       }
      },
      "response": [],
@@ -9584,6 +9837,10 @@
       "method": "PATCH",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{prof_token}}",
         "type": "text"
@@ -9592,6 +9849,15 @@
       "url": "{{base_url}}/attendances/{{attendance_id_rating}}/finish",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":true}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
       }
      },
      "response": [],
@@ -9864,6 +10130,846 @@
        }
       }
      ]
+    }
+   ]
+  },
+  {
+   "name": "08o - pagamento por Pix (pagamento-pix)",
+   "item": [
+    {
+     "name": "[ERRO] chave Pix que nao bate com o tipo -> 422 PIX_KEY_INVALID",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code PIX_KEY_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"PIX_KEY_INVALID\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/pix",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "pix"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"key_type\":\"CPF\",\"key\":\"123.456.789-00\",\"holder_name\":\"Beto\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "PUT chave Pix (telefone) -> 200 normalizada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"chave em +55DDDNUMERO\", () => pm.expect(pm.response.json().key).to.eql(\"+5511987654321\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/pix",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "pix"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"key_type\":\"PHONE\",\"key\":\"(11) 98765-4321\",\"holder_name\":\"Beto\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "GET chave Pix -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"key_type PHONE\", () => pm.expect(pm.response.json().key_type).to.eql(\"PHONE\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/pix",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "pix"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "create walk-in -> 201 com payment_status PENDING",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "pm.test(\"o pagamento nasce PENDING\", () => pm.expect(pm.response.json().payment_status).to.eql(\"PENDING\"));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_pix\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "GET pagamento (cliente) -> 200 com o copia-e-cola",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"PENDING\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
+         "pm.test(\"valor = servicos + multas\", () => pm.expect(Number(b.amount)).to.eql(Number(b.services_value) + Number(b.penalties_value)));",
+         "pm.test(\"BR Code\", () => pm.expect(b.pix_copy_paste).to.match(/^000201/));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Ja paguei ainda na fila (cliente) -> 200 AWAITING_CONFIRMATION",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"AWAITING_CONFIRMATION\", () => pm.expect(pm.response.json().status).to.eql(\"AWAITING_CONFIRMATION\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/claim",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "claim"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "[ERRO] Ja paguei de novo -> 409 PAYMENT_INVALID_STATUS",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.eql(\"PAYMENT_INVALID_STATUS\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/claim",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "claim"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "dot do profissional -> awaiting_count >= 1",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"awaiting_count >= 1\", () => pm.expect(pm.response.json().awaiting_count).to.be.at.least(1));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/pending-payments",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "pending-payments"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "start (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "start"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "finish sem o Sim do modal (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/finish",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "finish"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "pendencia do cliente -> count >= 1",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"count >= 1\", () => pm.expect(pm.response.json().count).to.be.at.least(1));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/clients/me/pending-payments",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "clients",
+        "me",
+        "pending-payments"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "[ERRO] fila nova com pagamento pendente -> 409 PAYMENT_PENDING",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code PAYMENT_PENDING\", () => pm.expect(pm.response.json().code).to.eql(\"PAYMENT_PENDING\"));",
+         "pm.test(\"traz os itens\", () => pm.expect(pm.response.json().items.length).to.be.at.least(1));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Recebi (prof) -> 200 PAID",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"PAID\", () => pm.expect(pm.response.json().status).to.eql(\"PAID\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/confirm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "confirm"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "[ERRO] Recebi de novo -> 409 PAYMENT_INVALID_STATUS",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/confirm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "confirm"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "pendencia do cliente -> count 0",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"count 0\", () => pm.expect(pm.response.json().count).to.eql(0));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/clients/me/pending-payments",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "clients",
+        "me",
+        "pending-payments"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "create walk-in 2 -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_pix2\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "start 2 (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix2}}/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix2}}",
+        "start"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "finish com o Sim do modal (payment_received) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix2}}/finish",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix2}}",
+        "finish"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":true}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "GET pagamento 2 -> PAID",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"PAID\", () => pm.expect(pm.response.json().status).to.eql(\"PAID\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix2}}/payment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix2}}",
+        "payment"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DELETE chave Pix -> 204",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/pix",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "pix"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
     }
    ]
   },
@@ -10811,6 +11917,10 @@
       "method": "PATCH",
       "header": [
        {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
         "key": "Authorization",
         "value": "Bearer {{prof_token}}",
         "type": "text"
@@ -10819,6 +11929,15 @@
       "url": "{{base_url}}/attendances/{{attendance_pause_id}}/finish",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":true}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
       }
      },
      "response": [],
@@ -12606,7 +13725,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "const newEmail = \"partner_updated_\" + Date.now() + \"@test.com\";",
+         "const newEmail = \"partner_updated_\" + Date.now() + \"@vupth.test\";",
          "pm.collectionVariables.set(\"partner_new_email\", newEmail);"
         ],
         "type": "text/javascript"
@@ -14442,7 +15561,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"curta@test.com\",\"password\":\"123\"}"
+       "raw": "{\"email\":\"curta@vupth.test\",\"password\":\"123\"}"
       },
       "url": "{{base_url}}/auth/register",
       "auth": {
@@ -14744,7 +15863,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"hacker@test.com\"}",
+       "raw": "{\"email\":\"hacker@vupth.test\"}",
        "options": {
         "raw": {
          "language": "json"
@@ -17603,7 +18722,7 @@
      "response": []
     },
     {
-     "name": "cliente solicita corte (loja fechada) -> 201 PENDING",
+     "name": "cliente solicita corte para amanha -> 201 PENDING, vence no horario pedido",
      "event": [
       {
        "listen": "test",
@@ -17611,7 +18730,7 @@
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
-         "  pm.test(\"PENDING, sem vencimento — pedido para outro dia (DEC-27)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.null; });",
+         "  pm.test(\"PENDING, vence no horario pedido (pedido-vence-no-horario)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(new Date(r.expires_at).getTime()).to.equal(new Date(pm.collectionVariables.get(\"cut_desired_time\")).getTime()); });",
          "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time.slice(0,10)).to.equal(pm.collectionVariables.get(\"cut_desired_time\").slice(0,10)));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
@@ -17758,7 +18877,9 @@
        "script": {
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if(pm.response.code===201) pm.collectionVariables.set(\"cut_id2\", pm.response.json().id);"
+         "if(pm.response.code===201){ const r=pm.response.json();",
+         "  pm.test(\"sem horario: nunca sem vencimento, e vale ao menos ~5 min\", () => { pm.expect(r.expires_at).to.not.be.null; pm.expect(new Date(r.expires_at).getTime()).to.be.above(Date.now() + 4*60*1000); });",
+         "  pm.collectionVariables.set(\"cut_id2\", r.id); }"
         ],
         "type": "text/javascript"
        }
@@ -17876,6 +18997,56 @@
       "body": {
        "mode": "raw",
        "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cliente solicita corte para daqui a 2 min -> vence na hora pedida, nao em 5 min",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// pedido-vence-no-horario: hora pedida a menos de 5 min — o vencimento e a hora pedida.",
+         "const d=new Date(Date.now()+2*60*1000); d.setUTCSeconds(0,0); d.setUTCMinutes(d.getUTCMinutes()+1);",
+         "pm.collectionVariables.set(\"cut_desired_soon\", d.toISOString().replace(/\\.\\d{3}Z$/,\"Z\"));"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201){ const r=pm.response.json();",
+         "  pm.test(\"expires_at = desired_time\", () => pm.expect(new Date(r.expires_at).getTime()).to.equal(new Date(pm.collectionVariables.get(\"cut_desired_soon\")).getTime())); }"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cut_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/cut-requests",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"{{cut_desired_soon}}\"}"
       }
      },
      "response": []
@@ -19709,6 +20880,15 @@
       "url": "{{base_url}}/attendances/{{ps_f3_attendance_id}}/finish",
       "auth": {
        "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":true}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
       }
      },
      "response": []
@@ -25850,6 +27030,63 @@
    ]
   },
   {
+   "name": "23 - documentacao da API (springdoc)",
+   "item": [
+    {
+     "name": "GET /v3/api-docs (sem token, dev)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - documentacao aberta fora da producao\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: openapi 3 e a rota de login documentada\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.openapi).to.match(/^3\\./);",
+         "  pm.expect(r.paths).to.have.property(\"/auth/login\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/v3/api-docs",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET /swagger-ui/index.html (sem token, dev)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - Swagger UI\", () => pm.response.to.have.status(200));",
+         "pm.test(\"HTML do Swagger UI\", () => pm.expect(pm.response.text()).to.include(\"swagger-ui\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/swagger-ui/index.html",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -26513,6 +27750,14 @@
   },
   {
    "key": "ah_estab_id",
+   "value": ""
+  },
+  {
+   "key": "attendance_id_pix",
+   "value": ""
+  },
+  {
+   "key": "attendance_id_pix2",
    "value": ""
   }
  ],

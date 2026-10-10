@@ -14,9 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
+import java.util.concurrent.Executor;
 
 /**
  * "Esqueci minha senha" — fatia 1 (backlog #1). Gera um código de 6 dígitos, guarda só o hash
@@ -41,6 +44,12 @@ public class ForgotPasswordUseCase {
     @Value("${vupth.mail.reset-code.ttl-minutes:15}")
     private long ttlMinutes;
 
+    /**
+     * O envio sai do request (requisicoes-lentas, 09/10): a ida a Brevo prendia a resposta (~1,9 s com
+     * o bcrypt). Uma thread virtual por envio; o teste troca por {@code Runnable::run}.
+     */
+    private Executor mailExecutor = task -> Thread.ofVirtual().name("forgot-password-mail").start(task);
+
     @Transactional
     public void execute(ForgotPasswordRequest request) {
         BaseUser user = userRepository.findByEmail(request.email())
@@ -60,10 +69,26 @@ public class ForgotPasswordUseCase {
         resetCodeRepository.save(entity);
 
         // Best-effort: falha de entrega é logada e engolida — não vaza ao usuário nem desfaz o código.
-        try {
-            emailSender.sendPasswordResetCode(user.getEmail(), code);
-        } catch (EmailDeliveryException e) {
-            log.error("[forgot-password] falha ao enviar e-mail (código segue válido): {}", e.getMessage());
+        // Sai depois do commit: o e-mail nunca leva um código que um rollback apagou.
+        String email = user.getEmail();
+        Runnable send = () -> {
+            try {
+                emailSender.sendPasswordResetCode(email, code);
+            } catch (EmailDeliveryException e) {
+                log.error("[forgot-password] falha ao enviar e-mail (código segue válido): {}", e.getMessage());
+            } catch (Exception e) {
+                log.error("[forgot-password] erro inesperado no envio do e-mail: {}", e.toString());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    mailExecutor.execute(send);
+                }
+            });
+        } else {
+            mailExecutor.execute(send);
         }
     }
 }

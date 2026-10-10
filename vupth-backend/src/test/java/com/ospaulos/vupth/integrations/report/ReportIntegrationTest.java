@@ -133,6 +133,8 @@ class ReportIntegrationTest {
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
         mvc.perform(patch("/attendances/{id}/finish", attId)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 

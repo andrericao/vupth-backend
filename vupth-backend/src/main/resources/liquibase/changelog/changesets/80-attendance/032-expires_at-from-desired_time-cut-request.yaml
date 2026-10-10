@@ -1,0 +1,10 @@
+databaseChangeLog:
+  # pedido-vence-no-horario (Andre, 10/10, emenda a DEC-27): o pedido vale ate o horario de interesse.
+  # Os PENDING de outro dia nasceram sem vencimento (016); passam a vencer no desired_time. O que ja passou
+  # do horario vence no primeiro ciclo do timer.
+  - changeSet:
+      id: 032-expires_at-from-desired_time-cut-request
+      author: andrericao
+      changes:
+        - sql:
+            sql: UPDATE cut_request SET expires_at = desired_time WHERE status = 'PENDING' AND expires_at IS NULL AND desired_time IS NOT NULL

@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 40
     services:
       postgres:
-        image: postgres:17
+        image: postgres:18
         env:
           POSTGRES_DB: vupth
           POSTGRES_USER: vupth
@@ -49,10 +49,10 @@ jobs:
 
       - name: Restaura no Postgres do job
         run: |
-          docker run --rm --network host -v "$PWD":/w -e PGPASSWORD=vupth postgres:17 \
+          docker run --rm --network host -v "$PWD":/w -e PGPASSWORD=vupth postgres:18 \
             pg_restore --no-owner --no-acl --exit-on-error -h localhost -U vupth -d vupth /w/vupth.dump
           # O minimo para chamar de restaurado: as migrations e os usuarios vieram.
-          docker run --rm --network host -e PGPASSWORD=vupth postgres:17 \
+          docker run --rm --network host -e PGPASSWORD=vupth postgres:18 \
             psql -h localhost -U vupth -d vupth -v ON_ERROR_STOP=1 -c 'select count(*) as migrations from databasechangelog' -c 'select count(*) as usuarios from base_user'
 
       - uses: actions/setup-java@v6

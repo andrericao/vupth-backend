@@ -25,5 +25,9 @@ public record ProfessionalReportResponse(
         // incompleto e o app deve dizer isso em vez de mostrar o numero como o todo.
         long attendancesWithoutSplit,
         // Expediente real do profissional por dia (Partner S4).
-        List<WorkdayResponse> workdays
+        List<WorkdayResponse> workdays,
+        // pagamento-pix (10/10): dos finalizados do periodo, quantos ainda nao foram pagos (PENDING ou
+        // AWAITING_CONFIRMATION) e o valor dos servicos deles. Pago, sai daqui.
+        long paymentPendingCount,
+        BigDecimal paymentPendingValue
 ) {}

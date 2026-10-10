@@ -139,6 +139,28 @@ class PushNotificationIntegrationTest {
         assertThat(deviceTokenRepository.findByToken(token)).isEmpty();
     }
 
+    /**
+     * S43 (push-conta-errada): o mesmo aparelho entra em outra conta sem logout (a bateria do Maestro
+     * troca de conta com clearState). O token tem de MUDAR de dono — nao pode ficar nas duas contas,
+     * senao o push de uma chega no aparelho logado na outra.
+     */
+    @Test
+    @Order(10)
+    @DisplayName("POST /devices com token de outra conta move o token para a conta nova (nao duplica)")
+    void device_tokenDeOutraConta_mudaDeDono() throws Exception {
+        var antiga = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var nova = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        String token = "ExponentPushToken[" + UUID.randomUUID() + "]";
+
+        registerDevice(antiga.token(), token, "android");
+        registerDevice(nova.token(), token, "android");
+
+        assertThat(deviceTokenRepository.findByUserId(UUID.fromString(antiga.id()))).isEmpty();
+        assertThat(deviceTokenRepository.findByUserId(UUID.fromString(nova.id()))).hasSize(1);
+        assertThat(deviceTokenRepository.findByToken(token).orElseThrow().getUserId())
+                .isEqualTo(UUID.fromString(nova.id()));
+    }
+
     @Test
     @Order(11)
     @DisplayName("POST /devices sem token -> 401; token em branco -> 422")
@@ -198,7 +220,7 @@ class PushNotificationIntegrationTest {
         var c2 = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         String t2 = "ExponentPushToken[" + UUID.randomUUID() + "]";
         registerDevice(c2.token(), t2, "ios");
-        join(c2);
+        String att2 = join(c2);
         verify(pushSender, never()).send(any(), eq("É quase a sua vez!"), any(), any());
 
         // profissional inicia client1 -> STARTED para t1 + 'proximo' para t2 (agora frente)
@@ -211,10 +233,24 @@ class PushNotificationIntegrationTest {
 
         // finish -> FINISHED para t1
         clearInvocations(pushSender);
+        // (sem o "Sim" do modal: o client1 nao volta a fila neste teste, o portao nao importa)
         mvc.perform(patch("/attendances/{id}/finish", att1)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
         verify(pushSender).send(argThat(l -> l.contains(t1)), eq("Atendimento concluído"), any(), any());
+
+        // pagamento-pix: com o "Sim" do modal, o cliente recebe um aviso so — "Pagamento efetuado" no lugar do
+        // "Atendimento concluído" (adendo 3)
+        clearInvocations(pushSender);
+        mvc.perform(patch("/attendances/{id}/start", att2).header("Authorization", ownerProfToken))
+                .andExpect(status().isOk());
+        clearInvocations(pushSender);
+        mvc.perform(patch("/attendances/{id}/finish", att2)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk());
+        verify(pushSender).send(argThat(l -> l.contains(t2)), eq("Pagamento efetuado"), any(), any());
+        verify(pushSender, never()).send(any(), eq("Atendimento concluído"), any(), any());
     }
 
     @Test

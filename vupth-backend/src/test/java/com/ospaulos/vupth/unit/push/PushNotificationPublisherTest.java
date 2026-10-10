@@ -1,7 +1,9 @@
 package com.ospaulos.vupth.unit.push;
 
 import com.ospaulos.vupth.domain.notification.model.DeviceToken;
+import com.ospaulos.vupth.domain.notification.model.PendingPushReceipt;
 import com.ospaulos.vupth.domain.notification.repository.DeviceTokenRepository;
+import com.ospaulos.vupth.domain.notification.repository.PendingPushReceiptRepository;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.push.PushSender;
 import com.ospaulos.vupth.infrastructure.push.PushTicket;
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -33,6 +36,7 @@ class PushNotificationPublisherTest {
 
     private DeviceTokenRepository deviceTokenRepository;
     private PushSender pushSender;
+    private PendingPushReceiptRepository pendingReceiptRepository;
     private PushNotificationPublisher publisher;
     private UUID userId;
 
@@ -40,7 +44,8 @@ class PushNotificationPublisherTest {
     void setUp() {
         deviceTokenRepository = mock(DeviceTokenRepository.class);
         pushSender = mock(PushSender.class);
-        publisher = new PushNotificationPublisher(deviceTokenRepository, pushSender);
+        pendingReceiptRepository = mock(PendingPushReceiptRepository.class);
+        publisher = new PushNotificationPublisher(deviceTokenRepository, pushSender, pendingReceiptRepository);
         userId = UUID.randomUUID();
     }
 
@@ -142,5 +147,76 @@ class PushNotificationPublisherTest {
         publisher.notifyUser(null, "Sua vez", "Voce e o proximo", Map.of());
 
         verifyNoInteractions(deviceTokenRepository, pushSender);
+    }
+
+    // ---- recibos-da-expo: o ticket aceito espera o recibo ----
+
+    @Test
+    @DisplayName("Ticket aceito com id vira recibo pendente; recusado e sem id, nao")
+    void acceptedTicketsAwaitReceipt() {
+        givenDevices(TOKEN_VIVO, TOKEN_MORTO, "ExponentPushToken[semidsemidsemidsemid33]");
+        when(pushSender.send(any(), any(), any(), any())).thenReturn(List.of(
+                PushTicket.accepted(TOKEN_VIVO, "t-1"),
+                PushTicket.rejected(TOKEN_MORTO, PushTicket.DEVICE_NOT_REGISTERED, "not registered"),
+                PushTicket.accepted("ExponentPushToken[semidsemidsemidsemid33]")));
+
+        notifyUser();
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<PendingPushReceipt>> saved = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(pendingReceiptRepository).saveAll(saved.capture());
+        assertThat(saved.getValue()).singleElement().satisfies(r -> {
+            assertThat(r.getTicketId()).isEqualTo("t-1");
+            assertThat(r.getToken()).isEqualTo(TOKEN_VIVO);
+            assertThat(r.getUserId()).isEqualTo(userId);
+            assertThat(r.getTitle()).isEqualTo("Sua vez");
+            assertThat(r.getSentAt()).isNotNull();
+        });
+    }
+
+    @Test
+    @DisplayName("Sem ticket com id (no-op, tudo recusado ou lista vazia) nada e guardado")
+    void nothingToAwait() {
+        givenDevices(TOKEN_VIVO);
+        when(pushSender.send(any(), any(), any(), any()))
+                .thenReturn(List.of(PushTicket.accepted(TOKEN_VIVO), PushTicket.accepted(TOKEN_VIVO, " ")))
+                .thenReturn(List.of())
+                .thenReturn(null);
+
+        notifyUser();
+        notifyUser();
+        notifyUser();
+
+        verify(pendingReceiptRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("Titulo longo e cortado em 200; falha ao guardar o recibo nao propaga")
+    void longTitleAndSaveFailure() {
+        givenDevices(TOKEN_VIVO);
+        when(pushSender.send(any(), any(), any(), any())).thenReturn(List.of(PushTicket.accepted(TOKEN_VIVO, "t-1")));
+        when(pendingReceiptRepository.saveAll(any())).thenThrow(new RuntimeException("banco fora"));
+
+        assertThatCode(() -> publisher.notifyUser(userId, "x".repeat(250), "corpo", Map.of()))
+                .doesNotThrowAnyException();
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<PendingPushReceipt>> saved = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(pendingReceiptRepository).saveAll(saved.capture());
+        assertThat(saved.getValue().get(0).getTitle()).hasSize(200);
+    }
+
+    @Test
+    @DisplayName("Titulo nulo e guardado nulo")
+    void nullTitle() {
+        givenDevices(TOKEN_VIVO);
+        when(pushSender.send(any(), any(), any(), any())).thenReturn(List.of(PushTicket.accepted(TOKEN_VIVO, "t-1")));
+
+        publisher.notifyUser(userId, null, "corpo", Map.of());
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<PendingPushReceipt>> saved = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(pendingReceiptRepository).saveAll(saved.capture());
+        assertThat(saved.getValue().get(0).getTitle()).isNull();
     }
 }

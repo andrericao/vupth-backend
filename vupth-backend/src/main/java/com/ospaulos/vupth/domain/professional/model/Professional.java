@@ -91,6 +91,20 @@ public class Professional extends AbstractAggregateRoot<Professional> {
     private String contactPhone;
 
     /**
+     * A chave Pix do profissional (pagamento-pix, 10/10): o tipo, a chave normalizada e o nome que o
+     * banco mostra. As tres juntas ou nenhuma. Monta o Pix copia-e-cola do atendimento.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pix_key_type", length = 10)
+    private com.ospaulos.vupth.domain.payment.PixKeyType pixKeyType;
+
+    @Column(name = "pix_key", length = 77)
+    private String pixKey;
+
+    @Column(name = "pix_holder_name", length = 25)
+    private String pixHolderName;
+
+    /**
      * Interruptor "expor a posicao na fila" (decisao de 05/09): {@code true} (padrao) o cliente ve a
      * posicao; {@code false} ela some de todos os lugares do app do cliente — o tempo estimado fica
      * sempre. O push de "proximo da fila" obedece a ele (QueuePushService).

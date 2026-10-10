@@ -83,6 +83,10 @@ public class BrevoApiEmailSender implements EmailSender {
 
     @Override
     public void send(String toEmail, String subject, String body) {
+        if (ReservedEmailDomains.isReserved(toEmail)) {
+            log.info("[MAIL:brevo] '{}' nao enviado para {}: dominio reservado de teste", subject, toEmail);
+            return;
+        }
         Map<String, Object> payload = Map.of(
                 "sender", Map.of("email", from, "name", fromName),
                 "to", List.of(Map.of("email", toEmail)),

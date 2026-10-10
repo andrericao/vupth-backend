@@ -66,6 +66,13 @@ public class SecurityConfig {
     @Value("${vupth.actuator.expose-all:false}")
     private boolean actuatorExposeAll;
 
+    /**
+     * Abre o {@code /v3/api-docs} e o Swagger UI (BAK-2 springdoc). {@code true} so em dev e
+     * staging; na producao fica {@code false} e a cadeia nega, mesmo que o springdoc esteja ligado.
+     */
+    @Value("${vupth.api-docs.public:false}")
+    private boolean apiDocsPublic;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
 
@@ -89,6 +96,10 @@ public class SecurityConfig {
                         // abra a porta junto.
                         .requestMatchers("/actuator/**")
                         .access((authentication, context) -> new AuthorizationDecision(actuatorExposeAll))
+
+                        // Documentacao da API (springdoc): aberta so onde o perfil liga.
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
+                        .access((authentication, context) -> new AuthorizationDecision(apiDocsPublic))
 
                         // WebSocket handshake — autenticacao da sessao STOMP e feita
                         // no StompAuthChannelInterceptor (frame CONNECT), nao no HTTP.
@@ -151,6 +162,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/move-to-end").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/service-items").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/*/rating").hasRole("CLIENT")
+                        // pagamento-pix (10/10): a parte certa (cliente, profissional ou dono) e checada no PaymentService
+                        .requestMatchers(HttpMethod.GET, "/attendances/*/payment").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/attendances/*/payment/claim").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.POST, "/attendances/*/payment/confirm").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/clients/me/pending-payments").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
+                        .requestMatchers("/professional/me/pix").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente

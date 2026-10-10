@@ -58,6 +58,10 @@ public class SmtpEmailSender implements EmailSender {
 
     @Override
     public void send(String toEmail, String subject, String body) {
+        if (ReservedEmailDomains.isReserved(toEmail)) {
+            log.info("[MAIL:smtp] '{}' nao enviado para {}: dominio reservado de teste", subject, toEmail);
+            return;
+        }
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(toEmail);

@@ -359,6 +359,8 @@ class AttendanceIntegrationTest {
         log.info("[Attendance] fullFlow_finish — attendanceId={}", fullFlowAttendanceId);
 
         mvc.perform(patch("/attendances/{id}/finish", fullFlowAttendanceId)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
@@ -759,6 +761,8 @@ class AttendanceIntegrationTest {
                 .forEach(a -> {
                     try {
                         mvc.perform(patch("/attendances/{id}/finish", a.getId())
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                                         .contentType(MediaType.APPLICATION_JSON)
                                         .header("Authorization", ownerProfToken))
                                 .andDo(print());
@@ -922,6 +926,8 @@ class AttendanceIntegrationTest {
         log.info("[Attendance] pauseResume_finishFromPaused — id={}", pauseAttendanceId);
 
         mvc.perform(patch("/attendances/{id}/finish", pauseAttendanceId)
+                        // pagamento-pix: pago no Finalizar, para o portao nao barrar o mesmo cliente depois
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())

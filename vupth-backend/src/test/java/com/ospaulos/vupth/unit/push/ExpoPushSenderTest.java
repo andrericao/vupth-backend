@@ -1,6 +1,8 @@
 package com.ospaulos.vupth.unit.push;
 
 import com.ospaulos.vupth.infrastructure.push.ExpoPushSender;
+import com.ospaulos.vupth.infrastructure.push.PushReceipt;
+import com.ospaulos.vupth.infrastructure.push.PushSender;
 import com.ospaulos.vupth.infrastructure.push.PushTicket;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -254,5 +256,128 @@ class ExpoPushSenderTest {
 
         assertThat(sender.send(List.of(), "t", "b", Map.of())).isEmpty();
         assertThat(sender.send(null, "t", "b", Map.of())).isEmpty();
+    }
+
+    // ---- recibos-da-expo: o id do ticket e a segunda etapa (/push/getReceipts) ----
+
+    /** Sobe uma "Expo" com a rota de recibos, e devolve o sender apontado para a rota irma /send. */
+    private ExpoPushSender senderWithReceipts(int statusCode, String receiptsBody, AtomicReference<String> captured)
+            throws IOException {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/getReceipts", exchange -> {
+            captured.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] out = receiptsBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(statusCode, out.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(out);
+            }
+        });
+        server.start();
+        return new ExpoPushSender("http://localhost:" + server.getAddress().getPort() + "/send", "");
+    }
+
+    @Test
+    @DisplayName("Ticket aceito traz o id da Expo — e com ele que se le o recibo")
+    void acceptedTicketCarriesId() throws IOException {
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"},{"status":"error","message":"x","details":{"error":"DeviceNotRegistered"}}]}""");
+
+        List<PushTicket> tickets = send(sender, TOKEN_A, TOKEN_B);
+
+        assertThat(tickets.get(0).id()).isEqualTo("t-1");
+        assertThat(tickets.get(1).id()).isNull();
+    }
+
+    @Test
+    @DisplayName("A rota dos recibos e a irma da de envio")
+    void receiptsUrlIsSiblingOfSend() {
+        assertThat(ExpoPushSender.receiptsUrlFor("https://exp.host/--/api/v2/push/send"))
+                .isEqualTo("https://exp.host/--/api/v2/push/getReceipts");
+        assertThat(ExpoPushSender.receiptsUrlFor("send")).isEqualTo("getReceipts");
+    }
+
+    @Test
+    @DisplayName("Recibos: ok e DeviceNotRegistered por id; id sem recibo nao volta")
+    void fetchReceiptsReadsEachId() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderWithReceipts(200, """
+                {"data":{"r-1":{"status":"ok"},"r-2":{"status":"error","message":"gone","details":{"error":"DeviceNotRegistered"}},"r-3":null}}""",
+                body);
+
+        Map<String, PushReceipt> receipts = sender.fetchReceipts(List.of("r-1", "r-2", "r-3", "r-4"));
+
+        assertThat(body.get()).contains("\"ids\"").contains("r-1").contains("r-4");
+        assertThat(receipts).containsOnlyKeys("r-1", "r-2");
+        assertThat(receipts.get("r-1").ok()).isTrue();
+        assertThat(receipts.get("r-1").isDeviceGone()).isFalse();
+        assertThat(receipts.get("r-2").isDeviceGone()).isTrue();
+        assertThat(receipts.get("r-2").message()).isEqualTo("gone");
+    }
+
+    @Test
+    @DisplayName("Recibo com erro sem details: nao e token morto")
+    void receiptErrorWithoutDetails() throws IOException {
+        var sender = senderWithReceipts(200, """
+                {"data":{"r-1":{"status":"error","message":"MessageRateExceeded"}}}""", new AtomicReference<>());
+
+        PushReceipt receipt = sender.fetchReceipts(List.of("r-1")).get("r-1");
+
+        assertThat(receipt.ok()).isFalse();
+        assertThat(receipt.error()).isNull();
+        assertThat(receipt.isDeviceGone()).isFalse();
+    }
+
+    @Test
+    @DisplayName("Recibos: corpo com errors, corpo vazio ou HTTP 500 devolvem vazio — nada se conclui")
+    void fetchReceiptsFailuresAreEmpty() throws IOException {
+        var withErrors = senderWithReceipts(200, """
+                {"errors":[{"code":"VALIDATION_ERROR"}]}""", new AtomicReference<>());
+        assertThat(withErrors.fetchReceipts(List.of("r-1"))).isEmpty();
+        server.stop(0);
+
+        var empty = senderWithReceipts(200, "null", new AtomicReference<>());
+        assertThat(empty.fetchReceipts(List.of("r-1"))).isEmpty();
+        server.stop(0);
+
+        var down = senderWithReceipts(500, "{}", new AtomicReference<>());
+        assertThat(down.fetchReceipts(List.of("r-1"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Recibos: lista vazia ou nula nao chama a Expo")
+    void fetchReceiptsNothingToAsk() {
+        var sender = new ExpoPushSender("http://localhost:1/send", "");
+        assertThat(sender.fetchReceipts(List.of())).isEmpty();
+        assertThat(sender.fetchReceipts(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Recibos: com o access token, vai o Bearer; a URL de recibos pode vir da configuracao")
+    void fetchReceiptsSendsBearerAndHonorsConfiguredUrl() throws IOException {
+        AtomicReference<String> auth = new AtomicReference<>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/recibos", exchange -> {
+            auth.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            byte[] out = "{\"data\":{\"r-1\":{\"status\":\"ok\"}}}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, out.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(out);
+            }
+        });
+        server.start();
+        String base = "http://localhost:" + server.getAddress().getPort();
+        var sender = new ExpoPushSender(base + "/send", "segredo", "alertas", base + "/recibos");
+
+        assertThat(sender.fetchReceipts(List.of("r-1"))).containsKey("r-1");
+        assertThat(auth.get()).isEqualTo("Bearer segredo");
+    }
+
+    @Test
+    @DisplayName("PushSender sem recibos (no-op) devolve vazio")
+    void defaultFetchReceiptsIsEmpty() {
+        PushSender noReceipts = (tokens, title, body, data) -> List.of();
+        assertThat(noReceipts.fetchReceipts(List.of("r-1"))).isEmpty();
     }
 }

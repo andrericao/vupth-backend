@@ -21,6 +21,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
+import java.util.concurrent.Executor;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -68,6 +70,8 @@ class PasswordResetUseCasesTest {
         user.setId(USER_ID);
         user.setEmail(EMAIL);
         user.setPassword("$2a$hash_antigo");
+        // O envio real sai numa thread virtual; aqui roda na hora, para o verify ver o e-mail.
+        ReflectionTestUtils.setField(forgotPasswordUseCase, "mailExecutor", (Executor) Runnable::run);
     }
 
     @Nested
@@ -96,6 +100,33 @@ class PasswordResetUseCasesTest {
             verify(resetCodeRepository).deleteByUserId(USER_ID);
             verify(resetCodeRepository).save(any(PasswordResetCode.class));
             verify(emailSender).sendPasswordResetCode(eq(EMAIL), matches("\\d{6}"));
+        }
+
+        @Test
+        @DisplayName("falha da Brevo nao vaza ao usuario: o codigo fica salvo e a chamada termina")
+        void deliveryFailure_isSwallowed() {
+            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(passwordEncoder.encode(anyString())).thenReturn("$2a$hash_do_codigo");
+            doThrow(new RuntimeException("brevo fora")).when(emailSender).sendPasswordResetCode(anyString(), anyString());
+
+            assertThatCode(() -> forgotPasswordUseCase.execute(new ForgotPasswordRequest(EMAIL)))
+                    .doesNotThrowAnyException();
+
+            verify(resetCodeRepository).save(any(PasswordResetCode.class));
+        }
+
+        @Test
+        @DisplayName("o e-mail sai pelo executor de envio, fora da thread do request")
+        void sendsThroughMailExecutor() {
+            Executor executor = mock(Executor.class);
+            ReflectionTestUtils.setField(forgotPasswordUseCase, "mailExecutor", executor);
+            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(passwordEncoder.encode(anyString())).thenReturn("$2a$hash_do_codigo");
+
+            forgotPasswordUseCase.execute(new ForgotPasswordRequest(EMAIL));
+
+            verify(executor).execute(any(Runnable.class));
+            verifyNoInteractions(emailSender); // o executor (mock) ainda nao rodou a tarefa
         }
     }
 
