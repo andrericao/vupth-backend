@@ -139,6 +139,28 @@ class PushNotificationIntegrationTest {
         assertThat(deviceTokenRepository.findByToken(token)).isEmpty();
     }
 
+    /**
+     * S43 (push-conta-errada): o mesmo aparelho entra em outra conta sem logout (a bateria do Maestro
+     * troca de conta com clearState). O token tem de MUDAR de dono — nao pode ficar nas duas contas,
+     * senao o push de uma chega no aparelho logado na outra.
+     */
+    @Test
+    @Order(10)
+    @DisplayName("POST /devices com token de outra conta move o token para a conta nova (nao duplica)")
+    void device_tokenDeOutraConta_mudaDeDono() throws Exception {
+        var antiga = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var nova = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        String token = "ExponentPushToken[" + UUID.randomUUID() + "]";
+
+        registerDevice(antiga.token(), token, "android");
+        registerDevice(nova.token(), token, "android");
+
+        assertThat(deviceTokenRepository.findByUserId(UUID.fromString(antiga.id()))).isEmpty();
+        assertThat(deviceTokenRepository.findByUserId(UUID.fromString(nova.id()))).hasSize(1);
+        assertThat(deviceTokenRepository.findByToken(token).orElseThrow().getUserId())
+                .isEqualTo(UUID.fromString(nova.id()));
+    }
+
     @Test
     @Order(11)
     @DisplayName("POST /devices sem token -> 401; token em branco -> 422")
