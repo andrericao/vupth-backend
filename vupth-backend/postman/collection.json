@@ -33,7 +33,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"owner_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -351,7 +351,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -455,7 +455,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"partner_email\", \"partner_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"partner_email\", \"partner_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"partner_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -6829,7 +6829,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "pm.collectionVariables.set(\"client_email\", \"client_\" + Date.now() + \"@test.com\");",
+         "pm.collectionVariables.set(\"client_email\", \"client_\" + Date.now() + \"@vupth.test\");",
          "pm.collectionVariables.set(\"client_password\", \"Senha@123\");"
         ],
         "type": "text/javascript"
@@ -12606,7 +12606,7 @@
        "listen": "prerequest",
        "script": {
         "exec": [
-         "const newEmail = \"partner_updated_\" + Date.now() + \"@test.com\";",
+         "const newEmail = \"partner_updated_\" + Date.now() + \"@vupth.test\";",
          "pm.collectionVariables.set(\"partner_new_email\", newEmail);"
         ],
         "type": "text/javascript"
@@ -14442,7 +14442,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"curta@test.com\",\"password\":\"123\"}"
+       "raw": "{\"email\":\"curta@vupth.test\",\"password\":\"123\"}"
       },
       "url": "{{base_url}}/auth/register",
       "auth": {
@@ -14744,7 +14744,7 @@
       },
       "body": {
        "mode": "raw",
-       "raw": "{\"email\":\"hacker@test.com\"}",
+       "raw": "{\"email\":\"hacker@vupth.test\"}",
        "options": {
         "raw": {
          "language": "json"
