@@ -25,10 +25,8 @@ final class ReservedEmailDomains {
         if (at < 0 || at == email.length() - 1) {
             return false;
         }
-        String domain = email.substring(at + 1).trim().toLowerCase(Locale.ROOT);
-        if (domain.endsWith(".")) {
-            domain = domain.substring(0, domain.length() - 1);
-        }
+        String raw = email.substring(at + 1).trim().toLowerCase(Locale.ROOT);
+        String domain = raw.endsWith(".") ? raw.substring(0, raw.length() - 1) : raw;
         String tld = domain.substring(domain.lastIndexOf('.') + 1);
         return RESERVED_TLDS.contains(tld)
                 || RESERVED_DOMAINS.contains(domain)
