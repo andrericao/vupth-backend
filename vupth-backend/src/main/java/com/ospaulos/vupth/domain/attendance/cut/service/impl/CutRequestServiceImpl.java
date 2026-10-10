@@ -28,13 +28,15 @@ import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 import com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
-import lombok.AllArgsConstructor;
+import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +44,7 @@ import java.util.UUID;
 
 @Slf4j
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Transactional
 public class CutRequestServiceImpl implements CutRequestService {
 
@@ -57,6 +59,13 @@ public class CutRequestServiceImpl implements CutRequestService {
     private final AttendanceService attendanceService;
     private final QueueWebSocketPublisher queuePublisher;
     private final PushNotificationPublisher pushPublisher;
+
+    /** Relogio do servico. Os testes de borda do vencimento (pedido-vence-no-horario) trocam por um fixo. */
+    private Clock clock = Clock.systemDefaultZone();
+
+    void setClock(Clock clock) {
+        this.clock = clock;
+    }
 
     @Override
     public CutRequestResponse createCutRequest(CutRequestRequest request, UUID clientId) {
@@ -98,7 +107,7 @@ public class CutRequestServiceImpl implements CutRequestService {
             }
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(clock);
         CutRequest cut = new CutRequest();
         cut.setClient(client);
         cut.setProfessional(professional);
@@ -106,7 +115,7 @@ public class CutRequestServiceImpl implements CutRequestService {
         cut.setServiceItems(serviceItems);
         cut.setStatus(CutRequestStatus.PENDING);
         cut.setCreatedAt(now);
-        cut.setExpiresAt(expiresAtFor(request.desiredTime(), now));
+        cut.setExpiresAt(expiresAtFor(request.desiredTime(), now, professional.getWorkStatus()));
         cut.setDesiredTime(request.desiredTime());
         CutRequest saved = cutRequestRepository.save(cut);
 
@@ -133,12 +142,14 @@ public class CutRequestServiceImpl implements CutRequestService {
         log.info("[CutRequest] accept — id={} professional={}", cutRequestId, professionalId);
         CutRequest cut = loadOwnedPending(cutRequestId, professionalId);
 
-        OffsetDateTime now = OffsetDateTime.now();
-        if (cut.getExpiresAt() != null && now.isAfter(cut.getExpiresAt())) {
-            // Defensivo: mesmo antes do timer da fatia 3 rodar, um aceite fora da janela auto-nega.
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        if (isExpired(cut, now)) {
+            // Defensivo: mesmo antes do timer rodar, um aceite fora da janela auto-nega — e avisa como
+            // o timer avisaria (pedido-vence-no-horario: aceitar as 14:30 um pedido das 14:00 nao vale).
             cut.setStatus(CutRequestStatus.EXPIRED);
             cut.setRespondedAt(now);
             cutRequestRepository.save(cut);
+            notifyExpired(cut);
             throw new CutRequestExpiredException(cutRequestId);
         }
 
@@ -184,7 +195,7 @@ public class CutRequestServiceImpl implements CutRequestService {
         CutRequest cut = loadOwnedPending(cutRequestId, professionalId);
 
         cut.setStatus(CutRequestStatus.REFUSED);
-        cut.setRespondedAt(OffsetDateTime.now());
+        cut.setRespondedAt(OffsetDateTime.now(clock));
         CutRequest saved = cutRequestRepository.save(cut);
 
         queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
@@ -202,7 +213,7 @@ public class CutRequestServiceImpl implements CutRequestService {
 
     @Override
     public int expireDueCutRequests() {
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(clock);
         List<CutRequest> due = cutRequestRepository.findByStatusAndExpiresAtBefore(CutRequestStatus.PENDING, now);
         if (due.isEmpty()) {
             return 0;
@@ -211,29 +222,60 @@ public class CutRequestServiceImpl implements CutRequestService {
             cut.setStatus(CutRequestStatus.EXPIRED);
             cut.setRespondedAt(now);
             cutRequestRepository.save(cut);
-
-            queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
-                    "CUT_EXPIRED", null, cut.getEstablishment().getId(),
-                    "Seu pedido de corte expirou sem resposta do profissional.").withCutRequestId(cut.getId()));
-            pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte expirado",
-                    "Ninguem respondeu a tempo. Tente novamente quando a loja abrir.",
-                    Map.of("type", "CUT_EXPIRED",
-                            "cutRequestId", String.valueOf(cut.getId()),
-                            "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+            notifyExpired(cut);
             log.info("[CutRequest] expire — id={} PENDING -> EXPIRED (expiresAt={})", cut.getId(), cut.getExpiresAt());
         }
         return due.size();
     }
 
     /**
-     * DEC-27: o pedido para HOJE (ou sem dia) vale {@value #VALIDITY_MINUTES} min; para um dia seguinte,
-     * cuja agenda ainda nao abriu, fica ativo ate o profissional decidir ({@code null} = sem vencimento).
+     * Quando o pedido vence (DEC-27 com a emenda pedido-vence-no-horario, Andre 10/10: "o pedido dura ate
+     * o horario de interesse ou ate o profissional aceitar"). Nunca fica sem vencimento:
+     * <ul>
+     *   <li>com {@code desiredTime} (hoje ou outro dia): vence no horario pedido;</li>
+     *   <li>sem horario, profissional em Fora ("assim que abrir"): vence as 23:59 de hoje, no fuso da loja;</li>
+     *   <li>sem horario, profissional em expediente: {@value #VALIDITY_MINUTES} min.</li>
+     * </ul>
      */
-    static OffsetDateTime expiresAtFor(OffsetDateTime desiredTime, OffsetDateTime now) {
-        if (isForAnotherDay(desiredTime, now)) {
-            return null;
+    static OffsetDateTime expiresAtFor(OffsetDateTime desiredTime, OffsetDateTime now,
+                                       ProfessionalStatus professionalStatus) {
+        if (desiredTime != null) {
+            return desiredTime;
         }
-        return now.plusMinutes(VALIDITY_MINUTES);
+        OffsetDateTime fiveMinutes = now.plusMinutes(VALIDITY_MINUTES);
+        if (professionalStatus == ProfessionalStatus.OFF) {
+            // Pedido feito nos ultimos minutos do dia nao nasce vencido: vale pelo menos os 5 min.
+            OffsetDateTime endOfDay = BusinessClock.at(BusinessClock.dateAt(now), END_OF_DAY);
+            return endOfDay.isAfter(fiveMinutes) ? endOfDay : fiveMinutes;
+        }
+        return fiveMinutes;
+    }
+
+    /** O "assim que abrir" com o profissional em Fora vale ate aqui, no dia do pedido. */
+    static final java.time.LocalTime END_OF_DAY = java.time.LocalTime.of(23, 59);
+
+    /** Venceu quando a hora chega: as 14:00:00 um pedido para as 14:00 ja nao vale. */
+    static boolean isExpired(CutRequest cut, OffsetDateTime now) {
+        return cut.getExpiresAt() != null && !now.isBefore(cut.getExpiresAt());
+    }
+
+    /** Vencimento (pelo timer ou pelo aceite atrasado): avisa o cliente (WS + push) e tira o card do profissional (WS). */
+    private void notifyExpired(CutRequest cut) {
+        String message = cut.getDesiredTime() != null
+                ? "O horario pedido passou sem resposta do profissional."
+                : "Seu pedido de corte expirou sem resposta do profissional.";
+        queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
+                "CUT_EXPIRED", null, cut.getEstablishment().getId(), message).withCutRequestId(cut.getId()));
+        pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte expirado",
+                cut.getDesiredTime() != null ? message : "Ninguem respondeu a tempo. Tente novamente quando a loja abrir.",
+                Map.of("type", "CUT_EXPIRED",
+                        "cutRequestId", String.valueOf(cut.getId()),
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+        if (cut.getProfessional() != null) {
+            queuePublisher.notifyClient(cut.getProfessional().getId(), QueueNotification.of(
+                    "CUT_EXPIRED", null, cut.getEstablishment().getId(),
+                    "Um pedido de corte venceu.").withCutRequestId(cut.getId()));
+        }
     }
 
     private static final java.time.format.DateTimeFormatter DAY_AND_TIME =

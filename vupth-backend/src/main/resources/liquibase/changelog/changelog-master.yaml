@@ -417,3 +417,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/031-create-ownership_transfer.yaml
       relativeToChangeLogFile: true
+
+  # Pedido de outro dia vence no horario pedido (pedido-vence-no-horario, emenda a DEC-27)
+  - include:
+      file: changesets/80-attendance/032-expires_at-from-desired_time-cut-request.yaml
+      relativeToChangeLogFile: true

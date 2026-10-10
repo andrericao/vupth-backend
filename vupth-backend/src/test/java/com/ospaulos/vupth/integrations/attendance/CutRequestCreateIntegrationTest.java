@@ -163,16 +163,38 @@ class CutRequestCreateIntegrationTest {
 
     @Test
     @Order(21)
-    @DisplayName("DEC-27: pedido para um dia seguinte -> 201 sem vencimento (expires_at nulo, ativo ate ele decidir)")
-    void nextDay_noExpiry() throws Exception {
-        String tomorrow = BusinessClock.at(BusinessClock.today().plusDays(1), java.time.LocalTime.of(10, 0)).toString();
-        mvc.perform(post("/attendances/cut-requests")
+    @DisplayName("pedido-vence-no-horario: pedido para um dia seguinte -> 201 e vence no horario pedido (nao fica sem vencimento)")
+    void nextDay_expiresAtDesiredTime() throws Exception {
+        java.time.OffsetDateTime tomorrow = BusinessClock.at(BusinessClock.today().plusDays(1), java.time.LocalTime.of(10, 0));
+        String body = mvc.perform(post("/attendances/cut-requests")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", clientToken)
-                        .content(bodyWithDesiredTime(tomorrow)))
+                        .content(bodyWithDesiredTime(tomorrow.toString())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDING"))
-                .andExpect(jsonPath("$.expires_at").value(nullValue()));
+                .andExpect(jsonPath("$.expires_at").isNotEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        UUID id = UUID.fromString(new org.json.JSONObject(body).getString("id"));
+        java.time.OffsetDateTime expiresAt = cutRequestRepository.findById(id).orElseThrow().getExpiresAt();
+        org.assertj.core.api.Assertions.assertThat(expiresAt.toInstant()).isEqualTo(tomorrow.toInstant());
+    }
+
+    @Test
+    @Order(22)
+    @DisplayName("pedido-vence-no-horario: pedido para daqui a 2 min -> vence na hora pedida, nao em 5 min")
+    void inTwoMinutes_expiresAtDesiredTime() throws Exception {
+        java.time.OffsetDateTime soon = java.time.OffsetDateTime.now().plusMinutes(2).withNano(0);
+        String body = mvc.perform(post("/attendances/cut-requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken)
+                        .content(bodyWithDesiredTime(soon.toString())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        UUID id = UUID.fromString(new org.json.JSONObject(body).getString("id"));
+        org.assertj.core.api.Assertions.assertThat(
+                cutRequestRepository.findById(id).orElseThrow().getExpiresAt().toInstant()).isEqualTo(soon.toInstant());
     }
 
     @Test

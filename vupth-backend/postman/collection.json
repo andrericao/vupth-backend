@@ -17843,7 +17843,7 @@
      "response": []
     },
     {
-     "name": "cliente solicita corte (loja fechada) -> 201 PENDING",
+     "name": "cliente solicita corte para amanha -> 201 PENDING, vence no horario pedido",
      "event": [
       {
        "listen": "test",
@@ -17851,7 +17851,7 @@
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "if(pm.response.code===201){ const r=pm.response.json();",
-         "  pm.test(\"PENDING, sem vencimento — pedido para outro dia (DEC-27)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(r.expires_at).to.be.null; });",
+         "  pm.test(\"PENDING, vence no horario pedido (pedido-vence-no-horario)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(new Date(r.expires_at).getTime()).to.equal(new Date(pm.collectionVariables.get(\"cut_desired_time\")).getTime()); });",
          "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time.slice(0,10)).to.equal(pm.collectionVariables.get(\"cut_desired_time\").slice(0,10)));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
@@ -17998,7 +17998,9 @@
        "script": {
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if(pm.response.code===201) pm.collectionVariables.set(\"cut_id2\", pm.response.json().id);"
+         "if(pm.response.code===201){ const r=pm.response.json();",
+         "  pm.test(\"sem horario: nunca sem vencimento, e vale ao menos ~5 min\", () => { pm.expect(r.expires_at).to.not.be.null; pm.expect(new Date(r.expires_at).getTime()).to.be.above(Date.now() + 4*60*1000); });",
+         "  pm.collectionVariables.set(\"cut_id2\", r.id); }"
         ],
         "type": "text/javascript"
        }
@@ -18116,6 +18118,56 @@
       "body": {
        "mode": "raw",
        "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"]}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cliente solicita corte para daqui a 2 min -> vence na hora pedida, nao em 5 min",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// pedido-vence-no-horario: hora pedida a menos de 5 min — o vencimento e a hora pedida.",
+         "const d=new Date(Date.now()+2*60*1000); d.setUTCSeconds(0,0); d.setUTCMinutes(d.getUTCMinutes()+1);",
+         "pm.collectionVariables.set(\"cut_desired_soon\", d.toISOString().replace(/\\.\\d{3}Z$/,\"Z\"));"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "if(pm.response.code===201){ const r=pm.response.json();",
+         "  pm.test(\"expires_at = desired_time\", () => pm.expect(new Date(r.expires_at).getTime()).to.equal(new Date(pm.collectionVariables.get(\"cut_desired_soon\")).getTime())); }"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cut_client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/cut-requests",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{cut_owner_id}}\",\"establishmentId\":\"{{cut_estab_id}}\",\"serviceItemIds\":[\"{{cut_service_item_id}}\"],\"desiredTime\":\"{{cut_desired_soon}}\"}"
       }
      },
      "response": []
