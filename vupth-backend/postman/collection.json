@@ -25850,6 +25850,63 @@
    ]
   },
   {
+   "name": "23 - documentacao da API (springdoc)",
+   "item": [
+    {
+     "name": "GET /v3/api-docs (sem token, dev)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - documentacao aberta fora da producao\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: openapi 3 e a rota de login documentada\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.openapi).to.match(/^3\\./);",
+         "  pm.expect(r.paths).to.have.property(\"/auth/login\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/v3/api-docs",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET /swagger-ui/index.html (sem token, dev)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - Swagger UI\", () => pm.response.to.have.status(200));",
+         "pm.test(\"HTML do Swagger UI\", () => pm.expect(pm.response.text()).to.include(\"swagger-ui\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": "{{base_url}}/swagger-ui/index.html",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
