@@ -46,6 +46,9 @@ public class PushNotificationPublisher {
                     .map(DeviceToken::getToken)
                     .toList();
             if (tokens.isEmpty()) {
+                // S43 (push-conta-errada): sem esta linha, "nao chegou" e "nao havia aparelho" ficavam
+                // iguais no log — o e-mail saia e o push sumia em silencio.
+                log.info("[PUSH] notifyUser user={} title='{}' devices=0 — nenhum aparelho registrado", userId, title);
                 return;
             }
             List<PushTicket> tickets = pushSender.send(tokens, title, body, data);
