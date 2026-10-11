@@ -14,7 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -39,7 +38,9 @@ class AffiliationNotifierTest {
 
     @Mock PushNotificationPublisher pushPublisher;
     @Mock EmailSender emailSender;
-    @InjectMocks AffiliationNotifier notifier;
+    AffiliationNotifier notifier;
+
+    static final String BAIXAR = "https://vupth-partner.pages.dev/baixar";
 
     private final UUID ownerId = UUID.randomUUID();
     private final UUID professionalId = UUID.randomUUID();
@@ -47,6 +48,7 @@ class AffiliationNotifierTest {
 
     @BeforeEach
     void setUp() {
+        notifier = new AffiliationNotifier(pushPublisher, emailSender, BAIXAR);
         BaseUser ownerUser = mock(BaseUser.class);
         when(ownerUser.getId()).thenReturn(ownerId);
         when(ownerUser.getEmail()).thenReturn("dono@vupth.app");
@@ -128,5 +130,32 @@ class AffiliationNotifierTest {
         doThrow(new EmailDeliveryException("brevo fora", null)).when(emailSender).send(anyString(), anyString(), anyString());
         assertThatCode(() -> notifier.created(ar)).doesNotThrowAnyException();
         verify(pushPublisher).notifyUser(eq(ownerId), anyString(), anyString(), anyMap());
+    }
+
+    @Test
+    @DisplayName("link-do-convite-parceiro: o e-mail de convite sem conta leva ao /baixar do Partner")
+    void invitedByEmail_linksPartnerDownload() {
+        notifier.invitedByEmail("novo@vupth.app", "Barbearia X");
+
+        verify(emailSender).send(eq("novo@vupth.app"), eq("VUPTH — Convite de Barbearia X"),
+                argThat(body -> body.contains(BAIXAR) && body.contains("novo@vupth.app")
+                        && !body.contains("vupth.pages.dev/baixar")));
+    }
+
+    @Test
+    @DisplayName("link-do-convite-parceiro: o endereco vem da configuracao")
+    void invitedByEmail_usesConfiguredUrl() {
+        new AffiliationNotifier(pushPublisher, emailSender, "https://outro.example/baixar")
+                .invitedByEmail("novo@vupth.app", "Barbearia X");
+
+        verify(emailSender).send(anyString(), anyString(), argThat(body -> body.contains("https://outro.example/baixar")));
+    }
+
+    @Test
+    @DisplayName("convite sem conta: falha do e-mail so vai para o log")
+    void invitedByEmail_emailFailure_isSwallowed() {
+        doThrow(new EmailDeliveryException("smtp fora", null)).when(emailSender).send(anyString(), anyString(), anyString());
+
+        assertThatCode(() -> notifier.invitedByEmail("novo@vupth.app", "Barbearia X")).doesNotThrowAnyException();
     }
 }
