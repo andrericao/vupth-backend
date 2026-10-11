@@ -13,13 +13,14 @@ cd "$(dirname "$0")"
 LOGS=.logs-teste
 mkdir -p "$LOGS"
 
-# fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim, passando ou falhando —
+# fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim (parados e removidos, sem -v:
+# os volumes ficam), passando ou falhando —
 # a memoria volta para o emulador e para a proxima equipe da fila. Os que ja estavam de pe antes ficam.
 CONTEINERES=(vupth_postgres_test vupth_postgres_dev vupth_backend_dev)
 JA_DE_PE=$(docker ps --format '{{.Names}}' 2>/dev/null)
 derrubar() {
   for c in "${CONTEINERES[@]}"; do
-    grep -qx "$c" <<<"$JA_DE_PE" || docker stop "$c" >/dev/null 2>&1
+    grep -qx "$c" <<<"$JA_DE_PE" || docker rm -f "$c" >/dev/null 2>&1
   done
 }
 trap derrubar EXIT
