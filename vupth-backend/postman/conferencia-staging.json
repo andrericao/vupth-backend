@@ -305,7 +305,7 @@
    ]
   },
   {
-   "name": "conferencias",
+   "name": "swagger",
    "item": [
     {
      "name": "Swagger no staging: a pagina abre",
@@ -351,7 +351,12 @@
        "type": "noauth"
       }
      }
-    },
+    }
+   ]
+  },
+  {
+   "name": "conferencias",
+   "item": [
     {
      "name": "E-mail sem conta: login da 401 EMAIL_NOT_FOUND",
      "event": [
