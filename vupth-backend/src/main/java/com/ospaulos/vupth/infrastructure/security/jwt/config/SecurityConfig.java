@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.ospaulos.vupth.infrastructure.security.jwt.converter.JwtAuthenticationConverter;
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -80,6 +81,13 @@ public class SecurityConfig {
 
         return httpSecurity
                 .authorizeHttpRequests(authorize -> authorize
+
+                        // readiness-401 (11/10): o despacho de ERRO para o /error passa. O pedido
+                        // original ja foi autorizado na entrada; sem isto, um erro numa rota publica
+                        // (o readiness durante o deploy da producao) virava 401 no /error e escondia
+                        // o 503 de verdade do monitor. O corpo segue o padrao (sem mensagem nem stack
+                        // em staging/prod), entao nada novo fica exposto.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 
                         // Publicos de proposito e com consumidor conhecido: o portao
                         // waitForBackend() dos apps (readiness), o ci.yml (startedAtEpochMs do

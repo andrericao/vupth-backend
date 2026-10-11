@@ -11,6 +11,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -183,13 +184,15 @@ public class HttpGeocoder implements Geocoder {
         try {
             throttleNominatim();
 
-            String uri = UriComponentsBuilder.fromUriString(nominatimReverseUrl)
+            // URI pronta, nao String: o RestClient codifica a String de novo e o espaco viraria %2520.
+            URI uri = UriComponentsBuilder.fromUriString(nominatimReverseUrl)
                     .queryParam("format", "jsonv2")
                     .queryParam("addressdetails", 1)
                     .queryParam("lat", coordinates.latitude())
                     .queryParam("lon", coordinates.longitude())
                     .encode()
-                    .toUriString();
+                    .build()
+                    .toUri();
 
             Map<?, ?> body = restClient.get()
                     .uri(uri)
@@ -274,7 +277,7 @@ public class HttpGeocoder implements Geocoder {
                     ? query.street()
                     : query.number() + " " + query.street();
 
-            String uri = UriComponentsBuilder.fromUriString(nominatimUrl)
+            URI uri = UriComponentsBuilder.fromUriString(nominatimUrl)
                     .queryParam("format", "jsonv2")
                     .queryParam("limit", 1)
                     .queryParam("countrycodes", "br")
@@ -283,7 +286,8 @@ public class HttpGeocoder implements Geocoder {
                     .queryParam("state", query.state() == null ? "" : query.state())
                     .queryParam("postalcode", query.hasUsableZipCode() ? query.zipCode() : "")
                     .encode()
-                    .toUriString();
+                    .build()
+                    .toUri();
 
             List<?> results = restClient.get()
                     .uri(uri)
