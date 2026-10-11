@@ -184,6 +184,31 @@ jobs:
           git tag -f homolog-last-good "$SHA"
           git push -f origin homolog-last-good
 
+  # =========================
+  # 📘 SWAGGER HOMOLOG
+  # =========================
+  # Swagger sozinho (11/10): a pagina e o /v3/api-docs do staging, pela pasta swagger da conferencia
+  # (scripts/conferir-swagger.sh). Job a parte, depois do Newman: se falhar, fica vermelho e avisa, mas
+  # nao derruba o deploy (o rollback-homolog so olha o test-homolog). Na producao o Swagger e fechado.
+  swagger-homolog:
+    needs: test-homolog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      - name: Swagger (HOMOLOG)
+        working-directory: vupth-backend
+        run: |
+          newman run postman/conferencia-staging.json \
+            --folder swagger \
+            --env-var "base_url=$HOMOLOG_URL" \
+            --reporters cli
+
 
   # =========================
   # ⏪ ROLLBACK HOMOLOG (Render)
