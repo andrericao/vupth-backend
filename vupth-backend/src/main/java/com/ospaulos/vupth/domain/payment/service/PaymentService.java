@@ -156,6 +156,12 @@ public class PaymentService {
         return true;
     }
 
+    /** O status do pagamento para mostrar (o efetivo), sem checar quem pergunta: so para a resposta do finish. */
+    @Transactional(readOnly = true)
+    public PaymentStatus statusOf(UUID attendanceId) {
+        return attendance(attendanceId).getEffectivePaymentStatus();
+    }
+
     // ─── as pendencias ───
 
     @Transactional(readOnly = true)

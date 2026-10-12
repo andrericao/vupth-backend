@@ -10854,7 +10854,8 @@
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"payment_status PAID na resposta do finish\", () => pm.expect(pm.response.json().payment_status).to.eql(\"PAID\"));"
         ]
        }
       }
