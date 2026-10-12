@@ -159,7 +159,10 @@ class PaymentIntegrationTest {
         mvc.perform(patch("/attendances/{id}/start", firstId).header("Authorization", profToken))
                 .andExpect(status().isOk());
         mvc.perform(patch("/attendances/{id}/finish", firstId).header("Authorization", profToken))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                // finish-com-payment-status (S47): a fila volta com o pagamento de quem terminou
+                // o cliente ja tinha tocado "Ja paguei" (teste 3): segue aguardando a confirmacao
+                .andExpect(jsonPath("$.payment_status").value("AWAITING_CONFIRMATION"));
 
         mvc.perform(get("/clients/me/pending-payments").header("Authorization", clientToken))
                 .andExpect(status().isOk())
@@ -222,7 +225,8 @@ class PaymentIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(patch("/attendances/{id}/finish", secondId).header("Authorization", profToken)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"payment_received\":true}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.payment_status").value("PAID"));
         mvc.perform(get("/attendances/{id}/payment", secondId).header("Authorization", profToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PAID"));

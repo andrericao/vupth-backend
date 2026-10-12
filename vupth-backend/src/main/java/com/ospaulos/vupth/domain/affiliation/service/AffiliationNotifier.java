@@ -6,8 +6,8 @@ import com.ospaulos.vupth.domain.affiliation.model.AffiliationType;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.infrastructure.mail.EmailSender;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -30,7 +30,6 @@ import java.util.UUID;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AffiliationNotifier {
 
     public static final String REQUESTED = "AFFILIATION_REQUESTED";
@@ -40,6 +39,16 @@ public class AffiliationNotifier {
 
     private final PushNotificationPublisher pushPublisher;
     private final EmailSender emailSender;
+    /** Onde baixar o app do parceiro (link-do-convite-parceiro, 11/10): o /baixar do Partner, so Android. */
+    private final String partnerDownloadUrl;
+
+    public AffiliationNotifier(PushNotificationPublisher pushPublisher, EmailSender emailSender,
+                               @Value("${vupth.partner.download-url:https://vupth-partner.pages.dev/baixar}")
+                               String partnerDownloadUrl) {
+        this.pushPublisher = pushPublisher;
+        this.emailSender = emailSender;
+        this.partnerDownloadUrl = partnerDownloadUrl;
+    }
 
     /** Pedido ou convite novo: avisa a outra ponta. */
     public void created(AffiliationRequest ar) {
@@ -63,7 +72,8 @@ public class AffiliationNotifier {
      */
     public void invitedByEmail(String email, String establishmentName) {
         String body = establishmentName + " convidou você para trabalhar com o VUPTH.\n\n"
-                + "Baixe o app VUPTH Parceiro, entre (ou crie a sua conta) com este e-mail (" + email + ") e "
+                + "Baixe o app VUPTH Parceiro (Android): " + partnerDownloadUrl + "\n\n"
+                + "Entre (ou crie a sua conta) com este e-mail (" + email + ") e "
                 + "crie o perfil profissional: o convite estará esperando para você aceitar.";
         Runnable send = () -> {
             try {
