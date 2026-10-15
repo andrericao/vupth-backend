@@ -126,6 +126,54 @@ class ExpoPushSenderTest {
     }
 
     @Test
+    @DisplayName("Hora de fechar? sai com categoryId FECHAMENTO — Fechar agora / Continuar atendendo na notificacao (S48)")
+    void closingPromptCarriesClosingCategory() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Hora de fechar?", "Sua fila acabou.",
+                Map.of("type", "CLOSING_PROMPT"));
+
+        assertThat(body.get()).contains("\"categoryId\":\"FECHAMENTO\"");
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0} -> {1}")
+    @org.junit.jupiter.params.provider.CsvSource({
+            "QUEUE_NEXT_IN_LINE, VER_FILA",
+            "ATTENDANCE_PROMOTED, VER_FILA",
+            "ATTENDANCE_CANCELLED, VER_ATENDIMENTO",
+            "CUT_ACCEPTED, VER_ATENDIMENTO",
+            "CUT_REFUSED, VER_ATENDIMENTO",
+            "CUT_EXPIRED, VER_ATENDIMENTO",
+            "ATTENDANCE_STARTED, CIENCIA",
+            "ATTENDANCE_FINISHED, CIENCIA"
+    })
+    @DisplayName("Push do Client sai com a categoria do tipo (push-categorias-do-client, DEC-43)")
+    void clientCategories(String type, String category) throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Titulo", "Corpo", Map.of("type", type));
+
+        assertThat(body.get()).contains("\"categoryId\":\"" + category + "\"");
+    }
+
+    @Test
+    @DisplayName("Oferta de vez antes segue sem categoria (espera o Andre)")
+    void earlierTurnOfferHasNoCategory() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Vez antes", "Aceite ou recuse.",
+                Map.of("type", "EARLIER_TURN_OFFERED"));
+
+        assertThat(body.get()).doesNotContain("categoryId");
+    }
+
+    @Test
     @DisplayName("Pedido de corte sai com categoryId CIENCIA — o OK aparece com o app fechado (S40)")
     void cutRequestCarriesCienciaCategory() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();

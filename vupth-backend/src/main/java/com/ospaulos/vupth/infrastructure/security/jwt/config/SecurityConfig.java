@@ -122,6 +122,8 @@ public class SecurityConfig {
                         // exclusao-por-link: a pagina web nao tem login — o link e a senha sao a prova
                         .requestMatchers(HttpMethod.POST, "/auth/account-deletion/request", "/auth/account-deletion/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
+                        // formulario-do-suporte (DEC-59): o site de suporte nao tem login
+                        .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
@@ -133,6 +135,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/establishment/*/reports").hasRole("OWNER")
                         // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
                         .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
+                        // ownership-transfer-sem-token (15/10): o pendente da loja e do dono; sem esta linha caia no
+                        // GET publico abaixo, e sem token o controller dava 500 (principal nulo)
+                        .requestMatchers(HttpMethod.GET, "/establishment/*/ownership-transfer").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/**").permitAll()
                         // A consulta de usuario (lista, por e-mail, por id) devolvia e-mail e papeis de
                         // qualquer conta sem token — e nenhum app nem o Postman a usa. Fechada para todos

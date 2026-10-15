@@ -117,6 +117,18 @@ class OwnershipTransferIntegrationTest {
     }
 
     @Test
+    @DisplayName("pendente da loja: sem token -> 401 (antes 500); cliente sem loja -> 403")
+    void pendingForOwner_requiresOwner() throws Exception {
+        Team t = team();
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+
+        mvc.perform(get("/establishment/{id}/ownership-transfer", t.storeId()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/establishment/{id}/ownership-transfer", t.storeId()).header("Authorization", client.token()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("cancelar -> 204 e o pendente some (404); recusar -> 204 e o dono continua")
     void cancel_and_refuse() throws Exception {
         Team t = team();

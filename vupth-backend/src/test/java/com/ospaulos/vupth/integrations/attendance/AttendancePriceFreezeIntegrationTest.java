@@ -74,7 +74,7 @@ class AttendancePriceFreezeIntegrationTest {
                                   "establishmentId": "%s",
                                   "serviceItemType": "CORTE_MAQUINA",
                                   "customName": "Corte liquido",
-                                  "price": 31.90,
+                                  "price": 32.90,
                                   "estimatedMinutes": 30,
                                   "pro_receives": 30.00,
                                   "base_price": 30.00
@@ -105,10 +105,10 @@ class AttendancePriceFreezeIntegrationTest {
 
         mvc.perform(get("/attendances").param("establishmentId", establishmentId).header("Authorization", ownerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(31.90))
+                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(32.90))
                 .andExpect(jsonPath("$[?(@.id == '%s')].proReceives", attendanceId).value(30.00))
-                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.20))
-                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(0.70))
+                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.32))
+                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(1.58))
                 .andDo(print());
     }
 
@@ -132,10 +132,10 @@ class AttendancePriceFreezeIntegrationTest {
 
         mvc.perform(get("/attendances").param("establishmentId", establishmentId).header("Authorization", ownerToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(31.90))
+                .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(32.90))
                 .andExpect(jsonPath("$[?(@.id == '%s')].proReceives", attendanceId).value(30.00))
-                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.20))
-                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(0.70))
+                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.32))
+                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(1.58))
                 .andDo(print());
     }
 }

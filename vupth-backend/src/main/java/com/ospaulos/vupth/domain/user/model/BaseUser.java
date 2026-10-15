@@ -402,26 +402,6 @@ public class BaseUser implements Serializable {
         return owner;
     }
 
-    private void initializeRoleData(RoleType roleType) {
-        switch (roleType) {
-            case PROFESSIONAL -> {
-                if (professional == null) {
-                    professional = new Professional(this);
-                }
-            }
-            case CLIENT -> {
-                if (client == null) {
-                    client = new Client(this);
-                }
-            }
-            case OWNER -> {
-                if (owner == null) {
-                    owner = new Owner(this);
-                }
-            }
-        }
-    }
-
     public void deactivateRole(RoleType roleType) {
         roles.stream()
                 .filter(r -> r.getRoleType() == roleType)

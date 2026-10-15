@@ -268,11 +268,11 @@ class ServiceItemServiceImplTest {
         @Test
         @DisplayName("create com pro_receives valido: grava e devolve a divisao")
         void create_withProReceives_returnsSplit() {
-            ServiceItemResponse result = serviceItemService.createServiceItem(professional, createRequest("31.90", "30.00", "30.00"));
+            ServiceItemResponse result = serviceItemService.createServiceItem(professional, createRequest("32.90", "30.00", "30.00"));
 
             assertThat(result.proReceives()).isEqualByComparingTo("30.00");
-            assertThat(result.intermediaryFee()).isEqualByComparingTo("1.20");
-            assertThat(result.platformFee()).isEqualByComparingTo("0.70");
+            assertThat(result.intermediaryFee()).isEqualByComparingTo("1.32");
+            assertThat(result.platformFee()).isEqualByComparingTo("1.58");
             verify(serviceItemRepository).save(argThat(si -> new BigDecimal("30.00").compareTo(si.getProReceives()) == 0));
         }
 
@@ -298,7 +298,7 @@ class ServiceItemServiceImplTest {
         @Test
         @DisplayName("PATCH preco + recebe: grava os dois")
         void update_priceAndProReceives() {
-            ServiceItem item = existingItem("31.90", "30.00", "30.00");
+            ServiceItem item = existingItem("32.90", "30.00", "30.00");
             when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
 
             ServiceItemResponse result = serviceItemService.updateServiceItem(
@@ -306,13 +306,13 @@ class ServiceItemServiceImplTest {
 
             assertThat(result.price()).isEqualByComparingTo("53.90");
             assertThat(result.proReceives()).isEqualByComparingTo("50.00");
-            assertThat(result.platformFee()).isEqualByComparingTo("1.90");
+            assertThat(result.platformFee()).isEqualByComparingTo("1.74");
         }
 
         @Test
         @DisplayName("PATCH so a divisao: conferida contra o preco atual — legado entra na regra")
         void update_onlyProReceives_validatesAgainstCurrentPrice() {
-            ServiceItem item = existingItem("31.90", null, null);
+            ServiceItem item = existingItem("32.90", null, null);
             when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
 
             ServiceItemResponse result = serviceItemService.updateServiceItem(
@@ -324,7 +324,7 @@ class ServiceItemServiceImplTest {
         @Test
         @DisplayName("PATCH so a divisao, fora da regra do preco atual: recusa, nada muda")
         void update_onlyProReceives_invalid_throws() {
-            ServiceItem item = existingItem("31.90", "30.00", "30.00");
+            ServiceItem item = existingItem("32.90", "30.00", "30.00");
             when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
 
             assertThatThrownBy(() -> serviceItemService.updateServiceItem(
@@ -337,7 +337,7 @@ class ServiceItemServiceImplTest {
         @Test
         @DisplayName("PATCH so preco NOVO: o recebe antigo nao vale mais e e apagado")
         void update_onlyNewPrice_clearsProReceives() {
-            ServiceItem item = existingItem("31.90", "30.00", "30.00");
+            ServiceItem item = existingItem("32.90", "30.00", "30.00");
             when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
 
             ServiceItemResponse result = serviceItemService.updateServiceItem(
@@ -351,11 +351,11 @@ class ServiceItemServiceImplTest {
         @Test
         @DisplayName("PATCH com o MESMO preco e sem recebe: mantem o recebe")
         void update_samePrice_keepsProReceives() {
-            ServiceItem item = existingItem("31.90", "30.00", "30.00");
+            ServiceItem item = existingItem("32.90", "30.00", "30.00");
             when(serviceItemRepository.findById(serviceItemId)).thenReturn(Optional.of(item));
 
             ServiceItemResponse result = serviceItemService.updateServiceItem(
-                    professional.getId(), professional.getId(), serviceItemId, updateRequest("31.9", null, null));
+                    professional.getId(), professional.getId(), serviceItemId, updateRequest("32.9", null, null));
 
             assertThat(result.proReceives()).isEqualByComparingTo("30.00");
         }

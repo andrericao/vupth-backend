@@ -446,13 +446,13 @@ class ServiceItemIntegrationTest {
         MvcResult result = mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content(pricedItemBody("Liquido", "31.90", "30.00", "30.00")))
+                        .content(pricedItemBody("Liquido", "32.90", "30.00", "30.00")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.price").value(31.90))
+                .andExpect(jsonPath("$.price").value(32.90))
                 .andExpect(jsonPath("$.pro_receives").value(30.00))
                 .andExpect(jsonPath("$.base_price").value(30.00))
-                .andExpect(jsonPath("$.intermediary_fee").value(1.20))
-                .andExpect(jsonPath("$.platform_fee").value(0.70))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
+                .andExpect(jsonPath("$.platform_fee").value(1.58))
                 .andDo(print())
                 .andReturn();
 
@@ -484,14 +484,14 @@ class ServiceItemIntegrationTest {
 
     @Test
     @Order(18)
-    @DisplayName("Receita LIQUIDA: POST com o preco da regra ANTERIOR (32,90 para 30 digitados) -> 422, nada criado")
+    @DisplayName("Receita LIQUIDA: POST com o preco da regra ANTERIOR (31,90 para 30 digitados: nao cobre os 30 depois dos 4% + 2% do preco) -> 422, nada criado")
     void createServiceItem_splitBelowPolicy_422() throws Exception {
         long before = serviceItemRepository.count();
 
         mvc.perform(post("/establishment/{id}/service-items", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content(pricedItemBody("Regra antiga", "32.90", "30.00", "30.00")))
+                        .content(pricedItemBody("Regra antiga", "31.90", "30.00", "30.00")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("SERVICE_PRICE_SPLIT_INVALID"))
                 .andDo(print());
@@ -508,12 +508,12 @@ class ServiceItemIntegrationTest {
         mvc.perform(patch("/professional-queue/{profId}/service-items/{itemId}", ownerId, itemId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
-                        .content("{\"price\":31.90,\"pro_receives\":30.00,\"base_price\":30.00}"))
+                        .content("{\"price\":32.90,\"pro_receives\":30.00,\"base_price\":30.00}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pro_receives").value(30.00))
                 .andExpect(jsonPath("$.base_price").value(30.00))
-                .andExpect(jsonPath("$.intermediary_fee").value(1.20))
-                .andExpect(jsonPath("$.platform_fee").value(0.70))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
+                .andExpect(jsonPath("$.platform_fee").value(1.58))
                 .andDo(print());
     }
 

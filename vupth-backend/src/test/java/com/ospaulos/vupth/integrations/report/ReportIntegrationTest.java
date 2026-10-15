@@ -98,7 +98,7 @@ class ReportIntegrationTest {
 
         // Receita LIQUIDA: os dois servicos entram na regra de preco. O atendimento congela
         // 31,90 + 21,90 = 53,80, dos quais o profissional recebe 30,00 + 20,00 = 50,00.
-        priceService(s1.id(), "31.90", "30.00", "30.00");
+        priceService(s1.id(), "32.90", "30.00", "30.00");
         priceService(s2.id(), "21.90", "20.00", "20.00");
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
@@ -170,7 +170,7 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.professionals[0].name").exists())
                 .andExpect(jsonPath("$.professionals[0].attendances").value(1))
                 .andExpect(jsonPath("$.professionals[0].revenue").exists())
-                .andExpect(jsonPath("$.totalRevenue").value(53.80))
+                .andExpect(jsonPath("$.totalRevenue").value(54.80))
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andExpect(jsonPath("$.professionals[0].netRevenue").value(50.00))
@@ -255,7 +255,7 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.totalRevenue").exists())
                 .andExpect(jsonPath("$.avgDurationMinutes").exists())
                 .andExpect(jsonPath("$.topService").exists())
-                .andExpect(jsonPath("$.totalRevenue").value(53.80))
+                .andExpect(jsonPath("$.totalRevenue").value(54.80))
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andDo(print());

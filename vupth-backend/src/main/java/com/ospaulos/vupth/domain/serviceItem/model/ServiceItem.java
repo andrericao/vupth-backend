@@ -122,11 +122,12 @@ public class ServiceItem {
 
     /**
      * A divisao do preco, ou {@code null} em servico legado — inclusive o que tem {@code proReceives}
-     * gravado pela regra anterior (sem o digitado, a regra de 16/09 nao se reconstroi).
+     * gravado pela regra anterior (sem o digitado, a divisao nao se reconstroi). Le sem reconferir o X,90
+     * ({@link PriceSplit#read}): o preco da regra de 16/09 segue valendo ate o profissional edita-lo.
      */
     @Transient
     public PriceSplit getPriceSplit() {
-        return proReceives == null || basePrice == null ? null : PriceSplit.of(price, proReceives, basePrice);
+        return proReceives == null || basePrice == null ? null : PriceSplit.read(price, proReceives, basePrice);
     }
 
     /** Registra uma nota (item #6): soma no total e incrementa a contagem de votos. */
