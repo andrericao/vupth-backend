@@ -13,15 +13,13 @@ import com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent;
 import com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository;
 import com.ospaulos.vupth.domain.payment.PaymentStatus;
 import com.ospaulos.vupth.domain.payment.PixBrCode;
+import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.payment.exception.PaymentAccessDeniedException;
 import com.ospaulos.vupth.domain.payment.exception.PaymentInvalidStatusException;
 import com.ospaulos.vupth.domain.payment.exception.PaymentNotAvailableException;
 import com.ospaulos.vupth.domain.payment.exception.PaymentPendingException;
 import com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException;
 import com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException;
-import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
-import com.ospaulos.vupth.domain.professional.model.Professional;
-import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,14 +51,14 @@ public class PaymentService {
     private static final BigDecimal ZERO = new BigDecimal("0.00");
 
     private final AttendanceRepository attendanceRepository;
-    private final ProfessionalRepository professionalRepository;
     private final ClientPenaltyEventRepository penaltyEventRepository;
+    private final com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private final Clock clock = Clock.systemDefaultZone();
 
-    // ─── a chave Pix do profissional ───
+    // ─── a chave Pix da pessoa (DEC-65: profissional ou dono) ───
 
-    public PixKeyResponse setPixKey(UUID professionalId, PixKeyRequest request) {
-        Professional professional = professional(professionalId);
+    public PixKeyResponse setPixKey(UUID userId, PixKeyRequest request) {
+        BaseUser person = person(userId);
         String key = request.keyType().normalize(request.key())
                 .orElseThrow(() -> new PixKeyInvalidException(
                         "A chave nao e um " + request.keyType() + " valido."));
@@ -68,30 +66,30 @@ public class PaymentService {
         if (holder.isEmpty() || holder.length() > 25) {
             throw new PixKeyInvalidException("O nome do titular precisa ter de 1 a 25 letras.");
         }
-        professional.setPixKeyType(request.keyType());
-        professional.setPixKey(key);
-        professional.setPixHolderName(holder);
-        professionalRepository.save(professional);
-        log.info("[Payment] chave Pix salva — professional={} tipo={}", professionalId, request.keyType());
-        return toPixKey(professional);
+        person.setPixKeyType(request.keyType());
+        person.setPixKey(key);
+        person.setPixHolderName(holder);
+        userRepository.save(person);
+        log.info("[Payment] chave Pix salva — user={} tipo={}", userId, request.keyType());
+        return toPixKey(person);
     }
 
     @Transactional(readOnly = true)
-    public PixKeyResponse getPixKey(UUID professionalId) {
-        Professional professional = professional(professionalId);
-        if (professional.getPixKey() == null) {
+    public PixKeyResponse getPixKey(UUID userId) {
+        BaseUser person = person(userId);
+        if (person.getPixKey() == null) {
             throw new PixKeyNotSetException();
         }
-        return toPixKey(professional);
+        return toPixKey(person);
     }
 
-    public void deletePixKey(UUID professionalId) {
-        Professional professional = professional(professionalId);
-        professional.setPixKeyType(null);
-        professional.setPixKey(null);
-        professional.setPixHolderName(null);
-        professionalRepository.save(professional);
-        log.info("[Payment] chave Pix apagada — professional={}", professionalId);
+    public void deletePixKey(UUID userId) {
+        BaseUser person = person(userId);
+        person.setPixKeyType(null);
+        person.setPixKey(null);
+        person.setPixHolderName(null);
+        userRepository.save(person);
+        log.info("[Payment] chave Pix apagada — user={}", userId);
     }
 
     // ─── o pagamento de um atendimento ───
@@ -242,10 +240,10 @@ public class PaymentService {
         BigDecimal services = attendance.getTotalValue();
         BigDecimal penalties = penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO);
         BigDecimal amount = services.add(penalties);
-        Professional professional = attendance.getProfessional();
+        BaseUser keyOwner = pixKeyOwner(attendance);
         String copyPaste = null;
-        if (professional.getPixKey() != null) {
-            copyPaste = PixBrCode.build(professional.getPixKey(), professional.getPixHolderName(),
+        if (keyOwner != null) {
+            copyPaste = PixBrCode.build(keyOwner.getPixKey(), keyOwner.getPixHolderName(),
                     cityOf(attendance), amount, "VUPTH" + attendance.getId().toString().replace("-", ""));
         }
         boolean hasKey = copyPaste != null;
@@ -255,10 +253,26 @@ public class PaymentService {
                 penalties,
                 amount,
                 copyPaste,
-                hasKey ? professional.getPixHolderName() : null,
-                hasKey ? professional.getPixKeyType() : null,
+                hasKey ? keyOwner.getPixHolderName() : null,
+                hasKey ? keyOwner.getPixKeyType() : null,
                 attendance.getPaymentClaimedAt(),
-                attendance.getPaymentConfirmedAt());
+                attendance.getPaymentConfirmedAt(),
+                !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER");
+    }
+
+    /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */
+    private static BaseUser pixKeyOwner(Attendance attendance) {
+        BaseUser professional = attendance.getProfessional() == null ? null : attendance.getProfessional().getBaseUser();
+        if (professional != null && professional.getPixKey() != null) {
+            return professional;
+        }
+        BaseUser owner = attendance.getEstablishment() == null || attendance.getEstablishment().getOwner() == null
+                ? null : attendance.getEstablishment().getOwner().getBaseUser();
+        return owner != null && owner.getPixKey() != null ? owner : null;
+    }
+
+    private static boolean isProfessional(Attendance attendance, BaseUser person) {
+        return attendance.getProfessional() != null && attendance.getProfessional().getBaseUser() == person;
     }
 
     private static String cityOf(Attendance attendance) {
@@ -282,12 +296,12 @@ public class PaymentService {
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
     }
 
-    private Professional professional(UUID professionalId) {
-        return professionalRepository.findById(professionalId)
-                .orElseThrow(() -> new ProfessionalNotFoundException(professionalId));
+    private BaseUser person(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new com.ospaulos.vupth.domain.user.exception.NotFoundUserException("User not found: " + userId));
     }
 
-    private static PixKeyResponse toPixKey(Professional professional) {
-        return new PixKeyResponse(professional.getPixKeyType(), professional.getPixKey(), professional.getPixHolderName());
+    private static PixKeyResponse toPixKey(BaseUser person) {
+        return new PixKeyResponse(person.getPixKeyType(), person.getPixKey(), person.getPixHolderName());
     }
 }

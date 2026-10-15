@@ -181,7 +181,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/attendances/*/payment/confirm").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/clients/me/pending-payments").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
-                        .requestMatchers("/professional/me/pix").hasRole("PROFESSIONAL")
+                        // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
+                        .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente

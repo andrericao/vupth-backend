@@ -442,3 +442,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/036-create-account_deletion_ledger.yaml
       relativeToChangeLogFile: true
+
+  # A chave Pix e da pessoa: o dono tambem cadastra (pix-por-pessoa, DEC-65)
+  - include:
+      file: changesets/20-auth/037-pix-key-on-base_user.yaml
+      relativeToChangeLogFile: true

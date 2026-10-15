@@ -114,6 +114,21 @@ public class BaseUser implements Serializable {
     @OneToMany(mappedBy = "baseUser", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserRole> roles = new HashSet<>();
 
+    /**
+     * A chave Pix da PESSOA (DEC-65, pix-por-pessoa, 15/10; antes ficava no profissional): o tipo, a chave
+     * normalizada e o nome que o banco mostra — as tres juntas ou nenhuma. O cliente paga na do profissional
+     * que atendeu; sem ela, na do dono da loja.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pix_key_type", length = 10)
+    private com.ospaulos.vupth.domain.payment.PixKeyType pixKeyType;
+
+    @Column(name = "pix_key", length = 77)
+    private String pixKey;
+
+    @Column(name = "pix_holder_name", length = 25)
+    private String pixHolderName;
+
     @JsonIgnore
     @OneToOne(mappedBy = "baseUser",
             cascade = CascadeType.ALL,
@@ -472,6 +487,9 @@ public class BaseUser implements Serializable {
         this.birthDate = null;
         this.gender = null;
         this.profileImageUrl = null;
+        this.pixKeyType = null; // a chave Pix e dado pessoal (DEC-65): sai com a conta
+        this.pixKey = null;
+        this.pixHolderName = null;
         this.password = scrambledPassword;
         this.isActive = false;
         this.deletedAt = OffsetDateTime.now();

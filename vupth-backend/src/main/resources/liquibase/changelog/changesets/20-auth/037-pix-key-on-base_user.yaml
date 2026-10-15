@@ -1,0 +1,45 @@
+databaseChangeLog:
+  # pix-por-pessoa (DEC-65, Andre 15/10): a chave Pix passa do profissional para a PESSOA (base_user), para o
+  # dono tambem cadastrar a dele, como alternativa. As chaves que ja existem sao copiadas (professional.id e o
+  # id da pessoa, pelo MapsId). As colunas antigas do professional ficam, sem uso, ate uma limpeza depois do deploy.
+  - changeSet:
+      id: 037-add-pix-key-to-base_user
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: base_user
+                columnName: pix_key
+      changes:
+        - addColumn:
+            tableName: base_user
+            columns:
+              - column:
+                  name: pix_key_type
+                  type: VARCHAR(10)
+              - column:
+                  name: pix_key
+                  type: VARCHAR(77)
+              - column:
+                  name: pix_holder_name
+                  type: VARCHAR(25)
+  - changeSet:
+      id: 037-copy-pix-key-from-professional
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - columnExists:
+            tableName: professional
+            columnName: pix_key
+      changes:
+        - sql:
+            sql: >
+              UPDATE base_user b
+                 SET pix_key_type = p.pix_key_type,
+                     pix_key = p.pix_key,
+                     pix_holder_name = p.pix_holder_name
+                FROM professional p
+               WHERE p.id = b.id
+                 AND p.pix_key IS NOT NULL
+                 AND b.pix_key IS NULL
