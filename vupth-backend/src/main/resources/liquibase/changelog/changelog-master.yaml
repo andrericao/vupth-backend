@@ -447,3 +447,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/037-pix-key-on-base_user.yaml
       relativeToChangeLogFile: true
+
+  # Campanhas: publica ou privada com cupom, e quem aceitou (promocao-de-lancamento v2, DEC-64)
+  - include:
+      file: changesets/96-campaign/038-create-campaign.yaml
+      relativeToChangeLogFile: true

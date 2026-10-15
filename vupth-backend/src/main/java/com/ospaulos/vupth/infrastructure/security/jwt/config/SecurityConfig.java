@@ -122,6 +122,8 @@ public class SecurityConfig {
                         // exclusao-por-link: a pagina web nao tem login — o link e a senha sao a prova
                         .requestMatchers(HttpMethod.POST, "/auth/account-deletion/request", "/auth/account-deletion/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
+                        // campanhas publicas (DEC-64): a pagina "Campanhas ativas" do suporte nao tem login
+                        .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
 

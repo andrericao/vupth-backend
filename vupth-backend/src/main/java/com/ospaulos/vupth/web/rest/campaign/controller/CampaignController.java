@@ -1,0 +1,42 @@
+package com.ospaulos.vupth.web.rest.campaign.controller;
+
+import com.ospaulos.vupth.api.campaign.dto.CampaignResponse;
+import com.ospaulos.vupth.api.campaign.dto.RedeemCouponRequest;
+import com.ospaulos.vupth.domain.campaign.service.CampaignService;
+import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * Campanhas (DEC-57/61/64). {@code GET /campaigns/active} e publico (a pagina "Campanhas ativas" do suporte
+ * e os apps); aceitar o cupom e ver os seus pede login.
+ */
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/campaigns")
+public class CampaignController {
+
+    private final CampaignService campaignService;
+
+    @GetMapping("/active")
+    public ResponseEntity<List<CampaignResponse>> active() {
+        return ResponseEntity.ok(campaignService.activePublic());
+    }
+
+    @PostMapping("/redeem")
+    public ResponseEntity<CampaignResponse> redeem(@RequestBody @Valid RedeemCouponRequest request,
+                                                   @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(campaignService.redeem(principal.getUserId(), request.code()));
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<List<CampaignResponse>> mine(@AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(campaignService.mine(principal.getUserId()));
+    }
+}

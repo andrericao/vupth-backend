@@ -836,6 +836,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), "PAYMENT_ACCESS_DENIED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.campaign.exception.CampaignException.class)
+    public ResponseEntity<ErrorResponse> handleCampaign(
+            com.ospaulos.vupth.domain.campaign.exception.CampaignException ex, HttpServletRequest req) {
+        log.warn("[{}] Campaign {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException.class)
     public ResponseEntity<ErrorResponse> handlePixKeyNotSet(
             com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException ex, HttpServletRequest req) {
