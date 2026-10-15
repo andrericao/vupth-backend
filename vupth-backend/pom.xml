@@ -31,7 +31,7 @@
 		<postgresql.version>42.7.14</postgresql.version>
 		<java.version>21</java.version>
 		<liquibase.version>4.33.0</liquibase.version>
-		<liquibase.hibernate6.version>4.30.0</liquibase.hibernate6.version>
+		<liquibase.hibernate6.version>5.0.4</liquibase.hibernate6.version>
 		<awssdk.version>2.55.13</awssdk.version>
 
 		<!-- Cobertura (DEC-7, 02/10): catraca — o minimo sobe a cada medicao e nunca desce. Fracao de
