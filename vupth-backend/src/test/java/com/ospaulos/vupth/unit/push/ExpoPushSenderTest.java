@@ -138,6 +138,28 @@ class ExpoPushSenderTest {
         assertThat(body.get()).contains("\"categoryId\":\"FECHAMENTO\"");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0} -> {1}")
+    @org.junit.jupiter.params.provider.CsvSource({
+            "QUEUE_NEXT_IN_LINE, VER_FILA",
+            "ATTENDANCE_PROMOTED, VER_FILA",
+            "ATTENDANCE_CANCELLED, VER_ATENDIMENTO",
+            "CUT_ACCEPTED, VER_ATENDIMENTO",
+            "CUT_REFUSED, VER_ATENDIMENTO",
+            "CUT_EXPIRED, VER_ATENDIMENTO",
+            "ATTENDANCE_STARTED, CIENCIA",
+            "ATTENDANCE_FINISHED, CIENCIA"
+    })
+    @DisplayName("Push do Client sai com a categoria do tipo (push-categorias-do-client, DEC-43)")
+    void clientCategories(String type, String category) throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Titulo", "Corpo", Map.of("type", type));
+
+        assertThat(body.get()).contains("\"categoryId\":\"" + category + "\"");
+    }
+
     @Test
     @DisplayName("Oferta de vez antes segue sem categoria (espera o Andre)")
     void earlierTurnOfferHasNoCategory() throws IOException {

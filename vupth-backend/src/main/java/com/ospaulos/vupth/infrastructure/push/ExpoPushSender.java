@@ -66,6 +66,20 @@ public class ExpoPushSender implements PushSender {
     static final String CLOSING_CATEGORY_ID = "FECHAMENTO";
 
     /**
+     * Categorias do Client (push-categorias-do-client, DEC-43; o Client registrou em 7b5276bf): "Ver minha
+     * vez" leva a fila, "Ver atendimento" leva ao atendimento. Os outros tipos seguem a regra geral (CIENCIA
+     * ou, nos de decisao, nenhuma). O CUT_REQUESTED vai ao Partner e fica com a CIENCIA (S40).
+     */
+    static final Map<String, String> CATEGORY_BY_TYPE = Map.of(
+            "CLOSING_PROMPT", CLOSING_CATEGORY_ID,
+            "QUEUE_NEXT_IN_LINE", "VER_FILA",
+            "ATTENDANCE_PROMOTED", "VER_FILA",
+            "ATTENDANCE_CANCELLED", "VER_ATENDIMENTO",
+            "CUT_ACCEPTED", "VER_ATENDIMENTO",
+            "CUT_REFUSED", "VER_ATENDIMENTO",
+            "CUT_EXPIRED", "VER_ATENDIMENTO");
+
+    /**
      * As que pedem decisao (aceitar/recusar, fechar ou nao) nao levam a CIENCIA. O CLOSING_PROMPT leva a
      * FECHAMENTO; as outras seguem sem categoria — o app abre nelas.
      * O CUT_REQUESTED saiu daqui (S40, 08/10): o Partner trata o pedido de corte como aviso com OK, e o
@@ -159,8 +173,8 @@ public class ExpoPushSender implements PushSender {
             return INFO_CATEGORY_ID;
         }
         String type = String.valueOf(data.get("type")); // Set.of nao aceita contains(null)
-        if ("CLOSING_PROMPT".equals(type)) {
-            return CLOSING_CATEGORY_ID;
+        if (CATEGORY_BY_TYPE.containsKey(type)) {
+            return CATEGORY_BY_TYPE.get(type);
         }
         return DECISION_TYPES.contains(type) ? null : INFO_CATEGORY_ID;
     }
