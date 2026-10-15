@@ -1,37 +1,13 @@
 # VUPTH Backend — PRD (Product Requirements Document)
 
-> Documento de referencia para o time de frontend.
-> Descreve **todos os endpoints implementados**, seus contratos (request/response),
-> regras de autenticacao/autorizacao, status de testes e o que ainda precisa ser implementado.
+> Congelado em 2026-08-26. Desde 06/09 a fonte unica e o vupth-docs (aba Backend:
+> https://vupth-docs.pages.dev/backend.html — "Endpoints — os grupos" e "Mapa endpoint x papel").
+> Os 57 endpoints criados depois (horarios, foto, Pix e pagamento, troca de vez, transferencia de
+> dono, exclusao por link, desativar conta) estao so la. Aqui nada novo entra; o que fecha, sai.
 >
-> **Base URL staging:** `https://vupth-backend-ia.onrender.com` (Render Free, branch `dev`, hiberna — ver secao 18c)
-> **Base URL prod:** `https://vupth-backend-ia-production.up.railway.app` (Railway, branch `main`)
+> **Base URL staging:** `https://vupth-backend-ia.onrender.com` (Render, branch `dev`)
+> **Base URL prod:** `https://vupth-backend-ia-production.up.railway.app` (Railway, branch `main`, sempre ligado)
 > **Base URL local:** `http://localhost:8080`
->
-> **Ultima atualizacao:** 2026-08-26
->
-> ### Keep-Alive (Render staging) — ⚠️ CORRIGIDO EM 2026-08-26
->
-> O Render Free dorme o servico apos ~15 min de inatividade, e o cold start custa ~50s
-> (boot da JVM + migrations) — o primeiro request depois disso falha por timeout se o app
-> nao esperar.
->
-> ⚠️ **Ate 26/08 esta secao descrevia um `.github/workflows/keep-alive.yml` com toggle por
-> `KEEP_ALIVE_ENABLED`. Esse workflow NAO EXISTE:** foi deletado de proposito no commit
-> `363019d` ("economizar minutos do Actions") e a secao nunca foi corrigida. Quem lesse este
-> PRD acreditava haver um keep-alive rodando; nao ha. O unico artefato vivo e
-> `vupth-backend/ping.sh`, um `while true` que roda **no terminal do Andre** — morre quando o
-> terminal fecha ou a maquina suspende.
->
-> **~~Direcao decidida~~ ❌ CANCELADA POR DECISAO DO ANDRE (2026-08-31).** O pinger externo chegou a
-> ser desenhado (cron-job.org, `GET /actuator/health/readiness`, 5 min, em janela) e o desenho fica
-> registrado na secao **18e.3** como memoria da conta das 750h — mas **o job nao sera criado**.
-> **Consequencia, dita de frente:** nao ha, e nao havera, nenhum atenuante para a hibernacao do Render.
-> O cold start de ~50s passa a ser o caso **comum**, nao a excecao, e quem segura o usuario e **so** o
-> portao `waitForBackend()` dos fronts (secao **18c**) — que ja esta implementado nos dois.
->
-> ⚠️ **Keep-warm nao substitui o portao `waitForBackend()` da secao 18c.** Deploy, restart,
-> falha do cron, fora da janela e teto de cota produzem instancia fria de novo.
 
 ---
 
