@@ -133,7 +133,11 @@ class CampaignServiceTest {
         when(redemptionRepository.findByUserIdWithCampaign(userId))
                 .thenReturn(List.of(new CampaignRedemption(campaign, userId, OffsetDateTime.now())));
 
-        assertThat(service.activePublic()).extracting("name").containsExactly("Parceiros");
+        when(redemptionRepository.countByCampaign_Id(campaign.getId())).thenReturn(1L);
+        var active = service.activePublic();
+        assertThat(active).extracting("name").containsExactly("Parceiros");
+        assertThat(active.get(0).remainingSlots()).isEqualTo(1);
+        assertThat(active.get(0).maxRedemptions()).isEqualTo(2);
         assertThat(service.mine(userId)).hasSize(1).allMatch(r -> r.redeemedAt() != null);
     }
 }

@@ -45,7 +45,7 @@ public class CampaignService {
     @Transactional(readOnly = true)
     public List<CampaignResponse> activePublic() {
         return campaignRepository.findRunning(CampaignVisibility.PUBLIC, OffsetDateTime.now(clock)).stream()
-                .map(c -> CampaignResponse.of(c, true, null))
+                .map(c -> CampaignResponse.of(c, true, redemptionRepository.countByCampaign_Id(c.getId()), null))
                 .toList();
     }
 
@@ -74,13 +74,13 @@ public class CampaignService {
         }
         CampaignRedemption redemption = redemptionRepository.save(new CampaignRedemption(campaign, userId, now));
         log.info("[Campaign] cupom aceito — campaign={} user={}", campaign.getId(), userId);
-        return CampaignResponse.of(campaign, true, redemption.getRedeemedAt());
+        return CampaignResponse.of(campaign, true, null, redemption.getRedeemedAt());
     }
 
     @Transactional(readOnly = true)
     public List<CampaignResponse> mine(UUID userId) {
         return redemptionRepository.findByUserIdWithCampaign(userId).stream()
-                .map(r -> CampaignResponse.of(r.getCampaign(), true, r.getRedeemedAt()))
+                .map(r -> CampaignResponse.of(r.getCampaign(), true, null, r.getRedeemedAt()))
                 .toList();
     }
 }
