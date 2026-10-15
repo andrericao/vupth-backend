@@ -6295,8 +6295,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "// Regra do Andre (16/09): 6% sobre o valor DIGITADO, preco sobe ao X,90 seguinte.",
-         "// 30,00 digitado -> taxa 1,80 -> preco 31,90; pagamento 4% de 30 = 1,20; app = o resto.",
+         "// Regra do Andre (15/10, preco-sobre-o-total): o menor X,90 em que, tirados 4% + 2% do PRECO, sobra o recebe.",
+         "// 30,00 -> 30 / 0,94 = 31,91 -> preco 32,90; pagamento 4% de 32,90 = 1,32; app = o resto (1,58).",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  const r = pm.response.json();",
@@ -6304,8 +6304,8 @@
          "    pm.expect(Number(r.pro_receives)).to.eql(30);",
          "    pm.expect(Number(r.base_price)).to.eql(30);",
          "  });",
-         "  pm.test(\"intermediary_fee = 4% do digitado\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.2));",
-         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(0.7));",
+         "  pm.test(\"intermediary_fee = 4% do preco\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.32));",
+         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(1.58));",
          "  pm.test(\"as tres partes somam o preco\", () => {",
          "    const sum = Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100);",
          "    pm.expect(sum).to.eql(Math.round(Number(r.price) * 100));",
@@ -6331,7 +6331,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"price\":31.90,\"pro_receives\":30.00,\"base_price\":30.00}"
+       "raw": "{\"price\":32.90,\"pro_receives\":30.00,\"base_price\":30.00}"
       },
       "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
       "auth": {
@@ -6347,8 +6347,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "// 32,90 era o preco da regra anterior (30 / 0,94). Pela regra de 16/09 o preco de 30 digitados",
-         "// e 31,90 — o app do parceiro ja calcula assim (ecf8069).",
+         "// 31,90 era o preco da regra de 16/09 (4% sobre o digitado). Pela regra de 15/10 ele nao cobre",
+         "// os 30 depois de 4% + 2% do preco: o de 30 digitados e 32,90.",
          "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
          "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
         ],
@@ -6371,7 +6371,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"price\":32.90,\"pro_receives\":30.00,\"base_price\":30.00}"
+       "raw": "{\"price\":31.90,\"pro_receives\":30.00,\"base_price\":30.00}"
       },
       "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
       "auth": {
