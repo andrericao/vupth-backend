@@ -126,6 +126,32 @@ class ExpoPushSenderTest {
     }
 
     @Test
+    @DisplayName("Hora de fechar? sai com categoryId FECHAMENTO — Fechar agora / Continuar atendendo na notificacao (S48)")
+    void closingPromptCarriesClosingCategory() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Hora de fechar?", "Sua fila acabou.",
+                Map.of("type", "CLOSING_PROMPT"));
+
+        assertThat(body.get()).contains("\"categoryId\":\"FECHAMENTO\"");
+    }
+
+    @Test
+    @DisplayName("Oferta de vez antes segue sem categoria (espera o Andre)")
+    void earlierTurnOfferHasNoCategory() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        var sender = senderReplying(200, """
+                {"data":[{"status":"ok","id":"t-1"}]}""", body);
+
+        sender.send(List.of(TOKEN_A), "Vez antes", "Aceite ou recuse.",
+                Map.of("type", "EARLIER_TURN_OFFERED"));
+
+        assertThat(body.get()).doesNotContain("categoryId");
+    }
+
+    @Test
     @DisplayName("Pedido de corte sai com categoryId CIENCIA — o OK aparece com o app fechado (S40)")
     void cutRequestCarriesCienciaCategory() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
