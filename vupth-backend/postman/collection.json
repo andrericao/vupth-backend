@@ -27088,6 +27088,49 @@
    ]
   },
   {
+   "name": "24 - suporte (formulario-do-suporte)",
+   "item": [
+    {
+     "name": "[ERRO] POST /support/contact com perfil fora da lista → 422 (formulario-do-suporte)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Publico (sem token). So o caso 422: o 204 manda e-mail de verdade no staging, e fica no teste de integracao.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code VALIDATION_ERROR com o campo perfil\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.code).to.eql(\"VALIDATION_ERROR\");",
+         "  pm.expect(JSON.stringify(r)).to.include(\"perfil\");",
+         "});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"nome\":\"Newman\",\"email\":\"newman@vupth.test\",\"perfil\":\"dono\",\"assunto\":\"Teste\",\"mensagem\":\"Oi\"}"
+      },
+      "url": "{{base_url}}/support/contact",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {

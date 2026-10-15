@@ -51,7 +51,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     static final String CI_HEADER = "X-Vupth-CI";
     private static final Set<String> LIMITED = Set.of("/auth/login", "/auth/register", "/auth/forgot-password",
-            "/auth/account-deletion/request", "/auth/account-deletion/confirm");
+            "/auth/account-deletion/request", "/auth/account-deletion/confirm",
+            // formulario-do-suporte (DEC-59): publico e manda e-mail — o mesmo limite contra spam
+            "/support/contact");
 
     private final boolean enabled;
     private final int maxRequests;
