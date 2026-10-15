@@ -29,33 +29,41 @@ class SupportContactIntegrationTest {
     @Autowired MockMvc mvc;
     @MockBean EmailSender emailSender;
 
-    private static String body(String perfil, String email, String mensagem) {
-        return String.format("{\"nome\":\"Ana\",\"email\":\"%s\",\"perfil\":\"%s\",\"assunto\":\"Fila\",\"mensagem\":\"%s\"}",
-                email, perfil, mensagem);
+    private static String body(String perfil, String categoria, String email, String mensagem) {
+        return String.format("{\"nome\":\"Ana\",\"email\":\"%s\",\"perfil\":\"%s\",\"categoria\":\"%s\","
+                + "\"assunto\":\"Cobranca errada\",\"mensagem\":\"%s\"}", email, perfil, categoria, mensagem);
     }
 
     @Test
     @DisplayName("sem token: 204 e o e-mail sai para a caixa do suporte")
     void publicAndSent() throws Exception {
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
-                        .content(body("cliente", "ana@exemplo.com", "Oi")))
+                        .content(body("cliente", "RECLAMACAO", "ana@exemplo.com", "Oi")))
                 .andExpect(status().isNoContent());
 
-        verify(emailSender).send(eq("suporte@vupth.test"), contains("cliente"), contains("ana@exemplo.com"));
+        verify(emailSender).send(eq("suporte@vupth.test"), eq("[VUPTH · Cliente · Reclamação] Cobranca errada"),
+                contains("ana@exemplo.com"));
     }
 
     @Test
-    @DisplayName("perfil fora da lista, e-mail invalido ou mensagem acima de 2000: 422 e nada sai")
+    @DisplayName("perfil ou categoria fora da lista, sem categoria, e-mail invalido ou mensagem acima de 2000: 422 e nada sai")
     void invalid() throws Exception {
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
-                        .content(body("dono", "ana@exemplo.com", "Oi")))
+                        .content(body("dono", "DUVIDA", "ana@exemplo.com", "Oi")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
-                        .content(body("cliente", "nao-e-email", "Oi")))
+                        .content(body("cliente", "DUVIDA", "nao-e-email", "Oi")))
                 .andExpect(status().isUnprocessableEntity());
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
-                        .content(body("cliente", "ana@exemplo.com", "x".repeat(2001))))
+                        .content(body("cliente", "DUVIDA", "ana@exemplo.com", "x".repeat(2001))))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
+                        .content(body("cliente", "URGENTE", "ana@exemplo.com", "Oi")))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"Ana\",\"email\":\"ana@exemplo.com\",\"perfil\":\"cliente\","
+                                + "\"assunto\":\"Fila\",\"mensagem\":\"Oi\"}"))
                 .andExpect(status().isUnprocessableEntity());
 
         verifyNoInteractions(emailSender);

@@ -7,12 +7,16 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Mensagem do formulario do site de suporte (formulario-do-suporte, DEC-59). Os nomes dos campos sao
- * os do contrato com o Suporte (vupth-support.pages.dev), em portugues.
+ * os do contrato com o Suporte (vupth-support.pages.dev), em portugues. A {@code categoria} (15/10) serve para o
+ * Andre filtrar no e-mail; o assunto segue texto livre.
  */
 public record SupportContactRequest(
         @NotBlank @Size(max = 100) String nome,
         @NotBlank @Email @Size(max = 254) String email,
         @NotBlank @Pattern(regexp = "cliente|parceiro", message = "perfil deve ser cliente ou parceiro") String perfil,
+        @NotBlank @Pattern(regexp = "DUVIDA|SUGESTAO|RECLAMACAO|PROBLEMA|PAGAMENTO|ELOGIO|OUTRO",
+                message = "categoria deve ser DUVIDA, SUGESTAO, RECLAMACAO, PROBLEMA, PAGAMENTO, ELOGIO ou OUTRO")
+        String categoria,
         @NotBlank @Size(max = 120) String assunto,
         @NotBlank @Size(max = 2000) String mensagem
 ) {

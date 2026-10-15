@@ -27119,7 +27119,7 @@
       ],
       "body": {
        "mode": "raw",
-       "raw": "{\"nome\":\"Newman\",\"email\":\"newman@vupth.test\",\"perfil\":\"dono\",\"assunto\":\"Teste\",\"mensagem\":\"Oi\"}"
+       "raw": "{\"nome\":\"Newman\",\"email\":\"newman@vupth.test\",\"perfil\":\"dono\",\"categoria\":\"DUVIDA\",\"assunto\":\"Teste\",\"mensagem\":\"Oi\"}"
       },
       "url": "{{base_url}}/support/contact",
       "auth": {
