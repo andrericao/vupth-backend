@@ -55,7 +55,14 @@ class AdminCampaignServiceTest {
                                                 BigDecimal amount, BigDecimal percent,
                                                 OffsetDateTime starts, OffsetDateTime ends, Integer max) {
         return new AdminCampaignRequest(" Lancamento ", " ", code, type, visibility, CampaignAudience.CLIENT, amount,
-                percent, starts, ends, "TUESDAY,WEDNESDAY", max, true);
+                percent, starts, ends, "TUESDAY,WEDNESDAY", max, true, null, null, null, null, null);
+    }
+
+    private AdminCampaignRequest referral(BigDecimal professional, BigDecimal owner, ReferralScope scope,
+                                          PayoutPeriod period, Integer day) {
+        return new AdminCampaignRequest("Indique", null, null, CampaignType.REFERRAL_BONUS, CampaignVisibility.PUBLIC,
+                null, new BigDecimal("5.00"), null, now.minusHours(1), now.plusDays(28), null, null, true,
+                professional, owner, scope, period, day);
     }
 
     private AdminCampaignRequest valid(String code) {
@@ -188,5 +195,57 @@ class AdminCampaignServiceTest {
             assertThat(c.audience()).isNull();
         });
         verify(campaignRepository).findAll(Sort.by(Sort.Direction.DESC, "startsAt"));
+    }
+
+    @Test
+    @DisplayName("indicacao (DEC-73): guarda a divisao, quem conta e o pagamento que o Andre preencheu")
+    void referralParams() {
+        AdminCampaignResponse r = service.create(adminId, referral(new BigDecimal("60"), new BigDecimal("40"),
+                ReferralScope.REFERRER_ESTABLISHMENT, PayoutPeriod.MONTHLY, 5));
+
+        assertThat(r.referralProfessionalPercent()).isEqualByComparingTo("60");
+        assertThat(r.referralOwnerPercent()).isEqualByComparingTo("40");
+        assertThat(r.referralScope()).isEqualTo("REFERRER_ESTABLISHMENT");
+        assertThat(r.payoutPeriod()).isEqualTo("MONTHLY");
+        assertThat(r.payoutDay()).isEqualTo(5);
+        assertThat(service.create(adminId, referral(BigDecimal.ZERO, new BigDecimal("100"),
+                ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 7)).payoutPeriod()).isEqualTo("WEEKLY");
+    }
+
+    @Test
+    @DisplayName("indicacao: falta parametro, divisao fora de 100 ou dia fora da semana → 422; nas outras, nao cabe")
+    void referralInvalid() {
+        BigDecimal sixty = new BigDecimal("60");
+        BigDecimal forty = new BigDecimal("40");
+        assertCode(() -> service.create(adminId, referral(null, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 1)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        assertCode(() -> service.create(adminId, referral(sixty, null, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 1)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        assertCode(() -> service.create(adminId, referral(sixty, forty, null, PayoutPeriod.WEEKLY, 1)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        assertCode(() -> service.create(adminId, referral(sixty, forty, ReferralScope.ANY_PROFESSIONAL, null, 1)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        assertCode(() -> service.create(adminId, referral(sixty, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, null)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        assertCode(() -> service.create(adminId, referral(sixty, sixty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.MONTHLY, 1)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        assertCode(() -> service.create(adminId, referral(sixty, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 8)),
+                HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+
+        for (int i = 0; i < 5; i++) {
+            Object[] p = {null, null, null, null, null};
+            p[i] = switch (i) {
+                case 0, 1 -> sixty;
+                case 2 -> ReferralScope.ANY_PROFESSIONAL;
+                case 3 -> PayoutPeriod.WEEKLY;
+                default -> 1;
+            };
+            AdminCampaignRequest discount = new AdminCampaignRequest("Desconto", null, "D" + i, CampaignType.DISCOUNT,
+                    CampaignVisibility.PRIVATE, null, new BigDecimal("5.00"), null, now.minusHours(1), now.plusDays(1),
+                    null, null, false, (BigDecimal) p[0], (BigDecimal) p[1], (ReferralScope) p[2], (PayoutPeriod) p[3],
+                    (Integer) p[4]);
+            assertCode(() -> service.create(adminId, discount), HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        }
+        verify(campaignRepository, never()).save(any());
     }
 }

@@ -127,6 +127,8 @@ public class SecurityConfig {
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/referrals/me").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/reports").hasRole("PROFESSIONAL")

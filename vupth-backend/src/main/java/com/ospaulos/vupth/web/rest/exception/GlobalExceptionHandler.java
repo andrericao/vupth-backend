@@ -843,6 +843,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.referral.exception.ReferralException.class)
+    public ResponseEntity<ErrorResponse> handleReferral(
+            com.ospaulos.vupth.domain.referral.exception.ReferralException ex, HttpServletRequest req) {
+        log.warn("[{}] Referral {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException.class)
     public ResponseEntity<ErrorResponse> handlePixKeyNotSet(
             com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException ex, HttpServletRequest req) {

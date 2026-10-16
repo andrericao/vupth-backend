@@ -3,6 +3,8 @@ package com.ospaulos.vupth.api.campaign.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.campaign.model.CampaignAudience;
 import com.ospaulos.vupth.domain.campaign.model.CampaignType;
+import com.ospaulos.vupth.domain.campaign.model.PayoutPeriod;
+import com.ospaulos.vupth.domain.campaign.model.ReferralScope;
 import com.ospaulos.vupth.domain.campaign.model.CampaignVisibility;
 import jakarta.validation.constraints.*;
 
@@ -32,6 +34,13 @@ public record AdminCampaignRequest(
                 message = "weekdays: dias em ingles, separados por virgula (ex.: TUESDAY,WEDNESDAY)")
         String weekdays,
         @JsonProperty("max_redemptions") @Min(1) Integer maxRedemptions,
-        @JsonProperty("new_clients_only") boolean newClientsOnly
+        @JsonProperty("new_clients_only") boolean newClientsOnly,
+        @JsonProperty("referral_professional_percent") @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 2)
+        BigDecimal referralProfessionalPercent,
+        @JsonProperty("referral_owner_percent") @DecimalMin("0") @DecimalMax("100") @Digits(integer = 3, fraction = 2)
+        BigDecimal referralOwnerPercent,
+        @JsonProperty("referral_scope") ReferralScope referralScope,
+        @JsonProperty("payout_period") PayoutPeriod payoutPeriod,
+        @JsonProperty("payout_day") @Min(1) @Max(28) Integer payoutDay
 ) {
 }

@@ -452,3 +452,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/038-create-campaign.yaml
       relativeToChangeLogFile: true
+
+  # Bonificacao por link: parametros da campanha, codigo de quem indica e o cliente indicado (BAK-9, DEC-73)
+  - include:
+      file: changesets/96-campaign/039-referral.yaml
+      relativeToChangeLogFile: true

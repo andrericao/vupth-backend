@@ -31,13 +31,21 @@ public record AdminCampaignResponse(
         @JsonProperty("redemptions") long redemptions,
         @JsonProperty("new_clients_only") boolean newClientsOnly,
         @JsonProperty("active") boolean active,
-        @JsonProperty("status") String status
+        @JsonProperty("status") String status,
+        @JsonProperty("referral_professional_percent") BigDecimal referralProfessionalPercent,
+        @JsonProperty("referral_owner_percent") BigDecimal referralOwnerPercent,
+        @JsonProperty("referral_scope") String referralScope,
+        @JsonProperty("payout_period") String payoutPeriod,
+        @JsonProperty("payout_day") Integer payoutDay
 ) {
     public static AdminCampaignResponse of(Campaign c, long redemptions, OffsetDateTime now) {
         return new AdminCampaignResponse(c.getId(), c.getName(), c.getDescription(), c.getCode(), c.getType().name(),
                 c.getVisibility().name(), c.getAudience() == null ? null : c.getAudience().name(), c.getValueAmount(),
                 c.getValuePercent(), c.getStartsAt(), c.getEndsAt(), c.getWeekdays(), c.getMaxRedemptions(),
-                redemptions, c.isNewClientsOnly(), c.isActive(), status(c, now));
+                redemptions, c.isNewClientsOnly(), c.isActive(), status(c, now),
+                c.getReferralProfessionalPercent(), c.getReferralOwnerPercent(),
+                c.getReferralScope() == null ? null : c.getReferralScope().name(),
+                c.getPayoutPeriod() == null ? null : c.getPayoutPeriod().name(), c.getPayoutDay());
     }
 
     private static String status(Campaign c, OffsetDateTime now) {

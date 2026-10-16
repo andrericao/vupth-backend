@@ -6,6 +6,7 @@ import com.ospaulos.vupth.domain.campaign.exception.CampaignException;
 import com.ospaulos.vupth.domain.campaign.model.Campaign;
 import com.ospaulos.vupth.domain.campaign.model.CampaignType;
 import com.ospaulos.vupth.domain.campaign.model.CampaignVisibility;
+import com.ospaulos.vupth.domain.campaign.model.PayoutPeriod;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRedemptionRepository;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -114,6 +116,7 @@ public class AdminCampaignService {
         if (r.type() != CampaignType.FEE_WAIVER && r.valueAmount() == null && r.valuePercent() == null) {
             throw CampaignException.invalid("O desconto e o bonus precisam de valor.");
         }
+        validateReferral(r);
         if (r.maxRedemptions() != null && r.maxRedemptions() < used) {
             throw CampaignException.invalid("O limite nao pode ficar abaixo de quem ja aceitou (" + used + ").");
         }
@@ -121,6 +124,31 @@ public class AdminCampaignService {
             campaignRepository.findByCodeIgnoreCase(code)
                     .filter(other -> !other.getId().equals(selfId))
                     .ifPresent(other -> { throw CampaignException.codeTaken(); });
+        }
+    }
+
+    /**
+     * Os parametros da bonificacao por link (DEC-73) so existem na campanha de indicacao, e nela todos sao
+     * preenchidos pelo Andre: a divisao soma 100, e o dia cabe na periodicidade.
+     */
+    private static void validateReferral(AdminCampaignRequest r) {
+        boolean any = r.referralProfessionalPercent() != null || r.referralOwnerPercent() != null
+                || r.referralScope() != null || r.payoutPeriod() != null || r.payoutDay() != null;
+        if (r.type() != CampaignType.REFERRAL_BONUS) {
+            if (any) {
+                throw CampaignException.invalid("Divisao, quem conta e pagamento so valem na campanha de indicacao.");
+            }
+            return;
+        }
+        if (r.referralProfessionalPercent() == null || r.referralOwnerPercent() == null
+                || r.referralScope() == null || r.payoutPeriod() == null || r.payoutDay() == null) {
+            throw CampaignException.invalid("A indicacao precisa da divisao, de quem conta e do pagamento.");
+        }
+        if (r.referralProfessionalPercent().add(r.referralOwnerPercent()).compareTo(BigDecimal.valueOf(100)) != 0) {
+            throw CampaignException.invalid("A parte do profissional e a do dono somam 100%.");
+        }
+        if (r.payoutPeriod() == PayoutPeriod.WEEKLY && r.payoutDay() > 7) {
+            throw CampaignException.invalid("Na semanal, o dia vai de 1 (segunda) a 7 (domingo).");
         }
     }
 
@@ -138,6 +166,11 @@ public class AdminCampaignService {
         c.setWeekdays(blankToNull(r.weekdays()));
         c.setMaxRedemptions(r.maxRedemptions());
         c.setNewClientsOnly(r.newClientsOnly());
+        c.setReferralProfessionalPercent(r.referralProfessionalPercent());
+        c.setReferralOwnerPercent(r.referralOwnerPercent());
+        c.setReferralScope(r.referralScope());
+        c.setPayoutPeriod(r.payoutPeriod());
+        c.setPayoutDay(r.payoutDay());
     }
 
     private static String blankToNull(String value) {

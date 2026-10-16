@@ -75,6 +75,31 @@ public class Campaign {
     @Column(name = "active", nullable = false)
     private boolean active = true;
 
+    /*
+     * Bonificacao por link (REFERRAL_BONUS, DEC-70/73): nenhum valor fixo no codigo; o Andre preenche no painel.
+     * A divisao vale para a loja so com dono (o dono gera o link, os profissionais atendem).
+     */
+
+    /** Parte do valor ao profissional que atendeu (%). */
+    @Column(name = "referral_professional_percent", precision = 5, scale = 2)
+    private BigDecimal referralProfessionalPercent;
+
+    /** Parte do valor ao dono que gerou o link (%). Com a do profissional, soma 100. */
+    @Column(name = "referral_owner_percent", precision = 5, scale = 2)
+    private BigDecimal referralOwnerPercent;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "referral_scope", length = 25)
+    private ReferralScope referralScope;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payout_period", length = 10)
+    private PayoutPeriod payoutPeriod;
+
+    /** Dia do pagamento: da semana (1-7) na semanal, do mes (1-28) na mensal. */
+    @Column(name = "payout_day")
+    private Integer payoutDay;
+
     /** Ligada e dentro da janela em {@code now}. */
     public boolean isRunning(OffsetDateTime now) {
         return active && !now.isBefore(startsAt) && now.isBefore(endsAt);
