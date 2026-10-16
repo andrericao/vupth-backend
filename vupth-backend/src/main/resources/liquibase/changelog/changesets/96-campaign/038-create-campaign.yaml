@@ -21,8 +21,8 @@ databaseChangeLog:
               - column: {name: type, type: VARCHAR(20), constraints: {nullable: false}}
               - column: {name: visibility, type: VARCHAR(10), constraints: {nullable: false}}
               - column: {name: audience, type: VARCHAR(15)}
-              - column: {name: value_amount, type: NUMERIC(10,2)}
-              - column: {name: value_percent, type: NUMERIC(5,2)}
+              - column: {name: value_amount, type: "NUMERIC(10,2)"}
+              - column: {name: value_percent, type: "NUMERIC(5,2)"}
               - column: {name: starts_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
               - column: {name: ends_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
               - column: {name: weekdays, type: VARCHAR(80)}
