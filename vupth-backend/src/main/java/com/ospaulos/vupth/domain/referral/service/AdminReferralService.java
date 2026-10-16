@@ -1,0 +1,97 @@
+package com.ospaulos.vupth.domain.referral.service;
+
+import com.ospaulos.vupth.api.referral.dto.AdminReferralPaidResponse;
+import com.ospaulos.vupth.api.referral.dto.AdminReferralPayoutResponse;
+import com.ospaulos.vupth.domain.campaign.model.Campaign;
+import com.ospaulos.vupth.domain.campaign.model.PayoutPeriod;
+import com.ospaulos.vupth.domain.campaign.repository.CampaignRepository;
+import com.ospaulos.vupth.domain.referral.exception.ReferralException;
+import com.ospaulos.vupth.domain.referral.repository.ReferralCreditRepository;
+import com.ospaulos.vupth.domain.referral.repository.ReferralPayoutRow;
+import com.ospaulos.vupth.domain.shared.BusinessClock;
+import com.ospaulos.vupth.domain.user.model.BaseUser;
+import com.ospaulos.vupth.domain.user.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * O lado do painel da bonificacao por link (BAK-9, fatia 3): o que pagar a cada pessoa, com a data do proximo
+ * pagamento pela periodicidade e o dia da campanha (DEC-73), e marcar como pago depois do Pix a mao.
+ * So o ADMIN chega aqui ({@code /admin/**}).
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class AdminReferralService {
+
+    private final ReferralCreditRepository creditRepository;
+    private final CampaignRepository campaignRepository;
+    private final UserRepository userRepository;
+
+    /** O que falta pagar, o pagamento mais proximo primeiro. */
+    @Transactional(readOnly = true)
+    public List<AdminReferralPayoutResponse> payouts() {
+        LocalDate today = LocalDate.now(BusinessClock.zone());
+        return creditRepository.findUnpaidPayouts().stream()
+                .map(row -> toResponse(row, today))
+                .sorted(Comparator.comparing(AdminReferralPayoutResponse::nextPayoutOn,
+                                Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(AdminReferralPayoutResponse::beneficiaryName,
+                                Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    public AdminReferralPaidResponse markPaid(UUID adminId, UUID campaignId, UUID userId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        int paid = creditRepository.markPaid(campaignId, userId, now);
+        if (paid == 0) {
+            throw ReferralException.nothingToPay();
+        }
+        log.info("[Referral] admin={} marcou pago campaign={} user={} creditos={}", adminId, campaignId, userId, paid);
+        return new AdminReferralPaidResponse(paid, now);
+    }
+
+    private AdminReferralPayoutResponse toResponse(ReferralPayoutRow row, LocalDate today) {
+        Campaign c = campaignRepository.findById(row.campaignId()).orElse(null);
+        BaseUser u = userRepository.findById(row.beneficiaryId()).orElse(null);
+        PayoutPeriod period = c == null ? null : c.getPayoutPeriod();
+        Integer day = c == null ? null : c.getPayoutDay();
+        return new AdminReferralPayoutResponse(row.campaignId(), c == null ? null : c.getName(),
+                period == null ? null : period.name(), day, nextPayoutOn(period, day, today),
+                row.beneficiaryId(), u == null ? null : name(u),
+                u == null || u.getPixKeyType() == null ? null : u.getPixKeyType().name(),
+                u == null ? null : u.getPixKey(), u == null ? null : u.getPixHolderName(),
+                row.amount(), row.credits());
+    }
+
+    /** Semanal: o proximo dia da semana (hoje conta). Mensal: o dia do mes, este mes ou o proximo. */
+    public static LocalDate nextPayoutOn(PayoutPeriod period, Integer day, LocalDate today) {
+        if (period == null || day == null) {
+            return null;
+        }
+        if (period == PayoutPeriod.WEEKLY) {
+            return today.with(TemporalAdjusters.nextOrSame(DayOfWeek.of(day)));
+        }
+        return today.getDayOfMonth() <= day ? today.withDayOfMonth(day) : today.plusMonths(1).withDayOfMonth(day);
+    }
+
+    private static String name(BaseUser u) {
+        String joined = Stream.of(u.getFirstName(), u.getLastName())
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.joining(" "));
+        return joined.isEmpty() ? u.getEmail() : joined;
+    }
+}

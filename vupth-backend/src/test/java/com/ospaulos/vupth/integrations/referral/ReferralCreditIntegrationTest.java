@@ -81,7 +81,8 @@ class ReferralCreditIntegrationTest {
     @Test
     @DisplayName("cliente pelo link do dono que atende: o Finalizar credita R$ 5 a ele; o segundo corte nao")
     void creditOnFirstCut() throws Exception {
-        mvc.perform(post("/admin/campaigns").header("Authorization", adminToken())
+        String admin = adminToken();
+        mvc.perform(post("/admin/campaigns").header("Authorization", admin)
                         .contentType(MediaType.APPLICATION_JSON).content(campaign()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.referral_scope").value("REFERRER_ESTABLISHMENT"));
@@ -111,5 +112,24 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.credited_clients").value(1))
                 .andExpect(jsonPath("$.to_receive").value(5.0));
+
+        // O painel ve o que pagar, paga a mao e marca; o "a receber" zera
+        String row = "$[?(@.beneficiary_id == '" + pro.id() + "')]";
+        String payouts = mvc.perform(get("/admin/referrals/payouts").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(row + ".amount").value(5.0))
+                .andExpect(jsonPath(row + ".payout_period").value("MONTHLY"))
+                .andReturn().getResponse().getContentAsString();
+        String campaignId = com.jayway.jsonpath.JsonPath.<List<String>>read(payouts, row + ".campaign_id").get(0);
+        mvc.perform(post("/admin/referrals/payouts/{c}/{u}/paid", campaignId, pro.id()).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paid_credits").value(1));
+        mvc.perform(post("/admin/referrals/payouts/{c}/{u}/paid", campaignId, pro.id()).header("Authorization", admin))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REFERRAL_NOTHING_TO_PAY"));
+        mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.to_receive").value(0));
+        mvc.perform(get("/admin/referrals/payouts").header("Authorization", pro.token()))
+                .andExpect(status().isForbidden());
     }
 }
