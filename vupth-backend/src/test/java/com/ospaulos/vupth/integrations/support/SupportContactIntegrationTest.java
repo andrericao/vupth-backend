@@ -49,7 +49,7 @@ class SupportContactIntegrationTest {
     @DisplayName("perfil ou categoria fora da lista, sem categoria, e-mail invalido ou mensagem acima de 2000: 422 e nada sai")
     void invalid() throws Exception {
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
-                        .content(body("dono", "DUVIDA", "ana@exemplo.com", "Oi")))
+                        .content(body("admin", "DUVIDA", "ana@exemplo.com", "Oi")))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)

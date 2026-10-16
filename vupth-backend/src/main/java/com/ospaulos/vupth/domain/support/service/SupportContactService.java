@@ -23,7 +23,8 @@ public class SupportContactService {
     private static final Map<String, String> CATEGORY_LABEL = Map.of(
             "DUVIDA", "Dúvida", "SUGESTAO", "Sugestão", "RECLAMACAO", "Reclamação", "PROBLEMA", "Problema",
             "PAGAMENTO", "Pagamento", "ELOGIO", "Elogio", "OUTRO", "Outro");
-    private static final Map<String, String> PROFILE_LABEL = Map.of("cliente", "Cliente", "parceiro", "Parceiro");
+    private static final Map<String, String> PROFILE_LABEL = Map.of(
+            "cliente", "Cliente", "profissional", "Profissional", "dono", "Dono", "parceiro", "Profissional ou dono");
 
     private final EmailSender emailSender;
     private final String inbox;
@@ -45,7 +46,7 @@ public class SupportContactService {
         String subject = oneLine("[VUPTH · " + perfil + " · " + categoria + "] " + request.assunto());
         String body = "Nome: " + oneLine(request.nome()) + "\n"
                 + "Responder para: " + oneLine(request.email()) + "\n"
-                + "Perfil: " + perfil + "\n"
+                + "Qual o seu perfil: " + perfil + "\n"
                 + "Categoria: " + categoria + "\n"
                 + "Assunto: " + oneLine(request.assunto()) + "\n\n"
                 + request.mensagem();
