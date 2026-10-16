@@ -68,7 +68,8 @@ public class ExpoPushSender implements PushSender {
     /**
      * Categorias do Client (push-categorias-do-client, DEC-43; o Client registrou em 7b5276bf): "Ver minha
      * vez" leva a fila, "Ver atendimento" leva ao atendimento. Os outros tipos seguem a regra geral (CIENCIA
-     * ou, nos de decisao, nenhuma). O CUT_REQUESTED vai ao Partner e fica com a CIENCIA (S40).
+     * ou, nos de decisao, nenhuma). O CUT_REQUESTED vai ao Partner e fica com a CIENCIA (S40). O
+     * ATTENDANCE_FINISHED leva o botao "Avaliar" (categoria-avaliar, notificacao-avaliar do Client).
      */
     static final Map<String, String> CATEGORY_BY_TYPE = Map.of(
             "CLOSING_PROMPT", CLOSING_CATEGORY_ID,
@@ -77,7 +78,8 @@ public class ExpoPushSender implements PushSender {
             "ATTENDANCE_CANCELLED", "VER_ATENDIMENTO",
             "CUT_ACCEPTED", "VER_ATENDIMENTO",
             "CUT_REFUSED", "VER_ATENDIMENTO",
-            "CUT_EXPIRED", "VER_ATENDIMENTO");
+            "CUT_EXPIRED", "VER_ATENDIMENTO",
+            "ATTENDANCE_FINISHED", "AVALIAR");
 
     /**
      * As que pedem decisao (aceitar/recusar, fechar ou nao) nao levam a CIENCIA. O CLOSING_PROMPT leva a

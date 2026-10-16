@@ -106,8 +106,8 @@ class ExpoPushSenderTest {
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
 
-        sender.send(List.of(TOKEN_A), "Atendimento concluido", "Seu atendimento foi concluido.",
-                Map.of("type", "ATTENDANCE_FINISHED"));
+        sender.send(List.of(TOKEN_A), "Atendimento iniciado", "Seu atendimento comecou.",
+                Map.of("type", "ATTENDANCE_STARTED"));
 
         assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
     }
@@ -146,8 +146,8 @@ class ExpoPushSenderTest {
             "CUT_ACCEPTED, VER_ATENDIMENTO",
             "CUT_REFUSED, VER_ATENDIMENTO",
             "CUT_EXPIRED, VER_ATENDIMENTO",
-            "ATTENDANCE_STARTED, CIENCIA",
-            "ATTENDANCE_FINISHED, CIENCIA"
+            "ATTENDANCE_FINISHED, AVALIAR",
+            "ATTENDANCE_STARTED, CIENCIA"
     })
     @DisplayName("Push do Client sai com a categoria do tipo (push-categorias-do-client, DEC-43)")
     void clientCategories(String type, String category) throws IOException {
