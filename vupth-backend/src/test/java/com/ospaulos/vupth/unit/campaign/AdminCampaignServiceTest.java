@@ -231,6 +231,10 @@ class AdminCampaignServiceTest {
                 HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
         assertCode(() -> service.create(adminId, referral(sixty, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 8)),
                 HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
+        AdminCampaignRequest percentOnly = new AdminCampaignRequest("Indique", null, null, CampaignType.REFERRAL_BONUS,
+                CampaignVisibility.PUBLIC, null, null, new BigDecimal("10"), now.minusHours(1), now.plusDays(28), null,
+                null, true, sixty, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 1);
+        assertCode(() -> service.create(adminId, percentOnly), HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
 
         for (int i = 0; i < 5; i++) {
             Object[] p = {null, null, null, null, null};

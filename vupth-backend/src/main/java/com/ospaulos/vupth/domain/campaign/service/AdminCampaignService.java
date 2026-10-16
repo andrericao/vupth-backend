@@ -140,6 +140,9 @@ public class AdminCampaignService {
             }
             return;
         }
+        if (r.valueAmount() == null) {
+            throw CampaignException.invalid("A indicacao paga em reais (value_amount) por cliente indicado.");
+        }
         if (r.referralProfessionalPercent() == null || r.referralOwnerPercent() == null
                 || r.referralScope() == null || r.payoutPeriod() == null || r.payoutDay() == null) {
             throw CampaignException.invalid("A indicacao precisa da divisao, de quem conta e do pagamento.");

@@ -86,6 +86,7 @@ import static org.mockito.Mockito.*;
 class AttendanceServiceImplTest {
 
     @Mock AttendanceRepository attendanceRepository;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
     @Mock ServiceItemRepository serviceItemRepository;
     @Mock ProfessionalRepository professionalRepository;
     @Mock ClientRepository clientRepository;

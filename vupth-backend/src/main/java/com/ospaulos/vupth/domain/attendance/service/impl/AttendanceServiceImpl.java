@@ -82,6 +82,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRatingRepository attendanceRatingRepository;
     private final com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
     private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
@@ -839,6 +840,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setDurationInMinutes(attendance.getServiceDurationInMinutes());
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        // Bonificacao por link (BAK-9): o credito do cliente indicado sai depois do commit, sem atrasar o "Finalizar"
+        eventPublisher.publishEvent(new com.ospaulos.vupth.domain.attendance.event.AttendanceFinishedEvent(saved.getId()));
 
         String clientName = attendance.getClient() != null
                 ? attendance.getClient().getFirstName()

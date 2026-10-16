@@ -462,3 +462,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/040-admin-staging.yaml
       relativeToChangeLogFile: true
+
+  # Bonificacao por link: o credito de cada corte de cliente indicado (BAK-9, fatia 2)
+  - include:
+      file: changesets/96-campaign/041-create-referral_credit.yaml
+      relativeToChangeLogFile: true

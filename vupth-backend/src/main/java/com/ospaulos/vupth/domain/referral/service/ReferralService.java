@@ -5,7 +5,9 @@ import com.ospaulos.vupth.api.referral.dto.ReferralMeResponse;
 import com.ospaulos.vupth.domain.referral.exception.ReferralException;
 import com.ospaulos.vupth.domain.referral.model.Referral;
 import com.ospaulos.vupth.domain.referral.model.ReferralCode;
+import com.ospaulos.vupth.domain.referral.model.ReferralShare;
 import com.ospaulos.vupth.domain.referral.repository.ReferralCodeRepository;
+import com.ospaulos.vupth.domain.referral.repository.ReferralCreditRepository;
 import com.ospaulos.vupth.domain.referral.repository.ReferralRepository;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,16 +42,18 @@ public class ReferralService {
 
     private final ReferralCodeRepository codeRepository;
     private final ReferralRepository referralRepository;
+    private final ReferralCreditRepository creditRepository;
     private final UserRepository userRepository;
     private final String linkBase;
     private final SecureRandom random = new SecureRandom();
     private final Clock clock = Clock.systemUTC();
 
     public ReferralService(ReferralCodeRepository codeRepository, ReferralRepository referralRepository,
-                           UserRepository userRepository,
+                           ReferralCreditRepository creditRepository, UserRepository userRepository,
                            @Value("${vupth.referral.link-base:https://vupth.pages.dev/i/}") String linkBase) {
         this.codeRepository = codeRepository;
         this.referralRepository = referralRepository;
+        this.creditRepository = creditRepository;
         this.userRepository = userRepository;
         this.linkBase = linkBase;
     }
@@ -60,7 +65,9 @@ public class ReferralService {
             throw ReferralException.notForYou();
         }
         ReferralCode code = codeRepository.findById(userId).orElseGet(() -> create(userId));
-        return new ReferralMeResponse(code.getCode(), linkBase + code.getCode(), referralRepository.countByReferrerId(userId));
+        return new ReferralMeResponse(code.getCode(), linkBase + code.getCode(), referralRepository.countByReferrerId(userId),
+                creditRepository.countClientsByBeneficiaryAndShareIn(userId, List.of(ReferralShare.REFERRER, ReferralShare.OWNER)),
+                creditRepository.sumUnpaidByBeneficiary(userId));
     }
 
     /** Liga o cliente a quem gerou o codigo. Repetir o mesmo codigo e inofensivo; outro codigo, 409. */

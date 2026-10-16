@@ -27249,6 +27249,7 @@
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "const b = pm.response.json();",
          "pm.test(\"codigo de 6 e link\", () => { pm.expect(b.code).to.match(/^[2-9A-HJKMNP-Z]{6}$/); pm.expect(b.link).to.include(b.code); pm.expect(b.referred_clients).to.be.a('number'); });",
+         "pm.test(\"creditados e a receber\", () => { pm.expect(b.credited_clients).to.be.a('number'); pm.expect(b.to_receive).to.be.a('number'); });",
          "pm.collectionVariables.set(\"referral_code\", b.code);"
         ]
        }

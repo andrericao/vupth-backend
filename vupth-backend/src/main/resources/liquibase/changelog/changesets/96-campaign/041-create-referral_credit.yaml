@@ -1,0 +1,34 @@
+databaseChangeLog:
+  # Bonificacao por link (BAK-9, fatia 2): o credito de cada corte de cliente indicado, uma linha por quem recebe.
+  # REFERRER = quem gerou o link e recebe tudo; OWNER e PROFESSIONAL = a divisao da loja do dono (DEC-70/73).
+  # paid_at nulo = a receber. Um cliente gera credito uma vez so (o primeiro corte concluido).
+  - changeSet:
+      id: 041-create-referral_credit
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: referral_credit
+      changes:
+        - createTable:
+            tableName: referral_credit
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_referral_credit, nullable: false}}
+              - column: {name: campaign_id, type: UUID, constraints: {nullable: false, foreignKeyName: fk_referral_credit_campaign, references: campaign(id)}}
+              - column: {name: attendance_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: client_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: beneficiary_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: share, type: VARCHAR(12), constraints: {nullable: false}}
+              - column: {name: amount, type: "NUMERIC(10,2)", constraints: {nullable: false}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: paid_at, type: TIMESTAMP WITH TIME ZONE}
+        - addUniqueConstraint:
+            tableName: referral_credit
+            columnNames: client_id, share
+            constraintName: uk_referral_credit_client_share
+        - createIndex:
+            tableName: referral_credit
+            indexName: ix_referral_credit_beneficiary
+            columns:
+              - column: {name: beneficiary_id}

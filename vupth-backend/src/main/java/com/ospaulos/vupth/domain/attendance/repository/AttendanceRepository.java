@@ -320,6 +320,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // O portao do PROFISSIONAL reusa o existsByProfessional_IdAndStatusIn acima.
     boolean existsByClient_IdAndStatusIn(UUID clientId, List<AttendanceStatus> statuses);
 
+    /** Quantos atendimentos do cliente estao no status (a bonificacao por link vale so o primeiro concluido). */
+    long countByClient_IdAndStatus(UUID clientId, AttendanceStatus status);
+
     /**
      * pagamento-pix: o que o cliente ainda deve — atendimentos FINALIZADOS com o pagamento em aberto
      * (quem esta na fila e nao pagou nao conta). O portao das filas e o dot do Perfil.
