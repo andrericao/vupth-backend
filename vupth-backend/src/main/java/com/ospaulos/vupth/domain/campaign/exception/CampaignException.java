@@ -8,7 +8,9 @@ import org.springframework.http.HttpStatus;
  *   <li>404 {@code CAMPAIGN_NOT_FOUND} — cupom que nao existe;</li>
  *   <li>409 {@code CAMPAIGN_NOT_AVAILABLE} — desligada, fora da janela ou sem vaga;</li>
  *   <li>409 {@code CAMPAIGN_ALREADY_REDEEMED} — a pessoa ja aceitou;</li>
- *   <li>403 {@code CAMPAIGN_NOT_FOR_YOU} — o perfil nao e o da campanha, ou nao e cliente novo.</li>
+ *   <li>403 {@code CAMPAIGN_NOT_FOR_YOU} — o perfil nao e o da campanha, ou nao e cliente novo;</li>
+ *   <li>422 {@code CAMPAIGN_INVALID} — no painel, campos que nao combinam (janela, cupom, valor, limite);</li>
+ *   <li>409 {@code CAMPAIGN_CODE_TAKEN} — no painel, o cupom ja e de outra campanha.</li>
  * </ul>
  */
 public class CampaignException extends RuntimeException {
@@ -36,6 +38,14 @@ public class CampaignException extends RuntimeException {
 
     public static CampaignException notForYou() {
         return new CampaignException(HttpStatus.FORBIDDEN, "CAMPAIGN_NOT_FOR_YOU", "Este cupom nao vale para o seu perfil.");
+    }
+
+    public static CampaignException invalid(String message) {
+        return new CampaignException(HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID", message);
+    }
+
+    public static CampaignException codeTaken() {
+        return new CampaignException(HttpStatus.CONFLICT, "CAMPAIGN_CODE_TAKEN", "Este cupom ja e de outra campanha.");
     }
 
     public HttpStatus getStatus() {

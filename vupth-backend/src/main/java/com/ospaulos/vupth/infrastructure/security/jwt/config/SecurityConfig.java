@@ -267,6 +267,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/email-invitations/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/service-types/*/keywords").hasRole("PROFESSIONAL")
 
+                        // Painel do Andre (DEC-69): so o papel ADMIN, que nasce por migracao.
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())
                 // Sem isto o preflight OPTIONS cai no anyRequest().authenticated() e, como

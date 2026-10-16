@@ -7,5 +7,7 @@ public enum RoleType {
     PROFESSIONAL,
     PARTNER,
     SECRETARY,
-    CLIENT;
+    CLIENT,
+    /** O Andre no painel (campanha-pelo-painel, DEC-69). So nasce por migracao, nunca pelo app. */
+    ADMIN;
 }
