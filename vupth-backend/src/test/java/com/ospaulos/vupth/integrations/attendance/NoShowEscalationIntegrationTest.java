@@ -61,6 +61,7 @@ class NoShowEscalationIntegrationTest {
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired UserRepository userRepository;
     @Autowired ServiceItemRepository serviceItemRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
 
     private final Faker faker = new Faker();
@@ -150,6 +151,12 @@ class NoShowEscalationIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    /** O profissional tira o cliente da fila (limpa o cenario para o proximo teste). */
+    private void cancel(Q q) throws Exception {
+        mvc.perform(delete("/professional-queue/{id}/remove", q.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isOk());
+    }
+
     private AttendanceStatus statusOf(String id) {
         return attendanceRepository.findById(UUID.fromString(id)).orElseThrow().getStatus();
     }
@@ -182,22 +189,48 @@ class NoShowEscalationIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("no-show -> 410 NO_SHOW_REMOVED, e o cliente atrasado continua na fila sem multa")
-    void noShow_gone() throws Exception {
-        Q c1 = createWalkin();
-        createWalkin(); // proximo, para o c1 ter atras de quem cair no /late
+    @DisplayName("falta-do-cliente: cedo demais -> 409 NO_SHOW_TOO_EARLY com available_at; o segundo da fila -> 409 NO_SHOW_NOT_FIRST")
+    void noShow_tooEarlyAndNotFirst() throws Exception {
+        Q first = createWalkin();
+        Q second = createWalkin();
 
-        markLate(c1.id());
+        mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NO_SHOW_TOO_EARLY"))
+                .andExpect(jsonPath("$.available_at").isNotEmpty());
+        mvc.perform(patch("/attendances/{id}/no-show", second.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NO_SHOW_NOT_FIRST"));
 
-        mvc.perform(patch("/attendances/{id}/no-show", c1.id())
-                        .header("Authorization", ownerProfToken))
-                .andExpect(status().isGone())
-                .andExpect(jsonPath("$.code").value("NO_SHOW_REMOVED"));
+        assertThat(statusOf(first.id())).isEqualTo(AttendanceStatus.SCHEDULED);
+        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(first.clientId()))).isZero();
+        cancel(first);
+        cancel(second);
+    }
 
-        assertThat(statusOf(c1.id())).as("nada mudou: segue atrasado").isEqualTo(AttendanceStatus.LATE);
-        assertThat(inWaiting(c1.id())).as("continua na fila").isTrue();
-        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(c1.clientId())))
-                .as("sem multa").isZero();
+    @Test
+    @Order(11)
+    @DisplayName("falta-do-cliente: passada a espera, o profissional marca -> REMOVED, multa NO_SHOW de R$ 5 e o proximo sobe")
+    void noShow_happyPath() throws Exception {
+        Q first = createWalkin();
+        Q second = createWalkin();
+        jdbc.update("UPDATE attendance SET promised_time = now() - interval '2 hours', "
+                + "scheduled_time = now() - interval '2 hours' WHERE id = ?", UUID.fromString(first.id()));
+
+        mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isOk());
+
+        assertThat(statusOf(first.id())).isEqualTo(AttendanceStatus.REMOVED);
+        var events = penaltyEventRepository.findByClientIdOrderByCreatedAtDesc(UUID.fromString(first.clientId()));
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getType()).isEqualTo(com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW);
+        assertThat(events.get(0).getAmount()).isEqualByComparingTo("5.00");
+        assertThat(events.get(0).getAttendanceId()).isEqualTo(UUID.fromString(first.id()));
+        assertThat(inWaiting(second.id())).isTrue();
+        // o atendimento ja nao esta mais em andamento: marcar de novo nao vale
+        mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isBadRequest());
+        cancel(second);
     }
 
     @Test

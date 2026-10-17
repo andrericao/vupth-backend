@@ -254,6 +254,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "OPERATION_MODE_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowException.class)
+    public ResponseEntity<NoShowErrorResponse> handleNoShow(
+            com.ospaulos.vupth.domain.attendance.exception.NoShowException ex, HttpServletRequest req) {
+        log.warn("[409] NoShow {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new NoShowErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getAvailableAt()));
+    }
+
+    /** 409 da falta: com {@code available_at} (a hora a partir da qual o botao vale), quando for cedo. */
+    public record NoShowErrorResponse(
+            int status,
+            String message,
+            String code,
+            OffsetDateTime timestamp,
+            @com.fasterxml.jackson.annotation.JsonProperty("available_at") OffsetDateTime availableAt) {
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException.class)
     public ResponseEntity<ErrorResponse> handleNoShowRemoved(
             com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException ex, HttpServletRequest req) {

@@ -49,6 +49,13 @@ public class LateArrivalService {
     private final ClientPenaltyEventRepository penaltyEventRepository;
     private final PushNotificationPublisher pushPublisher;
 
+    /** falta-do-cliente (DEC-83): a multa de quem nao compareceu e a espera antes de o profissional poder marcar. */
+    @org.springframework.beans.factory.annotation.Value("${vupth.penalty.no-show-amount:5.00}")
+    private BigDecimal noShowAmount = new BigDecimal("5.00");
+
+    @org.springframework.beans.factory.annotation.Value("${vupth.penalty.no-show-wait-minutes:10}")
+    private int noShowWaitMinutes = 10;
+
     /** A marcacao conta para o contador? So depois da tolerancia; sem nada gravado (atendimento antigo), conta. */
     boolean countsAsLate(Attendance attendance, Professional professional, OffsetDateTime now) {
         OffsetDateTime communicated = communicatedTime(attendance, professional, now);
@@ -136,6 +143,35 @@ public class LateArrivalService {
         }
         attendance.setCountedLates(0);
         log.info("[Late] atrasos desfeitos — client={} lateCount={}", client.getId(), client.getLateCount());
+    }
+
+    /** A partir de quando o profissional (ou o dono) pode marcar que o cliente nao compareceu. */
+    public OffsetDateTime noShowAvailableAt(Attendance attendance, Professional professional, OffsetDateTime now) {
+        OffsetDateTime communicated = communicatedTime(attendance, professional, now);
+        OffsetDateTime base = communicated != null ? communicated : attendance.getScheduledTime();
+        return base.plusMinutes(noShowWaitMinutes);
+    }
+
+    /**
+     * O cliente nao compareceu: nasce a multa {@code NO_SHOW} (pendente, acumula com as outras) e ele recebe o aviso com
+     * o botao "Pagar multa". Convidado, sem conta, sai da fila sem multa. Devolve se houve multa.
+     */
+    public boolean registerNoShow(Attendance attendance) {
+        Client client = attendance.getClient();
+        if (client == null) {
+            return false;
+        }
+        penaltyEventRepository.save(new ClientPenaltyEvent(
+                client, PenaltyType.NO_SHOW, attendance.getId(), 0, noShowAmount));
+        String amount = String.format(java.util.Locale.forLanguageTag("pt-BR"), "R$ %.2f", noShowAmount);
+        pushPublisher.notifyUser(client.getId(), "Você foi removido da fila",
+                "Você foi removido da fila por não comparecer. Multa de " + amount + ".",
+                Map.of("type", "NO_SHOW_REMOVED",
+                        "attendanceId", String.valueOf(attendance.getId()),
+                        "establishmentId", String.valueOf(attendance.getEstablishment().getId()),
+                        "amount", noShowAmount.toPlainString()));
+        log.info("[NoShow] client={} attendance={} -> multa de {}", client.getId(), attendance.getId(), noShowAmount);
+        return true;
     }
 
     private void notify(Client client, Attendance attendance, int count) {
