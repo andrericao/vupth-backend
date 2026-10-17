@@ -35,6 +35,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: auto
+      AGE_IDENTITY: ${{ secrets.BACKUP_AGE_IDENTITY }}
       AWS_REQUEST_CHECKSUM_CALCULATION: when_required
       AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
     steps:
@@ -42,10 +43,21 @@ jobs:
 
       - name: Baixa o ultimo backup diario
         run: |
-          ultimo=$(aws s3 ls "s3://$BUCKET/daily/" --endpoint-url "$R2_ENDPOINT" | awk '{print $4}' | grep '\.dump$' | sort | tail -n 1)
+          ultimo=$(aws s3 ls "s3://$BUCKET/daily/" --endpoint-url "$R2_ENDPOINT" | awk '{print $4}' | grep -E '\.dump(\.age)?$' | sort | tail -n 1)
           [ -n "$ultimo" ] || { echo "nenhum backup em daily/"; exit 1; }
           echo "restaurando $ultimo"
-          aws s3 cp "s3://$BUCKET/daily/$ultimo" vupth.dump --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          aws s3 cp "s3://$BUCKET/daily/$ultimo" "$ultimo" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          case "$ultimo" in
+            *.age)
+              # S5: o backup esta cifrado. A chave privada age so existe aqui se o Andre a pos no segredo
+              # BACKUP_AGE_IDENTITY; sem ela o teste mensal para e avisa (a prova manual esta em backend.html).
+              [ -n "$AGE_IDENTITY" ] || { echo "backup cifrado e falta o segredo BACKUP_AGE_IDENTITY"; exit 1; }
+              printf '%s\n' "$AGE_IDENTITY" > identity.txt
+              docker run --rm -v "$PWD":/w alpine:3 sh -c "apk add --no-cache age >/dev/null && age -d -i /w/identity.txt -o /w/vupth.dump /w/$ultimo"
+              rm -f identity.txt
+              ;;
+            *) mv "$ultimo" vupth.dump ;;
+          esac
 
       - name: Restaura no Postgres do job
         run: |
