@@ -305,6 +305,27 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-83: o cliente ve a multa e o total com ela; o profissional e o dono veem so o servico")
+    void penaltyOnlyForClient() {
+        withPixKey();
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        ClientPenaltyEvent fine = new ClientPenaltyEvent();
+        fine.setAmount(new BigDecimal("5.00"));
+        fine.setChargedAttendanceId(a.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(List.of(a.getId()))).thenReturn(List.of(fine));
+        when(attendanceRepository.findOpenPaymentsOfProfessional(professionalId)).thenReturn(List.of(a));
+
+        PaymentResponse forClient = service.getPayment(a.getId(), clientId);
+        assertThat(forClient.penaltiesValue()).isEqualByComparingTo("5.00");
+        assertThat(forClient.amount()).isEqualByComparingTo("45.00");
+
+        PaymentResponse forProfessional = service.getPayment(a.getId(), professionalId);
+        assertThat(forProfessional.penaltiesValue()).isEqualByComparingTo("0");
+        assertThat(forProfessional.amount()).isEqualByComparingTo("40.00");
+        assertThat(service.pendingOfProfessional(professionalId).items().get(0).amount()).isEqualByComparingTo("40.00");
+    }
+
+    @Test
     @DisplayName("push-pagamento-pendente: o valor so existe com o pagamento PENDENTE (servicos mais multas)")
     void pendingAmount() {
         Attendance pending = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);

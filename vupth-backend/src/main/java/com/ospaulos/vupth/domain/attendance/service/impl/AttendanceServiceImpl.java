@@ -1637,9 +1637,36 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<Attendance> attendances = attendanceRepository.findByFilters(
                 resolvedEstablishmentId, professionalId, status, from, to);
 
-        return attendances.stream()
+        return withReasons(attendances.stream()
                 .map(AttendanceListResponse::fromEntity)
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
+    }
+
+    /**
+     * relatorio-sem-multa (DEC-83): o motivo de cada atendimento que nao aconteceu (o cliente cancelou, o profissional
+     * removeu, removido por atraso) e a observacao de atraso do concluido, sem valor — a multa e do app. Uma consulta
+     * para a lista toda.
+     */
+    private List<AttendanceListResponse> withReasons(List<AttendanceListResponse> items) {
+        if (items.isEmpty()) {
+            return items;
+        }
+        Map<UUID, Set<com.ospaulos.vupth.domain.client.model.PenaltyType>> events = new java.util.HashMap<>();
+        penaltyEventRepository.findByAttendanceIdIn(items.stream().map(AttendanceListResponse::id).toList())
+                .forEach(e -> events.computeIfAbsent(e.getAttendanceId(), k -> new java.util.HashSet<>()).add(e.getType()));
+        return items.stream().map(i -> {
+            var types = events.getOrDefault(i.id(), Set.of());
+            String reason = null;
+            if (i.status() == AttendanceStatus.CANCELLED) {
+                reason = "CLIENT_CANCELLED";
+            } else if (i.status() == AttendanceStatus.REMOVED) {
+                reason = types.contains(com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
+                        ? "REMOVED_FOR_LATENESS" : "PROFESSIONAL_REMOVED";
+            }
+            boolean late = i.status() == AttendanceStatus.FINISHED
+                    && types.contains(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
+            return reason == null && !late ? i : i.withReason(reason, late);
+        }).collect(Collectors.toList());
     }
 
     @Override
@@ -1683,9 +1710,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 org.springframework.data.domain.PageRequest.of(page.page(), page.size()));
         List<AttendanceListResponse> items = ids.isEmpty()
                 ? List.of()
-                : attendanceRepository.findAllByIdsWithDetails(ids.getContent()).stream()
+                : withReasons(attendanceRepository.findAllByIdsWithDetails(ids.getContent()).stream()
                         .map(AttendanceListResponse::fromEntity)
-                        .collect(Collectors.toList());
+                        .collect(Collectors.toList()));
 
         return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
                 items, page.page(), page.size(), ids.getTotalElements(), ids.getTotalPages(), ids.hasNext());
@@ -1723,11 +1750,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Client: "ja avaliei?" — uma consulta para o historico inteiro.
         Set<UUID> rated = attendances.isEmpty() ? Set.of()
                 : attendanceRatingRepository.findRatedAttendanceIds(attendances.stream().map(Attendance::getId).toList());
-        return attendances.stream()
+        return withReasons(attendances.stream()
                 .map(a -> AttendanceListResponse.fromEntity(a)
                         .withPenalties(penalties.getOrDefault(a.getId(), List.of()))
                         .withRated(rated.contains(a.getId())))
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
     }
 
     private UUID resolveEstablishmentId(UUID userId, UUID establishmentId, UUID professionalId, Professional professional) {

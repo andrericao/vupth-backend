@@ -154,7 +154,7 @@ public class ReportServiceImpl implements ReportService {
             stores = establishmentIds.stream().distinct().map(byId::get).toList();
         }
         if (stores.isEmpty()) {
-            var empty = ownerSummary(List.of(), 0, BigDecimal.ZERO);
+            var empty = ownerSummary(List.of(), 0, reasons(List.of()), 0);
             return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse(empty, List.of(), List.of());
         }
 
@@ -164,7 +164,9 @@ public class ReportServiceImpl implements ReportService {
         List<Object[]> cancelled = attendanceRepository.findCancelledTimesByEstablishmentsBetween(
                 ids, from(dateFrom), to(dateTo));
 
-        List<Object[]> penalties = attendanceRepository.findPenaltiesByEstablishmentsBetween(
+        List<Object[]> notRealized = attendanceRepository.findNotRealizedByEstablishmentsBetween(
+                ids, from(dateFrom), to(dateTo));
+        List<Object[]> finishedLate = attendanceRepository.findFinishedLateByEstablishmentsBetween(
                 ids, from(dateFrom), to(dateTo));
 
         var storeBlocks = stores.stream().map(e -> new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Store(
@@ -172,37 +174,50 @@ public class ReportServiceImpl implements ReportService {
                 ownerSummary(
                         finished.stream().filter(a -> a.getEstablishment().getId().equals(e.getId())).toList(),
                         cancelled.stream().filter(c -> c[0].equals(e.getId())).count(),
-                        penaltySum(penalties.stream().filter(x -> x[0].equals(e.getId())).toList())))).toList();
+                        reasons(notRealized.stream().filter(x -> x[0].equals(e.getId())).toList()),
+                        finishedLate.stream().filter(x -> x[0].equals(e.getId())).count()))).toList();
 
         // A serie: o periodo e contado no dia da loja; so entram os periodos com atendimento.
         Map<LocalDate, List<Attendance>> finishedByPeriod = new TreeMap<>(finished.stream()
                 .collect(Collectors.groupingBy(a -> periodStart(BusinessClock.dateAt(a.getScheduledTime()), groupBy))));
         Map<LocalDate, Long> cancelledByPeriod = cancelled.stream().collect(Collectors.groupingBy(
                 c -> periodStart(BusinessClock.dateAt((OffsetDateTime) c[1]), groupBy), Collectors.counting()));
-        Map<LocalDate, List<Object[]>> penaltiesByPeriod = penalties.stream().collect(Collectors.groupingBy(
+        Map<LocalDate, List<Object[]>> notRealizedByPeriod = notRealized.stream().collect(Collectors.groupingBy(
                 x -> periodStart(BusinessClock.dateAt((OffsetDateTime) x[1]), groupBy)));
+        Map<LocalDate, Long> finishedLateByPeriod = finishedLate.stream().collect(Collectors.groupingBy(
+                x -> periodStart(BusinessClock.dateAt((OffsetDateTime) x[1]), groupBy), Collectors.counting()));
         java.util.Set<LocalDate> periods = new java.util.TreeSet<>(finishedByPeriod.keySet());
         periods.addAll(cancelledByPeriod.keySet());
-        periods.addAll(penaltiesByPeriod.keySet());
+        periods.addAll(notRealizedByPeriod.keySet());
+        periods.addAll(finishedLateByPeriod.keySet());
         var series = periods.stream().map(day -> new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Period(
                 day, ownerSummary(finishedByPeriod.getOrDefault(day, List.of()),
                 cancelledByPeriod.getOrDefault(day, 0L),
-                penaltySum(penaltiesByPeriod.getOrDefault(day, List.of()))))).toList();
+                reasons(notRealizedByPeriod.getOrDefault(day, List.of())),
+                finishedLateByPeriod.getOrDefault(day, 0L)))).toList();
 
         return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse(
-                ownerSummary(finished, cancelled.size(), penaltySum(penalties)), storeBlocks, series);
+                ownerSummary(finished, cancelled.size(), reasons(notRealized), finishedLate.size()), storeBlocks, series);
     }
 
     private com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Summary ownerSummary(
-            List<Attendance> finished, long cancelled, BigDecimal penalties) {
+            List<Attendance> finished, long cancelled,
+            com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.NotRealized notRealized, long finishedLate) {
         return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Summary(
                 finished.size(), cancelled, totalRevenue(finished), netRevenue(finished),
-                sum(finished, Attendance::getIntermediaryFee), sum(finished, Attendance::getPlatformFee), penalties);
+                sum(finished, Attendance::getIntermediaryFee), sum(finished, Attendance::getPlatformFee), notRealized, finishedLate);
     }
 
-    /** Soma o valor ({@code [loja, quando, valor]}) das multas. */
-    private BigDecimal penaltySum(List<Object[]> rows) {
-        return rows.stream().map(x -> (BigDecimal) x[2]).reduce(BigDecimal.ZERO, BigDecimal::add);
+    /**
+     * Conta os atendimentos que nao aconteceram ({@code [loja, quando, status, removidos por atraso]}) pelos tres motivos
+     * (DEC-83): CANCELLED = o cliente cancelou; REMOVED = o profissional removeu, ou, com o NO_SHOW do atendimento,
+     * removido por atraso. Nunca o valor.
+     */
+    private com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.NotRealized reasons(List<Object[]> rows) {
+        long cancelled = rows.stream().filter(x -> x[2].toString().equals("CANCELLED")).count();
+        long late = rows.stream().filter(x -> x[2].toString().equals("REMOVED") && ((Number) x[3]).longValue() > 0).count();
+        long removed = rows.stream().filter(x -> x[2].toString().equals("REMOVED") && ((Number) x[3]).longValue() == 0).count();
+        return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.NotRealized(cancelled, removed, late);
     }
 
     private BigDecimal sum(List<Attendance> attendances, java.util.function.Function<Attendance, BigDecimal> field) {

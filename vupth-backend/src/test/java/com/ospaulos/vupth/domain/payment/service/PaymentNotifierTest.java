@@ -67,7 +67,8 @@ class PaymentNotifierTest {
     @Test
     @DisplayName("Ja paguei: o profissional recebe push e WS PAYMENT_CLAIMED com o valor, para conferir")
     void claimedNotifiesProfessional() {
-        notifier.claimed(attendance.getId(), new BigDecimal("1045.5"));
+        attendance.setTotalValue(new BigDecimal("1045.5"));
+        notifier.claimed(attendance.getId());
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(pushPublisher).notifyUser(eq(professionalId), eq("Confira o pagamento"), body.capture(), anyMap());
@@ -81,7 +82,8 @@ class PaymentNotifierTest {
     @DisplayName("Convidado no Ja paguei vira 'O cliente'; valor nulo vira R$ 0,00")
     void claimedGuest() {
         attendance.setClient(null);
-        notifier.claimed(attendance.getId(), null);
+        attendance.setTotalValue(null);
+        notifier.claimed(attendance.getId());
 
         verify(pushPublisher).notifyUser(eq(professionalId), any(), eq("O cliente diz que pagou R$ 0,00 na Barbearia Central. Confira se consta na sua conta."), anyMap());
     }
@@ -120,6 +122,6 @@ class PaymentNotifierTest {
         verifyNoInteractions(pushPublisher);
 
         when(attendanceRepository.findById(attendance.getId())).thenThrow(new RuntimeException("banco fora"));
-        assertThatCode(() -> notifier.claimed(attendance.getId(), BigDecimal.ONE)).doesNotThrowAnyException();
+        assertThatCode(() -> notifier.claimed(attendance.getId())).doesNotThrowAnyException();
     }
 }

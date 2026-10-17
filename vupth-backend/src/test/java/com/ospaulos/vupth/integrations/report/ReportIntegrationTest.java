@@ -60,6 +60,9 @@ class ReportIntegrationTest {
     @Autowired ProfessionalRepository professionalRepository;
     @Autowired ObjectMapper mapper;
     @Autowired AttendanceRepository attendanceRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired com.ospaulos.vupth.domain.client.repository.ClientRepository clientRepository;
+    @Autowired com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired UserRepository userRepository;
     @Autowired ServiceItemRepository serviceItemRepository;
@@ -358,8 +361,11 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.total.gateway_fee").isNumber())
                 .andExpect(jsonPath("$.total.app_fee").isNumber())
                 .andExpect(jsonPath("$.total.cancelled").value(0))
-                .andExpect(jsonPath("$.total.penalties").value(0))
-                .andExpect(jsonPath("$.stores[0].summary.penalties").isNumber())
+                .andExpect(jsonPath("$.total.penalties").doesNotExist())
+                .andExpect(jsonPath("$.total.not_realized.client_cancelled").value(0))
+                .andExpect(jsonPath("$.total.not_realized.professional_removed").value(0))
+                .andExpect(jsonPath("$.stores[0].summary.not_realized.removed_for_lateness").value(0))
+                .andExpect(jsonPath("$.total.finished_late").value(0))
                 .andExpect(jsonPath("$.stores.length()").value(2))
                 .andExpect(jsonPath("$.stores[?(@.id=='" + establishmentId + "')].summary.finished").value(1))
                 .andExpect(jsonPath("$.series.length()").value(1))
@@ -382,6 +388,57 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.series").isEmpty());
         var plain = TestUserUtils.registerAndLoginUser(mvc, mapper, new Faker());
         mvc.perform(get("/owner/me/reports").header("Authorization", plain.token())).andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(70)
+    @DisplayName("relatorio-sem-multa: os tres motivos na contagem do dono e na lista, sem valor de multa")
+    void notRealizedWithReason() throws Exception {
+        // o unico atendimento da loja passa por tres estados; cada um e um motivo
+        var attendance = attendanceRepository.findAll().stream().findFirst().orElseThrow();
+        var client = clientRepository.findById(attendance.getClient().getId()).orElseThrow();
+
+        jdbc.update("UPDATE attendance SET status = 'CANCELLED' WHERE id = ?", attendance.getId());
+        expectReason("CLIENT_CANCELLED", 1, 0, 0);
+
+        jdbc.update("UPDATE attendance SET status = 'REMOVED' WHERE id = ?", attendance.getId());
+        expectReason("PROFESSIONAL_REMOVED", 0, 1, 0);
+
+        penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
+                client, com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW, attendance.getId(), 0,
+                new java.math.BigDecimal("5.00")));
+        expectReason("REMOVED_FOR_LATENESS", 0, 0, 1);
+
+        // concluido com atraso: nao e "nao realizado", leva a observacao
+        jdbc.update("UPDATE attendance SET status = 'FINISHED' WHERE id = ?", attendance.getId());
+        jdbc.update("UPDATE client_penalty_event SET type = 'LATE_ARRIVAL' WHERE attendance_id = ?", attendance.getId());
+        mvc.perform(get("/owner/me/reports").param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.total.finished").value(1))
+                .andExpect(jsonPath("$.total.finished_late").value(1))
+                .andExpect(jsonPath("$.total.not_realized.removed_for_lateness").value(0));
+        mvc.perform(get("/attendances").param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$[0].late_arrival").value(true))
+                .andExpect(jsonPath("$[0].not_realized_reason").doesNotExist());
+    }
+
+    private void expectReason(String reason, int cancelled, int removed, int late) throws Exception {
+        mvc.perform(get("/owner/me/reports").param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total.finished").value(0))
+                .andExpect(jsonPath("$.total.not_realized.client_cancelled").value(cancelled))
+                .andExpect(jsonPath("$.total.not_realized.professional_removed").value(removed))
+                .andExpect(jsonPath("$.total.not_realized.removed_for_lateness").value(late))
+                .andExpect(jsonPath("$.series[0].summary.not_realized.client_cancelled").value(cancelled))
+                .andExpect(jsonPath("$.total.penalties").doesNotExist());
+        mvc.perform(get("/attendances").param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].not_realized_reason").value(reason))
+                .andExpect(jsonPath("$[0].penalties").doesNotExist())
+                .andExpect(jsonPath("$[0].penaltyTotal").doesNotExist());
     }
 
     @AfterAll

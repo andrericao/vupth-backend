@@ -9,7 +9,8 @@ import java.util.UUID;
 
 /**
  * GET /owner/me/reports (multi-loja-do-dono): as lojas do dono juntas ({@code total}), cada uma ({@code stores})
- * e o tempo ({@code series}, por dia, semana ou mes da loja). {@code penalties} = as multas geradas por atendimentos da loja (o dinheiro delas e do app).
+ * e o tempo ({@code series}, por dia, semana ou mes da loja). {@code not_realized} = quantos atendimentos nao aconteceram, pelos tres motivos, e {@code finished_late} = os concluidos
+ * em que o cliente chegou atrasado; sem valor de multa.
  */
 public record OwnerReportResponse(
         @JsonProperty("total") Summary total,
@@ -25,7 +26,16 @@ public record OwnerReportResponse(
             @JsonProperty("professionals_net") BigDecimal professionalsNet,
             @JsonProperty("gateway_fee") BigDecimal gatewayFee,
             @JsonProperty("app_fee") BigDecimal appFee,
-            @JsonProperty("penalties") BigDecimal penalties
+            @JsonProperty("not_realized") NotRealized notRealized,
+            @JsonProperty("finished_late") long finishedLate
+    ) {}
+
+    /** Os tres motivos de um atendimento nao realizado (DEC-83): o cliente cancelou, o profissional removeu o cliente, o cliente foi
+     * removido por atraso. So a contagem: a multa e do app. */
+    public record NotRealized(
+            @JsonProperty("client_cancelled") long clientCancelled,
+            @JsonProperty("professional_removed") long professionalRemoved,
+            @JsonProperty("removed_for_lateness") long removedForLateness
     ) {}
 
     public record Store(

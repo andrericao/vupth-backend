@@ -609,19 +609,37 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("dateTo") OffsetDateTime dateTo);
 
     /**
-     * As multas com valor geradas no periodo por atendimentos destas lojas: {@code [id da loja, quando, valor]}. A multa
-     * e da loja do atendimento que a gerou (o atraso ou a saida da fila); quem a cobra depois e o app.
+     * Os atendimentos que nao aconteceram no periodo (DEC-83): {@code [id da loja, horario marcado, status, vezes que
+     * foi removido por atraso]}. CANCELLED = o cliente cancelou; REMOVED = o profissional removeu, e, com o evento
+     * NO_SHOW do atendimento, removido por atraso. Nunca o valor da multa.
      */
     @Query("""
-        SELECT a.establishment.id, e.createdAt, e.amount
-        FROM ClientPenaltyEvent e, Attendance a
-        WHERE a.id = e.attendanceId
-          AND a.establishment.id IN :establishmentIds
-          AND e.amount IS NOT NULL
-          AND e.createdAt >= :dateFrom
-          AND e.createdAt < :dateTo
+        SELECT a.establishment.id, a.scheduledTime, a.status,
+               (SELECT count(e) FROM ClientPenaltyEvent e
+                 WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
+        FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status IN ('CANCELLED', 'REMOVED')
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
     """)
-    List<Object[]> findPenaltiesByEstablishmentsBetween(
+    List<Object[]> findNotRealizedByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Os concluidos em que o cliente chegou atrasado (o profissional atendeu o seguinte): {@code [id da loja, horario marcado]}. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime
+        FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status = 'FINISHED'
+          AND EXISTS (SELECT 1 FROM ClientPenaltyEvent e
+                       WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findFinishedLateByEstablishmentsBetween(
             @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo);
