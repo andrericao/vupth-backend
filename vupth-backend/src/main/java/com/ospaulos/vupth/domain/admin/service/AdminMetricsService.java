@@ -37,11 +37,13 @@ public class AdminMetricsService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final String SAO_PAULO = "America/Sao_Paulo";
-    /** O fuso em que o Hibernate grava as colunas TIMESTAMP sem fuso (o da JVM). */
-    private static final String APP_ZONE = java.time.ZoneId.systemDefault().getId();
+
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager em;
 
     @org.springframework.beans.factory.annotation.Autowired
     public AdminMetricsService(JdbcTemplate jdbc) {
@@ -92,12 +94,20 @@ public class AdminMetricsService {
 
     private Funnel funnel(Window w) {
         Timestamp f = ts(w.from()), t = ts(w.to());
-        // base_user.created_at e TIMESTAMP sem fuso, gravado na hora local da JVM: le-se com esse fuso
-        long signups = count("SELECT count(*) FROM base_user WHERE (created_at AT TIME ZONE ?) >= ? "
-                + "AND (created_at AT TIME ZONE ?) < ?", APP_ZONE, f, APP_ZONE, t);
+        long signups = signupTimes(w).size();
         long created = count("SELECT count(*) FROM attendance WHERE created_at >= ? AND created_at < ?", f, t);
         return new Funnel(signups, created, byStatus("FINISHED", f, t), byStatus("CANCELLED", f, t),
                 byStatus("REMOVED", f, t), byStatus("LATE", f, t));
+    }
+
+    /**
+     * Os instantes de cadastro no periodo, pelo JPA: {@code base_user.created_at} e um TIMESTAMP sem fuso gravado na
+     * hora local da JVM, e so o Hibernate le de volta do mesmo jeito que grava (em SQL direto o fuso desencontrava).
+     */
+    private List<OffsetDateTime> signupTimes(Window w) {
+        return em.createQuery("SELECT u.createdAt FROM BaseUser u WHERE u.createdAt >= :f AND u.createdAt < :t",
+                        OffsetDateTime.class)
+                .setParameter("f", w.from()).setParameter("t", w.to()).getResultList();
     }
 
     private long byStatus(String status, Timestamp f, Timestamp t) {
@@ -132,10 +142,7 @@ public class AdminMetricsService {
         String unit = "hour".equalsIgnoreCase(granularity) ? "hour" : "day";
         String name = metric == null ? "cuts" : metric.toLowerCase();
         String sql = switch (name) {
-            case "signups" -> "SELECT date_trunc('" + unit + "', (created_at AT TIME ZONE '" + APP_ZONE + "') AT TIME ZONE '"
-                    + SAO_PAULO + "') AS at, count(*) AS value FROM base_user "
-                    + "WHERE (created_at AT TIME ZONE '" + APP_ZONE + "') >= ? "
-                    + "AND (created_at AT TIME ZONE '" + APP_ZONE + "') < ? GROUP BY 1 ORDER BY 1";
+            case "signups" -> null;
             case "revenue" -> "SELECT date_trunc('" + unit + "', scheduled_time AT TIME ZONE '" + SAO_PAULO + "') AS at, "
                     + "coalesce(sum(total_value),0) AS value FROM attendance WHERE status = 'FINISHED' "
                     + "AND scheduled_time >= ? AND scheduled_time < ? GROUP BY 1 ORDER BY 1";
@@ -146,9 +153,26 @@ public class AdminMetricsService {
                         + "AND scheduled_time >= ? AND scheduled_time < ? GROUP BY 1 ORDER BY 1";
             }
         };
+        if (sql == null) {
+            return new Series("signups", unit, signupSeries(w, unit));
+        }
         List<SeriesPoint> points = jdbc.query(sql, (rs, i) -> new SeriesPoint(
                 rs.getTimestamp("at").toLocalDateTime(), rs.getBigDecimal("value")), ts(w.from()), ts(w.to()));
         return new Series(name, unit, points);
+    }
+
+    /** Os cadastros por hora ou dia da loja (agrupados aqui, pelo motivo do {@link #signupTimes}). */
+    private List<SeriesPoint> signupSeries(Window w, String unit) {
+        java.util.TreeMap<java.time.LocalDateTime, Long> buckets = new java.util.TreeMap<>();
+        for (OffsetDateTime at : signupTimes(w)) {
+            java.time.LocalDateTime local = at.atZoneSameInstant(BusinessClock.zone()).toLocalDateTime();
+            java.time.LocalDateTime bucket = "hour".equals(unit)
+                    ? local.truncatedTo(java.time.temporal.ChronoUnit.HOURS)
+                    : local.toLocalDate().atStartOfDay();
+            buckets.merge(bucket, 1L, Long::sum);
+        }
+        return buckets.entrySet().stream()
+                .map(e -> new SeriesPoint(e.getKey(), BigDecimal.valueOf(e.getValue()))).toList();
     }
 
     // ─── finance ───
