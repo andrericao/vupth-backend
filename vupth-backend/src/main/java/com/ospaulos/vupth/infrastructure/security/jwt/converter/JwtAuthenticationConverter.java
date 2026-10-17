@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.security.jwt.converter;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -30,7 +31,7 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
             String id = jwt.getSubject();
             String email = jwt.getClaimAsString("email");
 
-            log.info("JWT CONVERTER START - id: {}, email: {}", id, email);
+            log.info("JWT CONVERTER START - id: {}", id);
 
             BaseUser user = repository.findById(UUID.fromString(id))
                     .orElseThrow(() -> {
@@ -47,7 +48,7 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
 
             UserDetailsImpl userDetails = new UserDetailsImpl(user);
 
-            log.info("JWT CONVERTER END - id: {}, email: {}", id, email);
+            log.info("JWT CONVERTER END - id: {}", id);
 
             return new UsernamePasswordAuthenticationToken(
                     userDetails,

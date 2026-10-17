@@ -19,7 +19,11 @@ class SupportContactServiceTest {
     private final EmailSender emailSender = mock(EmailSender.class);
 
     private static SupportContactRequest request(String assunto) {
-        return new SupportContactRequest("Ana", "ana@exemplo.com", "parceiro", "RECLAMACAO", assunto, "Nao consigo abrir a fila.");
+        return request("profissional", assunto);
+    }
+
+    private static SupportContactRequest request(String perfil, String assunto) {
+        return new SupportContactRequest("Ana", "ana@exemplo.com", perfil, "RECLAMACAO", assunto, "Nao consigo abrir a fila.");
     }
 
     @Test
@@ -30,9 +34,20 @@ class SupportContactServiceTest {
         ArgumentCaptor<String> subject = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(emailSender).send(eq("suporte@vupth.test"), subject.capture(), body.capture());
-        assertThat(subject.getValue()).isEqualTo("[VUPTH · Parceiro · Reclamação] Fila");
-        assertThat(body.getValue()).contains("Nome: Ana", "Responder para: ana@exemplo.com", "Perfil: Parceiro",
+        assertThat(subject.getValue()).isEqualTo("[VUPTH · Profissional · Reclamação] Fila");
+        assertThat(body.getValue()).contains("Nome: Ana", "Responder para: ana@exemplo.com", "Qual o seu perfil: Profissional",
                 "Categoria: Reclamação", "Assunto: Fila", "Nao consigo abrir a fila.");
+    }
+
+    @Test
+    @DisplayName("perfil do formulario: dono e o parceiro antigo aparecem com o nome certo no titulo")
+    void profileLabels() {
+        SupportContactService service = new SupportContactService(emailSender, "suporte@vupth.test");
+        service.forward(request("dono", "Fila"));
+        service.forward(request("parceiro", "Fila"));
+
+        verify(emailSender).send(anyString(), eq("[VUPTH · Dono · Reclamação] Fila"), contains("Qual o seu perfil: Dono"));
+        verify(emailSender).send(anyString(), eq("[VUPTH · Profissional ou dono · Reclamação] Fila"), anyString());
     }
 
     @Test
@@ -40,7 +55,7 @@ class SupportContactServiceTest {
     void subjectInOneLine() {
         new SupportContactService(emailSender, "suporte@vupth.test").forward(request("Fila\r\nBcc: x@y.z"));
 
-        verify(emailSender).send(anyString(), eq("[VUPTH · Parceiro · Reclamação] Fila Bcc: x@y.z"), anyString());
+        verify(emailSender).send(anyString(), eq("[VUPTH · Profissional · Reclamação] Fila Bcc: x@y.z"), anyString());
     }
 
     @Test

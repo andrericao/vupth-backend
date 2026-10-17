@@ -45,7 +45,6 @@ public class MailInfoContributor implements InfoContributor {
 
     private final EmailSender emailSender;
     private final String provider;
-    private final String from;
     private final String brevoApiKey;
     private final String smtpHost;
     private final String smtpPassword;
@@ -53,13 +52,11 @@ public class MailInfoContributor implements InfoContributor {
     public MailInfoContributor(
             EmailSender emailSender,
             @Value("${vupth.mail.provider:none}") String provider,
-            @Value("${vupth.mail.from:no-reply@vupth.app}") String from,
             @Value("${vupth.mail.brevo.api-key:}") String brevoApiKey,
             @Value("${spring.mail.host:}") String smtpHost,
             @Value("${spring.mail.password:}") String smtpPassword) {
         this.emailSender = emailSender;
         this.provider = provider;
-        this.from = from;
         this.brevoApiKey = brevoApiKey;
         this.smtpHost = smtpHost;
         this.smtpPassword = smtpPassword;
@@ -68,11 +65,10 @@ public class MailInfoContributor implements InfoContributor {
     @Override
     public void contribute(Info.Builder builder) {
         // LinkedHashMap para o JSON sair na ordem em que se le o diagnostico: o que foi pedido,
-        // o que subiu, para quem envia, se da para enviar.
+        // o que subiu, se da para enviar. O remetente (from) ficou de fora: o info e publico (S6, DEC-81).
         Map<String, Object> mail = new LinkedHashMap<>();
         mail.put("provider", provider);
         mail.put("sender", ClassUtils.getUserClass(emailSender).getSimpleName());
-        mail.put("from", from);
         mail.put("credentials", credentialsStatus());
         builder.withDetail("mail", mail);
     }

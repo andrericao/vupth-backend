@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Cobertura sem os metodos do Hibernate (cobertura-98, Andre 11/10, 5.2 a).
+"""Cobertura sem os metodos do Hibernate (piso 80% e meta 85%, DEC-82, Andre 17/10; antes cobertura-98).
 
 O plugin de enhance do Hibernate (pom, <goal>enhance</goal>) injeta nas entidades metodos
 $$_hibernate_* que nenhum teste chama e que nao sao codigo nosso; o JaCoCo os conta. Este script le o
 target/site/jacoco/jacoco.xml (o mvn test gera), tira esses metodos e soma linhas, instrucoes,
 branches e metodos. Abaixo do minimo em qualquer um, sai com 1.
 
-    python3 scripts/cobertura.py                  # minimo 98%
+    python3 scripts/cobertura.py                  # piso 80% (meta 85%)
     python3 scripts/cobertura.py --minimo 0.95
     python3 scripts/cobertura.py --piores 15      # as 15 classes com mais linhas sem teste
 
@@ -47,7 +47,7 @@ def ler(caminho):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--xml", default=str(Path(__file__).resolve().parent.parent / "target/site/jacoco/jacoco.xml"))
-    ap.add_argument("--minimo", type=float, default=0.98)
+    ap.add_argument("--minimo", type=float, default=0.80)
     ap.add_argument("--piores", type=int, default=10)
     args = ap.parse_args()
 

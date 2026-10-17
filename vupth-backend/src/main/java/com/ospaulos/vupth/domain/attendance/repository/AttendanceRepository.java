@@ -320,6 +320,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // O portao do PROFISSIONAL reusa o existsByProfessional_IdAndStatusIn acima.
     boolean existsByClient_IdAndStatusIn(UUID clientId, List<AttendanceStatus> statuses);
 
+    /** Quantos atendimentos do cliente estao no status (a bonificacao por link vale so o primeiro concluido). */
+    long countByClient_IdAndStatus(UUID clientId, AttendanceStatus status);
+
     /**
      * pagamento-pix: o que o cliente ainda deve — atendimentos FINALIZADOS com o pagamento em aberto
      * (quem esta na fila e nao pagou nao conta). O portao das filas e o dot do Perfil.
@@ -335,6 +338,19 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             ORDER BY a.endTime DESC
             """)
     List<Attendance> findOpenPaymentsOfClient(@Param("clientId") UUID clientId);
+
+    /**
+     * push-pagamento-pendente (DEC-78): os atendimentos de cliente com conta, finalizados antes de {@code before}
+     * e ainda com o pagamento PENDENTE — os que levam o lembrete das 10h.
+     */
+    @Query("""
+            SELECT a FROM Attendance a
+            JOIN FETCH a.client JOIN FETCH a.establishment
+            WHERE a.status = com.ospaulos.vupth.domain.attendance.AttendanceStatus.FINISHED
+              AND a.paymentStatus = com.ospaulos.vupth.domain.payment.PaymentStatus.PENDING
+              AND a.endTime < :before
+            """)
+    List<Attendance> findPendingPaymentsFinishedBefore(@Param("before") java.time.OffsetDateTime before);
 
     /**
      * pagamento-pix: o dot do profissional — os que o cliente diz que pagou (em qualquer status) e os

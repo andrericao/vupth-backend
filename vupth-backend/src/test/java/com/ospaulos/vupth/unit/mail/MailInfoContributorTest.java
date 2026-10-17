@@ -42,7 +42,7 @@ class MailInfoContributorTest {
 
     private MailInfoContributor contributor(EmailSender sender, String provider, String apiKey,
                                             String smtpHost, String smtpPassword) {
-        return new MailInfoContributor(sender, provider, "no-reply@vupth.app", apiKey, smtpHost, smtpPassword);
+        return new MailInfoContributor(sender, provider, apiKey, smtpHost, smtpPassword);
     }
 
     @Nested
@@ -137,7 +137,7 @@ class MailInfoContributorTest {
         @DisplayName("nem a API key nem a senha de SMTP aparecem no JSON, em nenhuma forma")
         void naoVazaCredencial() throws Exception {
             MailInfoContributor comTudoPreenchido = new MailInfoContributor(
-                    new FakeBrevoSender(), "brevo", "no-reply@vupth.app",
+                    new FakeBrevoSender(), "brevo",
                     "xkeysib-segredo-da-api", "smtp-relay.brevo.com", "senha-do-smtp");
 
             String json = new ObjectMapper().writeValueAsString(mailOf(comTudoPreenchido));
@@ -147,10 +147,10 @@ class MailInfoContributorTest {
         }
 
         @Test
-        @DisplayName("o remetente sai inteiro — nao e segredo, e e o que explica e-mail caindo em spam")
-        void remetenteSaiInteiro() {
+        @DisplayName("o remetente nao sai: o info e publico (S6, DEC-81)")
+        void remetenteNaoSai() {
             assertThat(mailOf(contributor(new FakeBrevoSender(), "brevo", "chave", "", "")))
-                    .containsEntry("from", "no-reply@vupth.app");
+                    .doesNotContainKey("from");
         }
     }
 }

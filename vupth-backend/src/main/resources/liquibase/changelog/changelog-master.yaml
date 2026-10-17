@@ -442,3 +442,38 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/036-create-account_deletion_ledger.yaml
       relativeToChangeLogFile: true
+
+  # A chave Pix e da pessoa: o dono tambem cadastra (pix-por-pessoa, DEC-65)
+  - include:
+      file: changesets/20-auth/037-pix-key-on-base_user.yaml
+      relativeToChangeLogFile: true
+
+  # Campanhas: publica ou privada com cupom, e quem aceitou (promocao-de-lancamento v2, DEC-64)
+  - include:
+      file: changesets/96-campaign/038-create-campaign.yaml
+      relativeToChangeLogFile: true
+
+  # Bonificacao por link: parametros da campanha, codigo de quem indica e o cliente indicado (BAK-9, DEC-73)
+  - include:
+      file: changesets/96-campaign/039-referral.yaml
+      relativeToChangeLogFile: true
+
+  # ADMIN do staging = a conta do Andre (painel e Asaas); nunca na producao
+  - include:
+      file: changesets/20-auth/040-admin-staging.yaml
+      relativeToChangeLogFile: true
+
+  # Bonificacao por link: o credito de cada corte de cliente indicado (BAK-9, fatia 2)
+  - include:
+      file: changesets/96-campaign/041-create-referral_credit.yaml
+      relativeToChangeLogFile: true
+
+  # Voto do artigo do site de suporte (voto-do-artigo)
+  - include:
+      file: changesets/96-campaign/042-create-article-vote.yaml
+      relativeToChangeLogFile: true
+
+  # S4: colunas do Pix maiores para o texto cifrado
+  - include:
+      file: changesets/20-auth/043-pix-columns-for-encryption.yaml
+      relativeToChangeLogFile: true

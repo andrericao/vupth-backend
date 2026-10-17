@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.user.service.impl;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
@@ -20,7 +21,7 @@ public class AuthServiceImpl implements UserDetailsService {
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 
-        log.info("LOAD USER BY USERNAME - LOGIN() " + email);
+        log.info("LOAD USER BY USERNAME - LOGIN() " + LogMask.email(email));
 
         BaseUser user =  userRepository.findByEmailWithRoles(email)
                 .orElseThrow(

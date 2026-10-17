@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.affiliation.usecase;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.api.affiliation.dto.response.AffiliationRequestResponse;
 import com.ospaulos.vupth.api.affiliation.dto.response.EmailInvitationResponse;
 import com.ospaulos.vupth.api.affiliation.dto.response.InviteByEmailResponse;
@@ -42,7 +43,7 @@ public class InviteByEmailUseCase {
     @Transactional
     public InviteByEmailResponse invite(UUID ownerId, UUID establishmentId, String rawEmail) {
         String email = EmailInvitation.normalize(rawEmail);
-        log.info("[EmailInvitation] invite — owner={} establishment={} email={}", ownerId, establishmentId, email);
+        log.info("[EmailInvitation] invite — owner={} establishment={} email={}", ownerId, establishmentId, LogMask.email(email));
 
         Establishment establishment = ownedEstablishment(ownerId, establishmentId);
 

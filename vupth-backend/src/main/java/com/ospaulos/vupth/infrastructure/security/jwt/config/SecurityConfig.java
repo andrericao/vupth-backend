@@ -122,9 +122,14 @@ public class SecurityConfig {
                         // exclusao-por-link: a pagina web nao tem login — o link e a senha sao a prova
                         .requestMatchers(HttpMethod.POST, "/auth/account-deletion/request", "/auth/account-deletion/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
+                        // campanhas publicas (DEC-64): a pagina "Campanhas ativas" do suporte nao tem login
+                        .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/support/articles/*/vote").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/referrals/me").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/reports").hasRole("PROFESSIONAL")
@@ -181,7 +186,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/attendances/*/payment/confirm").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/clients/me/pending-payments").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
-                        .requestMatchers("/professional/me/pix").hasRole("PROFESSIONAL")
+                        // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
+                        .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente
@@ -264,6 +270,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/email-invitations/*").hasRole("OWNER")
                         .requestMatchers(HttpMethod.POST, "/service-types/*/keywords").hasRole("PROFESSIONAL")
 
+                        // Painel do Andre (DEC-69): so o papel ADMIN, que nasce por migracao.
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+
                         // ── Fallback ──────────────────────────────────────────────────────
                         .anyRequest().authenticated())
                 // Sem isto o preflight OPTIONS cai no anyRequest().authenticated() e, como
@@ -272,6 +281,13 @@ public class SecurityConfig {
                 // Com o .cors(), o CorsFilter responde o preflight ANTES da autorizacao.
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
+                // S7 (DEC-81): HSTS so em resposta HTTPS. Atras do proxy da plataforma o pedido chega em HTTP puro, e o
+                // protocolo de verdade vem no X-Forwarded-Proto; sem isto o Spring nunca mandaria o cabecalho.
+                .headers(headers -> headers.httpStrictTransportSecurity(hsts -> hsts
+                        .requestMatcher(request -> request.isSecure()
+                                || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")))
+                        .maxAgeInSeconds(31_536_000)
+                        .includeSubDomains(true)))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
                         oauth2 -> oauth2

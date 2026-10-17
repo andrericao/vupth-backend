@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.user.usecase.profile;
 
+import com.ospaulos.vupth.api.user.policy.PasswordPolicy;
 import com.ospaulos.vupth.api.user.dto.request.profile.PasswordRequest;
 import com.ospaulos.vupth.api.user.dto.response.auth.RefreshTokenResponse;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosAndToken;
@@ -38,6 +39,7 @@ public class UpdatePasswordUseCase {
             throw new InvalidCurrentPasswordException();
         }
 
+        PasswordPolicy.check(request.password());
         user.setPassword(passwordEncoder.encode(request.password()));
         repository.save(user);
 

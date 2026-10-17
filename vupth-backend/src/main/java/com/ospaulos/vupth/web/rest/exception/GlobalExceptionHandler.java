@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.web.rest.exception;
 
+import com.ospaulos.vupth.api.user.policy.PasswordPolicy;
 import com.ospaulos.vupth.domain.address.exception.InvalidCoordinatesException;
 import com.ospaulos.vupth.domain.address.exception.InvalidUfException;
 import com.ospaulos.vupth.domain.address.exception.ReverseGeocodeNotFoundException;
@@ -535,6 +536,22 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidArticleSlug(
+            com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidArticleSlug | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INVALID_ARTICLE_SLUG");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.api.user.exception.PasswordPolicyException.class)
+    public ResponseEntity<PasswordPolicyErrorResponse> handlePasswordPolicy(
+            com.ospaulos.vupth.api.user.exception.PasswordPolicyException ex, HttpServletRequest req) {
+        log.warn("[422] PasswordPolicy {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new PasswordPolicyErrorResponse(
+                HttpStatus.UNPROCESSABLE_ENTITY.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(),
+                PasswordPolicy.MIN_CHARS, PasswordPolicy.MAX_CHARS));
+    }
+
     @ExceptionHandler(InvalidCurrentPasswordException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCurrentPassword(
             InvalidCurrentPasswordException ex, HttpServletRequest req) {
@@ -836,6 +853,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), "PAYMENT_ACCESS_DENIED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.campaign.exception.CampaignException.class)
+    public ResponseEntity<ErrorResponse> handleCampaign(
+            com.ospaulos.vupth.domain.campaign.exception.CampaignException ex, HttpServletRequest req) {
+        log.warn("[{}] Campaign {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.referral.exception.ReferralException.class)
+    public ResponseEntity<ErrorResponse> handleReferral(
+            com.ospaulos.vupth.domain.referral.exception.ReferralException ex, HttpServletRequest req) {
+        log.warn("[{}] Referral {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException.class)
     public ResponseEntity<ErrorResponse> handlePixKeyNotSet(
             com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException ex, HttpServletRequest req) {
@@ -918,6 +949,16 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, String code) {
         return ResponseEntity.status(status)
                 .body(new ErrorResponse(status.value(), message, code, OffsetDateTime.now()));
+    }
+
+    /** 422 da senha (DEC-79): traz o minimo e o maximo para os apps mostrarem. */
+    public record PasswordPolicyErrorResponse(
+            int status,
+            String message,
+            String code,
+            OffsetDateTime timestamp,
+            @com.fasterxml.jackson.annotation.JsonProperty("min_length") int minLength,
+            @com.fasterxml.jackson.annotation.JsonProperty("max_length") int maxLength) {
     }
 
     public record ErrorResponse(

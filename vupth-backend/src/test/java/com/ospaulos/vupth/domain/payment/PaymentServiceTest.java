@@ -23,9 +23,7 @@ import com.ospaulos.vupth.domain.payment.exception.PaymentPendingException;
 import com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException;
 import com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException;
 import com.ospaulos.vupth.domain.payment.service.PaymentService;
-import com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException;
 import com.ospaulos.vupth.domain.professional.model.Professional;
-import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -46,7 +44,7 @@ import static org.mockito.Mockito.*;
 class PaymentServiceTest {
 
     private AttendanceRepository attendanceRepository;
-    private ProfessionalRepository professionalRepository;
+    private com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private ClientPenaltyEventRepository penaltyRepository;
     private PaymentService service;
 
@@ -61,9 +59,9 @@ class PaymentServiceTest {
     @BeforeEach
     void setUp() {
         attendanceRepository = mock(AttendanceRepository.class);
-        professionalRepository = mock(ProfessionalRepository.class);
+        userRepository = mock(com.ospaulos.vupth.domain.user.repository.UserRepository.class);
         penaltyRepository = mock(ClientPenaltyEventRepository.class);
-        service = new PaymentService(attendanceRepository, professionalRepository, penaltyRepository);
+        service = new PaymentService(attendanceRepository, penaltyRepository, userRepository);
         when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of());
 
         professional = new Professional(user("Beto"));
@@ -99,9 +97,9 @@ class PaymentServiceTest {
     }
 
     private void withPixKey() {
-        professional.setPixKeyType(PixKeyType.EMAIL);
-        professional.setPixKey("beto@mail.com");
-        professional.setPixHolderName("Beto");
+        professional.getBaseUser().setPixKeyType(PixKeyType.EMAIL);
+        professional.getBaseUser().setPixKey("beto@mail.com");
+        professional.getBaseUser().setPixHolderName("Beto");
     }
 
     // ─── nasce na criacao ───
@@ -133,7 +131,7 @@ class PaymentServiceTest {
     @Test
     @DisplayName("Chave: salva normalizada; tipo errado ou nome fora de 1..25 da 422; GET sem chave 404; DELETE limpa")
     void pixKey() {
-        when(professionalRepository.findById(professionalId)).thenReturn(Optional.of(professional));
+        when(userRepository.findById(professionalId)).thenReturn(Optional.of(professional.getBaseUser()));
 
         var saved = service.setPixKey(professionalId, new PixKeyRequest(PixKeyType.PHONE, "(11) 98765-4321", " Beto "));
         assertThat(saved.key()).isEqualTo("+5511987654321");
@@ -150,11 +148,12 @@ class PaymentServiceTest {
                 .isInstanceOf(PixKeyInvalidException.class);
 
         service.deletePixKey(professionalId);
-        assertThat(professional.getPixKey()).isNull();
+        assertThat(professional.getBaseUser().getPixKey()).isNull();
         assertThatThrownBy(() -> service.getPixKey(professionalId)).isInstanceOf(PixKeyNotSetException.class);
 
-        when(professionalRepository.findById(strangerId)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.getPixKey(strangerId)).isInstanceOf(ProfessionalNotFoundException.class);
+        when(userRepository.findById(strangerId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.getPixKey(strangerId))
+                .isInstanceOf(com.ospaulos.vupth.domain.user.exception.NotFoundUserException.class);
     }
 
     // ─── o pagamento ───
@@ -186,9 +185,30 @@ class PaymentServiceTest {
         assertThat(r.pixCopyPaste()).contains("beto@mail.com").contains("540545.00").contains("CAMPINAS");
         assertThat(r.holderName()).isEqualTo("Beto");
         assertThat(r.keyType()).isEqualTo(PixKeyType.EMAIL);
+        assertThat(r.pixOwner()).isEqualTo("PROFESSIONAL");
         assertThat(service.getPayment(a.getId(), professionalId).status()).isEqualTo(PaymentStatus.PENDING);
         assertThat(service.getPayment(a.getId(), ownerId).status()).isEqualTo(PaymentStatus.PENDING);
         assertThatThrownBy(() -> service.getPayment(a.getId(), strangerId)).isInstanceOf(PaymentAccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("DEC-65: profissional sem chave -> o Pix sai na chave do dono (pix_owner OWNER); com a dele, vale a dele")
+    void ownerKeyIsTheAlternative() {
+        BaseUser dona = establishment.getOwner().getBaseUser();
+        dona.setPixKeyType(PixKeyType.EMAIL);
+        dona.setPixKey("dona@mail.com");
+        dona.setPixHolderName("Dona");
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+
+        PaymentResponse r = service.getPayment(a.getId(), clientId);
+        assertThat(r.pixCopyPaste()).contains("dona@mail.com");
+        assertThat(r.holderName()).isEqualTo("Dona");
+        assertThat(r.pixOwner()).isEqualTo("OWNER");
+
+        withPixKey();
+        PaymentResponse own = service.getPayment(a.getId(), clientId);
+        assertThat(own.pixCopyPaste()).contains("beto@mail.com");
+        assertThat(own.pixOwner()).isEqualTo("PROFESSIONAL");
     }
 
     @Test
@@ -199,6 +219,7 @@ class PaymentServiceTest {
         assertThat(r.pixCopyPaste()).isNull();
         assertThat(r.holderName()).isNull();
         assertThat(r.keyType()).isNull();
+        assertThat(r.pixOwner()).isNull();
         assertThat(r.amount()).isEqualByComparingTo("40");
 
         Attendance cancelled = attendance(AttendanceStatus.CANCELLED, PaymentStatus.PENDING);
@@ -281,6 +302,39 @@ class PaymentServiceTest {
                 .isInstanceOfSatisfying(PaymentPendingException.class,
                         e -> assertThat(e.getPending().items()).hasSize(1));
         service.assertNoPendingPayment(strangerId);
+    }
+
+    @Test
+    @DisplayName("push-pagamento-pendente: o valor so existe com o pagamento PENDENTE (servicos mais multas)")
+    void pendingAmount() {
+        Attendance pending = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        Attendance paid = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        ClientPenaltyEvent fine = new ClientPenaltyEvent();
+        fine.setAmount(new BigDecimal("5.00"));
+        fine.setChargedAttendanceId(pending.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(List.of(pending.getId())))
+                .thenReturn(List.of(fine));
+
+        assertThat(service.pendingAmountOf(pending.getId())).isEqualByComparingTo("45.00");
+        assertThat(service.pendingAmountOf(awaiting.getId())).isNull();
+        assertThat(service.pendingAmountOf(paid.getId())).isNull();
+    }
+
+    @Test
+    @DisplayName("push-pagamento-pendente: os lembretes trazem cliente, atendimento, loja e o valor com a multa")
+    void reminders() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        OffsetDateTime before = OffsetDateTime.now();
+        when(attendanceRepository.findPendingPaymentsFinishedBefore(before)).thenReturn(List.of(a));
+
+        var reminders = service.remindersFinishedBefore(before);
+
+        assertThat(reminders).hasSize(1);
+        assertThat(reminders.get(0).clientId()).isEqualTo(clientId);
+        assertThat(reminders.get(0).attendanceId()).isEqualTo(a.getId());
+        assertThat(reminders.get(0).establishmentId()).isEqualTo(establishment.getId());
+        assertThat(reminders.get(0).amount()).isEqualByComparingTo("40.00");
     }
 
     @Test

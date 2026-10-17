@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.mail;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +85,7 @@ public class BrevoApiEmailSender implements EmailSender {
     @Override
     public void send(String toEmail, String subject, String body) {
         if (ReservedEmailDomains.isReserved(toEmail)) {
-            log.info("[MAIL:brevo] '{}' nao enviado para {}: dominio reservado de teste", subject, toEmail);
+            log.info("[MAIL:brevo] '{}' nao enviado para {}: dominio reservado de teste", subject, LogMask.email(toEmail));
             return;
         }
         Map<String, Object> payload = Map.of(
@@ -102,7 +103,7 @@ public class BrevoApiEmailSender implements EmailSender {
                     .retrieve()
                     .body(BrevoSendResponse.class);
             String messageId = response == null ? null : response.messageId();
-            log.info("[MAIL:brevo] '{}' enviado para {} (messageId={})", subject, toEmail, messageId);
+            log.info("[MAIL:brevo] '{}' enviado para {} (messageId={})", subject, LogMask.email(toEmail), messageId);
         } catch (RestClientResponseException e) {
             // O corpo do Brevo e o unico lugar onde aparece o MOTIVO ("Key not found", "sender not
             // valid"). Sem ele sobra o status, que nao separa chave errada de remetente nao verificado.
@@ -110,7 +111,7 @@ public class BrevoApiEmailSender implements EmailSender {
                     subject, toEmail, e.getStatusCode().value(), e.getResponseBodyAsString());
             throw new EmailDeliveryException("Brevo recusou o envio (HTTP " + e.getStatusCode().value() + ")", e);
         } catch (Exception e) {
-            log.error("[MAIL:brevo] falha ao enviar '{}' para {}: {}", subject, toEmail, e.getMessage());
+            log.error("[MAIL:brevo] falha ao enviar '{}' para {}: {}", subject, LogMask.email(toEmail), e.getMessage());
             throw new EmailDeliveryException("Falha ao chamar a API do Brevo", e);
         }
     }

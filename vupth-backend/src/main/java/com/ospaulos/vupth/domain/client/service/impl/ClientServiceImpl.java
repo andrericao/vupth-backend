@@ -1,9 +1,6 @@
 package com.ospaulos.vupth.domain.client.service.impl;
 
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
-import com.ospaulos.vupth.api.client.dto.response.ClientInProgressResponse;
 import com.ospaulos.vupth.api.client.dto.response.ClientInQueueResponse;
 import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
@@ -95,46 +92,6 @@ public class ClientServiceImpl implements ClientService {
         }
 
         return queueService.queueWaitingTime(attendance);
-    }
-
-    @Override
-    public ClientInProgressResponse getClientInProgressWaitingTime(UUID attendanceId, UUID clientId){
-
-        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
-                .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
-
-        Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new EntityNotFoundException("Client not found"));
-
-        if(!attendance.getClient().getId().equals(clientId)){
-            throw new EstablishmentAccessDeniedException("Attendance or Client don't exists");
-        }
-
-        AttendanceInProgressResponse attendanceInProgressResponse =
-                attendanceService.buildAttendanceInProgressResponse(attendance);
-
-        return new ClientInProgressResponse(
-                attendance.getId(),
-                client.getId(),
-                attendanceInProgressResponse
-        );
-
-    }
-
-    @Override
-    public AttendanceInQueueResponse cancelAttendance(UUID attendanceId, UUID clientId){
-
-        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
-                .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
-
-        Client client = clientRepository.findById(clientId)
-                .orElseThrow(() -> new EntityNotFoundException("Client not found"));
-
-        if(!attendance.getClient().getId().equals(clientId)){
-            throw new EstablishmentAccessDeniedException("Attendance or Client don't exists");
-        }
-
-        return attendanceService.cancelAttendance(attendance);
     }
 
     // TODO: Trocar lugar na fila

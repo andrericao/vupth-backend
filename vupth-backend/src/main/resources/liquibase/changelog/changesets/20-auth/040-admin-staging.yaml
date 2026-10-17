@@ -1,0 +1,18 @@
+databaseChangeLog:
+  # O papel ADMIN do painel e do teste do Asaas (Andre, 16/10): so para a conta andrericao49@gmail.com, que ja
+  # existe e e dele. Nao cria conta nem senha. context "!prod": a producao (contexts=prod) nunca roda isto.
+  # runAlways + NOT EXISTS: se a conta ainda nao existir no banco, o papel entra no proximo boot depois dela.
+  - changeSet:
+      id: 040-admin-staging
+      author: andrericao
+      context: "!prod"
+      runAlways: true
+      changes:
+        - sql:
+            sql: >
+              INSERT INTO user_roles (id, base_user_id, role_type, is_active)
+              SELECT gen_random_uuid(), u.id, 'ADMIN', true
+              FROM base_user u
+              WHERE lower(u.email) = 'andrericao49@gmail.com'
+                AND NOT EXISTS (
+                  SELECT 1 FROM user_roles r WHERE r.base_user_id = u.id AND r.role_type = 'ADMIN')

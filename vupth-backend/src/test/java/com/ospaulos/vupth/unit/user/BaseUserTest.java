@@ -271,6 +271,21 @@ class BaseUserTest {
     }
 
     @Test
+    @DisplayName("anonymize apaga a chave Pix junto com os outros dados pessoais (DEC-65)")
+    void anonymizeClearsPix() {
+        user.setPixKeyType(com.ospaulos.vupth.domain.payment.PixKeyType.EMAIL);
+        user.setPixKey("ana@mail.com");
+        user.setPixHolderName("Ana");
+
+        user.anonymize("x");
+
+        assertThat(user.getPixKey()).isNull();
+        assertThat(user.getPixKeyType()).isNull();
+        assertThat(user.getPixHolderName()).isNull();
+        assertThat(user.getIsActive()).isFalse();
+    }
+
+    @Test
     @DisplayName("idade sem nascimento = 0; activate/deactivate")
     void ageAndActivation() {
         assertThat(user.getAge()).isZero();

@@ -1,0 +1,57 @@
+databaseChangeLog:
+  # Bonificacao por link (BAK-9, DEC-52/70/73): os parametros da campanha de indicacao, que o Andre preenche
+  # no painel (% ao profissional e ao dono, quem conta, periodicidade e dia do pagamento); o codigo fixo de
+  # cada profissional e dono; e o cliente ligado a quem o indicou (o primeiro codigo vale e nao muda).
+  - changeSet:
+      id: 039-campaign-referral-params
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: campaign
+                columnName: referral_scope
+      changes:
+        - addColumn:
+            tableName: campaign
+            columns:
+              - column: {name: referral_professional_percent, type: "NUMERIC(5,2)"}
+              - column: {name: referral_owner_percent, type: "NUMERIC(5,2)"}
+              - column: {name: referral_scope, type: VARCHAR(25)}
+              - column: {name: payout_period, type: VARCHAR(10)}
+              - column: {name: payout_day, type: INTEGER}
+  - changeSet:
+      id: 039-create-referral_code
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: referral_code
+      changes:
+        - createTable:
+            tableName: referral_code
+            columns:
+              - column: {name: user_id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_referral_code, nullable: false, foreignKeyName: fk_referral_code_user, references: base_user(id), deleteCascade: true}}
+              - column: {name: code, type: VARCHAR(12), constraints: {nullable: false, unique: true, uniqueConstraintName: uk_referral_code_code}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+  - changeSet:
+      id: 039-create-referral
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: referral
+      changes:
+        - createTable:
+            tableName: referral
+            columns:
+              - column: {name: client_id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_referral, nullable: false, foreignKeyName: fk_referral_client, references: base_user(id), deleteCascade: true}}
+              - column: {name: referrer_id, type: UUID, constraints: {nullable: false, foreignKeyName: fk_referral_referrer, references: base_user(id), deleteCascade: true}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+        - createIndex:
+            tableName: referral
+            indexName: ix_referral_referrer
+            columns:
+              - column: {name: referrer_id}

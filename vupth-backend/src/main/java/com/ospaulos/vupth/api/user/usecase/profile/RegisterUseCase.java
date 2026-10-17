@@ -1,5 +1,7 @@
 package com.ospaulos.vupth.api.user.usecase.profile;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
+import com.ospaulos.vupth.api.user.policy.PasswordPolicy;
 import com.ospaulos.vupth.api.user.dto.request.profile.UserRegisterRequest;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserRegisterResponse;
 import com.ospaulos.vupth.api.user.exception.EmailNotAvailableException;
@@ -33,8 +35,10 @@ public class RegisterUseCase {
 
         log.info("RegisterUserUseCase.execute() - BEGIN!");
 
+        PasswordPolicy.check(request.password());
+
         if(!emailAvailabilitySpecification.isAvaliable(request.email())){
-            log.error("RegisterUserUseCase.execute() - Email already exists: {}", request.email());
+            log.error("RegisterUserUseCase.execute() - Email already exists: {}", LogMask.email(request.email()));
             throw new EmailNotAvailableException(request.email());
         }
 

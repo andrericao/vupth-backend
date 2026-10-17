@@ -21,6 +21,8 @@ public record PaymentResponse(
         @JsonProperty("holder_name") String holderName,
         @JsonProperty("key_type") PixKeyType keyType,
         @JsonProperty("claimed_at") OffsetDateTime claimedAt,
-        @JsonProperty("confirmed_at") OffsetDateTime confirmedAt
+        @JsonProperty("confirmed_at") OffsetDateTime confirmedAt,
+        // DEC-65 (pix-por-pessoa): de quem e a chave — PROFESSIONAL (quem atendeu) ou OWNER (o dono, a alternativa)
+        @JsonProperty("pix_owner") String pixOwner
 ) {
 }

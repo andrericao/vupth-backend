@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.mail;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,7 +60,7 @@ public class SmtpEmailSender implements EmailSender {
     @Override
     public void send(String toEmail, String subject, String body) {
         if (ReservedEmailDomains.isReserved(toEmail)) {
-            log.info("[MAIL:smtp] '{}' nao enviado para {}: dominio reservado de teste", subject, toEmail);
+            log.info("[MAIL:smtp] '{}' nao enviado para {}: dominio reservado de teste", subject, LogMask.email(toEmail));
             return;
         }
         SimpleMailMessage message = new SimpleMailMessage();
@@ -69,9 +70,9 @@ public class SmtpEmailSender implements EmailSender {
         message.setText(body);
         try {
             mailSender.send(message);
-            log.info("[MAIL:smtp] '{}' enviado para {}", subject, toEmail);
+            log.info("[MAIL:smtp] '{}' enviado para {}", subject, LogMask.email(toEmail));
         } catch (MailException e) {
-            log.error("[MAIL:smtp] falha ao enviar '{}' para {}: {}", subject, toEmail, e.getMessage());
+            log.error("[MAIL:smtp] falha ao enviar '{}' para {}: {}", subject, LogMask.email(toEmail), e.getMessage());
             throw new EmailDeliveryException("Falha ao enviar e-mail", e);
         }
     }

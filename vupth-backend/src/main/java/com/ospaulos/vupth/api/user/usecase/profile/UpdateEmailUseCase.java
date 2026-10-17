@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.user.usecase.profile;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.api.user.dto.request.profile.EmailRequest;
 import com.ospaulos.vupth.api.user.dto.response.auth.RefreshTokenResponse;
 import com.ospaulos.vupth.api.user.dto.response.profile.UserProfileGeneralInfosAndToken;
@@ -28,7 +29,7 @@ public class UpdateEmailUseCase {
     @Transactional
     public UserProfileGeneralInfosAndToken executeUpdateEmail(UUID id, EmailRequest request){
 
-        log.info("USERCASE UPDATE EMAIL - " + request.email());
+        log.info("USERCASE UPDATE EMAIL - " + LogMask.email(request.email()));
 
         BaseUser user = repository.findById(id)
                 .orElseThrow(
@@ -44,7 +45,7 @@ public class UpdateEmailUseCase {
 
         RefreshTokenResponse tokensResponse = utilsTokens.rotateTokens(user);
 
-        log.info("UPDATE E-MAIL USERCASE - " + user.getEmail());
+        log.info("UPDATE E-MAIL USERCASE - " + LogMask.email(user.getEmail()));
 
         return new UserProfileGeneralInfosAndToken(
                 mapper.toGeneralInfosUserResponse(user),

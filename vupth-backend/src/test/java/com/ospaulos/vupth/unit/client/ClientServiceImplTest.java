@@ -5,6 +5,7 @@ import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
 import com.ospaulos.vupth.domain.attendance.exception.AttendanceInvalidStatusException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.api.client.dto.response.ClientInQueueResponse;
+import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -217,6 +218,78 @@ class ClientServiceImplTest {
                 assertThatThrownBy(() -> attendanceService.leaveQueue(attendance.getId(), clientId))
                         .isInstanceOf(AttendanceInvalidStatusException.class);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("getCompleteQueueInfo")
+    class QueueInfoTests {
+
+        @Test
+        @DisplayName("success: delegates to the queue overview of the professional's establishment")
+        void queueInfo_success() {
+            QueueResponse expected = mock(QueueResponse.class);
+            when(professionalRepository.findById(professionalId)).thenReturn(Optional.of(professional));
+            when(queueService.getQueueOverview(professional, establishment)).thenReturn(expected);
+
+            assertThat(clientService.getCompleteQueueInfo(professionalId, establishmentId)).isSameAs(expected);
+        }
+
+        @Test
+        @DisplayName("professional not found → EntityNotFoundException")
+        void queueInfo_professionalNotFound_throws() {
+            when(professionalRepository.findById(professionalId)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> clientService.getCompleteQueueInfo(professionalId, establishmentId))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("getClientInQueueWaitingTime")
+    class WaitingTimeTests {
+
+        @Test
+        @DisplayName("success: own attendance in the queue → waiting time")
+        void waiting_success() {
+            ClientInQueueResponse expected = mock(ClientInQueueResponse.class);
+            when(attendanceRepository.findByIdEager(attendance.getId())).thenReturn(Optional.of(attendance));
+            when(queueService.queueWaitingTime(attendance)).thenReturn(expected);
+
+            assertThat(clientService.getClientInQueueWaitingTime(clientId, attendance.getId())).isSameAs(expected);
+        }
+
+        @Test
+        @DisplayName("attendance not found → EntityNotFoundException")
+        void waiting_notFound_throws() {
+            when(attendanceRepository.findByIdEager(attendance.getId())).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> clientService.getClientInQueueWaitingTime(clientId, attendance.getId()))
+                    .isInstanceOf(EntityNotFoundException.class);
+        }
+
+        @Test
+        @DisplayName("another client's attendance → EstablishmentAccessDeniedException")
+        void waiting_otherClient_throws() {
+            when(attendanceRepository.findByIdEager(attendance.getId())).thenReturn(Optional.of(attendance));
+
+            assertThatThrownBy(() -> clientService.getClientInQueueWaitingTime(UUID.randomUUID(), attendance.getId()))
+                    .isInstanceOf(EstablishmentAccessDeniedException.class);
+            verifyNoInteractions(queueService);
+        }
+
+        @Test
+        @DisplayName("FINISHED, CANCELLED or REMOVED → AttendanceInvalidStatusException")
+        void waiting_outOfQueue_throws() {
+            when(attendanceRepository.findByIdEager(attendance.getId())).thenReturn(Optional.of(attendance));
+
+            for (AttendanceStatus status : List.of(AttendanceStatus.FINISHED, AttendanceStatus.CANCELLED, AttendanceStatus.REMOVED)) {
+                attendance.setStatus(status);
+                assertThatThrownBy(() -> clientService.getClientInQueueWaitingTime(clientId, attendance.getId()))
+                        .as(status.name())
+                        .isInstanceOf(AttendanceInvalidStatusException.class);
+            }
+            verifyNoInteractions(queueService);
         }
     }
 }

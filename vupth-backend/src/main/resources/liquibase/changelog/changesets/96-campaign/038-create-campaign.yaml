@@ -1,0 +1,54 @@
+databaseChangeLog:
+  # Campanhas (promocao-de-lancamento v2, DEC-57/61/64): a campanha (publica ou privada com cupom, perfil de
+  # quem aceita, janela, valor, limite de pessoas) e quem aceitou, uma vez por pessoa. Nenhuma nasce aqui:
+  # o Andre passa os valores e uma migracao propria cria cada uma, ate o painel existir.
+  - changeSet:
+      id: 038-create-campaign
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: campaign
+      changes:
+        - createTable:
+            tableName: campaign
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_campaign, nullable: false}}
+              - column: {name: code, type: VARCHAR(40)}
+              - column: {name: name, type: VARCHAR(80), constraints: {nullable: false}}
+              - column: {name: description, type: VARCHAR(300)}
+              - column: {name: type, type: VARCHAR(20), constraints: {nullable: false}}
+              - column: {name: visibility, type: VARCHAR(10), constraints: {nullable: false}}
+              - column: {name: audience, type: VARCHAR(15)}
+              - column: {name: value_amount, type: "NUMERIC(10,2)"}
+              - column: {name: value_percent, type: "NUMERIC(5,2)"}
+              - column: {name: starts_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: ends_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: weekdays, type: VARCHAR(80)}
+              - column: {name: max_redemptions, type: INTEGER}
+              - column: {name: new_clients_only, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}
+              - column: {name: active, type: BOOLEAN, defaultValueBoolean: true, constraints: {nullable: false}}
+        # O cupom e unico sem diferenciar maiuscula (o app aceita "VUPTH10" e "vupth10").
+        - sql:
+            sql: CREATE UNIQUE INDEX uk_campaign_code_lower ON campaign (lower(code)) WHERE code IS NOT NULL
+  - changeSet:
+      id: 038-create-campaign_redemption
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: campaign_redemption
+      changes:
+        - createTable:
+            tableName: campaign_redemption
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_campaign_redemption, nullable: false}}
+              - column: {name: campaign_id, type: UUID, constraints: {nullable: false, foreignKeyName: fk_campaign_redemption_campaign, references: campaign(id)}}
+              - column: {name: user_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: redeemed_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+        - addUniqueConstraint:
+            tableName: campaign_redemption
+            columnNames: campaign_id, user_id
+            constraintName: uk_campaign_redemption
