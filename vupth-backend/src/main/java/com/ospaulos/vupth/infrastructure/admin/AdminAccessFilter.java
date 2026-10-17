@@ -46,6 +46,10 @@ public class AdminAccessFilter extends OncePerRequestFilter {
     private final AdminPermissionRepository permissions;
     private final AdminAuditRepository audits;
 
+    /** O segundo fator e exigido para abrir o painel (padrao ligado; desligado no teste e no staging ate o painel tratar). */
+    @org.springframework.beans.factory.annotation.Value("${vupth.admin.totp.required:true}")
+    private boolean totpRequired = true;
+
     public AdminAccessFilter(AdminPermissionRepository permissions, AdminAuditRepository audits) {
         this.permissions = permissions;
         this.audits = audits;
@@ -66,6 +70,20 @@ public class AdminAccessFilter extends OncePerRequestFilter {
             return;
         }
         ContentCachingRequestWrapper wrapped = new ContentCachingRequestWrapper(request, BODY_LIMIT);
+        boolean authArea = request.getRequestURI().startsWith("/admin/auth/");
+        if (totpRequired && !authArea && !secondFactorDone()) {
+            denyTotp(response);
+            audit(adminId, wrapped, response.getStatus());
+            return;
+        }
+        if (authArea) {
+            try {
+                chain.doFilter(wrapped, response);
+            } finally {
+                audit(adminId, wrapped, response.getStatus());
+            }
+            return;
+        }
         AdminPermission required = AdminPermission.forPath(request.getRequestURI());
         Set<AdminPermission> granted = permissions.permissionsOf(adminId);
         boolean owner = granted.isEmpty();
@@ -79,6 +97,21 @@ public class AdminAccessFilter extends OncePerRequestFilter {
         } finally {
             audit(adminId, wrapped, response.getStatus());
         }
+    }
+
+    /** O token do painel (com {@code totp} no {@code amr}) vem do passo de verificacao; o do login comum nao o tem. */
+    private static boolean secondFactorDone() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getDetails() instanceof java.util.List<?> amr && amr.contains("totp");
+    }
+
+    private static void denyTotp(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(String.format(
+                "{\"status\":401,\"message\":\"Falta o segundo fator do painel.\",\"code\":\"ADMIN_TOTP_REQUIRED\",\"timestamp\":\"%s\"}",
+                OffsetDateTime.now()));
     }
 
     private static UUID currentUserId() {
