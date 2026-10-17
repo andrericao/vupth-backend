@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.user.usecase.auth;
 
+import com.ospaulos.vupth.api.user.policy.PasswordPolicy;
 import com.ospaulos.vupth.api.user.dto.request.auth.ResetPasswordRequest;
 import com.ospaulos.vupth.api.user.exception.InvalidResetCodeException;
 import com.ospaulos.vupth.api.user.exception.ResetCodeExpiredException;
@@ -30,6 +31,8 @@ public class ResetPasswordUseCase {
 
     @Transactional
     public void execute(ResetPasswordRequest request) {
+        // A senha nova fora da regra nao gasta tentativa do codigo
+        PasswordPolicy.check(request.newPassword());
         // E-mail desconhecido cai no mesmo erro genérico de código inválido (não vaza existência).
         BaseUser user = userRepository.findByEmail(request.email())
                 .orElseThrow(InvalidResetCodeException::new);

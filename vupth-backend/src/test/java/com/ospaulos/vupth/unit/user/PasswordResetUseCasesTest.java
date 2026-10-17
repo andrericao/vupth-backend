@@ -156,6 +156,15 @@ class PasswordResetUseCasesTest {
         }
 
         @Test
+        @DisplayName("senha nova acima de 64 caracteres — 422 PASSWORD_TOO_LONG antes do código (nao gasta tentativa)")
+        void tooLong_beforeCode() {
+            assertThatThrownBy(() ->
+                    resetPasswordUseCase.execute(new ResetPasswordRequest(EMAIL, "123456", "a".repeat(65))))
+                    .isInstanceOf(com.ospaulos.vupth.api.user.exception.PasswordPolicyException.class);
+            verifyNoInteractions(userRepository, resetCodeRepository);
+        }
+
+        @Test
         @DisplayName("código errado — incrementa attempts e lança InvalidResetCode (senha intacta)")
         void wrongCode_incrementsAndThrows() {
             PasswordResetCode code = freshCode();

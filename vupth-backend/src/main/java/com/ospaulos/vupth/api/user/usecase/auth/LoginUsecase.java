@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.user.usecase.auth;
 
+import com.ospaulos.vupth.api.user.policy.PasswordPolicy;
 import com.ospaulos.vupth.domain.user.exception.EmailNotRegisteredException;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
 import com.ospaulos.vupth.api.user.dto.request.auth.LoginRequest;
@@ -44,6 +45,11 @@ public class LoginUsecase {
         // segue 401 BAD_CREDENTIALS. O AuthenticationManager esconde a diferenca de proposito.
         if (!userRepository.existsByEmail(request.email())) {
             throw new EmailNotRegisteredException();
+        }
+
+        // senha-limite-claro: nenhuma conta tem senha acima de 72 bytes; o BCrypt recusaria com erro.
+        if (request.password() != null && !PasswordPolicy.fitsBcrypt(request.password())) {
+            throw new org.springframework.security.authentication.BadCredentialsException("Bad credentials");
         }
 
         var authenticationToken =
