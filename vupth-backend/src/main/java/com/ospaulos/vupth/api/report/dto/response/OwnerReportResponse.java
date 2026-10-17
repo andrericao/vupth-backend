@@ -9,7 +9,7 @@ import java.util.UUID;
 
 /**
  * GET /owner/me/reports (multi-loja-do-dono): as lojas do dono juntas ({@code total}), cada uma ({@code stores})
- * e o tempo ({@code series}, por dia, semana ou mes da loja). Multas ainda nao entram.
+ * e o tempo ({@code series}, por dia, semana ou mes da loja). {@code penalties} = as multas geradas por atendimentos da loja (o dinheiro delas e do app).
  */
 public record OwnerReportResponse(
         @JsonProperty("total") Summary total,
@@ -24,7 +24,8 @@ public record OwnerReportResponse(
             @JsonProperty("gross_revenue") BigDecimal grossRevenue,
             @JsonProperty("professionals_net") BigDecimal professionalsNet,
             @JsonProperty("gateway_fee") BigDecimal gatewayFee,
-            @JsonProperty("app_fee") BigDecimal appFee
+            @JsonProperty("app_fee") BigDecimal appFee,
+            @JsonProperty("penalties") BigDecimal penalties
     ) {}
 
     public record Store(

@@ -607,4 +607,22 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo);
+
+    /**
+     * As multas com valor geradas no periodo por atendimentos destas lojas: {@code [id da loja, quando, valor]}. A multa
+     * e da loja do atendimento que a gerou (o atraso ou a saida da fila); quem a cobra depois e o app.
+     */
+    @Query("""
+        SELECT a.establishment.id, e.createdAt, e.amount
+        FROM ClientPenaltyEvent e, Attendance a
+        WHERE a.id = e.attendanceId
+          AND a.establishment.id IN :establishmentIds
+          AND e.amount IS NOT NULL
+          AND e.createdAt >= :dateFrom
+          AND e.createdAt < :dateTo
+    """)
+    List<Object[]> findPenaltiesByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
 }

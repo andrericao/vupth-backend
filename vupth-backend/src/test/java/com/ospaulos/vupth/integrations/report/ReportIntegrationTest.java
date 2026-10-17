@@ -358,6 +358,8 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.total.gateway_fee").isNumber())
                 .andExpect(jsonPath("$.total.app_fee").isNumber())
                 .andExpect(jsonPath("$.total.cancelled").value(0))
+                .andExpect(jsonPath("$.total.penalties").value(0))
+                .andExpect(jsonPath("$.stores[0].summary.penalties").isNumber())
                 .andExpect(jsonPath("$.stores.length()").value(2))
                 .andExpect(jsonPath("$.stores[?(@.id=='" + establishmentId + "')].summary.finished").value(1))
                 .andExpect(jsonPath("$.series.length()").value(1))

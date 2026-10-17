@@ -154,7 +154,7 @@ public class ReportServiceImpl implements ReportService {
             stores = establishmentIds.stream().distinct().map(byId::get).toList();
         }
         if (stores.isEmpty()) {
-            var empty = ownerSummary(List.of(), 0);
+            var empty = ownerSummary(List.of(), 0, BigDecimal.ZERO);
             return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse(empty, List.of(), List.of());
         }
 
@@ -164,32 +164,45 @@ public class ReportServiceImpl implements ReportService {
         List<Object[]> cancelled = attendanceRepository.findCancelledTimesByEstablishmentsBetween(
                 ids, from(dateFrom), to(dateTo));
 
+        List<Object[]> penalties = attendanceRepository.findPenaltiesByEstablishmentsBetween(
+                ids, from(dateFrom), to(dateTo));
+
         var storeBlocks = stores.stream().map(e -> new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Store(
                 e.getId(), e.getName(),
                 ownerSummary(
                         finished.stream().filter(a -> a.getEstablishment().getId().equals(e.getId())).toList(),
-                        cancelled.stream().filter(c -> c[0].equals(e.getId())).count()))).toList();
+                        cancelled.stream().filter(c -> c[0].equals(e.getId())).count(),
+                        penaltySum(penalties.stream().filter(x -> x[0].equals(e.getId())).toList())))).toList();
 
         // A serie: o periodo e contado no dia da loja; so entram os periodos com atendimento.
         Map<LocalDate, List<Attendance>> finishedByPeriod = new TreeMap<>(finished.stream()
                 .collect(Collectors.groupingBy(a -> periodStart(BusinessClock.dateAt(a.getScheduledTime()), groupBy))));
         Map<LocalDate, Long> cancelledByPeriod = cancelled.stream().collect(Collectors.groupingBy(
                 c -> periodStart(BusinessClock.dateAt((OffsetDateTime) c[1]), groupBy), Collectors.counting()));
+        Map<LocalDate, List<Object[]>> penaltiesByPeriod = penalties.stream().collect(Collectors.groupingBy(
+                x -> periodStart(BusinessClock.dateAt((OffsetDateTime) x[1]), groupBy)));
         java.util.Set<LocalDate> periods = new java.util.TreeSet<>(finishedByPeriod.keySet());
         periods.addAll(cancelledByPeriod.keySet());
+        periods.addAll(penaltiesByPeriod.keySet());
         var series = periods.stream().map(day -> new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Period(
                 day, ownerSummary(finishedByPeriod.getOrDefault(day, List.of()),
-                cancelledByPeriod.getOrDefault(day, 0L)))).toList();
+                cancelledByPeriod.getOrDefault(day, 0L),
+                penaltySum(penaltiesByPeriod.getOrDefault(day, List.of()))))).toList();
 
         return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse(
-                ownerSummary(finished, cancelled.size()), storeBlocks, series);
+                ownerSummary(finished, cancelled.size(), penaltySum(penalties)), storeBlocks, series);
     }
 
     private com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Summary ownerSummary(
-            List<Attendance> finished, long cancelled) {
+            List<Attendance> finished, long cancelled, BigDecimal penalties) {
         return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Summary(
                 finished.size(), cancelled, totalRevenue(finished), netRevenue(finished),
-                sum(finished, Attendance::getIntermediaryFee), sum(finished, Attendance::getPlatformFee));
+                sum(finished, Attendance::getIntermediaryFee), sum(finished, Attendance::getPlatformFee), penalties);
+    }
+
+    /** Soma o valor ({@code [loja, quando, valor]}) das multas. */
+    private BigDecimal penaltySum(List<Object[]> rows) {
+        return rows.stream().map(x -> (BigDecimal) x[2]).reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal sum(List<Attendance> attendances, java.util.function.Function<Attendance, BigDecimal> field) {

@@ -54,6 +54,7 @@ class PaymentNotifierTest {
         professional.setId(professionalId);
         Establishment establishment = new Establishment();
         establishment.setId(UUID.randomUUID());
+        establishment.setName("Barbearia Central");
         attendance = new Attendance();
         attendance.setId(UUID.randomUUID());
         attendance.setClient(client);
@@ -70,7 +71,7 @@ class PaymentNotifierTest {
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(pushPublisher).notifyUser(eq(professionalId), eq("Confira o pagamento"), body.capture(), anyMap());
-        assertThat(body.getValue()).isEqualTo("Ana diz que pagou R$ 1.045,50. Confira se consta na sua conta.");
+        assertThat(body.getValue()).isEqualTo("Ana diz que pagou R$ 1.045,50 na Barbearia Central. Confira se consta na sua conta.");
         ArgumentCaptor<QueueNotification> ws = ArgumentCaptor.forClass(QueueNotification.class);
         verify(queuePublisher).notifyClient(eq(professionalId), ws.capture());
         assertThat(ws.getValue().type()).isEqualTo("PAYMENT_CLAIMED");
@@ -82,7 +83,7 @@ class PaymentNotifierTest {
         attendance.setClient(null);
         notifier.claimed(attendance.getId(), null);
 
-        verify(pushPublisher).notifyUser(eq(professionalId), any(), eq("O cliente diz que pagou R$ 0,00. Confira se consta na sua conta."), anyMap());
+        verify(pushPublisher).notifyUser(eq(professionalId), any(), eq("O cliente diz que pagou R$ 0,00 na Barbearia Central. Confira se consta na sua conta."), anyMap());
     }
 
     @Test
