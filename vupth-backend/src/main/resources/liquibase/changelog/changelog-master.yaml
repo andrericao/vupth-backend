@@ -487,3 +487,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/045-admin-totp.yaml
       relativeToChangeLogFile: true
+
+  # Painel, fatia 3: o convite com permissoes
+  - include:
+      file: changesets/20-auth/046-admin-invitation.yaml
+      relativeToChangeLogFile: true

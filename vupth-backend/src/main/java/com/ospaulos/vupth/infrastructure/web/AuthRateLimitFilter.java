@@ -53,7 +53,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> LIMITED = Set.of("/auth/login", "/auth/register", "/auth/forgot-password",
             "/auth/account-deletion/request", "/auth/account-deletion/confirm",
             // formulario-do-suporte (DEC-59): publico e manda e-mail — o mesmo limite contra spam
-            "/support/contact");
+            "/support/contact",
+            // convite-com-permissoes: publico e cria conta — o mesmo limite contra adivinhar o token
+            "/admin/invitations/accept");
 
     /** voto-do-artigo (17/10): publico e grava no banco — o mesmo limite, com todos os artigos numa conta so. */
     private static final java.util.regex.Pattern ARTICLE_VOTE =

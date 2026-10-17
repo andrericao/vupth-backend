@@ -536,6 +536,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.admin.exception.AdminInvitationException.class)
+    public ResponseEntity<ErrorResponse> handleAdminInvitation(
+            com.ospaulos.vupth.domain.admin.exception.AdminInvitationException ex, HttpServletRequest req) {
+        log.warn("[{}] AdminInvitation {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.admin.exception.AdminTotpException.class)
     public ResponseEntity<ErrorResponse> handleAdminTotp(
             com.ospaulos.vupth.domain.admin.exception.AdminTotpException ex, HttpServletRequest req) {
