@@ -2,6 +2,8 @@ package com.ospaulos.vupth.web.rest.admin;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.api.admin.dto.AdminTotpRequest;
+import com.ospaulos.vupth.domain.admin.model.AdminPermission;
+import com.ospaulos.vupth.domain.admin.repository.AdminPermissionRepository;
 import com.ospaulos.vupth.domain.admin.service.AdminTotpService;
 import com.ospaulos.vupth.infrastructure.mail.EmailSender;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
@@ -19,7 +21,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.OffsetDateTime;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * O login seguro do painel (painel-de-monitoramento, fatia 3). O {@code /auth/login} segue igual; para abrir o
@@ -37,10 +41,13 @@ public class AdminAuthController {
     private final AdminTotpService totp;
     private final JwtTokenProvider tokens;
     private final EmailSender emailSender;
+    private final AdminPermissionRepository permissionRepository;
 
     public record Status(
             @JsonProperty("totp_enabled") boolean totpEnabled,
-            @JsonProperty("verified") boolean verified) {}
+            @JsonProperty("verified") boolean verified,
+            @JsonProperty("owner") boolean owner,
+            @JsonProperty("permissions") List<AdminPermission> permissions) {}
 
     public record SetupResponse(
             @JsonProperty("secret") String secret,
@@ -54,7 +61,12 @@ public class AdminAuthController {
     @GetMapping("/status")
     public ResponseEntity<Status> status(@AuthenticationPrincipal UserDetailsImpl user, Authentication auth) {
         boolean verified = auth.getDetails() instanceof List<?> amr && amr.contains("totp");
-        return ResponseEntity.ok(new Status(totp.isEnabled(user.getUserId()), verified));
+        // O dono (sem nenhuma linha de permissao) pode tudo: o painel recebe a lista cheia para esconder so o que falta
+        Set<AdminPermission> granted = permissionRepository.permissionsOf(user.getUserId());
+        boolean owner = granted.isEmpty();
+        List<AdminPermission> permissions = (owner ? EnumSet.allOf(AdminPermission.class) : granted).stream()
+                .sorted().toList();
+        return ResponseEntity.ok(new Status(totp.isEnabled(user.getUserId()), verified, owner, permissions));
     }
 
     @PostMapping("/totp/setup")

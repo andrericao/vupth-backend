@@ -75,7 +75,9 @@ class AdminTotpIntegrationTest {
         mvc.perform(get("/admin/auth/status").header("Authorization", user.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totp_enabled").value(false))
-                .andExpect(jsonPath("$.verified").value(false));
+                .andExpect(jsonPath("$.verified").value(false))
+                .andExpect(jsonPath("$.owner").value(true))
+                .andExpect(jsonPath("$.permissions.length()").value(9));
         mvc.perform(post("/admin/auth/totp/verify").header("Authorization", user.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body("123456")))
                 .andExpect(status().isConflict())

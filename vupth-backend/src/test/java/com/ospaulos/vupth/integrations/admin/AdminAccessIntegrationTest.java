@@ -93,6 +93,13 @@ class AdminAccessIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("ADMIN_PERMISSION_DENIED"));
 
+        // o status mostra so o que o convidado pode abrir (o painel esconde o resto)
+        mvc.perform(get("/admin/auth/status").header("Authorization", invited.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.owner").value(false))
+                .andExpect(jsonPath("$.permissions.length()").value(1))
+                .andExpect(jsonPath("$.permissions[0]").value("FINANCE"));
+
         assertThat(auditOf(invited.id())).extracting(AdminAudit::getStatus).contains(200, 403, 403);
     }
 
