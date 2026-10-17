@@ -37,6 +37,8 @@ public class AdminMetricsService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO;
     private static final String SAO_PAULO = "America/Sao_Paulo";
+    /** O fuso em que o Hibernate grava as colunas TIMESTAMP sem fuso (o da JVM). */
+    private static final String APP_ZONE = java.time.ZoneId.systemDefault().getId();
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
@@ -90,7 +92,9 @@ public class AdminMetricsService {
 
     private Funnel funnel(Window w) {
         Timestamp f = ts(w.from()), t = ts(w.to());
-        long signups = count("SELECT count(*) FROM base_user WHERE created_at >= ? AND created_at < ?", f, t);
+        // base_user.created_at e TIMESTAMP sem fuso, gravado na hora local da JVM: le-se com esse fuso
+        long signups = count("SELECT count(*) FROM base_user WHERE (created_at AT TIME ZONE ?) >= ? "
+                + "AND (created_at AT TIME ZONE ?) < ?", APP_ZONE, f, APP_ZONE, t);
         long created = count("SELECT count(*) FROM attendance WHERE created_at >= ? AND created_at < ?", f, t);
         return new Funnel(signups, created, byStatus("FINISHED", f, t), byStatus("CANCELLED", f, t),
                 byStatus("REMOVED", f, t), byStatus("LATE", f, t));
@@ -128,8 +132,10 @@ public class AdminMetricsService {
         String unit = "hour".equalsIgnoreCase(granularity) ? "hour" : "day";
         String name = metric == null ? "cuts" : metric.toLowerCase();
         String sql = switch (name) {
-            case "signups" -> "SELECT date_trunc('" + unit + "', created_at AT TIME ZONE '" + SAO_PAULO + "') AS at, "
-                    + "count(*) AS value FROM base_user WHERE created_at >= ? AND created_at < ? GROUP BY 1 ORDER BY 1";
+            case "signups" -> "SELECT date_trunc('" + unit + "', (created_at AT TIME ZONE '" + APP_ZONE + "') AT TIME ZONE '"
+                    + SAO_PAULO + "') AS at, count(*) AS value FROM base_user "
+                    + "WHERE (created_at AT TIME ZONE '" + APP_ZONE + "') >= ? "
+                    + "AND (created_at AT TIME ZONE '" + APP_ZONE + "') < ? GROUP BY 1 ORDER BY 1";
             case "revenue" -> "SELECT date_trunc('" + unit + "', scheduled_time AT TIME ZONE '" + SAO_PAULO + "') AS at, "
                     + "coalesce(sum(total_value),0) AS value FROM attendance WHERE status = 'FINISHED' "
                     + "AND scheduled_time >= ? AND scheduled_time < ? GROUP BY 1 ORDER BY 1";

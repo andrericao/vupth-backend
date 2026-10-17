@@ -49,7 +49,10 @@ class AdminMetricsIntegrationTest {
     @DisplayName("overview: saude, funil e dinheiro de hoje, com a comparacao; o cadastro de agora aparece no funil")
     void overview() throws Exception {
         var owner = admin();
-        mvc.perform(get("/admin/overview").header("Authorization", owner.token()))
+        // janela explicita (hoje por padrao depende do fuso da loja, que outros testes da suite mudam)
+        mvc.perform(get("/admin/overview").param("from", java.time.OffsetDateTime.now().minusHours(1).toString())
+                        .param("to", java.time.OffsetDateTime.now().plusHours(1).toString())
+                        .header("Authorization", owner.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.period.from").isNotEmpty())
                 .andExpect(jsonPath("$.compare_period.from").isNotEmpty())
@@ -75,6 +78,8 @@ class AdminMetricsIntegrationTest {
     void series() throws Exception {
         var owner = admin();
         mvc.perform(get("/admin/series").param("metric", "signups").param("granularity", "hour")
+                        .param("from", java.time.OffsetDateTime.now().minusHours(1).toString())
+                        .param("to", java.time.OffsetDateTime.now().plusHours(1).toString())
                         .header("Authorization", owner.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.metric").value("signups"))
