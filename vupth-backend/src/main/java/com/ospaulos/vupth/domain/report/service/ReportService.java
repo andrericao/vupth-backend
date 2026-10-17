@@ -28,4 +28,13 @@ public interface ReportService {
      */
     ProfessionalReportResponse getProfessionalReport(
             UUID userId, LocalDate dateFrom, LocalDate dateTo);
+
+    /**
+     * Relatorio do dono com todas as lojas dele juntas, cada uma e a serie por periodo (multi-loja-do-dono).
+     *
+     * @param groupBy          {@code day}, {@code week} (segunda a domingo) ou {@code month}; nulo = {@code day}
+     * @param establishmentIds quais lojas; vazio = todas as do dono (id de loja alheia: acesso negado)
+     */
+    com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse getOwnerReport(
+            UUID userId, LocalDate dateFrom, LocalDate dateTo, String groupBy, java.util.Collection<UUID> establishmentIds);
 }

@@ -343,6 +343,45 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.workdays").isEmpty());
     }
 
+    @Test
+    @Order(60)
+    @DisplayName("GET /owner/me/reports — o dono ve o total, cada loja e a serie; loja alheia 403; sem periodo zera")
+    void ownerReport() throws Exception {
+        // a segunda loja do dono, sem atendimento
+        TestUserUtils.becomeOwner(mvc, mapper, new Faker(), ownerProfToken);
+
+        mvc.perform(get("/owner/me/reports").param("groupBy", "month").header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total.finished").value(1))
+                .andExpect(jsonPath("$.total.gross_revenue").value(54.80))
+                .andExpect(jsonPath("$.total.professionals_net").value(50.00))
+                .andExpect(jsonPath("$.total.gateway_fee").isNumber())
+                .andExpect(jsonPath("$.total.app_fee").isNumber())
+                .andExpect(jsonPath("$.total.cancelled").value(0))
+                .andExpect(jsonPath("$.stores.length()").value(2))
+                .andExpect(jsonPath("$.stores[?(@.id=='" + establishmentId + "')].summary.finished").value(1))
+                .andExpect(jsonPath("$.series.length()").value(1))
+                .andExpect(jsonPath("$.series[0].summary.finished").value(1));
+
+        // so a loja pedida; a de outro dono e 403
+        mvc.perform(get("/owner/me/reports").param("establishmentId", establishmentId)
+                        .header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.stores.length()").value(1));
+        var stranger = TestUserUtils.registerAndLoginUser(mvc, mapper, new Faker());
+        TestUserUtils.becomeOwner(mvc, mapper, new Faker(), stranger.token());
+        mvc.perform(get("/owner/me/reports").param("establishmentId", establishmentId)
+                        .header("Authorization", stranger.token()))
+                .andExpect(status().isForbidden());
+
+        // periodo futuro: zera; quem nao e dono: 403
+        mvc.perform(get("/owner/me/reports").param("dateFrom", "2099-01-01").param("dateTo", "2099-12-31")
+                        .param("groupBy", "week").header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.total.finished").value(0))
+                .andExpect(jsonPath("$.series").isEmpty());
+        var plain = TestUserUtils.registerAndLoginUser(mvc, mapper, new Faker());
+        mvc.perform(get("/owner/me/reports").header("Authorization", plain.token())).andExpect(status().isForbidden());
+    }
+
     @AfterAll
     void tearDown() {
         log.info("[Report] tearDown — limpando dados");

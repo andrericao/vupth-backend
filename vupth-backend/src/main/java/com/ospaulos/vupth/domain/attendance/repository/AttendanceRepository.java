@@ -578,4 +578,33 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     boolean existsByProfessionalIdAndStatusInAndScheduledTimeBetween(
             UUID professionalId, java.util.Collection<com.ospaulos.vupth.domain.attendance.AttendanceStatus> statuses,
             java.time.OffsetDateTime from, java.time.OffsetDateTime to);
+
+    /**
+     * Relatorio do dono (multi-loja-do-dono): os finalizados de varias lojas de uma vez, numa ida so ao banco.
+     * Sem os joins de profissional e servico — o relatorio agregado so soma valores.
+     */
+    @Query("""
+        SELECT a FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status = 'FINISHED'
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Attendance> findFinishedByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Os cancelados de varias lojas no periodo: {@code [id da loja, horario marcado]}, para contar por loja e periodo. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status = 'CANCELLED'
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findCancelledTimesByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
 }

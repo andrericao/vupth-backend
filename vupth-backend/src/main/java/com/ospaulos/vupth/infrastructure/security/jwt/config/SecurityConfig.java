@@ -138,6 +138,7 @@ public class SecurityConfig {
                         // convite-sem-conta: os convites por e-mail que esperam a conta — so o dono
                         .requestMatchers(HttpMethod.GET, "/establishment/*/email-invitations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/reports").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.GET, "/owner/me/reports").hasRole("OWNER")
                         // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
                         .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
                         // ownership-transfer-sem-token (15/10): o pendente da loja e do dono; sem esta linha caia no
