@@ -105,7 +105,11 @@ public class ReportServiceImpl implements ReportService {
                 withoutSplit(finished),
                 workdays(shiftRepository
                         .findByEstablishmentIdAndStartedAtGreaterThanEqualAndStartedAtLessThanOrderByStartedAtAsc(
-                                establishmentId, from(dateFrom), to(dateTo))));
+                                establishmentId, from(dateFrom), to(dateTo))),
+                reasons(attendanceRepository.findNotRealizedByEstablishmentsBetween(
+                        List.of(establishmentId), from(dateFrom), to(dateTo))),
+                attendanceRepository.findFinishedLateByEstablishmentsBetween(
+                        List.of(establishmentId), from(dateFrom), to(dateTo)).size());
     }
 
     @Override
@@ -131,7 +135,11 @@ public class ReportServiceImpl implements ReportService {
                         .findByProfessionalIdAndStartedAtGreaterThanEqualAndStartedAtLessThanOrderByStartedAtAsc(
                                 professional.getId(), from(dateFrom), to(dateTo))),
                 paymentPending(finished).size(),
-                totalRevenue(paymentPending(finished)));
+                totalRevenue(paymentPending(finished)),
+                reasons(attendanceRepository.findNotRealizedByProfessionalBetween(
+                        professional.getId(), from(dateFrom), to(dateTo))),
+                attendanceRepository.findFinishedLateByProfessionalBetween(
+                        professional.getId(), from(dateFrom), to(dateTo)).size());
     }
 
     @Override

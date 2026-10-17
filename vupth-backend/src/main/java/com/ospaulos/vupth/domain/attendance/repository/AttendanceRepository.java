@@ -643,4 +643,36 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
             @Param("dateFrom") OffsetDateTime dateFrom,
             @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Como {@link #findNotRealizedByEstablishmentsBetween}, so dos atendimentos de um profissional. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime, a.status,
+               (SELECT count(e) FROM ClientPenaltyEvent e
+                 WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
+        FROM Attendance a
+        WHERE a.professional.id = :professionalId
+          AND a.status IN ('CANCELLED', 'REMOVED')
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findNotRealizedByProfessionalBetween(
+            @Param("professionalId") UUID professionalId,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Como {@link #findFinishedLateByEstablishmentsBetween}, so dos atendimentos de um profissional. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime
+        FROM Attendance a
+        WHERE a.professional.id = :professionalId
+          AND a.status = 'FINISHED'
+          AND EXISTS (SELECT 1 FROM ClientPenaltyEvent e
+                       WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findFinishedLateByProfessionalBetween(
+            @Param("professionalId") UUID professionalId,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
 }

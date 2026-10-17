@@ -177,6 +177,10 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andExpect(jsonPath("$.professionals[0].netRevenue").value(50.00))
+                .andExpect(jsonPath("$.notRealized.client_cancelled").value(0))
+                .andExpect(jsonPath("$.notRealized.professional_removed").value(0))
+                .andExpect(jsonPath("$.notRealized.removed_for_lateness").value(0))
+                .andExpect(jsonPath("$.finishedLate").value(0))
                 .andDo(print());
     }
 
@@ -403,6 +407,14 @@ class ReportIntegrationTest {
 
         jdbc.update("UPDATE attendance SET status = 'REMOVED' WHERE id = ?", attendance.getId());
         expectReason("PROFESSIONAL_REMOVED", 0, 1, 0);
+        // a mesma contagem, sem valor de multa, nos relatorios da loja e do profissional
+        mvc.perform(get("/establishment/{id}/reports", establishmentId).header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.totalAttendances").value(0))
+                .andExpect(jsonPath("$.notRealized.professional_removed").value(1))
+                .andExpect(jsonPath("$.penalties").doesNotExist());
+        mvc.perform(get("/professional/me/reports").header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.notRealized.professional_removed").value(1))
+                .andExpect(jsonPath("$.finishedLate").value(0));
 
         penaltyEventRepository.save(new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent(
                 client, com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW, attendance.getId(), 0,
@@ -417,6 +429,8 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.total.finished").value(1))
                 .andExpect(jsonPath("$.total.finished_late").value(1))
                 .andExpect(jsonPath("$.total.not_realized.removed_for_lateness").value(0));
+        mvc.perform(get("/establishment/{id}/reports", establishmentId).header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.finishedLate").value(1));
         mvc.perform(get("/attendances").param("establishmentId", establishmentId)
                         .header("Authorization", ownerProfToken))
                 .andExpect(jsonPath("$[0].late_arrival").value(true))
