@@ -74,6 +74,7 @@ class CampaignServiceTest {
         var r = service.redeem(userId, " parceiro10 ");
 
         assertThat(r.name()).isEqualTo("Parceiros");
+        assertThat(r.benefit()).isEqualTo("DISCOUNT");
         assertThat(r.code()).isEqualTo("PARCEIRO10");
         assertThat(r.redeemedAt()).isNotNull();
         verify(redemptionRepository).save(any());

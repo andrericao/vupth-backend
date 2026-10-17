@@ -25,7 +25,8 @@ public record CampaignResponse(
         @JsonProperty("max_redemptions") Integer maxRedemptions,
         @JsonProperty("remaining_slots") Integer remainingSlots,
         @JsonProperty("new_clients_only") boolean newClientsOnly,
-        @JsonProperty("redeemed_at") OffsetDateTime redeemedAt
+        @JsonProperty("redeemed_at") OffsetDateTime redeemedAt,
+        @JsonProperty("benefit") String benefit
 ) {
     /** {@code used} = quantos ja aceitaram (para as vagas restantes); nulo quando nao interessa. */
     public static CampaignResponse of(Campaign c, boolean withCode, Long used, OffsetDateTime redeemedAt) {
@@ -34,6 +35,6 @@ public record CampaignResponse(
         return new CampaignResponse(c.getId(), c.getName(), c.getDescription(), c.getType().name(),
                 c.getAudience() == null ? null : c.getAudience().name(), c.getValueAmount(), c.getValuePercent(),
                 c.getStartsAt(), c.getEndsAt(), c.getWeekdays(), withCode ? c.getCode() : null,
-                c.getMaxRedemptions(), remaining, c.isNewClientsOnly(), redeemedAt);
+                c.getMaxRedemptions(), remaining, c.isNewClientsOnly(), redeemedAt, c.getType().benefit());
     }
 }

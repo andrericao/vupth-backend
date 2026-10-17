@@ -208,6 +208,7 @@ class AdminCampaignServiceTest {
         assertThat(r.referralScope()).isEqualTo("REFERRER_ESTABLISHMENT");
         assertThat(r.payoutPeriod()).isEqualTo("MONTHLY");
         assertThat(r.payoutDay()).isEqualTo(5);
+        assertThat(r.benefit()).isEqualTo("CASH");
         assertThat(service.create(adminId, referral(BigDecimal.ZERO, new BigDecimal("100"),
                 ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 7)).payoutPeriod()).isEqualTo("WEEKLY");
     }

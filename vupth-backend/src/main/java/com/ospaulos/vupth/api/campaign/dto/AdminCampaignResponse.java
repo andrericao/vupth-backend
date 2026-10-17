@@ -36,7 +36,8 @@ public record AdminCampaignResponse(
         @JsonProperty("referral_owner_percent") BigDecimal referralOwnerPercent,
         @JsonProperty("referral_scope") String referralScope,
         @JsonProperty("payout_period") String payoutPeriod,
-        @JsonProperty("payout_day") Integer payoutDay
+        @JsonProperty("payout_day") Integer payoutDay,
+        @JsonProperty("benefit") String benefit
 ) {
     public static AdminCampaignResponse of(Campaign c, long redemptions, OffsetDateTime now) {
         return new AdminCampaignResponse(c.getId(), c.getName(), c.getDescription(), c.getCode(), c.getType().name(),
@@ -45,7 +46,8 @@ public record AdminCampaignResponse(
                 redemptions, c.isNewClientsOnly(), c.isActive(), status(c, now),
                 c.getReferralProfessionalPercent(), c.getReferralOwnerPercent(),
                 c.getReferralScope() == null ? null : c.getReferralScope().name(),
-                c.getPayoutPeriod() == null ? null : c.getPayoutPeriod().name(), c.getPayoutDay());
+                c.getPayoutPeriod() == null ? null : c.getPayoutPeriod().name(), c.getPayoutDay(),
+                c.getType().benefit());
     }
 
     private static String status(Campaign c, OffsetDateTime now) {
