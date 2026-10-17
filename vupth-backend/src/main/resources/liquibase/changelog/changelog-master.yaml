@@ -467,3 +467,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/041-create-referral_credit.yaml
       relativeToChangeLogFile: true
+
+  # Voto do artigo do site de suporte (voto-do-artigo)
+  - include:
+      file: changesets/96-campaign/042-create-article-vote.yaml
+      relativeToChangeLogFile: true

@@ -27127,6 +27127,40 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] POST /support/articles/{slug}/vote com slug fora do formato → 422 (voto-do-artigo)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Publico (sem token). So o 422: o 204 grava um voto no banco do ambiente, e fica no teste de integracao.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code INVALID_ARTICLE_SLUG\", () => pm.expect(pm.response.json().code).to.eql(\"INVALID_ARTICLE_SLUG\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"vote\":\"UP\"}"
+      },
+      "url": "{{base_url}}/support/articles/Slug_Ruim/vote",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

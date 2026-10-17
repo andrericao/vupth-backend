@@ -536,6 +536,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidArticleSlug(
+            com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException ex, HttpServletRequest req) {
+        log.warn("[422] InvalidArticleSlug | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "INVALID_ARTICLE_SLUG");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.api.user.exception.PasswordPolicyException.class)
     public ResponseEntity<PasswordPolicyErrorResponse> handlePasswordPolicy(
             com.ospaulos.vupth.api.user.exception.PasswordPolicyException ex, HttpServletRequest req) {

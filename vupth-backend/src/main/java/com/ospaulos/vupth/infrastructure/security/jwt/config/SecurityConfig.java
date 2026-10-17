@@ -126,6 +126,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/support/articles/*/vote").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/referrals/me").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")

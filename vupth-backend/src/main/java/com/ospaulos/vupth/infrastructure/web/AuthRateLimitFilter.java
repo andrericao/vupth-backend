@@ -55,6 +55,11 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             // formulario-do-suporte (DEC-59): publico e manda e-mail — o mesmo limite contra spam
             "/support/contact");
 
+    /** voto-do-artigo (17/10): publico e grava no banco — o mesmo limite, com todos os artigos numa conta so. */
+    private static final java.util.regex.Pattern ARTICLE_VOTE =
+            java.util.regex.Pattern.compile("/support/articles/[^/]+/vote");
+    private static final String ARTICLE_VOTE_ROUTE = "/support/articles/*/vote";
+
     private final boolean enabled;
     private final int maxRequests;
     private final long windowMillis;
@@ -93,8 +98,16 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !enabled || !"POST".equals(request.getMethod()) || !LIMITED.contains(request.getRequestURI())
+        return !enabled || !"POST".equals(request.getMethod()) || limitedRoute(request.getRequestURI()) == null
                 || isCi(request);
+    }
+
+    /** A rota que conta no limite (o voto do artigo conta todos os slugs juntos), ou {@code null}. */
+    private static String limitedRoute(String uri) {
+        if (LIMITED.contains(uri)) {
+            return uri;
+        }
+        return ARTICLE_VOTE.matcher(uri).matches() ? ARTICLE_VOTE_ROUTE : null;
     }
 
     /** O header do CI so vale com segredo configurado; a comparacao em tempo constante nao vaza o segredo. */
@@ -108,7 +121,7 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         long now = clock.millis();
-        String key = clientIp(request) + " " + request.getRequestURI();
+        String key = clientIp(request) + " " + limitedRoute(request.getRequestURI());
         Window window = windows.compute(key, (k, w) ->
                 w == null || now - w.start >= windowMillis ? new Window(now, 1) : new Window(w.start, w.count + 1));
 

@@ -196,4 +196,21 @@ class AuthRateLimitFilterTest {
         assertThat(run(filter, second, passed).getStatus()).isEqualTo(429);
         assertThat(passed).hasValue(1);
     }
+
+    @Test
+    @DisplayName("voto-do-artigo: todos os slugs contam numa janela so; GET e outras rotas passam livres")
+    void articleVoteSharesOneWindow() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 2, 60, Clock.fixed(T0, ZoneOffset.UTC));
+        AtomicInteger passed = new AtomicInteger();
+
+        run(filter, post("/support/articles/como-pagar/vote", "2.2.2.2"), passed);
+        run(filter, post("/support/articles/sair-da-fila/vote", "2.2.2.2"), passed);
+        MockHttpServletResponse third = run(filter, post("/support/articles/multas/vote", "2.2.2.2"), passed);
+
+        assertThat(passed).hasValue(2);
+        assertThat(third.getStatus()).isEqualTo(429);
+        run(filter, new MockHttpServletRequest("GET", "/support/articles/multas/vote"), passed);
+        run(filter, post("/support/articles/a/b/vote", "2.2.2.2"), passed);
+        assertThat(passed).hasValue(4);
+    }
 }
