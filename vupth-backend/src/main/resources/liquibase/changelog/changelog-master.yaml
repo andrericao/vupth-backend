@@ -472,3 +472,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/042-create-article-vote.yaml
       relativeToChangeLogFile: true
+
+  # S4: colunas do Pix maiores para o texto cifrado
+  - include:
+      file: changesets/20-auth/043-pix-columns-for-encryption.yaml
+      relativeToChangeLogFile: true

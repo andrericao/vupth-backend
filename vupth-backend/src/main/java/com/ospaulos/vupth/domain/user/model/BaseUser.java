@@ -123,10 +123,13 @@ public class BaseUser implements Serializable {
     @Column(name = "pix_key_type", length = 10)
     private com.ospaulos.vupth.domain.payment.PixKeyType pixKeyType;
 
-    @Column(name = "pix_key", length = 77)
+    /** Cifrados no banco (S4, DEC-81): AES-256-GCM, ver {@code DataCipher}. A coluna comporta o texto cifrado. */
+    @Convert(converter = com.ospaulos.vupth.infrastructure.crypto.EncryptedStringConverter.class)
+    @Column(name = "pix_key", length = 400)
     private String pixKey;
 
-    @Column(name = "pix_holder_name", length = 25)
+    @Convert(converter = com.ospaulos.vupth.infrastructure.crypto.EncryptedStringConverter.class)
+    @Column(name = "pix_holder_name", length = 400)
     private String pixHolderName;
 
     @JsonIgnore

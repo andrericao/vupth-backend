@@ -1,0 +1,16 @@
+databaseChangeLog:
+  # S4 (DEC-81, fase 1): a chave Pix e o titular passam a ser gravados cifrados (AES-256-GCM, prefixo enc:v1:).
+  # O texto cifrado e maior que o original: as colunas sobem para 400. O que ja existe em texto puro e cifrado
+  # na partida pelo PersonalDataEncryptionMigrator.
+  - changeSet:
+      id: 043-pix-columns-for-encryption
+      author: andrericao
+      changes:
+        - modifyDataType:
+            tableName: base_user
+            columnName: pix_key
+            newDataType: VARCHAR(400)
+        - modifyDataType:
+            tableName: base_user
+            columnName: pix_holder_name
+            newDataType: VARCHAR(400)
