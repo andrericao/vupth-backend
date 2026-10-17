@@ -17,7 +17,7 @@ class NoOpEmailSenderTest {
     void resetCodeNeverLogged(CapturedOutput output) {
         new NoOpEmailSender().sendPasswordResetCode("ana@vupth.com", "482913");
 
-        assertThat(output).contains("[MAIL:noop]").contains("ana@vupth.com");
+        assertThat(output).contains("[MAIL:noop]").contains("a***@vupth.com").doesNotContain("ana@vupth.com");
         assertThat(output).doesNotContain("482913");
     }
 }
