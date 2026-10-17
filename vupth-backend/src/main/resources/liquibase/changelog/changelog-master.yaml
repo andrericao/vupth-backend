@@ -477,3 +477,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/043-pix-columns-for-encryption.yaml
       relativeToChangeLogFile: true
+
+  # Painel: auditoria do /admin/** e permissoes por usuario (fatia 1)
+  - include:
+      file: changesets/20-auth/044-admin-audit-and-permissions.yaml
+      relativeToChangeLogFile: true
