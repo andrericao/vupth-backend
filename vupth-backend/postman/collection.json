@@ -9229,7 +9229,7 @@
   },
   {
    "name": "08g - \"nao compareceu\" saiu (26/09) — regra dos 3 atrasos",
-   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. PATCH /attendances/{id}/no-show responde 410 NO_SHOW_REMOVED ate os apps tirarem o botao.",
+   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. Em 17/10 (falta-do-cliente, DEC-83) o PATCH /attendances/{id}/no-show voltou: o primeiro da fila, 10 min depois da hora comunicada, leva multa de R$ 5 e sai (409 NO_SHOW_TOO_EARLY / NO_SHOW_NOT_FIRST antes disso).",
    "item": [
     {
      "name": "create walk-in para no-show -> 201",
@@ -9308,17 +9308,17 @@
      "response": []
     },
     {
-     "name": "PATCH no-show (prof) -> 410 NO_SHOW_REMOVED",
+     "name": "PATCH no-show (prof) cedo demais -> 409 NO_SHOW_TOO_EARLY (falta-do-cliente)",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "// Andre 26/09: o \"nao compareceu\" saiu — a regra dos 3 atrasos cobre o sumico. O endpoint responde",
-         "// 410 ate os apps tirarem o botao, e nao mexe em nada (o atendimento segue na fila).",
-         "pm.test(\"Status 410 - no-show removido\", () => pm.response.to.have.status(410));",
-         "pm.test(\"code NO_SHOW_REMOVED\", () => pm.expect(pm.response.json().code).to.eql(\"NO_SHOW_REMOVED\"));"
+         "// falta-do-cliente (DEC-83, 17/10): o no-show voltou. So o primeiro da fila e so depois de 10 min da hora comunicada;",
+         "// o atendimento acabou de entrar, entao e cedo (ou nao e o primeiro): 409 e nada muda (segue na fila).",
+         "pm.test(\"Status 409 - cedo demais ou nao e o primeiro\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code NO_SHOW_TOO_EARLY ou NO_SHOW_NOT_FIRST\", () => pm.expect([\"NO_SHOW_TOO_EARLY\", \"NO_SHOW_NOT_FIRST\"]).to.include(pm.response.json().code));"
         ]
        }
       }
@@ -9445,14 +9445,14 @@
      "response": []
     },
     {
-     "name": "[ERRO] no-show em SCHEDULED -> 410 (o endpoint saiu)",
+     "name": "[ERRO] no-show cedo demais em SCHEDULED -> 409 (falta-do-cliente)",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 410 - no-show removido\", () => pm.response.to.have.status(410));"
+         "pm.test(\"Status 409 - cedo demais ou nao e o primeiro\", () => pm.response.to.have.status(409));"
         ]
        }
       }
