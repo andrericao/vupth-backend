@@ -7709,6 +7709,47 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] confirmar o pagamento da multa com token de cliente -> 403 (pagar-multa-avulso)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// So o painel (ADMIN) confirma o Pix da multa; o cliente leva 403. O fluxo todo (Pix do app, 24 h) fica no teste de integracao.",
+         "pm.test(\"Status 403 - so o ADMIN confirma\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/admin/penalty-payments/00000000-0000-0000-0000-000000000000/paid",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "admin",
+        "penalty-payments",
+        "00000000-0000-0000-0000-000000000000",
+        "paid"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

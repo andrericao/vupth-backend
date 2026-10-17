@@ -23,6 +23,10 @@ public record PaymentResponse(
         @JsonProperty("claimed_at") OffsetDateTime claimedAt,
         @JsonProperty("confirmed_at") OffsetDateTime confirmedAt,
         // DEC-65 (pix-por-pessoa): de quem e a chave — PROFESSIONAL (quem atendeu) ou OWNER (o dono, a alternativa)
-        @JsonProperty("pix_owner") String pixOwner
+        @JsonProperty("pix_owner") String pixOwner,
+        // DEC-83 (dois Pix): o Pix do servico (acima) vai ao profissional; o da multa vai ao app. So o cliente o recebe, e so
+        // com multa a pagar e a chave do app configurada.
+        @JsonProperty("penalty_pix_copy_paste") String penaltyPixCopyPaste,
+        @JsonProperty("penalty_holder_name") String penaltyHolderName
 ) {
 }

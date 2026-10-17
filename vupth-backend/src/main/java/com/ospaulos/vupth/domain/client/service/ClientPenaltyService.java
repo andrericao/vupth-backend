@@ -44,6 +44,7 @@ public class ClientPenaltyService {
 
     private final ClientPenaltyEventRepository penaltyEventRepository;
     private final AttendanceRepository attendanceRepository;
+    private final com.ospaulos.vupth.domain.client.repository.PenaltyPaymentRepository penaltyPaymentRepository;
 
     @Transactional(readOnly = true)
     public PendingPenaltiesResponse pending(UUID clientId) {
@@ -66,7 +67,10 @@ public class ClientPenaltyService {
         if (pending.isEmpty()) {
             return;
         }
-        pending.forEach(event -> event.setChargedAttendanceId(attendance.getId()));
+        pending.forEach(event -> {
+            event.setChargedAttendanceId(attendance.getId());
+            event.setPenaltyPaymentId(null); // um pagamento avulso vencido nao segura mais a multa
+        });
         penaltyEventRepository.saveAll(pending);
         log.info("[Penalty] {} multa(s) pendente(s) do client={} passam a ser cobradas no attendance={}",
                 pending.size(), attendance.getClient().getId(), attendance.getId());
@@ -85,6 +89,12 @@ public class ClientPenaltyService {
                 .collect(Collectors.groupingBy(p -> chargedByPenalty.get(p.penaltyId())));
     }
 
+    /** As multas ainda a pagar do cliente, sem as que um pagamento avulso (vigente ou pago) ja cobre. */
+    @Transactional(readOnly = true)
+    public List<ClientPenaltyEvent> pendingFor(UUID clientId) {
+        return pendingEvents(clientId);
+    }
+
     private List<ClientPenaltyEvent> pendingEvents(UUID clientId) {
         List<ClientPenaltyEvent> withAmount = penaltyEventRepository.findByClientIdAndAmountIsNotNullOrderByCreatedAtAsc(clientId);
         Set<UUID> chargedIds = withAmount.stream()
@@ -97,7 +107,18 @@ public class ClientPenaltyService {
                 released.add(a.getId());
             }
         });
+        // pagar-multa-avulso: a multa coberta por um pagamento avulso vigente ou pago nao volta a ser cobrada
+        Set<UUID> paymentIds = withAmount.stream()
+                .map(ClientPenaltyEvent::getPenaltyPaymentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        Set<UUID> held = paymentIds.isEmpty() ? Set.of() : penaltyPaymentRepository.findAllById(paymentIds).stream()
+                .filter(p -> p.holds(now))
+                .map(com.ospaulos.vupth.domain.client.model.PenaltyPayment::getId)
+                .collect(Collectors.toSet());
         return withAmount.stream()
+                .filter(e -> e.getPenaltyPaymentId() == null || !held.contains(e.getPenaltyPaymentId()))
                 .filter(e -> e.getAmount().signum() > 0)
                 .filter(e -> e.getChargedAttendanceId() == null || released.contains(e.getChargedAttendanceId()))
                 .toList();

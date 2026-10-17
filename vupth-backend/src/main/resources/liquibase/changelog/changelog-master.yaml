@@ -492,3 +492,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/046-admin-invitation.yaml
       relativeToChangeLogFile: true
+
+  # pagar-multa-avulso: o pagamento da multa ao app
+  - include:
+      file: changesets/70-client/047-create-penalty_payment.yaml
+      relativeToChangeLogFile: true

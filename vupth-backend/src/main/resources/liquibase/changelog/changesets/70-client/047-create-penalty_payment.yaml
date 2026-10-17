@@ -1,0 +1,33 @@
+databaseChangeLog:
+  # pagar-multa-avulso (DEC-83): o cliente paga as multas pendentes a qualquer momento, por um Pix que e do app. O
+  # pagamento vale 24 h (expires_at); o app confirma no painel. As multas pagas por ele ficam ligadas por
+  # client_penalty_event.penalty_payment_id, e nao entram em outro corte enquanto o pagamento vale ou esta pago.
+  - changeSet:
+      id: 047-create-penalty_payment
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: penalty_payment
+      changes:
+        - createTable:
+            tableName: penalty_payment
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_penalty_payment, nullable: false}}
+              - column: {name: client_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: amount, type: "NUMERIC(10,2)", constraints: {nullable: false}}
+              - column: {name: status, type: VARCHAR(10), constraints: {nullable: false}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: expires_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: paid_at, type: TIMESTAMP WITH TIME ZONE}
+              - column: {name: confirmed_by, type: UUID}
+        - createIndex:
+            tableName: penalty_payment
+            indexName: ix_penalty_payment_client
+            columns:
+              - column: {name: client_id}
+        - addColumn:
+            tableName: client_penalty_event
+            columns:
+              - column: {name: penalty_payment_id, type: UUID}

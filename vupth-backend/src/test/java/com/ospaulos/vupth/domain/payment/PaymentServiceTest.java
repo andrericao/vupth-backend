@@ -47,6 +47,7 @@ class PaymentServiceTest {
     private com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private ClientPenaltyEventRepository penaltyRepository;
     private PaymentService service;
+    private com.ospaulos.vupth.infrastructure.config.AppPix appPixForPenalties;
 
     private final UUID clientId = UUID.randomUUID();
     private final UUID professionalId = UUID.randomUUID();
@@ -58,10 +59,12 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        appPixForPenalties = new com.ospaulos.vupth.infrastructure.config.AppPix("+5511988887777", "VUPTH", "SAO PAULO");
         attendanceRepository = mock(AttendanceRepository.class);
         userRepository = mock(com.ospaulos.vupth.domain.user.repository.UserRepository.class);
         penaltyRepository = mock(ClientPenaltyEventRepository.class);
         service = new PaymentService(attendanceRepository, penaltyRepository, userRepository);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appPix", appPixForPenalties);
         when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of());
 
         professional = new Professional(user("Beto"));
@@ -182,7 +185,8 @@ class PaymentServiceTest {
         assertThat(r.servicesValue()).isEqualByComparingTo("40");
         assertThat(r.penaltiesValue()).isEqualByComparingTo("5");
         assertThat(r.amount()).isEqualByComparingTo("45");
-        assertThat(r.pixCopyPaste()).contains("beto@mail.com").contains("540545.00").contains("CAMPINAS");
+        // DEC-83 (dois Pix): o Pix do profissional leva so o servico (40,00); a multa (5,00) vai por outro Pix, ao app
+        assertThat(r.pixCopyPaste()).contains("beto@mail.com").contains("540540.00").contains("CAMPINAS");
         assertThat(r.holderName()).isEqualTo("Beto");
         assertThat(r.keyType()).isEqualTo(PixKeyType.EMAIL);
         assertThat(r.pixOwner()).isEqualTo("PROFESSIONAL");
@@ -319,7 +323,13 @@ class PaymentServiceTest {
         assertThat(forClient.penaltiesValue()).isEqualByComparingTo("5.00");
         assertThat(forClient.amount()).isEqualByComparingTo("45.00");
 
+        // dois Pix (DEC-83): o do servico vai ao profissional, o da multa ao app; so o cliente recebe o da multa
+        assertThat(forClient.pixCopyPaste()).isNotNull().contains("540540.00");
+        assertThat(forClient.penaltyPixCopyPaste()).isNotNull().contains("54045.00");
+        assertThat(forClient.penaltyHolderName()).isEqualTo("VUPTH");
+
         PaymentResponse forProfessional = service.getPayment(a.getId(), professionalId);
+        assertThat(forProfessional.penaltyPixCopyPaste()).isNull();
         assertThat(forProfessional.penaltiesValue()).isEqualByComparingTo("0");
         assertThat(forProfessional.amount()).isEqualByComparingTo("40.00");
         assertThat(service.pendingOfProfessional(professionalId).items().get(0).amount()).isEqualByComparingTo("40.00");

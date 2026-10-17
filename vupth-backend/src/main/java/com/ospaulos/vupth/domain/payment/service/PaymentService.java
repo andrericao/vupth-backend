@@ -55,6 +55,10 @@ public class PaymentService {
     private final com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private final Clock clock = Clock.systemDefaultZone();
 
+    /** O Pix do app, que recebe a multa (DEC-83). Opcional: sem ele (testes de unidade) a multa so mostra o valor. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.config.AppPix appPix;
+
     // ─── a chave Pix da pessoa (DEC-65: profissional ou dono) ───
 
     public PixKeyResponse setPixKey(UUID userId, PixKeyRequest request) {
@@ -272,8 +276,9 @@ public class PaymentService {
         BaseUser keyOwner = pixKeyOwner(attendance);
         String copyPaste = null;
         if (keyOwner != null) {
+            // DEC-83: o Pix do profissional leva so o servico; a multa vai por outro Pix, ao app
             copyPaste = PixBrCode.build(keyOwner.getPixKey(), keyOwner.getPixHolderName(),
-                    cityOf(attendance), amount, "VUPTH" + attendance.getId().toString().replace("-", ""));
+                    cityOf(attendance), services, "VUPTH" + attendance.getId().toString().replace("-", ""));
         }
         boolean hasKey = copyPaste != null;
         return new PaymentResponse(
@@ -286,7 +291,10 @@ public class PaymentService {
                 hasKey ? keyOwner.getPixKeyType() : null,
                 attendance.getPaymentClaimedAt(),
                 attendance.getPaymentConfirmedAt(),
-                !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER");
+                !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER",
+                forClient && penalties.signum() > 0 && appPix != null
+                        ? appPix.copyPaste(penalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
+                forClient && penalties.signum() > 0 && appPix != null && appPix.configured() ? appPix.holderName() : null);
     }
 
     /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */
