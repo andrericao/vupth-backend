@@ -536,6 +536,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException.class)
+    public ResponseEntity<ErrorResponse> handleOwnerStoreLimit(
+            com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException ex, HttpServletRequest req) {
+        log.warn("[409] OwnerStoreLimit | {} {} | limite={}", req.getMethod(), req.getRequestURI(), ex.getLimit());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "OWNER_STORE_LIMIT");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException.class)
     public ResponseEntity<ErrorResponse> handleInvalidArticleSlug(
             com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException ex, HttpServletRequest req) {

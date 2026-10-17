@@ -99,6 +99,20 @@ class QuickCreateUseCasesTest {
         @InjectMocks QuickCreateEstablishmentUseCase useCase;
 
         @Test
+        @DisplayName("multi-loja: com 5 lojas em uso o dono nao cria a sexta (OwnerStoreLimitException); nada e salvo")
+        void storeLimit() {
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+            when(ownerRepository.findById(USER_ID)).thenReturn(Optional.of(new Owner(user)));
+            when(establishmentRepository.countByOwner_IdAndStatusNotIn(eq(USER_ID), any())).thenReturn(5L);
+
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.execute(USER_ID,
+                            new EstablishmentQuickCreateRequest("Loja 6", ServiceType.BARBER)))
+                    .isInstanceOf(com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException.class)
+                    .hasMessageContaining("5");
+            verify(establishmentRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("success: OWNER role added, establishment created")
         void execute_success_addsOwnerRole() {
             assertThat(user.isOwner()).isFalse();

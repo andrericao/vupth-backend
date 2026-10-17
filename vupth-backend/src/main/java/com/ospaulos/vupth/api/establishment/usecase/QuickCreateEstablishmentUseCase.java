@@ -40,6 +40,10 @@ public class QuickCreateEstablishmentUseCase {
     private final OwnerRepository ownerRepository;
     private final EstablishmentRepository establishmentRepository;
 
+    /** O teto de lojas por dono (multi-loja-do-dono, 17/10: 5); {@code vupth.owner.max-stores}. */
+    @org.springframework.beans.factory.annotation.Value("${vupth.owner.max-stores:5}")
+    private int maxStores = 5;
+
     @Transactional
     public EstablishmentQuickCreateResponse execute(UUID userId, EstablishmentQuickCreateRequest request) {
 
@@ -58,6 +62,12 @@ public class QuickCreateEstablishmentUseCase {
 
         Owner owner = ownerRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Owner profile not found after creation"));
+
+        // 2b. O teto de lojas por dono: as inativas e as removidas nao contam
+        if (establishmentRepository.countByOwner_IdAndStatusNotIn(userId,
+                java.util.List.of(EstablishmentStatus.INACTIVE, EstablishmentStatus.REMOVED)) >= maxStores) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException(maxStores);
+        }
 
         // 3. Create establishment with minimum required data
         Establishment establishment = new Establishment();
