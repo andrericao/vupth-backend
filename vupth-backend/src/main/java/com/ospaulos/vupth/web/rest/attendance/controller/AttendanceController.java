@@ -498,7 +498,18 @@ public class AttendanceController {
             paymentNotifier.confirmed(attendanceId);
             return ResponseEntity.ok(response);
         }
-        // Push (mesmo aviso do WS, para o app em background)
+        // Push (mesmo aviso do WS, para o app em background). Com o pagamento pendente (DEC-78), um so push,
+        // o PAYMENT_PENDING com o botao Pagar, no lugar do ATTENDANCE_FINISHED.
+        java.math.BigDecimal pending = paymentService.pendingAmountOf(attendanceId);
+        if (pending != null) {
+            pushPublisher.notifyUser(att.clientId(), "Atendimento concluído",
+                    com.ospaulos.vupth.domain.payment.service.PaymentReminderScheduler.pendingText(pending),
+                    java.util.Map.of("type", "PAYMENT_PENDING",
+                            "attendanceId", attendanceId.toString(),
+                            "establishmentId", String.valueOf(att.establishmentId()),
+                            "amount", pending.toPlainString()));
+            return ResponseEntity.ok(response);
+        }
         pushPublisher.notifyUser(att.clientId(), "Atendimento concluído", "Seu atendimento foi concluído.",
                 java.util.Map.of("type", "ATTENDANCE_FINISHED",
                         "attendanceId", attendanceId.toString(),

@@ -305,6 +305,39 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("push-pagamento-pendente: o valor so existe com o pagamento PENDENTE (servicos mais multas)")
+    void pendingAmount() {
+        Attendance pending = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        Attendance paid = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        ClientPenaltyEvent fine = new ClientPenaltyEvent();
+        fine.setAmount(new BigDecimal("5.00"));
+        fine.setChargedAttendanceId(pending.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(List.of(pending.getId())))
+                .thenReturn(List.of(fine));
+
+        assertThat(service.pendingAmountOf(pending.getId())).isEqualByComparingTo("45.00");
+        assertThat(service.pendingAmountOf(awaiting.getId())).isNull();
+        assertThat(service.pendingAmountOf(paid.getId())).isNull();
+    }
+
+    @Test
+    @DisplayName("push-pagamento-pendente: os lembretes trazem cliente, atendimento, loja e o valor com a multa")
+    void reminders() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        OffsetDateTime before = OffsetDateTime.now();
+        when(attendanceRepository.findPendingPaymentsFinishedBefore(before)).thenReturn(List.of(a));
+
+        var reminders = service.remindersFinishedBefore(before);
+
+        assertThat(reminders).hasSize(1);
+        assertThat(reminders.get(0).clientId()).isEqualTo(clientId);
+        assertThat(reminders.get(0).attendanceId()).isEqualTo(a.getId());
+        assertThat(reminders.get(0).establishmentId()).isEqualTo(establishment.getId());
+        assertThat(reminders.get(0).amount()).isEqualByComparingTo("40.00");
+    }
+
+    @Test
     @DisplayName("Dot do profissional: awaiting_count so dos AWAITING; itens com o nome (convidado tambem)")
     void professionalPending() {
         Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);

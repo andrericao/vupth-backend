@@ -160,6 +160,31 @@ public class PaymentService {
         return attendance(attendanceId).getEffectivePaymentStatus();
     }
 
+    /** O valor que falta pagar (servicos mais multas) quando o pagamento esta PENDENTE; nulo nos outros casos. */
+    @Transactional(readOnly = true)
+    public BigDecimal pendingAmountOf(UUID attendanceId) {
+        Attendance a = attendance(attendanceId);
+        if (a.getEffectivePaymentStatus() != PaymentStatus.PENDING) {
+            return null;
+        }
+        return a.getTotalValue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
+    }
+
+    /** Um lembrete de pagamento pendente (push-pagamento-pendente): para quem, qual atendimento e quanto. */
+    public record PaymentReminder(UUID clientId, UUID attendanceId, UUID establishmentId, BigDecimal amount) {
+    }
+
+    /** Os pagamentos PENDENTES de atendimentos finalizados antes de {@code before}, com o valor de cada um. */
+    @Transactional(readOnly = true)
+    public List<PaymentReminder> remindersFinishedBefore(OffsetDateTime before) {
+        List<Attendance> open = attendanceRepository.findPendingPaymentsFinishedBefore(before);
+        Map<UUID, BigDecimal> penalties = penaltiesOf(open.stream().map(Attendance::getId).toList());
+        return open.stream()
+                .map(a -> new PaymentReminder(a.getClient().getId(), a.getId(), a.getEstablishment().getId(),
+                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO))))
+                .toList();
+    }
+
     // ─── as pendencias ───
 
     @Transactional(readOnly = true)

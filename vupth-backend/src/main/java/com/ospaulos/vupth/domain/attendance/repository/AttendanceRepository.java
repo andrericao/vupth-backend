@@ -340,6 +340,19 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     List<Attendance> findOpenPaymentsOfClient(@Param("clientId") UUID clientId);
 
     /**
+     * push-pagamento-pendente (DEC-78): os atendimentos de cliente com conta, finalizados antes de {@code before}
+     * e ainda com o pagamento PENDENTE — os que levam o lembrete das 10h.
+     */
+    @Query("""
+            SELECT a FROM Attendance a
+            JOIN FETCH a.client JOIN FETCH a.establishment
+            WHERE a.status = com.ospaulos.vupth.domain.attendance.AttendanceStatus.FINISHED
+              AND a.paymentStatus = com.ospaulos.vupth.domain.payment.PaymentStatus.PENDING
+              AND a.endTime < :before
+            """)
+    List<Attendance> findPendingPaymentsFinishedBefore(@Param("before") java.time.OffsetDateTime before);
+
+    /**
      * pagamento-pix: o dot do profissional — os que o cliente diz que pagou (em qualquer status) e os
      * finalizados ainda pendentes (o "Nao" do modal).
      */
