@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.user.usecase.auth;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.api.user.policy.PasswordPolicy;
 import com.ospaulos.vupth.domain.user.exception.EmailNotRegisteredException;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -39,7 +40,7 @@ public class LoginUsecase {
 
     public UserProfileGeneralInfosAndToken executeLogin(LoginRequest request){
 
-        log.info("USECASE LOGIN: " + request.email());
+        log.info("USECASE LOGIN: " + LogMask.email(request.email()));
 
         // BAK-6 (D2): e-mail sem conta tem resposta propria (401 EMAIL_NOT_FOUND); senha errada
         // segue 401 BAD_CREDENTIALS. O AuthenticationManager esconde a diferenca de proposito.

@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.security.jwt.filter;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.UserRole;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
@@ -20,7 +21,7 @@ public class UserDetailsImpl implements UserDetails {
 
     public UserDetailsImpl(BaseUser user) {
 
-        log.info("USER DETAILS START - " + user.getEmail());
+        log.info("USER DETAILS START - " + LogMask.email(user.getEmail()));
 
         if (user.getPassword() == null || user.getPassword().isEmpty()) {
             throw new IllegalStateException("User with no password: " + user.getEmail());

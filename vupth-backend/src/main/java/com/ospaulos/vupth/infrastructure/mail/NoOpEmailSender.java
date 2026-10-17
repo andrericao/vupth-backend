@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.infrastructure.mail;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,11 +31,11 @@ public class NoOpEmailSender implements EmailSender {
 
     @Override
     public void sendPasswordResetCode(String toEmail, String code) {
-        log.info("[MAIL:noop] reset code pedido para {} (provider=none — nenhum e-mail enviado)", toEmail);
+        log.info("[MAIL:noop] reset code pedido para {} (provider=none — nenhum e-mail enviado)", LogMask.email(toEmail));
     }
 
     @Override
     public void send(String toEmail, String subject, String body) {
-        log.info("[MAIL:noop] '{}' para {} (provider=none — nenhum e-mail enviado)", subject, toEmail);
+        log.info("[MAIL:noop] '{}' para {} (provider=none — nenhum e-mail enviado)", subject, LogMask.email(toEmail));
     }
 }

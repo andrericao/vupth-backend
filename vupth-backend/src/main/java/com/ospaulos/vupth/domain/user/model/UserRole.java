@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.user.model;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
@@ -50,12 +51,12 @@ public class UserRole {
     }
 
     public void activate() {
-        log.info("Activate role {} for user {}", roleType, baseUser.getEmail());
+        log.info("Activate role {} for user {}", roleType, LogMask.email(baseUser.getEmail()));
         this.isActive = true;
     }
 
     public void deactivate() {
-        log.info("Deactivate role {} for user {}", roleType, baseUser.getEmail());
+        log.info("Deactivate role {} for user {}", roleType, LogMask.email(baseUser.getEmail()));
         this.isActive = false;
     }
 }

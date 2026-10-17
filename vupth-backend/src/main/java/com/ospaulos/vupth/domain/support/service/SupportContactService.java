@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.support.service;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.api.support.dto.request.SupportContactRequest;
 import com.ospaulos.vupth.infrastructure.mail.EmailDeliveryException;
 import com.ospaulos.vupth.infrastructure.mail.EmailSender;
@@ -37,7 +38,7 @@ public class SupportContactService {
 
     public void forward(SupportContactRequest request) {
         if (inbox.isEmpty()) {
-            log.error("[Suporte] SUPPORT_INBOX_EMAIL vazia — mensagem de {} nao encaminhada", request.email());
+            log.error("[Suporte] SUPPORT_INBOX_EMAIL vazia — mensagem de {} nao encaminhada", LogMask.email(request.email()));
             throw new EmailDeliveryException("SUPPORT_INBOX_EMAIL nao configurada", null);
         }
         String perfil = PROFILE_LABEL.getOrDefault(request.perfil(), request.perfil());

@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.affiliation.service;
 
+import com.ospaulos.vupth.infrastructure.logging.LogMask;
 import com.ospaulos.vupth.domain.affiliation.model.AffiliationRequest;
 import com.ospaulos.vupth.domain.affiliation.model.AffiliationStatus;
 import com.ospaulos.vupth.domain.affiliation.model.AffiliationType;
@@ -79,7 +80,7 @@ public class AffiliationNotifier {
             try {
                 emailSender.send(email, "VUPTH — Convite de " + establishmentName, body);
             } catch (Exception e) {
-                log.warn("[Affiliation] e-mail de convite sem conta para {} falhou: {}", email, e.getMessage());
+                log.warn("[Affiliation] e-mail de convite sem conta para {} falhou: {}", LogMask.email(email), e.getMessage());
             }
         };
         if (TransactionSynchronizationManager.isSynchronizationActive()) {

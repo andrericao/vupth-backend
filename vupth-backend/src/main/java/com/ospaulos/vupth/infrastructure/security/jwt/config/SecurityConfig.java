@@ -281,6 +281,13 @@ public class SecurityConfig {
                 // Com o .cors(), o CorsFilter responde o preflight ANTES da autorizacao.
                 .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
+                // S7 (DEC-81): HSTS so em resposta HTTPS. Atras do proxy da plataforma o pedido chega em HTTP puro, e o
+                // protocolo de verdade vem no X-Forwarded-Proto; sem isto o Spring nunca mandaria o cabecalho.
+                .headers(headers -> headers.httpStrictTransportSecurity(hsts -> hsts
+                        .requestMatcher(request -> request.isSecure()
+                                || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")))
+                        .maxAgeInSeconds(31_536_000)
+                        .includeSubDomains(true)))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
