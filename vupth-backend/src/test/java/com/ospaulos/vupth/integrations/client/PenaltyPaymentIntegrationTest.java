@@ -35,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = VupthApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@TestPropertySource(properties = {"vupth.app-pix.key=+5511988887777", "vupth.app-pix.holder-name=VUPTH APP"})
+@TestPropertySource(properties = {"vupth.payment.mode=SPLIT_PIX", "vupth.app-pix.key=+5511988887777",
+        "vupth.app-pix.holder-name=VUPTH APP"})
 class PenaltyPaymentIntegrationTest {
 
     @Autowired MockMvc mvc;

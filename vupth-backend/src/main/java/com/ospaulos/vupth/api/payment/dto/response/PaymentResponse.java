@@ -27,6 +27,8 @@ public record PaymentResponse(
         // DEC-83 (dois Pix): o Pix do servico (acima) vai ao profissional; o da multa vai ao app. So o cliente o recebe, e so
         // com multa a pagar e a chave do app configurada.
         @JsonProperty("penalty_pix_copy_paste") String penaltyPixCopyPaste,
-        @JsonProperty("penalty_holder_name") String penaltyHolderName
+        @JsonProperty("penalty_holder_name") String penaltyHolderName,
+        // DEC-85: como o profissional disse que recebeu (PIX, CARTAO, DINHEIRO ou NOTA); nulo = nao informado ou ainda nao pago
+        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod
 ) {
 }

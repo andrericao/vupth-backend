@@ -497,3 +497,8 @@ databaseChangeLog:
   - include:
       file: changesets/70-client/047-create-penalty_payment.yaml
       relativeToChangeLogFile: true
+
+  # forma de recebimento do pagamento (DEC-85)
+  - include:
+      file: changesets/80-attendance/048-add-payment_method-to-attendance.yaml
+      relativeToChangeLogFile: true

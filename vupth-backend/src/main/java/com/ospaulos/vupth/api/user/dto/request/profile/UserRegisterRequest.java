@@ -3,7 +3,6 @@ package com.ospaulos.vupth.api.user.dto.request.profile;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 
 /**
  * Registration request.
@@ -22,7 +21,8 @@ public record UserRegisterRequest(
         @Email(message = "Email must be a valid email address")
         String email,
 
+        // O minimo e o maximo vem da PasswordPolicy (DEC-79): 422 PASSWORD_TOO_SHORT / PASSWORD_TOO_LONG com min_length e
+        // max_length, o mesmo code do cadastro, da troca e da redefinicao.
         @NotNull(message = "Password is required")
-        @Size(min = 6, message = "Password must be at least 6 characters")
         String password) {
 }

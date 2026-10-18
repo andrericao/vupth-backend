@@ -37,9 +37,15 @@ public class PenaltyPaymentService {
     private final ClientPenaltyService penaltyService;
     private final ClientRepository clientRepository;
     private final AppPix appPix;
+    private final com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
 
     /** Gera o Pix das multas pendentes; sem multa pendente devolve o pagamento vigente, se houver. */
     public PenaltyPaymentResponse pay(UUID clientId) {
+        if (!paymentMode.splitPix()) {
+            // fase de testes sem gateway (DEC-85): a multa so se paga no proximo corte, junto com o servico
+            throw new PenaltyPaymentException(HttpStatus.CONFLICT, "PENALTY_PAY_DISABLED",
+                    "A multa e paga no proximo corte, junto com o servico.");
+        }
         OffsetDateTime now = OffsetDateTime.now();
         List<ClientPenaltyEvent> pending = penaltyService.pendingFor(clientId);
         if (pending.isEmpty()) {

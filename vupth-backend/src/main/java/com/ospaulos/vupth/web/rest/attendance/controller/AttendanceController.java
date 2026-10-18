@@ -492,7 +492,8 @@ public class AttendanceController {
         QueueResponse response = professionalService.finishAttendance(principal.getUserId(), attendanceId);
         // pagamento-pix (adendo 1): o "Sim" do modal termina e marca pago na mesma chamada
         boolean paidNow = finishRequest != null && finishRequest.received()
-                && paymentService.confirmOnFinish(attendanceId, principal.getUserId());
+                && paymentService.confirmOnFinish(attendanceId, principal.getUserId(),
+                finishRequest.paymentMethod());
         // finish-com-payment-status (S47): a fila volta com o pagamento de quem acabou de terminar
         response = response.withPaymentStatus(paymentService.statusOf(attendanceId));
 

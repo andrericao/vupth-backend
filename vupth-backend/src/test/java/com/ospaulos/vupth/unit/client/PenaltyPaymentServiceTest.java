@@ -33,7 +33,8 @@ class PenaltyPaymentServiceTest {
         ClientPenaltyEvent event = new ClientPenaltyEvent(null, null, null, 0, new BigDecimal("5.00"));
         when(penalties.pendingFor(client)).thenReturn(List.of(event));
         var service = new PenaltyPaymentService(payments, mock(ClientPenaltyEventRepository.class), penalties,
-                mock(ClientRepository.class), new AppPix("", "VUPTH", "SAO PAULO"));
+                mock(ClientRepository.class), new AppPix("", "VUPTH", "SAO PAULO"),
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX"));
 
         assertThatThrownBy(() -> service.pay(client)).isInstanceOfSatisfying(PenaltyPaymentException.class, e -> {
             assertThat(e.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
@@ -52,5 +53,31 @@ class PenaltyPaymentServiceTest {
         assertThat(pix.configured()).isTrue();
         assertThat(pix.holderName()).isEqualTo("VUPTH");
         assertThat(pix.copyPaste(new BigDecimal("8.00"), "VUPTHMULTA1")).startsWith("000201").contains("5404" + "8.00");
+    }
+
+    @Test
+    @DisplayName("fase de testes sem gateway (TEST_PIX_TOTAL, o padrao): pagar a multa avulso responde 409 PENALTY_PAY_DISABLED")
+    void disabledInTestMode() {
+        PenaltyPaymentRepository payments = mock(PenaltyPaymentRepository.class);
+        var service = new PenaltyPaymentService(payments, mock(ClientPenaltyEventRepository.class),
+                mock(ClientPenaltyService.class), mock(ClientRepository.class),
+                new AppPix("+5511988887777", "VUPTH", "SAO PAULO"),
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("TEST_PIX_TOTAL"));
+
+        assertThatThrownBy(() -> service.pay(UUID.randomUUID())).isInstanceOfSatisfying(PenaltyPaymentException.class, e -> {
+            assertThat(e.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(e.getCode()).isEqualTo("PENALTY_PAY_DISABLED");
+        });
+        org.mockito.Mockito.verifyNoInteractions(payments);
+    }
+
+    @Test
+    @DisplayName("PaymentMode: so SPLIT_PIX liga os dois Pix; nulo, vazio ou outro valor e a fase de testes")
+    void paymentMode() {
+        assertThat(new com.ospaulos.vupth.infrastructure.config.PaymentMode("split_pix").splitPix()).isTrue();
+        assertThat(new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX").name()).isEqualTo("SPLIT_PIX");
+        assertThat(new com.ospaulos.vupth.infrastructure.config.PaymentMode(null).splitPix()).isFalse();
+        assertThat(new com.ospaulos.vupth.infrastructure.config.PaymentMode(" ").name()).isEqualTo("TEST_PIX_TOTAL");
+        assertThat(new com.ospaulos.vupth.infrastructure.config.PaymentMode("qualquer").splitPix()).isFalse();
     }
 }
