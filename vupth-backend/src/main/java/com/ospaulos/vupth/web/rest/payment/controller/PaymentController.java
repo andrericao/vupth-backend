@@ -58,7 +58,7 @@ public class PaymentController {
                                                  @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("PAYMENT CONTROLLER CLAIM {} by client={}", attendanceId, principal.getUserId());
         PaymentResponse response = paymentService.claim(attendanceId, principal.getUserId());
-        paymentNotifier.claimed(attendanceId, response.amount());
+        paymentNotifier.claimed(attendanceId); // o valor do aviso e so o servico (DEC-83)
         return ResponseEntity.ok(response);
     }
 

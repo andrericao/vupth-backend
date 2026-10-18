@@ -410,13 +410,21 @@ public class AttendanceController {
     }
 
     /**
-     * PATCH /attendances/{attendanceId}/no-show — SAIU (Andre, 26/09): responde 410 NO_SHOW_REMOVED.
-     * A regra dos 3 atrasos cobre o sumico: o profissional marca "atrasado" ({@code /late}) e, no 3o,
-     * o sistema cobra a multa e manda o cliente para o fim da fila. Fica ate os apps tirarem o botao.
+     * PATCH /attendances/{attendanceId}/no-show — o cliente nao compareceu (falta-do-cliente, DEC-83, 17/10). O
+     * profissional do atendimento ou o dono da loja tira o primeiro da fila depois da espera (10 min da hora comunicada);
+     * ele leva multa de R$ 5,00 (configuravel) e sai com o motivo "removido por atraso". Convidado sai sem multa.
+     * 409 NO_SHOW_NOT_FIRST / NO_SHOW_TOO_EARLY (com available_at). O 1o e o 2o atraso seguem so avisando ({@code /late}).
      */
     @PatchMapping("/{attendanceId}/no-show")
-    public ResponseEntity<?> markNoShow(@PathVariable UUID attendanceId) {
-        throw new com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException();
+    public ResponseEntity<?> markNoShow(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+
+        log.info("ATTENDANCE CONTROLLER NO-SHOW {} by user={}", attendanceId, principal.getUserId());
+
+        QueueResponse response = professionalService.markNoShow(principal.getUserId(), attendanceId);
+        queuePublisher.broadcastQueue(response.establishmentId());
+        return ResponseEntity.ok(response);
     }
 
     /**

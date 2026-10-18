@@ -49,6 +49,9 @@ public interface EstablishmentRepository extends JpaRepository<Establishment, UU
     """)
     List<Establishment> findByOwnerId(@Param("ownerId") UUID ownerId);
 
+    /** Quantas lojas o dono tem em uso (as inativas e as removidas nao contam no teto). */
+    long countByOwner_IdAndStatusNotIn(UUID ownerId, java.util.Collection<EstablishmentStatus> statuses);
+
     // Lista todos os ativos (exclui INACTIVE) com associations para serialização
     @Query("""
         SELECT e FROM Establishment e

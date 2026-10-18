@@ -50,10 +50,14 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
 
             log.info("JWT CONVERTER END - id: {}", id);
 
-            return new UsernamePasswordAuthenticationToken(
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     userDetails,
                     null,
                     userDetails.getAuthorities());
+            // Como o login foi feito (pwd, totp): o painel confere se o segundo fator foi cumprido
+            java.util.List<String> amr = jwt.getClaimAsStringList("amr");
+            authentication.setDetails(amr == null ? java.util.List.<String>of() : amr);
+            return authentication;
 
         } catch (Exception e){
             log.error("❌ Error to converter JWT: ", e);

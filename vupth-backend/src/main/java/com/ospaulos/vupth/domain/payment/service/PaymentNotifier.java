@@ -36,11 +36,13 @@ public class PaymentNotifier {
     private final PushNotificationPublisher pushPublisher;
 
     /** "Ja paguei": o profissional recebe notificacao e o dot. */
-    public void claimed(UUID attendanceId, BigDecimal amount) {
+    public void claimed(UUID attendanceId) {
         withAttendance(attendanceId, a -> {
             UUID professionalId = a.getProfessional().getId();
             String client = a.getClient() != null ? a.getClient().getFirstName() : "O cliente";
-            String message = client + " diz que pagou " + money(amount) + ". Confira se consta na sua conta.";
+            // multi-loja: o dono que tem varias lojas precisa saber de qual e o pagamento
+            String store = a.getEstablishment().getName() == null ? "" : " na " + a.getEstablishment().getName();
+            String message = client + " diz que pagou " + money(a.getTotalValue()) + store + ". Confira se consta na sua conta.";
             queuePublisher.notifyClient(professionalId, QueueNotification.of(
                     PAYMENT_CLAIMED, attendanceId, a.getEstablishment().getId(), message));
             pushPublisher.notifyUser(professionalId, "Confira o pagamento", message,

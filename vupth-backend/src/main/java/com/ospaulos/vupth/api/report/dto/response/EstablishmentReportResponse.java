@@ -29,7 +29,11 @@ public record EstablishmentReportResponse(
         BigDecimal netRevenue,
         long attendancesWithoutSplit,
         // Expediente da LOJA por dia (Partner S4): da primeira chegada a ultima saida, entre todos.
-        List<WorkdayResponse> workdays
+        List<WorkdayResponse> workdays,
+        // relatorio-sem-multa (DEC-83): os nao realizados pelos tres motivos e os concluidos com atraso do cliente.
+        // So a contagem: a multa e do app.
+        OwnerReportResponse.NotRealized notRealized,
+        long finishedLate
 ) {
 
     public record ProfessionalRevenue(

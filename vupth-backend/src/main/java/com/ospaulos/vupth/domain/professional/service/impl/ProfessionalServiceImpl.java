@@ -197,6 +197,47 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
     @Override
     @Transactional
+    public QueueResponse markNoShow(UUID userId, UUID attendanceId) {
+        log.info("[Professional] markNoShow — user={} attendance={}", userId, attendanceId);
+
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = attendance.getProfessional();
+
+        boolean isProfessional = professional.getId().equals(userId);
+        boolean isOwner = establishment.getOwner() != null && establishment.getOwner().getId().equals(userId);
+        if (!isProfessional && !isOwner) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException(
+                    "Only the professional of the attendance or the owner of the establishment can mark a no-show.");
+        }
+        if (attendance.getStatus() != AttendanceStatus.SCHEDULED && attendance.getStatus() != AttendanceStatus.LATE) {
+            throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
+        }
+
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        if (waiting.isEmpty() || !waiting.get(0).getId().equals(attendanceId)) {
+            throw com.ospaulos.vupth.domain.attendance.exception.NoShowException.notFirst();
+        }
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        java.time.OffsetDateTime availableAt = lateArrivalService.noShowAvailableAt(attendance, professional, now);
+        if (now.isBefore(availableAt)) {
+            throw com.ospaulos.vupth.domain.attendance.exception.NoShowException.tooEarly(availableAt);
+        }
+
+        // Saiu por nao comparecer: REMOVED (quem tirou foi a loja) e, com conta, a multa NO_SHOW
+        attendance.setStatus(AttendanceStatus.REMOVED);
+        attendanceRepository.save(attendance);
+        lateArrivalService.registerNoShow(attendance);
+
+        queueService.updateQueueEstimates(professional);
+        log.info("[Professional] markNoShow — attendance={} removido por nao comparecer", attendanceId);
+        return queueService.getQueueOverview(professional, establishment);
+    }
+
+    @Override
+    @Transactional
     public QueueResponse undoAttendanceLate(UUID professionalId, UUID attendanceId) {
         log.info("[Professional] undoAttendanceLate — professional={} attendance={}",
                 professionalId, attendanceId);

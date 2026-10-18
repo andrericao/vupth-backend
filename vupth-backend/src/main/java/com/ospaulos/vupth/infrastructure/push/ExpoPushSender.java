@@ -80,7 +80,8 @@ public class ExpoPushSender implements PushSender {
             "CUT_REFUSED", "VER_ATENDIMENTO",
             "CUT_EXPIRED", "VER_ATENDIMENTO",
             "ATTENDANCE_FINISHED", "AVALIAR",
-            "PAYMENT_PENDING", "PAGAR");
+            "PAYMENT_PENDING", "PAGAR",
+            "NO_SHOW_REMOVED", "PAGAR_MULTA");
 
     /**
      * As que pedem decisao (aceitar/recusar, fechar ou nao) nao levam a CIENCIA. O CLOSING_PROMPT leva a

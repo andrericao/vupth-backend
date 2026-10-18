@@ -55,6 +55,10 @@ public class PaymentService {
     private final com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private final Clock clock = Clock.systemDefaultZone();
 
+    /** O Pix do app, que recebe a multa (DEC-83). Opcional: sem ele (testes de unidade) a multa so mostra o valor. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.config.AppPix appPix;
+
     // ─── a chave Pix da pessoa (DEC-65: profissional ou dono) ───
 
     public PixKeyResponse setPixKey(UUID userId, PixKeyRequest request) {
@@ -101,7 +105,7 @@ public class PaymentService {
             throw new PaymentAccessDeniedException("So o cliente, o profissional e o dono da loja veem este pagamento.");
         }
         assertAvailable(attendance);
-        return toPayment(attendance);
+        return toPayment(attendance, isClient(attendance, userId));
     }
 
     /** "Ja paguei": so o cliente, de PENDING para AWAITING_CONFIRMATION. */
@@ -118,7 +122,7 @@ public class PaymentService {
         attendance.setPaymentClaimedAt(OffsetDateTime.now(clock));
         attendanceRepository.save(attendance);
         log.info("[Payment] Ja paguei — attendance={} client={}", attendanceId, userId);
-        return toPayment(attendance);
+        return toPayment(attendance, true);
     }
 
     /** "Recebi": o profissional do atendimento ou o dono da loja, de PENDING ou AWAITING_CONFIRMATION para PAID. */
@@ -133,7 +137,7 @@ public class PaymentService {
         }
         markPaid(attendance);
         log.info("[Payment] Recebi — attendance={} by={}", attendanceId, userId);
-        return toPayment(attendance);
+        return toPayment(attendance, isClient(attendance, userId));
     }
 
     /**
@@ -217,12 +221,11 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public ProfessionalPendingPaymentsResponse pendingOfProfessional(UUID professionalId) {
         List<Attendance> open = attendanceRepository.findOpenPaymentsOfProfessional(professionalId);
-        Map<UUID, BigDecimal> penalties = penaltiesOf(open.stream().map(Attendance::getId).toList());
         List<ProfessionalPendingPaymentsResponse.Item> items = open.stream()
                 .map(a -> new ProfessionalPendingPaymentsResponse.Item(
                         a.getId(),
                         a.getPaymentStatus(),
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO)),
+                        a.getTotalValue(), // o profissional ve so o servico; a multa e do app (DEC-83)
                         a.getClient() != null ? a.getClient().getFirstName() : a.getGuestName(),
                         a.getEndTime(),
                         a.getPaymentClaimedAt()))
@@ -261,15 +264,21 @@ public class PaymentService {
                 && userId.equals(attendance.getEstablishment().getOwner().getId());
     }
 
-    private PaymentResponse toPayment(Attendance attendance) {
+    /**
+     * @param forClient o cliente ve a multa e o total com ela; o profissional e o dono veem so o valor do servico
+     *                  (DEC-83, relatorio-sem-multa: a multa e do app)
+     */
+    private PaymentResponse toPayment(Attendance attendance, boolean forClient) {
         BigDecimal services = attendance.getTotalValue();
-        BigDecimal penalties = penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO);
+        BigDecimal penalties = forClient
+                ? penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO) : ZERO;
         BigDecimal amount = services.add(penalties);
         BaseUser keyOwner = pixKeyOwner(attendance);
         String copyPaste = null;
         if (keyOwner != null) {
+            // DEC-83: o Pix do profissional leva so o servico; a multa vai por outro Pix, ao app
             copyPaste = PixBrCode.build(keyOwner.getPixKey(), keyOwner.getPixHolderName(),
-                    cityOf(attendance), amount, "VUPTH" + attendance.getId().toString().replace("-", ""));
+                    cityOf(attendance), services, "VUPTH" + attendance.getId().toString().replace("-", ""));
         }
         boolean hasKey = copyPaste != null;
         return new PaymentResponse(
@@ -282,7 +291,10 @@ public class PaymentService {
                 hasKey ? keyOwner.getPixKeyType() : null,
                 attendance.getPaymentClaimedAt(),
                 attendance.getPaymentConfirmedAt(),
-                !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER");
+                !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER",
+                forClient && penalties.signum() > 0 && appPix != null
+                        ? appPix.copyPaste(penalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
+                forClient && penalties.signum() > 0 && appPix != null && appPix.configured() ? appPix.holderName() : null);
     }
 
     /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */

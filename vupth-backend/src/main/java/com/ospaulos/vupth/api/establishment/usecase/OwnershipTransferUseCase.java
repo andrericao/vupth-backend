@@ -146,7 +146,10 @@ public class OwnershipTransferUseCase {
         transfer.close(OwnershipTransfer.Status.REFUSED);
         transferRepository.save(transfer);
         String who = userRepository.findById(professionalId).map(BaseUser::getFirstName).orElse("O profissional");
-        notifyOwner(transfer, "OWNERSHIP_TRANSFER_REFUSED", "Posse recusada", who + " recusou ser o dono da loja.");
+        String store = establishmentRepository.findById(transfer.getEstablishmentId())
+                .map(Establishment::getName).map(name -> " " + name).orElse("");
+        notifyOwner(transfer, "OWNERSHIP_TRANSFER_REFUSED", "Posse recusada",
+                who + " recusou ser o dono da loja" + store + ".");
         log.info("[OwnershipTransfer] refused — id={}", transferId);
     }
 

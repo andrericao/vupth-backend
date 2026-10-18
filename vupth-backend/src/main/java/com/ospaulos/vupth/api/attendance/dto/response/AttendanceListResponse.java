@@ -44,7 +44,13 @@ public record AttendanceListResponse(
         Boolean rated,
         // pagamento-pix (10/10): a flag do pagamento, ao lado do status (null = fora do fluxo)
         @com.fasterxml.jackson.annotation.JsonProperty("payment_status")
-        com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus
+        com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus,
+        // relatorio-sem-multa (DEC-83): por que o atendimento nao aconteceu — CLIENT_CANCELLED (o cliente cancelou),
+        // PROFESSIONAL_REMOVED (o profissional removeu) ou REMOVED_FOR_LATENESS (removido por atraso). Nulo se aconteceu.
+        // Sem valor: a multa e do app.
+        @com.fasterxml.jackson.annotation.JsonProperty("not_realized_reason") String notRealizedReason,
+        // O corte foi concluido, mas o cliente chegou atrasado (o profissional atendeu o seguinte): a observacao de atraso.
+        @com.fasterxml.jackson.annotation.JsonProperty("late_arrival") Boolean lateArrival
 ) {
 
     public AttendanceListResponse withPenalties(List<PenaltyChargeResponse> charged) {
@@ -53,13 +59,19 @@ public record AttendanceListResponse(
                 .reduce(new BigDecimal("0.00"), BigDecimal::add);
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
-                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated, paymentStatus);
+                durationInMinutes, proReceives, intermediaryFee, platformFee, charged, total, rated, paymentStatus, notRealizedReason, lateArrival);
     }
 
     public AttendanceListResponse withRated(boolean isRated) {
         return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
-                durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated, paymentStatus);
+                durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, isRated, paymentStatus, notRealizedReason, lateArrival);
+    }
+
+    public AttendanceListResponse withReason(String reason, boolean late) {
+        return new AttendanceListResponse(id, clientId, clientName, professionalId, professionalName,
+                establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime, startTime, endTime,
+                durationInMinutes, proReceives, intermediaryFee, platformFee, penalties, penaltyTotal, rated, paymentStatus, reason, late);
     }
 
     public static AttendanceListResponse fromEntity(Attendance attendance) {
@@ -92,7 +104,9 @@ public record AttendanceListResponse(
                 null,
                 null,
                 null,
-                attendance.getEffectivePaymentStatus()
+                attendance.getEffectivePaymentStatus(),
+                null,
+                null
         );
     }
 

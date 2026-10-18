@@ -254,6 +254,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "OPERATION_MODE_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowException.class)
+    public ResponseEntity<NoShowErrorResponse> handleNoShow(
+            com.ospaulos.vupth.domain.attendance.exception.NoShowException ex, HttpServletRequest req) {
+        log.warn("[409] NoShow {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new NoShowErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getAvailableAt()));
+    }
+
+    /** 409 da falta: com {@code available_at} (a hora a partir da qual o botao vale), quando for cedo. */
+    public record NoShowErrorResponse(
+            int status,
+            String message,
+            String code,
+            OffsetDateTime timestamp,
+            @com.fasterxml.jackson.annotation.JsonProperty("available_at") OffsetDateTime availableAt) {
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException.class)
     public ResponseEntity<ErrorResponse> handleNoShowRemoved(
             com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException ex, HttpServletRequest req) {
@@ -534,6 +551,34 @@ public class GlobalExceptionHandler {
             LockedException ex, HttpServletRequest req) {
         log.warn("[401] AccountLocked | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.client.exception.PenaltyPaymentException.class)
+    public ResponseEntity<ErrorResponse> handlePenaltyPayment(
+            com.ospaulos.vupth.domain.client.exception.PenaltyPaymentException ex, HttpServletRequest req) {
+        log.warn("[{}] PenaltyPayment {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.admin.exception.AdminInvitationException.class)
+    public ResponseEntity<ErrorResponse> handleAdminInvitation(
+            com.ospaulos.vupth.domain.admin.exception.AdminInvitationException ex, HttpServletRequest req) {
+        log.warn("[{}] AdminInvitation {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.admin.exception.AdminTotpException.class)
+    public ResponseEntity<ErrorResponse> handleAdminTotp(
+            com.ospaulos.vupth.domain.admin.exception.AdminTotpException ex, HttpServletRequest req) {
+        log.warn("[{}] AdminTotp {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException.class)
+    public ResponseEntity<ErrorResponse> handleOwnerStoreLimit(
+            com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException ex, HttpServletRequest req) {
+        log.warn("[409] OwnerStoreLimit | {} {} | limite={}", req.getMethod(), req.getRequestURI(), ex.getLimit());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), "OWNER_STORE_LIMIT");
     }
 
     @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.InvalidArticleSlugException.class)

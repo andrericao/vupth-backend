@@ -578,4 +578,101 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     boolean existsByProfessionalIdAndStatusInAndScheduledTimeBetween(
             UUID professionalId, java.util.Collection<com.ospaulos.vupth.domain.attendance.AttendanceStatus> statuses,
             java.time.OffsetDateTime from, java.time.OffsetDateTime to);
+
+    /**
+     * Relatorio do dono (multi-loja-do-dono): os finalizados de varias lojas de uma vez, numa ida so ao banco.
+     * Sem os joins de profissional e servico — o relatorio agregado so soma valores.
+     */
+    @Query("""
+        SELECT a FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status = 'FINISHED'
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Attendance> findFinishedByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Os cancelados de varias lojas no periodo: {@code [id da loja, horario marcado]}, para contar por loja e periodo. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status = 'CANCELLED'
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findCancelledTimesByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /**
+     * Os atendimentos que nao aconteceram no periodo (DEC-83): {@code [id da loja, horario marcado, status, vezes que
+     * foi removido por atraso]}. CANCELLED = o cliente cancelou; REMOVED = o profissional removeu, e, com o evento
+     * NO_SHOW do atendimento, removido por atraso. Nunca o valor da multa.
+     */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime, a.status,
+               (SELECT count(e) FROM ClientPenaltyEvent e
+                 WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
+        FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status IN ('CANCELLED', 'REMOVED')
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findNotRealizedByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Os concluidos em que o cliente chegou atrasado (o profissional atendeu o seguinte): {@code [id da loja, horario marcado]}. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime
+        FROM Attendance a
+        WHERE a.establishment.id IN :establishmentIds
+          AND a.status = 'FINISHED'
+          AND EXISTS (SELECT 1 FROM ClientPenaltyEvent e
+                       WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findFinishedLateByEstablishmentsBetween(
+            @Param("establishmentIds") java.util.Collection<UUID> establishmentIds,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Como {@link #findNotRealizedByEstablishmentsBetween}, so dos atendimentos de um profissional. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime, a.status,
+               (SELECT count(e) FROM ClientPenaltyEvent e
+                 WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
+        FROM Attendance a
+        WHERE a.professional.id = :professionalId
+          AND a.status IN ('CANCELLED', 'REMOVED')
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findNotRealizedByProfessionalBetween(
+            @Param("professionalId") UUID professionalId,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
+
+    /** Como {@link #findFinishedLateByEstablishmentsBetween}, so dos atendimentos de um profissional. */
+    @Query("""
+        SELECT a.establishment.id, a.scheduledTime
+        FROM Attendance a
+        WHERE a.professional.id = :professionalId
+          AND a.status = 'FINISHED'
+          AND EXISTS (SELECT 1 FROM ClientPenaltyEvent e
+                       WHERE e.attendanceId = a.id AND e.type = com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+          AND a.scheduledTime >= :dateFrom
+          AND a.scheduledTime < :dateTo
+    """)
+    List<Object[]> findFinishedLateByProfessionalBetween(
+            @Param("professionalId") UUID professionalId,
+            @Param("dateFrom") OffsetDateTime dateFrom,
+            @Param("dateTo") OffsetDateTime dateTo);
 }

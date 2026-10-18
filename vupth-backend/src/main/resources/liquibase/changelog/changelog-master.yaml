@@ -477,3 +477,23 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/043-pix-columns-for-encryption.yaml
       relativeToChangeLogFile: true
+
+  # Painel: auditoria do /admin/** e permissoes por usuario (fatia 1)
+  - include:
+      file: changesets/20-auth/044-admin-audit-and-permissions.yaml
+      relativeToChangeLogFile: true
+
+  # Painel, fatia 3: segundo fator TOTP e codigos de recuperacao
+  - include:
+      file: changesets/20-auth/045-admin-totp.yaml
+      relativeToChangeLogFile: true
+
+  # Painel, fatia 3: o convite com permissoes
+  - include:
+      file: changesets/20-auth/046-admin-invitation.yaml
+      relativeToChangeLogFile: true
+
+  # pagar-multa-avulso: o pagamento da multa ao app
+  - include:
+      file: changesets/70-client/047-create-penalty_payment.yaml
+      relativeToChangeLogFile: true

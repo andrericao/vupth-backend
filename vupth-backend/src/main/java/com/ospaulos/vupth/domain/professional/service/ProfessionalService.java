@@ -23,6 +23,12 @@ public interface ProfessionalService {
     public QueueResponse markAttendanceLate(UUID professionalId, UUID attendanceId);
 
     /**
+     * O cliente nao compareceu (falta-do-cliente, DEC-83): o profissional do atendimento ou o dono da loja o tira da fila
+     * ({@code REMOVED}, motivo "removido por atraso") com multa. So o primeiro da fila, depois da espera.
+     */
+    public QueueResponse markNoShow(UUID userId, UUID attendanceId);
+
+    /**
      * Desfaz o LATE (item #19): o cliente volta a SCHEDULED, mantendo a posicao atual
      * (a que ele caiu). Usado quando o cliente chega e ainda nao vai ser atendido na hora.
      */

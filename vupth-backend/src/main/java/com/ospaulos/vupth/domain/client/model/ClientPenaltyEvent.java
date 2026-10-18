@@ -61,6 +61,13 @@ public class ClientPenaltyEvent implements Serializable {
     @Column(name = "charged_attendance_id")
     private UUID chargedAttendanceId;
 
+    /**
+     * O pagamento avulso que cobre esta multa (pagar-multa-avulso, DEC-83). Enquanto esse pagamento vale (pendente e
+     * dentro do prazo) ou esta pago, a multa nao entra em outro corte: assim ninguem paga duas vezes.
+     */
+    @Column(name = "penalty_payment_id")
+    private UUID penaltyPaymentId;
+
     /** Instante do "Sim" do cliente no aviso da multa (ciencia, D4). Nulo onde nao houve toque. */
     @Column(name = "acknowledged_at")
     private OffsetDateTime acknowledgedAt;

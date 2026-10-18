@@ -46,6 +46,17 @@ class SupportContactIntegrationTest {
     }
 
     @Test
+    @DisplayName("categoria FEEDBACK: 204 e o e-mail sai com o rotulo Feedback")
+    void feedback() throws Exception {
+        mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
+                        .content(body("profissional", "FEEDBACK", "ana@exemplo.com", "Ficou otimo")))
+                .andExpect(status().isNoContent());
+
+        verify(emailSender).send(eq("suporte@vupth.test"), eq("[VUPTH · Profissional · Feedback] Cobranca errada"),
+                contains("Ficou otimo"));
+    }
+
+    @Test
     @DisplayName("perfil ou categoria fora da lista, sem categoria, e-mail invalido ou mensagem acima de 2000: 422 e nada sai")
     void invalid() throws Exception {
         mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)

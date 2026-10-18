@@ -29,5 +29,9 @@ public record ProfessionalReportResponse(
         // pagamento-pix (10/10): dos finalizados do periodo, quantos ainda nao foram pagos (PENDING ou
         // AWAITING_CONFIRMATION) e o valor dos servicos deles. Pago, sai daqui.
         long paymentPendingCount,
-        BigDecimal paymentPendingValue
+        BigDecimal paymentPendingValue,
+        // relatorio-sem-multa (DEC-83): os nao realizados pelos tres motivos e os concluidos com atraso do cliente.
+        // So a contagem: a multa e do app.
+        OwnerReportResponse.NotRealized notRealized,
+        long finishedLate
 ) {}

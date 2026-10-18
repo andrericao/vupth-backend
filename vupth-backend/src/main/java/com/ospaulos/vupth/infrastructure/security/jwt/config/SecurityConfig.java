@@ -126,6 +126,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/admin/invitations/accept").permitAll()
                         .requestMatchers(HttpMethod.POST, "/support/articles/*/vote").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/referrals/me").hasAnyRole("PROFESSIONAL", "OWNER")
@@ -138,6 +139,7 @@ public class SecurityConfig {
                         // convite-sem-conta: os convites por e-mail que esperam a conta — so o dono
                         .requestMatchers(HttpMethod.GET, "/establishment/*/email-invitations").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/reports").hasRole("OWNER")
+                        .requestMatchers(HttpMethod.GET, "/owner/me/reports").hasRole("OWNER")
                         // S8: a lista de gestao (todos os vinculados) nao e publica — dono ou profissional da loja
                         .requestMatchers(HttpMethod.GET, "/establishment/*/professionals").hasAnyRole("OWNER", "PROFESSIONAL")
                         // ownership-transfer-sem-token (15/10): o pendente da loja e do dono; sem esta linha caia no
@@ -185,6 +187,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/attendances/*/payment/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.POST, "/attendances/*/payment/confirm").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/clients/me/pending-payments").hasRole("CLIENT")
+                        .requestMatchers("/clients/me/penalties/**").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
                         // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
                         .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
@@ -222,7 +225,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/resume").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-late").hasRole("PROFESSIONAL")
-                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/no-show").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.PATCH, "/attendances/*/no-show").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/promote").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/fit-in").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-fit").hasRole("PROFESSIONAL")

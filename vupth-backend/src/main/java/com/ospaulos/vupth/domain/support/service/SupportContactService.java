@@ -23,7 +23,7 @@ public class SupportContactService {
     /** Como a categoria e o perfil aparecem no titulo do e-mail (os filtros do Andre casam com estes nomes). */
     private static final Map<String, String> CATEGORY_LABEL = Map.of(
             "DUVIDA", "Dúvida", "SUGESTAO", "Sugestão", "RECLAMACAO", "Reclamação", "PROBLEMA", "Problema",
-            "PAGAMENTO", "Pagamento", "ELOGIO", "Elogio", "OUTRO", "Outro");
+            "PAGAMENTO", "Pagamento", "ELOGIO", "Elogio", "FEEDBACK", "Feedback", "OUTRO", "Outro");
     private static final Map<String, String> PROFILE_LABEL = Map.of(
             "cliente", "Cliente", "profissional", "Profissional", "dono", "Dono", "parceiro", "Profissional ou dono");
 

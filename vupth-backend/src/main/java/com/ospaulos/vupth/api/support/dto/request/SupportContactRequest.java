@@ -16,8 +16,8 @@ public record SupportContactRequest(
         @NotBlank @Email @Size(max = 254) String email,
         @NotBlank @Pattern(regexp = "cliente|profissional|dono|parceiro",
                 message = "perfil deve ser cliente, profissional ou dono") String perfil,
-        @NotBlank @Pattern(regexp = "DUVIDA|SUGESTAO|RECLAMACAO|PROBLEMA|PAGAMENTO|ELOGIO|OUTRO",
-                message = "categoria deve ser DUVIDA, SUGESTAO, RECLAMACAO, PROBLEMA, PAGAMENTO, ELOGIO ou OUTRO")
+        @NotBlank @Pattern(regexp = "DUVIDA|SUGESTAO|RECLAMACAO|PROBLEMA|PAGAMENTO|ELOGIO|FEEDBACK|OUTRO",
+                message = "categoria deve ser DUVIDA, SUGESTAO, RECLAMACAO, PROBLEMA, PAGAMENTO, ELOGIO, FEEDBACK ou OUTRO")
         String categoria,
         @NotBlank @Size(max = 120) String assunto,
         @NotBlank @Size(max = 2000) String mensagem

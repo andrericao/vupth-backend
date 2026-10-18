@@ -24,6 +24,9 @@ public class JwtTokenProvider {
     @Value("${jwt.access-token.expiration:PT1H}")
     private Duration expirationTime;
 
+    @Value("${jwt.admin-token.expiration:PT15M}")
+    private Duration adminExpirationTime;
+
     @Value("${jwt.issuer:vupth-backend}")
     private String issuer;
 
@@ -38,21 +41,36 @@ public class JwtTokenProvider {
             return buildToken(userDetails);
     }
 
+    /**
+     * O token do painel (painel-de-monitoramento, fatia 3): curto ({@code jwt.admin-token.expiration}, 15 min) e com
+     * o segundo fator cumprido no {@code amr} ({@code pwd}, {@code totp}). Sem refresh: acabou, entra de novo.
+     */
+    public String createAdminToken(UserDetailsImpl userDetails){
+        return buildToken(userDetails, adminExpirationTime, java.util.List.of("pwd", "totp"));
+    }
+
     private String buildToken(UserDetailsImpl user){
+        return buildToken(user, expirationTime, null);
+    }
+
+    private String buildToken(UserDetailsImpl user, Duration ttl, java.util.List<String> amr){
 
         try{
             String roles = user.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.joining(","));
 
-            var claims = JwtClaimsSet.builder()
+            var builder = JwtClaimsSet.builder()
                     .issuer(issuer)
                     .subject(user.getUserId().toString())
                     .issuedAt(Instant.now())
-                    .expiresAt(Instant.now().plus(expirationTime))
+                    .expiresAt(Instant.now().plus(ttl))
                     .claim("email", user.getUsername())
-                    .claim("roles", roles)
-                    .build();
+                    .claim("roles", roles);
+            if (amr != null) {
+                builder.claim("amr", amr);
+            }
+            var claims = builder.build();
 
             var jwtToken = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
             return jwtToken;

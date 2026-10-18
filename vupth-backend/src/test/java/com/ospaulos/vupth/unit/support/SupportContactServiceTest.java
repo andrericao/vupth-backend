@@ -40,6 +40,15 @@ class SupportContactServiceTest {
     }
 
     @Test
+    @DisplayName("categoria FEEDBACK (feedback sobre o app): aparece como Feedback no titulo")
+    void feedbackCategory() {
+        new SupportContactService(emailSender, "suporte@vupth.test").forward(
+                new SupportContactRequest("Ana", "ana@exemplo.com", "cliente", "FEEDBACK", "Gostei", "Sugiro um modo escuro."));
+
+        verify(emailSender).send(anyString(), eq("[VUPTH · Cliente · Feedback] Gostei"), contains("Categoria: Feedback"));
+    }
+
+    @Test
     @DisplayName("perfil do formulario: dono e o parceiro antigo aparecem com o nome certo no titulo")
     void profileLabels() {
         SupportContactService service = new SupportContactService(emailSender, "suporte@vupth.test");

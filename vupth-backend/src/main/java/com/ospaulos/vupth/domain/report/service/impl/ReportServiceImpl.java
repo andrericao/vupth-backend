@@ -105,7 +105,11 @@ public class ReportServiceImpl implements ReportService {
                 withoutSplit(finished),
                 workdays(shiftRepository
                         .findByEstablishmentIdAndStartedAtGreaterThanEqualAndStartedAtLessThanOrderByStartedAtAsc(
-                                establishmentId, from(dateFrom), to(dateTo))));
+                                establishmentId, from(dateFrom), to(dateTo))),
+                reasons(attendanceRepository.findNotRealizedByEstablishmentsBetween(
+                        List.of(establishmentId), from(dateFrom), to(dateTo))),
+                attendanceRepository.findFinishedLateByEstablishmentsBetween(
+                        List.of(establishmentId), from(dateFrom), to(dateTo)).size());
     }
 
     @Override
@@ -131,7 +135,112 @@ public class ReportServiceImpl implements ReportService {
                         .findByProfessionalIdAndStartedAtGreaterThanEqualAndStartedAtLessThanOrderByStartedAtAsc(
                                 professional.getId(), from(dateFrom), to(dateTo))),
                 paymentPending(finished).size(),
-                totalRevenue(paymentPending(finished)));
+                totalRevenue(paymentPending(finished)),
+                reasons(attendanceRepository.findNotRealizedByProfessionalBetween(
+                        professional.getId(), from(dateFrom), to(dateTo))),
+                attendanceRepository.findFinishedLateByProfessionalBetween(
+                        professional.getId(), from(dateFrom), to(dateTo)).size());
+    }
+
+    @Override
+    public com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse getOwnerReport(
+            UUID userId, LocalDate dateFrom, LocalDate dateTo, String groupBy,
+            java.util.Collection<UUID> establishmentIds) {
+
+        log.info("[Report] owner report — owner={} from={} to={} groupBy={}", userId, dateFrom, dateTo, groupBy);
+
+        List<Establishment> mine = establishmentRepository.findByOwnerId(userId);
+        List<Establishment> stores = mine;
+        if (establishmentIds != null && !establishmentIds.isEmpty()) {
+            Map<UUID, Establishment> byId = mine.stream().collect(Collectors.toMap(Establishment::getId, e -> e));
+            for (UUID id : establishmentIds) {
+                if (!byId.containsKey(id)) {
+                    throw new EstablishmentAccessDeniedException(
+                            "You can only view reports from your own establishments.");
+                }
+            }
+            stores = establishmentIds.stream().distinct().map(byId::get).toList();
+        }
+        if (stores.isEmpty()) {
+            var empty = ownerSummary(List.of(), 0, reasons(List.of()), 0);
+            return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse(empty, List.of(), List.of());
+        }
+
+        List<UUID> ids = stores.stream().map(Establishment::getId).toList();
+        List<Attendance> finished = attendanceRepository.findFinishedByEstablishmentsBetween(
+                ids, from(dateFrom), to(dateTo));
+        List<Object[]> cancelled = attendanceRepository.findCancelledTimesByEstablishmentsBetween(
+                ids, from(dateFrom), to(dateTo));
+
+        List<Object[]> notRealized = attendanceRepository.findNotRealizedByEstablishmentsBetween(
+                ids, from(dateFrom), to(dateTo));
+        List<Object[]> finishedLate = attendanceRepository.findFinishedLateByEstablishmentsBetween(
+                ids, from(dateFrom), to(dateTo));
+
+        var storeBlocks = stores.stream().map(e -> new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Store(
+                e.getId(), e.getName(),
+                ownerSummary(
+                        finished.stream().filter(a -> a.getEstablishment().getId().equals(e.getId())).toList(),
+                        cancelled.stream().filter(c -> c[0].equals(e.getId())).count(),
+                        reasons(notRealized.stream().filter(x -> x[0].equals(e.getId())).toList()),
+                        finishedLate.stream().filter(x -> x[0].equals(e.getId())).count()))).toList();
+
+        // A serie: o periodo e contado no dia da loja; so entram os periodos com atendimento.
+        Map<LocalDate, List<Attendance>> finishedByPeriod = new TreeMap<>(finished.stream()
+                .collect(Collectors.groupingBy(a -> periodStart(BusinessClock.dateAt(a.getScheduledTime()), groupBy))));
+        Map<LocalDate, Long> cancelledByPeriod = cancelled.stream().collect(Collectors.groupingBy(
+                c -> periodStart(BusinessClock.dateAt((OffsetDateTime) c[1]), groupBy), Collectors.counting()));
+        Map<LocalDate, List<Object[]>> notRealizedByPeriod = notRealized.stream().collect(Collectors.groupingBy(
+                x -> periodStart(BusinessClock.dateAt((OffsetDateTime) x[1]), groupBy)));
+        Map<LocalDate, Long> finishedLateByPeriod = finishedLate.stream().collect(Collectors.groupingBy(
+                x -> periodStart(BusinessClock.dateAt((OffsetDateTime) x[1]), groupBy), Collectors.counting()));
+        java.util.Set<LocalDate> periods = new java.util.TreeSet<>(finishedByPeriod.keySet());
+        periods.addAll(cancelledByPeriod.keySet());
+        periods.addAll(notRealizedByPeriod.keySet());
+        periods.addAll(finishedLateByPeriod.keySet());
+        var series = periods.stream().map(day -> new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Period(
+                day, ownerSummary(finishedByPeriod.getOrDefault(day, List.of()),
+                cancelledByPeriod.getOrDefault(day, 0L),
+                reasons(notRealizedByPeriod.getOrDefault(day, List.of())),
+                finishedLateByPeriod.getOrDefault(day, 0L)))).toList();
+
+        return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse(
+                ownerSummary(finished, cancelled.size(), reasons(notRealized), finishedLate.size()), storeBlocks, series);
+    }
+
+    private com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Summary ownerSummary(
+            List<Attendance> finished, long cancelled,
+            com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.NotRealized notRealized, long finishedLate) {
+        return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.Summary(
+                finished.size(), cancelled, totalRevenue(finished), netRevenue(finished),
+                sum(finished, Attendance::getIntermediaryFee), sum(finished, Attendance::getPlatformFee), notRealized, finishedLate);
+    }
+
+    /**
+     * Conta os atendimentos que nao aconteceram ({@code [loja, quando, status, removidos por atraso]}) pelos tres motivos
+     * (DEC-83): CANCELLED = o cliente cancelou; REMOVED = o profissional removeu, ou, com o NO_SHOW do atendimento,
+     * removido por atraso. Nunca o valor.
+     */
+    private com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.NotRealized reasons(List<Object[]> rows) {
+        long cancelled = rows.stream().filter(x -> x[2].toString().equals("CANCELLED")).count();
+        long late = rows.stream().filter(x -> x[2].toString().equals("REMOVED") && ((Number) x[3]).longValue() > 0).count();
+        long removed = rows.stream().filter(x -> x[2].toString().equals("REMOVED") && ((Number) x[3]).longValue() == 0).count();
+        return new com.ospaulos.vupth.api.report.dto.response.OwnerReportResponse.NotRealized(cancelled, removed, late);
+    }
+
+    private BigDecimal sum(List<Attendance> attendances, java.util.function.Function<Attendance, BigDecimal> field) {
+        return attendances.stream().map(field).filter(Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /** O primeiro dia do periodo: o proprio dia, a segunda da semana ou o dia 1 do mes. */
+    static LocalDate periodStart(LocalDate day, String groupBy) {
+        if ("week".equalsIgnoreCase(groupBy)) {
+            return day.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        }
+        if ("month".equalsIgnoreCase(groupBy)) {
+            return day.withDayOfMonth(1);
+        }
+        return day;
     }
 
     /** pagamento-pix: os finalizados ainda nao pagos (os antigos, sem flag, ficam de fora). */
