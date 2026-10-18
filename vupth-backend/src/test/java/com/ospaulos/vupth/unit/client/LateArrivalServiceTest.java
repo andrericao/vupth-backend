@@ -170,4 +170,82 @@ class LateArrivalServiceTest {
         assertThat(service.registerLate(guest, professional, NOW)).isZero();
         verifyNoInteractions(penaltyEventRepository, pushPublisher);
     }
+
+    // ─── testes-de-pagamento-massivos (DEC-92): os cantos do contador ───
+
+    @Test
+    @DisplayName("sem promessa e sem a vez ter chegado: nada comunicado, a marcacao conta; sem promessa mas com a vez chegada, vale a vez")
+    void nothingCommunicated_counts() {
+        assertThat(service.registerLate(attendance(null), professional, NOW)).isEqualTo(1);
+
+        finishedAt(NOW.minusMinutes(10));
+        assertThat(service.registerLate(attendance(null), professional, NOW)).isEqualTo(2);
+        // a vez chegou ha 3 min: dentro da tolerancia de 5, nao conta
+        assertThat(service.registerLate(attendance(null), professional, NOW.minusMinutes(7))).isZero();
+    }
+
+    @Test
+    @DisplayName("noShowAvailableAt: 10 min depois da hora comunicada; sem hora comunicada, do horario marcado")
+    void noShowAvailableAt() {
+        Attendance promised = attendance(NOW.minusMinutes(30));
+        assertThat(service.noShowAvailableAt(promised, professional, NOW)).isEqualTo(NOW.minusMinutes(20));
+
+        Attendance onlyScheduled = attendance(null);
+        onlyScheduled.setScheduledTime(NOW.minusHours(1));
+        assertThat(service.noShowAvailableAt(onlyScheduled, professional, NOW)).isEqualTo(NOW.minusMinutes(50));
+    }
+
+    @Test
+    @DisplayName("desfazer: convidado ou sem atraso contado nao mexe; sem multa, devolve os atrasos; com a multa ainda nao cobrada, ela sai e o contador volta")
+    void undoLate() {
+        Attendance guest = attendance(NOW);
+        guest.setClient(null);
+        guest.setCountedLates(1);
+        service.undoLate(guest);
+        verifyNoInteractions(penaltyEventRepository);
+
+        Attendance none = attendance(NOW);
+        none.setCountedLates(0);
+        service.undoLate(none);
+        verifyNoInteractions(penaltyEventRepository);
+
+        client.setLateCount(2);
+        Attendance two = attendance(NOW);
+        two.setCountedLates(2);
+        when(penaltyEventRepository.findByClientIdOrderByCreatedAtDesc(client.getId())).thenReturn(List.of());
+        service.undoLate(two);
+        assertThat(client.getLateCount()).isZero();
+        assertThat(two.getCountedLates()).isZero();
+
+        // o contador nunca fica negativo
+        client.setLateCount(0);
+        Attendance more = attendance(NOW);
+        more.setCountedLates(1);
+        service.undoLate(more);
+        assertThat(client.getLateCount()).isZero();
+
+        // a multa do 3o atraso (ainda nao cobrada) sai: antes dele o cliente estava em (atual + 3 - contados)
+        client.setLateCount(0);
+        Attendance third = attendance(NOW);
+        third.setCountedLates(1);
+        ClientPenaltyEvent penalty = new ClientPenaltyEvent(client, PenaltyType.LATE_ARRIVAL, third.getId(), 0, new java.math.BigDecimal("5.00"));
+        ClientPenaltyEvent other = new ClientPenaltyEvent(client, PenaltyType.LATE_CANCEL, third.getId(), 0, new java.math.BigDecimal("5.00"));
+        ClientPenaltyEvent elsewhere = new ClientPenaltyEvent(client, PenaltyType.LATE_ARRIVAL, UUID.randomUUID(), 0, new java.math.BigDecimal("5.00"));
+        ClientPenaltyEvent charged = new ClientPenaltyEvent(client, PenaltyType.LATE_ARRIVAL, third.getId(), 0, new java.math.BigDecimal("5.00"));
+        charged.setChargedAttendanceId(UUID.randomUUID());
+        when(penaltyEventRepository.findByClientIdOrderByCreatedAtDesc(client.getId()))
+                .thenReturn(List.of(other, elsewhere, charged, penalty));
+        service.undoLate(third);
+        verify(penaltyEventRepository).delete(penalty);
+        verify(penaltyEventRepository, never()).delete(charged);
+        assertThat(client.getLateCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("a vez so chega no que ja aconteceu: um corte concluido com horario no futuro nao conta para a hora comunicada")
+    void futureFinishIsIgnored() {
+        finishedAt(NOW.plusMinutes(30));
+
+        assertThat(service.registerLate(attendance(null), professional, NOW)).isEqualTo(1);
+    }
 }

@@ -451,4 +451,100 @@ class PaymentServiceTest {
         when(attendanceRepository.findOpenPaymentsOfProfessional(strangerId)).thenReturn(List.of());
         assertThat(service.pendingOfProfessional(strangerId).items()).isEmpty();
     }
+
+    // ─── testes-de-pagamento-massivos (DEC-92): todos os ramos do dinheiro ───
+
+    private void chargePenalty(Attendance a, String amount) {
+        ClientPenaltyEvent fine = new ClientPenaltyEvent();
+        fine.setAmount(new BigDecimal(amount));
+        fine.setChargedAttendanceId(a.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(fine));
+    }
+
+    @Test
+    @DisplayName("SPLIT_PIX: sem o Pix do app, sem multa ou com o app sem chave, a multa nao gera o copia-e-cola dela")
+    void splitWithoutPenaltyPix() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "paymentMode",
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX"));
+        withPixKey();
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+
+        // sem multa carregada
+        assertThat(service.getPayment(a.getId(), clientId).penaltyPixCopyPaste()).isNull();
+
+        chargePenalty(a, "5.00");
+        // multa, mas o app nao tem Pix configurado no contexto (testes de unidade)
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appPix", null);
+        PaymentResponse noAppPix = service.getPayment(a.getId(), clientId);
+        assertThat(noAppPix.penaltiesValue()).isEqualByComparingTo("5.00");
+        assertThat(noAppPix.penaltyPixCopyPaste()).isNull();
+        assertThat(noAppPix.penaltyHolderName()).isNull();
+
+        // multa, app com Pix mas sem chave: o copia-e-cola e o titular saem nulos
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appPix",
+                new com.ospaulos.vupth.infrastructure.config.AppPix("", "VUPTH", "SAO PAULO"));
+        PaymentResponse unconfigured = service.getPayment(a.getId(), clientId);
+        assertThat(unconfigured.penaltyPixCopyPaste()).isNull();
+        assertThat(unconfigured.penaltyHolderName()).isNull();
+    }
+
+    @Test
+    @DisplayName("quem recebe o Pix: profissional sem chave e sem dono, dono sem chave, atendimento sem profissional ou sem loja")
+    void pixKeyOwnerCorners() {
+        BaseUser dona = establishment.getOwner().getBaseUser();
+        dona.setPixKeyType(PixKeyType.EMAIL);
+        dona.setPixKey("dona@mail.com");
+        dona.setPixHolderName("Dona");
+
+        // sem profissional na linha (removido): vale a chave do dono, e nao e "PROFESSIONAL"
+        Attendance noProfessional = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        noProfessional.setProfessional(null);
+        PaymentResponse r = service.getPayment(noProfessional.getId(), clientId);
+        assertThat(r.pixOwner()).isEqualTo("OWNER");
+        assertThat(r.pixCopyPaste()).contains("dona@mail.com");
+
+        // sem loja: sem dono, sem cidade e sem chave
+        Attendance noEstablishment = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        noEstablishment.setEstablishment(null);
+        PaymentResponse none = service.getPayment(noEstablishment.getId(), clientId);
+        assertThat(none.pixCopyPaste()).isNull();
+        assertThat(none.pixOwner()).isNull();
+
+        // loja sem dono: sem chave
+        establishment.setOwner(null);
+        Attendance noOwner = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        assertThat(service.getPayment(noOwner.getId(), clientId).pixCopyPaste()).isNull();
+
+        // dono sem chave Pix: sem chave
+        Owner ownerWithoutKey = new Owner(user("Dona sem chave"));
+        establishment.setOwner(ownerWithoutKey);
+        Attendance ownerNoKey = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        assertThat(service.getPayment(ownerNoKey.getId(), clientId).pixCopyPaste()).isNull();
+    }
+
+    @Test
+    @DisplayName("amountForProfessional: o servico no SPLIT_PIX e o total (servico + multa) na fase de testes")
+    void amountForProfessionalByMode() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        chargePenalty(a, "5.00");
+
+        assertThat(service.amountForProfessional(a.getId())).isEqualByComparingTo("45.00");
+
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "paymentMode",
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX"));
+        assertThat(service.amountForProfessional(a.getId())).isEqualByComparingTo("40.00");
+    }
+
+    @Test
+    @DisplayName("a chave do profissional vale mesmo com o atendimento sem loja: o Pix sai sem cidade")
+    void keyWithoutEstablishmentHasNoCity() {
+        withPixKey();
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        a.setEstablishment(null);
+
+        PaymentResponse r = service.getPayment(a.getId(), clientId);
+
+        assertThat(r.pixOwner()).isEqualTo("PROFESSIONAL");
+        assertThat(r.pixCopyPaste()).contains("beto@mail.com");
+    }
 }

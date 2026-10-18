@@ -6386,6 +6386,219 @@
      "response": []
     },
     {
+     "name": "Pior caso: R$ 10 a receber -> R$ 12,90, gateway no piso do Pix (1,99) (taxa-fixa, DEC-91)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// taxa-fixa-pelo-pior-caso (DEC-91): gateway = max(R$ 1,99; R$ 0,49 + 2,99% do preco), centavo para cima.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intermediary_fee do pior caso\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.99));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(0.91));",
+         "  pm.test(\"as tres partes somam o preco\", () => pm.expect(Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100)).to.eql(Math.round(Number(r.price) * 100)));",
+         "  pm.test(\"o app nunca perde: sobra ao menos os 2% do preco\", () => pm.expect(Number(r.platform_fee)).to.be.at.least(Math.round(Number(r.price) * 2) / 100 - 0.005));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 12.9, \"pro_receives\": 10.0, \"base_price\": 10.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Pior caso: R$ 100 a receber -> R$ 105,90, gateway 0,49 + 2,99% (3,66) (taxa-fixa, DEC-91)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// taxa-fixa-pelo-pior-caso (DEC-91): gateway = max(R$ 1,99; R$ 0,49 + 2,99% do preco), centavo para cima.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intermediary_fee do pior caso\", () => pm.expect(Number(r.intermediary_fee)).to.eql(3.66));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(2.24));",
+         "  pm.test(\"as tres partes somam o preco\", () => pm.expect(Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100)).to.eql(Math.round(Number(r.price) * 100)));",
+         "  pm.test(\"o app nunca perde: sobra ao menos os 2% do preco\", () => pm.expect(Number(r.platform_fee)).to.be.at.least(Math.round(Number(r.price) * 2) / 100 - 0.005));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 105.9, \"pro_receives\": 100.0, \"base_price\": 100.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] Pior caso: R$ 10,90 para receber R$ 10 (nao cobre o Pix) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// o preco que nao e o menor X,90 da regra nova e recusado.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 10.9, \"pro_receives\": 10.0, \"base_price\": 10.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] Pior caso: R$ 85,90 para receber R$ 80 (acima do menor X,90, 84,90) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// o preco que nao e o menor X,90 da regra nova e recusado.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 85.9, \"pro_receives\": 80.0, \"base_price\": 80.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Pior caso: volta o servico para R$ 32,90 / R$ 30 (restaura o cenario)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// taxa-fixa-pelo-pior-caso (DEC-91): gateway = max(R$ 1,99; R$ 0,49 + 2,99% do preco), centavo para cima.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intermediary_fee do pior caso\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.99));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(0.91));",
+         "  pm.test(\"as tres partes somam o preco\", () => pm.expect(Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100)).to.eql(Math.round(Number(r.price) * 100)));",
+         "  pm.test(\"o app nunca perde: sobra ao menos os 2% do preco\", () => pm.expect(Number(r.platform_fee)).to.be.at.least(Math.round(Number(r.price) * 2) / 100 - 0.005));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 32.9, \"pro_receives\": 30.0, \"base_price\": 30.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "delete service item → DELETE (#10)",
      "event": [
       {
