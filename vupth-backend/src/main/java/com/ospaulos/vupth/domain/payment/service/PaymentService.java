@@ -59,6 +59,14 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.infrastructure.config.AppPix appPix;
 
+    /** O modo do dinheiro (DEC-85): sem ele (testes de unidade), vale o padrao, o Pix total ao profissional. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
+
+    private boolean splitPix() {
+        return paymentMode != null && paymentMode.splitPix();
+    }
+
     // ─── a chave Pix da pessoa (DEC-65: profissional ou dono) ───
 
     public PixKeyResponse setPixKey(UUID userId, PixKeyRequest request) {
@@ -221,11 +229,14 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public ProfessionalPendingPaymentsResponse pendingOfProfessional(UUID professionalId) {
         List<Attendance> open = attendanceRepository.findOpenPaymentsOfProfessional(professionalId);
+        Map<UUID, BigDecimal> penalties = splitPix() ? Map.of()
+                : penaltiesOf(open.stream().map(Attendance::getId).toList());
         List<ProfessionalPendingPaymentsResponse.Item> items = open.stream()
                 .map(a -> new ProfessionalPendingPaymentsResponse.Item(
                         a.getId(),
                         a.getPaymentStatus(),
-                        a.getTotalValue(), // o profissional ve so o servico; a multa e do app (DEC-83)
+                        // SPLIT_PIX: so o servico (a multa e do app, DEC-83); fase de testes: o total que cai no Pix (DEC-85)
+                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO)),
                         a.getClient() != null ? a.getClient().getFirstName() : a.getGuestName(),
                         a.getEndTime(),
                         a.getPaymentClaimedAt()))
@@ -265,26 +276,44 @@ public class PaymentService {
     }
 
     /**
-     * @param forClient o cliente ve a multa e o total com ela; o profissional e o dono veem so o valor do servico
-     *                  (DEC-83, relatorio-sem-multa: a multa e do app)
+     * @param forClient o cliente ve a multa e o total com ela. O profissional e o dono veem: com os dois Pix
+     *                  ({@code SPLIT_PIX}), so o valor do servico (DEC-83: a multa e do app); na fase de testes
+     *                  ({@code TEST_PIX_TOTAL}, DEC-85), o total que cai no Pix, como "valor a receber" e sem rotulo de multa.
      */
     private PaymentResponse toPayment(Attendance attendance, boolean forClient) {
         BigDecimal services = attendance.getTotalValue();
-        BigDecimal penalties = forClient
-                ? penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO) : ZERO;
-        BigDecimal amount = services.add(penalties);
+        BigDecimal realPenalties = penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO);
+        boolean split = splitPix();
+        BigDecimal shownServices;
+        BigDecimal shownPenalties;
+        BigDecimal amount;
+        if (forClient) {
+            shownServices = services;
+            shownPenalties = realPenalties;
+            amount = services.add(realPenalties);
+        } else if (split) {
+            shownServices = services;
+            shownPenalties = ZERO;
+            amount = services;
+        } else {
+            shownServices = services.add(realPenalties); // "valor a receber": bate com o Pix, sem dizer que ha multa
+            shownPenalties = ZERO;
+            amount = shownServices;
+        }
         BaseUser keyOwner = pixKeyOwner(attendance);
         String copyPaste = null;
         if (keyOwner != null) {
-            // DEC-83: o Pix do profissional leva so o servico; a multa vai por outro Pix, ao app
+            // SPLIT_PIX: o Pix do profissional leva so o servico (a multa vai por outro Pix, ao app); fase de testes: o total
+            BigDecimal pixAmount = split ? services : services.add(realPenalties);
             copyPaste = PixBrCode.build(keyOwner.getPixKey(), keyOwner.getPixHolderName(),
-                    cityOf(attendance), services, "VUPTH" + attendance.getId().toString().replace("-", ""));
+                    cityOf(attendance), pixAmount, "VUPTH" + attendance.getId().toString().replace("-", ""));
         }
         boolean hasKey = copyPaste != null;
+        boolean penaltyPix = split && forClient && realPenalties.signum() > 0 && appPix != null;
         return new PaymentResponse(
                 attendance.getEffectivePaymentStatus(),
-                services,
-                penalties,
+                shownServices,
+                shownPenalties,
                 amount,
                 copyPaste,
                 hasKey ? keyOwner.getPixHolderName() : null,
@@ -292,9 +321,16 @@ public class PaymentService {
                 attendance.getPaymentClaimedAt(),
                 attendance.getPaymentConfirmedAt(),
                 !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER",
-                forClient && penalties.signum() > 0 && appPix != null
-                        ? appPix.copyPaste(penalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
-                forClient && penalties.signum() > 0 && appPix != null && appPix.configured() ? appPix.holderName() : null);
+                penaltyPix ? appPix.copyPaste(realPenalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
+                penaltyPix && appPix.configured() ? appPix.holderName() : null);
+    }
+
+    /** O valor que cai no Pix do profissional: o servico (SPLIT_PIX) ou o total (fase de testes). Para o aviso "diz que pagou". */
+    @Transactional(readOnly = true)
+    public BigDecimal amountForProfessional(UUID attendanceId) {
+        Attendance a = attendance(attendanceId);
+        return splitPix() ? a.getTotalValue()
+                : a.getTotalValue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
     /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */

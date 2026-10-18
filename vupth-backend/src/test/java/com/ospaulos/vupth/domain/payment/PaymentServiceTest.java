@@ -185,8 +185,9 @@ class PaymentServiceTest {
         assertThat(r.servicesValue()).isEqualByComparingTo("40");
         assertThat(r.penaltiesValue()).isEqualByComparingTo("5");
         assertThat(r.amount()).isEqualByComparingTo("45");
-        // DEC-83 (dois Pix): o Pix do profissional leva so o servico (40,00); a multa (5,00) vai por outro Pix, ao app
-        assertThat(r.pixCopyPaste()).contains("beto@mail.com").contains("540540.00").contains("CAMPINAS");
+        // fase de testes sem gateway (DEC-85, o padrao): o Pix do profissional leva o total (40,00 + 5,00)
+        assertThat(r.pixCopyPaste()).contains("beto@mail.com").contains("540545.00").contains("CAMPINAS");
+        assertThat(r.penaltyPixCopyPaste()).isNull();
         assertThat(r.holderName()).isEqualTo("Beto");
         assertThat(r.keyType()).isEqualTo(PixKeyType.EMAIL);
         assertThat(r.pixOwner()).isEqualTo("PROFESSIONAL");
@@ -309,8 +310,10 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("DEC-83: o cliente ve a multa e o total com ela; o profissional e o dono veem so o servico")
+    @DisplayName("DEC-83 (SPLIT_PIX): o cliente ve a multa e o total com ela; o profissional e o dono veem so o servico")
     void penaltyOnlyForClient() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "paymentMode",
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX"));
         withPixKey();
         Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
         ClientPenaltyEvent fine = new ClientPenaltyEvent();
@@ -333,6 +336,31 @@ class PaymentServiceTest {
         assertThat(forProfessional.penaltiesValue()).isEqualByComparingTo("0");
         assertThat(forProfessional.amount()).isEqualByComparingTo("40.00");
         assertThat(service.pendingOfProfessional(professionalId).items().get(0).amount()).isEqualByComparingTo("40.00");
+    }
+
+    @Test
+    @DisplayName("DEC-85 (fase de testes, o padrao): o profissional ve o total como valor a receber, sem rotulo de multa; Pix total; sem Pix da multa")
+    void testModeProfessionalSeesTotal() {
+        withPixKey();
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        ClientPenaltyEvent fine = new ClientPenaltyEvent();
+        fine.setAmount(new BigDecimal("5.00"));
+        fine.setChargedAttendanceId(a.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(List.of(a.getId()))).thenReturn(List.of(fine));
+        when(attendanceRepository.findOpenPaymentsOfProfessional(professionalId)).thenReturn(List.of(a));
+
+        PaymentResponse forClient = service.getPayment(a.getId(), clientId);
+        assertThat(forClient.penaltiesValue()).isEqualByComparingTo("5.00");
+        assertThat(forClient.amount()).isEqualByComparingTo("45.00");
+        assertThat(forClient.pixCopyPaste()).contains("540545.00");
+        assertThat(forClient.penaltyPixCopyPaste()).isNull();
+
+        PaymentResponse forProfessional = service.getPayment(a.getId(), professionalId);
+        assertThat(forProfessional.penaltiesValue()).isEqualByComparingTo("0");
+        assertThat(forProfessional.servicesValue()).isEqualByComparingTo("45.00");
+        assertThat(forProfessional.amount()).isEqualByComparingTo("45.00");
+        assertThat(service.pendingOfProfessional(professionalId).items().get(0).amount()).isEqualByComparingTo("45.00");
+        assertThat(service.amountForProfessional(a.getId())).isEqualByComparingTo("45.00");
     }
 
     @Test
