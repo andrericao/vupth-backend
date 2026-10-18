@@ -226,14 +226,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
             throw com.ospaulos.vupth.domain.attendance.exception.NoShowException.tooEarly(availableAt);
         }
 
-        // Saiu por nao comparecer: REMOVED (quem tirou foi a loja) e, com conta, a multa NO_SHOW
-        attendance.setStatus(AttendanceStatus.REMOVED);
-        attendanceRepository.save(attendance);
-        lateArrivalService.registerNoShow(attendance);
-
-        queueService.updateQueueEstimates(professional);
-        log.info("[Professional] markNoShow — attendance={} removido por nao comparecer", attendanceId);
-        return queueService.getQueueOverview(professional, establishment);
+        // DEC-86: nao comparecer e um atraso — troca de lugar com o proximo e soma no contador; no 3o, a multa.
+        // Mesmo caminho do /late; a espera de 10 min acima passa da tolerancia de 5, entao o atraso sempre conta.
+        log.info("[Professional] markNoShow — attendance={} vira atraso", attendanceId);
+        return markAttendanceLate(professional.getId(), attendanceId);
     }
 
     @Override

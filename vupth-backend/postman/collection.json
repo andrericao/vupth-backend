@@ -9270,7 +9270,7 @@
   },
   {
    "name": "08g - \"nao compareceu\" saiu (26/09) — regra dos 3 atrasos",
-   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. Em 17/10 (falta-do-cliente, DEC-83) o PATCH /attendances/{id}/no-show voltou: o primeiro da fila, 10 min depois da hora comunicada, leva multa de R$ 5 e sai (409 NO_SHOW_TOO_EARLY / NO_SHOW_NOT_FIRST antes disso).",
+   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. Em 17/10 (falta-do-cliente, DEC-83) o PATCH /attendances/{id}/no-show voltou: o primeiro da fila, 10 min depois da hora comunicada, vale como um atraso (troca de lugar e soma no contador; no 3o, multa de R$ 5 e fim da fila; DEC-86, 18/10). 409 NO_SHOW_TOO_EARLY / NO_SHOW_NOT_FIRST antes disso.",
    "item": [
     {
      "name": "create walk-in para no-show -> 201",
