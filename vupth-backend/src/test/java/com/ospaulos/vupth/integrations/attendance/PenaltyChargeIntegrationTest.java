@@ -158,7 +158,7 @@ class PenaltyChargeIntegrationTest {
 
     @Test
     @Order(20)
-    @DisplayName("Saiu depois da tolerancia: a multa fica pendente, com a origem e a divisao app/gateway")
+    @DisplayName("Saiu depois da tolerancia: a multa fica pendente, com a origem, sem a divisao app/gateway (DEC-94)")
     void exitAfterTolerance_pendingWithOrigin() throws Exception {
         this.originId = enter();
         expireTolerance(originId);
@@ -169,8 +169,9 @@ class PenaltyChargeIntegrationTest {
         JSONObject penalty = p.getJSONArray("penalties").getJSONObject(0);
         assertThat(penalty.getString("type")).isEqualTo("LATE_CANCEL");
         assertThat(money(penalty, "amount")).as("o cliente paga o valor cheio").isEqualByComparingTo("5.00");
-        assertThat(money(penalty, "gatewayFee")).as("4% do gateway").isEqualByComparingTo("0.20");
-        assertThat(money(penalty, "appShare")).as("o resto e do app").isEqualByComparingTo("4.80");
+        // DEC-94: o cliente nunca ve a taxa do gateway nem a parte do app
+        assertThat(penalty.has("gatewayFee")).as("sem a taxa do gateway").isFalse();
+        assertThat(penalty.has("appShare")).as("sem a parte do app").isFalse();
         assertThat(penalty.getString("originAttendanceId")).isEqualTo(originId);
         assertThat(penalty.getString("originProfessionalName")).as("corte com o profissional tal").isEqualTo(professionalName);
         assertThat(penalty.getString("originEstablishmentName")).isNotBlank();

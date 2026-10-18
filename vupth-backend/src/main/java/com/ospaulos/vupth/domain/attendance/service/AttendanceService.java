@@ -12,7 +12,9 @@ import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.serviceItem.model.ServiceItem;
 
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.ClientAttendanceResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.StoreAttendanceResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 
 import java.time.LocalDate;
@@ -216,32 +218,39 @@ public interface AttendanceService {
 
     public AttendanceInQueueResponse buildAttendanceInQueueResponse(Attendance attendance);
 
-    public List<AttendanceListResponse> listAttendances(
+    /** A lista da LOJA (profissional ou dono): a divisao do preco, sem multa nem lucro do app (DEC-94). */
+    public List<StoreAttendanceResponse> listAttendances(
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
-            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status);
 
     /**
-     * Historico paginado (historico-rapido): os mesmos filtros e a mesma ordem de
+     * Historico paginado da loja (historico-rapido): os mesmos filtros e a mesma ordem de
      * {@link #listAttendances}, cortados no banco.
      */
-    public com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse listAttendancesPage(
+    public AttendancePageResponse<StoreAttendanceResponse> listAttendancesPage(
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
-            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status,
             com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage page);
 
-    public List<AttendanceListResponse> listClientAttendances(
+    /** O historico do PROPRIO cliente: o corte e a multa, sem o valor do profissional nem a margem do app (DEC-94). */
+    public List<ClientAttendanceResponse> listClientAttendances(
             UUID clientId,
             AttendanceStatus status,
             LocalDate dateFrom,
             LocalDate dateTo);
+
+    public AttendancePageResponse<ClientAttendanceResponse> listClientAttendancesPage(
+            UUID clientId,
+            AttendanceStatus status,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage page);
 }

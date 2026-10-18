@@ -467,8 +467,8 @@ class AttendanceServiceImplCoverageTest {
             when(attendanceRepository.findByClientFilters(eq(clientId), isNull(), any(), any()))
                     .thenReturn(List.of(attendance, second));
 
-            var page = attendanceService.listAttendancesPage(
-                    clientId, null, null, clientId, null, null, null, new ShowcasePage(0, 1));
+            var page = attendanceService.listClientAttendancesPage(
+                    clientId, null, null, null, new ShowcasePage(0, 1));
 
             assertThat(page.items()).hasSize(1);
             assertThat(page.totalItems()).isEqualTo(2);
@@ -484,7 +484,7 @@ class AttendanceServiceImplCoverageTest {
                     .thenReturn(Page.empty());
 
             var page = attendanceService.listAttendancesPage(
-                    professionalId, null, professionalId, null,
+                    professionalId, null, professionalId,
                     LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), null, new ShowcasePage(0, 20));
 
             assertThat(page.items()).isEmpty();
@@ -503,7 +503,7 @@ class AttendanceServiceImplCoverageTest {
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             assertThatThrownBy(() -> attendanceService.listAttendances(
-                    professionalId, null, UUID.randomUUID(), null, null, null, null))
+                    professionalId, null, UUID.randomUUID(), null, null, null))
                     .isInstanceOf(EstablishmentAccessDeniedException.class);
         }
 
@@ -513,7 +513,7 @@ class AttendanceServiceImplCoverageTest {
             when(professionalRepository.findByIdWithBaseUser(clientId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> attendanceService.listAttendances(
-                    clientId, null, professionalId, null, null, null, null))
+                    clientId, null, professionalId, null, null, null))
                     .isInstanceOf(EstablishmentAccessDeniedException.class);
         }
 
@@ -523,7 +523,7 @@ class AttendanceServiceImplCoverageTest {
             when(professionalRepository.findByIdWithBaseUser(clientId)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> attendanceService.listAttendances(
-                    clientId, null, null, null, null, null, null))
+                    clientId, null, null, null, null, null))
                     .isInstanceOf(EstablishmentAccessDeniedException.class);
         }
 
@@ -534,7 +534,7 @@ class AttendanceServiceImplCoverageTest {
             when(professionalRepository.findByIdWithBaseUser(professionalId)).thenReturn(Optional.of(professional));
 
             assertThatThrownBy(() -> attendanceService.listAttendances(
-                    professionalId, null, null, null, null, null, null))
+                    professionalId, null, null, null, null, null))
                     .isInstanceOf(EstablishmentAccessDeniedException.class);
         }
 
@@ -545,7 +545,7 @@ class AttendanceServiceImplCoverageTest {
             when(attendanceRepository.findByFilters(eq(establishmentId), isNull(), isNull(), any(), any()))
                     .thenReturn(List.of(attendance));
 
-            assertThat(attendanceService.listAttendances(professionalId, null, null, null, null, null, null))
+            assertThat(attendanceService.listAttendances(professionalId, null, null, null, null, null))
                     .hasSize(1);
         }
     }

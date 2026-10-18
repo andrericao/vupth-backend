@@ -6,14 +6,12 @@ import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent;
 import com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository;
-import com.ospaulos.vupth.domain.serviceItem.valueObject.PriceSplit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -133,13 +131,10 @@ public class ClientPenaltyService {
                 .collect(Collectors.toMap(Attendance::getId, Function.identity()));
         return events.stream().map(event -> {
             Attendance origin = event.getAttendanceId() != null ? origins.get(event.getAttendanceId()) : null;
-            BigDecimal gatewayFee = event.getAmount().multiply(PriceSplit.INTERMEDIARY_RATE).setScale(2, RoundingMode.HALF_UP);
             return new PenaltyChargeResponse(
                     event.getId(),
                     event.getType(),
                     event.getAmount(),
-                    gatewayFee,
-                    event.getAmount().subtract(gatewayFee),
                     event.getAttendanceId(),
                     origin != null ? origin.getScheduledTime() : event.getCreatedAt(),
                     origin != null && origin.getProfessional() != null ? origin.getProfessional().getName() : null,

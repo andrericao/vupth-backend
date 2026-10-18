@@ -5,7 +5,9 @@ import com.ospaulos.vupth.api.attendance.dto.request.AttendanceGuestRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInProgressResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.ClientAttendanceResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.StoreAttendanceResponse;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendancePausedResponse;
 import com.ospaulos.vupth.domain.attendance.penalty.ExitPenaltyRule;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -60,6 +62,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1596,27 +1599,16 @@ public class AttendanceServiceImpl implements AttendanceService {
     // ─────────────────────────────────────────────────────────────
 
     @Override
-    public List<AttendanceListResponse> listAttendances(
+    public List<StoreAttendanceResponse> listAttendances(
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
-            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status) {
 
-        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} clientId={} dateFrom={} dateTo={} status={}",
-                userId, establishmentId, professionalId, clientId, dateFrom, dateTo, status);
-
-        // Partner BUG8 (sintoma b): o cliente lista os PROPRIOS atendimentos por aqui (?clientId=).
-        // clientId so pode ser o do proprio JWT — nao se lista fila de outro cliente. Delega ao
-        // mesmo caminho de /attendances/client/me (findByClientFilters), consistente com a queue.
-        if (clientId != null) {
-            if (!clientId.equals(userId)) {
-                throw new EstablishmentAccessDeniedException("You can only list your own attendances.");
-            }
-            return listClientAttendances(userId, status, dateFrom, dateTo);
-        }
+        log.info("[Attendance] listAttendances — userId={} establishmentId={} professionalId={} dateFrom={} dateTo={} status={}",
+                userId, establishmentId, professionalId, dateFrom, dateTo, status);
 
         Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
         final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
@@ -1637,8 +1629,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<Attendance> attendances = attendanceRepository.findByFilters(
                 resolvedEstablishmentId, professionalId, status, from, to);
 
-        return withReasons(attendances.stream()
-                .map(AttendanceListResponse::fromEntity)
+        return storeWithReasons(attendances.stream()
+                .map(StoreAttendanceResponse::fromEntity)
                 .collect(Collectors.toList()));
     }
 
@@ -1647,34 +1639,62 @@ public class AttendanceServiceImpl implements AttendanceService {
      * removeu, removido por atraso) e a observacao de atraso do concluido, sem valor — a multa e do app. Uma consulta
      * para a lista toda.
      */
-    private List<AttendanceListResponse> withReasons(List<AttendanceListResponse> items) {
+    private Map<UUID, Set<com.ospaulos.vupth.domain.client.model.PenaltyType>> penaltyTypesOf(Collection<UUID> attendanceIds) {
+        Map<UUID, Set<com.ospaulos.vupth.domain.client.model.PenaltyType>> events = new java.util.HashMap<>();
+        penaltyEventRepository.findByAttendanceIdIn(attendanceIds)
+                .forEach(e -> events.computeIfAbsent(e.getAttendanceId(), k -> new java.util.HashSet<>()).add(e.getType()));
+        return events;
+    }
+
+    private static String notRealizedReason(AttendanceStatus status,
+                                            Set<com.ospaulos.vupth.domain.client.model.PenaltyType> types) {
+        if (status == AttendanceStatus.CANCELLED) {
+            return "CLIENT_CANCELLED";
+        }
+        if (status == AttendanceStatus.REMOVED) {
+            return types.contains(com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
+                    ? "REMOVED_FOR_LATENESS" : "PROFESSIONAL_REMOVED";
+        }
+        return null;
+    }
+
+    private static boolean lateArrival(AttendanceStatus status,
+                                       Set<com.ospaulos.vupth.domain.client.model.PenaltyType> types) {
+        return status == AttendanceStatus.FINISHED
+                && types.contains(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
+    }
+
+    private List<StoreAttendanceResponse> storeWithReasons(List<StoreAttendanceResponse> items) {
         if (items.isEmpty()) {
             return items;
         }
-        Map<UUID, Set<com.ospaulos.vupth.domain.client.model.PenaltyType>> events = new java.util.HashMap<>();
-        penaltyEventRepository.findByAttendanceIdIn(items.stream().map(AttendanceListResponse::id).toList())
-                .forEach(e -> events.computeIfAbsent(e.getAttendanceId(), k -> new java.util.HashSet<>()).add(e.getType()));
+        var events = penaltyTypesOf(items.stream().map(StoreAttendanceResponse::id).toList());
         return items.stream().map(i -> {
             var types = events.getOrDefault(i.id(), Set.of());
-            String reason = null;
-            if (i.status() == AttendanceStatus.CANCELLED) {
-                reason = "CLIENT_CANCELLED";
-            } else if (i.status() == AttendanceStatus.REMOVED) {
-                reason = types.contains(com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW)
-                        ? "REMOVED_FOR_LATENESS" : "PROFESSIONAL_REMOVED";
-            }
-            boolean late = i.status() == AttendanceStatus.FINISHED
-                    && types.contains(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
+            String reason = notRealizedReason(i.status(), types);
+            boolean late = lateArrival(i.status(), types);
+            return reason == null && !late ? i : i.withReason(reason, late);
+        }).collect(Collectors.toList());
+    }
+
+    private List<ClientAttendanceResponse> clientWithReasons(List<ClientAttendanceResponse> items) {
+        if (items.isEmpty()) {
+            return items;
+        }
+        var events = penaltyTypesOf(items.stream().map(ClientAttendanceResponse::id).toList());
+        return items.stream().map(i -> {
+            var types = events.getOrDefault(i.id(), Set.of());
+            String reason = notRealizedReason(i.status(), types);
+            boolean late = lateArrival(i.status(), types);
             return reason == null && !late ? i : i.withReason(reason, late);
         }).collect(Collectors.toList());
     }
 
     @Override
-    public com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse listAttendancesPage(
+    public AttendancePageResponse<StoreAttendanceResponse> listAttendancesPage(
             UUID userId,
             UUID establishmentId,
             UUID professionalId,
-            UUID clientId,
             LocalDate dateFrom,
             LocalDate dateTo,
             AttendanceStatus status,
@@ -1682,16 +1702,6 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         log.info("[Attendance] listAttendancesPage — userId={} establishmentId={} professionalId={} page={} size={}",
                 userId, establishmentId, professionalId, page.page(), page.size());
-
-        // O historico do proprio cliente ja e pequeno e tem multas/avaliacao por item: corta em memoria.
-        if (clientId != null) {
-            List<AttendanceListResponse> all =
-                    listAttendances(userId, establishmentId, professionalId, clientId, dateFrom, dateTo, status);
-            int totalPages = page.totalPages(all.size());
-            return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
-                    page.slice(all), page.page(), page.size(), all.size(), totalPages,
-                    page.page() + 1 < totalPages);
-        }
 
         Professional professional = professionalRepository.findByIdWithBaseUser(userId).orElse(null);
         final UUID resolvedEstablishmentId = resolveEstablishmentId(userId, establishmentId, professionalId, professional);
@@ -1708,18 +1718,32 @@ public class AttendanceServiceImpl implements AttendanceService {
         org.springframework.data.domain.Page<UUID> ids = attendanceRepository.findIdPageByFilters(
                 resolvedEstablishmentId, professionalId, status, from, to,
                 org.springframework.data.domain.PageRequest.of(page.page(), page.size()));
-        List<AttendanceListResponse> items = ids.isEmpty()
+        List<StoreAttendanceResponse> items = ids.isEmpty()
                 ? List.of()
-                : withReasons(attendanceRepository.findAllByIdsWithDetails(ids.getContent()).stream()
-                        .map(AttendanceListResponse::fromEntity)
+                : storeWithReasons(attendanceRepository.findAllByIdsWithDetails(ids.getContent()).stream()
+                        .map(StoreAttendanceResponse::fromEntity)
                         .collect(Collectors.toList()));
 
-        return new com.ospaulos.vupth.api.attendance.dto.response.AttendancePageResponse(
+        return new AttendancePageResponse<>(
                 items, page.page(), page.size(), ids.getTotalElements(), ids.getTotalPages(), ids.hasNext());
     }
 
     @Override
-    public List<AttendanceListResponse> listClientAttendances(
+    public AttendancePageResponse<ClientAttendanceResponse> listClientAttendancesPage(
+            UUID clientId,
+            AttendanceStatus status,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage page) {
+        // O historico do proprio cliente ja e pequeno e tem multas/avaliacao por item: corta em memoria.
+        List<ClientAttendanceResponse> all = listClientAttendances(clientId, status, dateFrom, dateTo);
+        int totalPages = page.totalPages(all.size());
+        return new AttendancePageResponse<>(
+                page.slice(all), page.page(), page.size(), all.size(), totalPages, page.page() + 1 < totalPages);
+    }
+
+    @Override
+    public List<ClientAttendanceResponse> listClientAttendances(
             UUID clientId,
             AttendanceStatus status,
             LocalDate dateFrom,
@@ -1750,8 +1774,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Client: "ja avaliei?" — uma consulta para o historico inteiro.
         Set<UUID> rated = attendances.isEmpty() ? Set.of()
                 : attendanceRatingRepository.findRatedAttendanceIds(attendances.stream().map(Attendance::getId).toList());
-        return withReasons(attendances.stream()
-                .map(a -> AttendanceListResponse.fromEntity(a)
+        return clientWithReasons(attendances.stream()
+                .map(a -> ClientAttendanceResponse.fromEntity(a)
                         .withPenalties(penalties.getOrDefault(a.getId(), List.of()))
                         .withRated(rated.contains(a.getId())))
                 .collect(Collectors.toList()));

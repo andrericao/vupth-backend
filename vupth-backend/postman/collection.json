@@ -7680,9 +7680,10 @@
          "  pm.expect(b.total, \"total\").to.be.a(\"number\");",
          "  pm.expect(b.penalties, \"penalties\").to.be.an(\"array\");",
          "  b.penalties.forEach(p => {",
-         "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\", \"gatewayFee\", \"appShare\",",
+         "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\",",
          "      \"originAttendanceId\", \"originDate\", \"originProfessionalName\", \"originEstablishmentName\");",
-         "    pm.expect(p.gatewayFee + p.appShare).to.be.closeTo(p.amount, 0.001);",
+         "    // DEC-94: o cliente nunca ve a taxa do gateway nem a parte do app",
+         "    pm.expect(p).to.not.have.any.keys(\"gatewayFee\", \"appShare\");",
          "  });",
          "});"
         ]
