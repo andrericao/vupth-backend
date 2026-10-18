@@ -36,14 +36,19 @@ done
 falhou() {
   local destino="$LOGS/$(date +%Y-%m-%d_%H%M%S)_$1_FALHA.txt"
   mv "$2" "$destino"
+  # DEC-98: um resumo curto da falha (so o que quebrou, sem cor), para ler no lugar do log inteiro
+  local resumo="${destino%_FALHA.txt}_RESUMO.txt"
+  sed 's/\x1b\[[0-9;]*m//g' "$destino" \
+    | grep -aE '^\[ERROR\] +[A-Za-z].*(:[0-9]+|Test|FAIL)|Tests run:.*(Failures: [1-9]|Errors: [1-9])|expected|but was|COMPILATION ERROR|cannot find symbol|BUILD FAILURE|assertion|✗|AssertionError' \
+    | cut -c1-300 | head -30 > "$resumo"
   echo
-  echo "❌ $1 falhou — log em vupth-backend/$destino"
+  echo "❌ $1 falhou — log em vupth-backend/$destino (resumo: vupth-backend/$resumo)"
   exit 1
 }
 
 # Verde: as falhas antigas do tipo $1 saem da pasta.
 passou() {
-  rm -f "$LOGS"/*_"$1"_FALHA.txt
+  rm -f "$LOGS"/*_"$1"_FALHA.txt "$LOGS"/*_"$1"_RESUMO.txt
   echo "✅ $1 verde"
 }
 
