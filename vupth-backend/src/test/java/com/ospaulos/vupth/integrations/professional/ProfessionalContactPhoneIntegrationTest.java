@@ -164,6 +164,19 @@ class ProfessionalContactPhoneIntegrationTest {
     }
 
     @Test
+    @Order(52)
+    @DisplayName("nota-no-professional-me: /professional/me traz rating_average (null) e rating_count (0), como o professionals-with-queue, sem votos")
+    void me_exposesRating() throws Exception {
+        mvc.perform(get("/professional/me").header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rating_average").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.rating_count").value(0));
+        mvc.perform(get("/establishment/id/{id}/professionals-with-queue", establishmentId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.professionals[0].rating_count").value(0));
+    }
+
+    @Test
     @Order(51)
     @DisplayName("PATCH show_position=false esconde; o cliente le false e o tempo estimado continua")
     void showPosition_toggleOff() throws Exception {
