@@ -40,6 +40,7 @@ public class AttendanceIntentionController {
     private final AttendanceService attendanceService;
     private final IntentionPromotionScheduler promotionScheduler;
     private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
 
     /**
      * POST /attendances/intentions — cria uma intencao para o cliente autenticado (clientId do JWT).
@@ -57,6 +58,8 @@ public class AttendanceIntentionController {
 
         // pagamento-pix: com atendimento finalizado sem pagar, nada de agendar (409 PAYMENT_PENDING)
         paymentService.assertNoPendingPayment(principal.getUserId());
+        // limite-de-duas-multas (DEC-83): com 2 multas devidas, so marca depois de quitar (409 PENALTY_LIMIT_REACHED)
+        clientPenaltyService.assertWithinLimit(principal.getUserId());
 
         IntentionResponse response = attendanceService.createIntention(
                 request.professionalId(), request.serviceItemIds(), request.desiredTime(), principal.getUserId(),

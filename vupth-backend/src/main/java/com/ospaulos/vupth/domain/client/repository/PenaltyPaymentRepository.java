@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface PenaltyPaymentRepository extends JpaRepository<PenaltyPayment, UUID> {
 
     List<PenaltyPayment> findByStatusOrderByCreatedAtAsc(PenaltyPayment.Status status);
+
+    List<PenaltyPayment> findByClientIdAndStatus(UUID clientId, PenaltyPayment.Status status);
 }

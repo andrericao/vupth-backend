@@ -44,6 +44,10 @@ public class ClientPenaltyService {
     private final AttendanceRepository attendanceRepository;
     private final com.ospaulos.vupth.domain.client.repository.PenaltyPaymentRepository penaltyPaymentRepository;
 
+    /** limite-de-duas-multas (DEC-83): com tantas multas devidas, o cliente so marca depois de quitar. */
+    @org.springframework.beans.factory.annotation.Value("${vupth.penalty.max-pending:2}")
+    private int maxPending = 2;
+
     @Transactional(readOnly = true)
     public PendingPenaltiesResponse pending(UUID clientId) {
         List<PenaltyChargeResponse> penalties = describe(pendingEvents(clientId));
@@ -85,6 +89,45 @@ public class ClientPenaltyService {
                 .collect(Collectors.toMap(ClientPenaltyEvent::getId, ClientPenaltyEvent::getChargedAttendanceId));
         return describe(events).stream()
                 .collect(Collectors.groupingBy(p -> chargedByPenalty.get(p.penaltyId())));
+    }
+
+    /**
+     * As multas devidas e ainda nao confirmadas: as pendentes mais as cobertas por um pagamento avulso vigente que o
+     * painel ainda nao confirmou. Nao entram as carregadas por um corte na fila (ja estao sendo cobradas la).
+     */
+    @Transactional(readOnly = true)
+    public List<ClientPenaltyEvent> dueFor(UUID clientId) {
+        List<ClientPenaltyEvent> due = new java.util.ArrayList<>(pendingEvents(clientId));
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        Set<UUID> unconfirmed = penaltyPaymentRepository
+                .findByClientIdAndStatus(clientId, com.ospaulos.vupth.domain.client.model.PenaltyPayment.Status.PENDING)
+                .stream().filter(p -> p.getExpiresAt().isAfter(now))
+                .map(com.ospaulos.vupth.domain.client.model.PenaltyPayment::getId).collect(Collectors.toSet());
+        if (!unconfirmed.isEmpty()) {
+            penaltyEventRepository.findByClientIdAndAmountIsNotNullOrderByCreatedAtAsc(clientId).stream()
+                    .filter(e -> e.getAmount().signum() > 0)
+                    .filter(e -> e.getPenaltyPaymentId() != null && unconfirmed.contains(e.getPenaltyPaymentId()))
+                    .forEach(due::add);
+        }
+        return due;
+    }
+
+    /** O portao de entrar na fila ou agendar: com o limite de multas devidas, 409 {@code PENALTY_LIMIT_REACHED}. */
+    @Transactional(readOnly = true)
+    public void assertWithinLimit(UUID clientId) {
+        List<ClientPenaltyEvent> due = dueFor(clientId);
+        if (due.size() < maxPending) {
+            return;
+        }
+        BigDecimal total = due.stream().map(ClientPenaltyEvent::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        UUID paymentId = penaltyPaymentRepository
+                .findByClientIdAndStatus(clientId, com.ospaulos.vupth.domain.client.model.PenaltyPayment.Status.PENDING)
+                .stream().filter(p -> p.getExpiresAt().isAfter(now))
+                .max(java.util.Comparator.comparing(com.ospaulos.vupth.domain.client.model.PenaltyPayment::getCreatedAt))
+                .map(com.ospaulos.vupth.domain.client.model.PenaltyPayment::getId).orElse(null);
+        throw new com.ospaulos.vupth.domain.client.exception.PenaltyLimitException(
+                maxPending, total, describe(due), paymentId);
     }
 
     /** As multas ainda a pagar do cliente, sem as que um pagamento avulso (vigente ou pago) ja cobre. */

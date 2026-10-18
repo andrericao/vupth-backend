@@ -42,6 +42,7 @@ public class AttendanceController {
     private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
     private final com.ospaulos.vupth.domain.attendance.service.SuddenDropService suddenDropService;
     private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
     private final com.ospaulos.vupth.domain.payment.service.PaymentNotifier paymentNotifier;
     private final com.ospaulos.vupth.domain.attendance.service.NoShowHintService noShowHintService;
 
@@ -133,6 +134,8 @@ public class AttendanceController {
 
         // pagamento-pix: com atendimento finalizado sem pagar, nada de fila nova (409 PAYMENT_PENDING)
         paymentService.assertNoPendingPayment(principal.getUserId());
+        // limite-de-duas-multas (DEC-83): com 2 multas devidas, so marca depois de quitar (409 PENALTY_LIMIT_REACHED)
+        clientPenaltyService.assertWithinLimit(principal.getUserId());
 
         // clientId comes from the token, not the body — body value is ignored
         AttendanceRequest secureRequest = new AttendanceRequest(
