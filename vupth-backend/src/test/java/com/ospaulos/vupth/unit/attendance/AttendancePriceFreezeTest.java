@@ -46,8 +46,8 @@ class AttendancePriceFreezeTest {
 
         assertThat(attendance.getTotalValue()).isEqualByComparingTo("86.80");
         assertThat(attendance.getProReceives()).isEqualByComparingTo("80.00");
-        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("3.48");
-        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("3.32");
+        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("4.10");
+        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("2.70");
         assertThat(attendance.getProReceives().add(attendance.getIntermediaryFee()).add(attendance.getPlatformFee()))
                 .isEqualByComparingTo(attendance.getTotalValue());
     }
@@ -77,8 +77,8 @@ class AttendancePriceFreezeTest {
 
         assertThat(attendance.getTotalValue()).isEqualByComparingTo("32.90");
         assertThat(attendance.getProReceives()).isEqualByComparingTo("30.00");
-        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("1.32");
-        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("1.58");
+        assertThat(attendance.getIntermediaryFee()).isEqualByComparingTo("1.99");
+        assertThat(attendance.getPlatformFee()).isEqualByComparingTo("0.91");
     }
 
     @Test

@@ -6300,8 +6300,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "// Regra do Andre (15/10, preco-sobre-o-total): o menor X,90 em que, tirados 4% + 2% do PRECO, sobra o recebe.",
-         "// 30,00 -> 30 / 0,94 = 31,91 -> preco 32,90; pagamento 4% de 32,90 = 1,32; app = o resto (1,58).",
+         "// Regra do Andre (15/10, preco-sobre-o-total): o menor X,90 em que, tirados o gateway (pior caso: o maior entre R$ 1,99 e R$ 0,49 + 2,99%) e 2% do PRECO, sobra o recebe.",
+         "// 30,00 -> 30 / 0,94 = 31,91 -> preco 32,90; gateway = max(1,99; 0,49 + 2,99% de 32,90 = 1,47) = 1,99 (DEC-91); app = o resto (0,91).",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  const r = pm.response.json();",
@@ -6309,8 +6309,8 @@
          "    pm.expect(Number(r.pro_receives)).to.eql(30);",
          "    pm.expect(Number(r.base_price)).to.eql(30);",
          "  });",
-         "  pm.test(\"intermediary_fee = 4% do preco\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.32));",
-         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(1.58));",
+         "  pm.test(\"intermediary_fee = pior caso do gateway (max(1,99; 0,49 + 2,99%))\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.99));",
+         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(0.91));",
          "  pm.test(\"as tres partes somam o preco\", () => {",
          "    const sum = Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100);",
          "    pm.expect(sum).to.eql(Math.round(Number(r.price) * 100));",

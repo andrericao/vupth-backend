@@ -44,14 +44,14 @@ class PriceSplitTest {
 
         @ParameterizedTest(name = "digitado {0}, recebe {1}, preco {2} -> pagamento {3}, app {4}")
         @CsvSource({
-                "10.00, 10.00, 10.90, 0.44, 0.46",
-                "30.00, 30.00, 32.90, 1.32, 1.58",      // 31,91 sobe para 32,90 (hoje era 31,90)
-                "30.00, 28.20, 30.90, 1.24, 1.46",      // absorve os 1,80
-                "50.00, 50.00, 53.90, 2.16, 1.74",      // o exemplo do Andre: 4% de 53,90, nao de 50
-                "80.00, 76.40, 81.90, 3.28, 2.22",
-                "80.00, 80.00, 85.90, 3.44, 2.46",
-                "100.00, 100.00, 106.90, 4.28, 2.62",
-                "100.84, 100.84, 107.90, 4.32, 2.74"
+                "10.00, 10.00, 12.90, 1.99, 0.91",      // piso do Pix (DEC-91): o cartao de 12,90 custaria 0,88
+                "30.00, 30.00, 32.90, 1.99, 0.91",      // 31,91 sobe para 32,90; gateway no Pix cheio
+                "30.00, 28.20, 30.90, 1.99, 0.71",      // absorve os 1,80
+                "50.00, 50.00, 53.90, 2.11, 1.79",      // acima de ~50,17 manda o cartao: 0,49 + 2,99% de 53,90
+                "80.00, 76.40, 81.90, 2.94, 2.56",
+                "80.00, 80.00, 84.90, 3.03, 1.87",
+                "100.00, 100.00, 105.90, 3.66, 2.24",
+                "100.84, 100.84, 106.90, 3.69, 2.37"
         })
         @DisplayName("valores concretos")
         void concreteValues(String base, String pro, String price, String intermediary, String app) {
@@ -79,7 +79,7 @@ class PriceSplitTest {
         }
 
         @Test
-        @DisplayName("grade R$ 5,00 a R$ 500,00 (passo R$ 0,01): prova real, o menor X,90, 4% do preco e soma exata")
+        @DisplayName("grade R$ 5,00 a R$ 500,00 (passo R$ 0,01): prova real, o menor X,90, o pior caso do gateway e soma exata")
         void goldenRuleAcrossTheGrid() {
             int checked = 0;
             for (int c = 500; c <= 50_000; c++) {
@@ -91,9 +91,9 @@ class PriceSplitTest {
 
                     PriceSplit split = PriceSplit.of(price, pro, base);
 
-                    BigDecimal gateway = cents(price.multiply(PriceSplit.INTERMEDIARY_RATE));
+                    BigDecimal gateway = PriceSplit.intermediaryFor(price);
                     BigDecimal appShare = cents(price.multiply(PriceSplit.APP_RATE));
-                    assertThat(split.intermediaryFee()).as("4%% do preco %s", price).isEqualByComparingTo(gateway);
+                    assertThat(split.intermediaryFee()).as("o pior caso exato do preco %s", price).isEqualByComparingTo(gateway);
                     assertThat(price.subtract(gateway).subtract(appShare))
                             .as("prova real: %s cobre o recebe %s", price, pro)
                             .isGreaterThanOrEqualTo(pro);
@@ -102,7 +102,7 @@ class PriceSplitTest {
                             .as("soma de %s", price).isEqualByComparingTo(price);
                     assertThat(price.remainder(BigDecimal.ONE)).isEqualByComparingTo("0.90");
                     BigDecimal cheaper = price.subtract(BigDecimal.ONE);
-                    assertThat(cheaper.subtract(cents(cheaper.multiply(PriceSplit.INTERMEDIARY_RATE)))
+                    assertThat(cheaper.subtract(PriceSplit.intermediaryFor(cheaper))
                             .subtract(cents(cheaper.multiply(PriceSplit.APP_RATE))))
                             .as("o X,90 abaixo de %s nao cobriria %s", price, pro)
                             .isLessThan(pro);
@@ -110,6 +110,35 @@ class PriceSplitTest {
                 }
             }
             assertThat(checked).isGreaterThan(140_000);
+        }
+
+        @Test
+        @DisplayName("o app nunca perde (DEC-91): para todo preco X,90 de R$ 5 a R$ 500 a taxa cobrada cobre a taxa cheia de todo meio a vista")
+        void chargedFeeCoversWorstMethod() {
+            for (int reais = 5; reais <= 500; reais++) {
+                BigDecimal price = BigDecimal.valueOf(reais).add(new BigDecimal("0.90"));
+                BigDecimal pix = new BigDecimal("1.99");
+                BigDecimal debit = new BigDecimal("0.35").add(price.multiply(new BigDecimal("0.0189")));
+                BigDecimal credit = new BigDecimal("0.49").add(price.multiply(new BigDecimal("0.0299")));
+
+                BigDecimal charged = PriceSplit.intermediaryFor(price);
+
+                assertThat(charged).as("Pix em %s", price).isGreaterThanOrEqualTo(pix);
+                assertThat(charged).as("debito em %s", price).isGreaterThanOrEqualTo(debit);
+                assertThat(charged).as("credito a vista em %s", price).isGreaterThanOrEqualTo(credit);
+                assertThat(charged).as("o pior caso exato de %s, sem cobrar a mais que 1 centavo", price)
+                        .isLessThan(pix.max(credit).add(new BigDecimal("0.01")));
+            }
+        }
+
+        @Test
+        @DisplayName("a taxa e o Pix cheio (R$ 1,99) ate a virada de ~R$ 50,17 e o credito a vista cheio (0,49 + 2,99%) dai em diante")
+        void feeIsTheExactWorstCase() {
+            assertThat(PriceSplit.intermediaryFor(brl("12.90"))).isEqualByComparingTo("1.99");
+            assertThat(PriceSplit.intermediaryFor(brl("50.00"))).isEqualByComparingTo("1.99");
+            assertThat(PriceSplit.intermediaryFor(brl("50.90"))).isEqualByComparingTo("2.02");
+            assertThat(PriceSplit.intermediaryFor(brl("53.90"))).isEqualByComparingTo("2.11");
+            assertThat(PriceSplit.intermediaryFor(brl("100.00"))).isEqualByComparingTo("3.48");
         }
     }
 
@@ -150,12 +179,24 @@ class PriceSplitTest {
     class Read {
 
         @Test
-        @DisplayName("preco da regra de 16/09 continua lido, com o gateway sobre o preco")
+        @DisplayName("servico ja gravado mantem a divisao antiga: so os 4% do preco, sem o piso (DEC-91)")
         void oldRulePrice() {
             PriceSplit split = PriceSplit.read(brl("31.90"), brl("30.00"), brl("30.00"));
 
             assertThat(split.intermediaryFee()).isEqualByComparingTo("1.28");
             assertThat(split.platformFee()).isEqualByComparingTo("0.62");
+        }
+
+        @Test
+        @DisplayName("preco que o piso cobre le com a regra nova; o que o piso deixaria sem app cai na antiga (DEC-91)")
+        void newRuleWithLegacyFallback() {
+            PriceSplit current = PriceSplit.read(brl("32.90"), brl("30.00"), brl("30.00"));
+            assertThat(current.intermediaryFee()).isEqualByComparingTo("1.99");
+            assertThat(current.platformFee()).isEqualByComparingTo("0.91");
+
+            PriceSplit legacy = PriceSplit.read(brl("16.90"), brl("15.00"), brl("15.00"));
+            assertThat(legacy.intermediaryFee()).isEqualByComparingTo("0.68");
+            assertThat(legacy.platformFee()).isEqualByComparingTo("1.22");
         }
 
         @Test

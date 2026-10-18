@@ -107,8 +107,8 @@ class AttendancePriceFreezeIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(32.90))
                 .andExpect(jsonPath("$[?(@.id == '%s')].proReceives", attendanceId).value(30.00))
-                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.32))
-                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(1.58))
+                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.99))
+                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(0.91))
                 .andDo(print());
     }
 
@@ -134,8 +134,8 @@ class AttendancePriceFreezeIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.id == '%s')].totalValue", attendanceId).value(32.90))
                 .andExpect(jsonPath("$[?(@.id == '%s')].proReceives", attendanceId).value(30.00))
-                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.32))
-                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(1.58))
+                .andExpect(jsonPath("$[?(@.id == '%s')].intermediaryFee", attendanceId).value(1.99))
+                .andExpect(jsonPath("$[?(@.id == '%s')].platformFee", attendanceId).value(0.91))
                 .andDo(print());
     }
 }

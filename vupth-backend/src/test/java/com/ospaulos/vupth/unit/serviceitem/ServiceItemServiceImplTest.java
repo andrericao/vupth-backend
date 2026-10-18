@@ -271,8 +271,8 @@ class ServiceItemServiceImplTest {
             ServiceItemResponse result = serviceItemService.createServiceItem(professional, createRequest("32.90", "30.00", "30.00"));
 
             assertThat(result.proReceives()).isEqualByComparingTo("30.00");
-            assertThat(result.intermediaryFee()).isEqualByComparingTo("1.32");
-            assertThat(result.platformFee()).isEqualByComparingTo("1.58");
+            assertThat(result.intermediaryFee()).isEqualByComparingTo("1.99");
+            assertThat(result.platformFee()).isEqualByComparingTo("0.91");
             verify(serviceItemRepository).save(argThat(si -> new BigDecimal("30.00").compareTo(si.getProReceives()) == 0));
         }
 
@@ -306,7 +306,7 @@ class ServiceItemServiceImplTest {
 
             assertThat(result.price()).isEqualByComparingTo("53.90");
             assertThat(result.proReceives()).isEqualByComparingTo("50.00");
-            assertThat(result.platformFee()).isEqualByComparingTo("1.74");
+            assertThat(result.platformFee()).isEqualByComparingTo("1.79");
         }
 
         @Test

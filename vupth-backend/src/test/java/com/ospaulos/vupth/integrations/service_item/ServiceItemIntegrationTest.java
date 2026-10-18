@@ -451,8 +451,8 @@ class ServiceItemIntegrationTest {
                 .andExpect(jsonPath("$.price").value(32.90))
                 .andExpect(jsonPath("$.pro_receives").value(30.00))
                 .andExpect(jsonPath("$.base_price").value(30.00))
-                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
-                .andExpect(jsonPath("$.platform_fee").value(1.58))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.99))
+                .andExpect(jsonPath("$.platform_fee").value(0.91))
                 .andDo(print())
                 .andReturn();
 
@@ -512,8 +512,8 @@ class ServiceItemIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pro_receives").value(30.00))
                 .andExpect(jsonPath("$.base_price").value(30.00))
-                .andExpect(jsonPath("$.intermediary_fee").value(1.32))
-                .andExpect(jsonPath("$.platform_fee").value(1.58))
+                .andExpect(jsonPath("$.intermediary_fee").value(1.99))
+                .andExpect(jsonPath("$.platform_fee").value(0.91))
                 .andDo(print());
     }
 

@@ -13,8 +13,8 @@ import java.math.RoundingMode;
  *   digitado      = o valor que o profissional digitou (basePrice)
  *   absorvido     = a parte da taxa que ele escolheu pagar: 0 a 6% do digitado
  *   recebe        = digitado - absorvido
- *   preco         = o menor X,90 que passa na prova real (comeca no X,90 logo acima de recebe / 0,94)
- *   intermediario = 4% do PRECO (centavo meio para cima) — a taxa do gateway incide sobre o total
+ *   preco         = o menor X,90 que passa na prova real (comeca no X,90 logo acima de recebe)
+ *   intermediario = o maior entre R$ 1,99 (Pix) e R$ 0,49 + 2,99% do PRECO (credito a vista), centavo para cima (DEC-91)
  *   app           = preco - recebe - intermediario   (os 2% + a sobra do arredondamento)
  *   prova real    = preco - intermediario - 2% do preco >= recebe
  * </pre>
@@ -40,11 +40,18 @@ public record PriceSplit(
 
     /** A taxa do gateway (Asaas), sobre o preco cobrado. Unico lugar dela no backend. */
     public static final BigDecimal INTERMEDIARY_RATE = new BigDecimal("0.04");
+    /**
+     * O pior caso exato do gateway por preco (DEC-91, o app nunca perde), com as taxas CHEIAS, so a vista:
+     * o Pix custa um fixo de R$ 1,99 e o credito a vista R$ 0,49 + 2,99% do preco (o debito custa sempre menos).
+     * A taxa cobrada e o maior dos dois ({@link #intermediaryFor}); a virada e em ~R$ 50,17.
+     */
+    public static final BigDecimal PIX_FEE = new BigDecimal("1.99");
+    public static final BigDecimal CARD_FIXED_FEE = new BigDecimal("0.49");
+    public static final BigDecimal CARD_RATE = new BigDecimal("0.0299");
     /** A parte do app, sobre o preco cobrado. */
     public static final BigDecimal APP_RATE = new BigDecimal("0.02");
     /** O teto do que o profissional pode absorver, sobre o digitado: as duas taxas juntas. */
     public static final BigDecimal FEE_RATE = INTERMEDIARY_RATE.add(APP_RATE);
-    private static final BigDecimal NET_RATE = BigDecimal.ONE.subtract(FEE_RATE);
     private static final BigDecimal NINETY_CENTS = new BigDecimal("0.90");
     private static final int CENTS = 2;
 
@@ -74,32 +81,39 @@ public record PriceSplit(
                     "O preco deve ser %s (o menor X,90 em que o profissional recebe %s depois das taxas); recebido %s",
                     expected, pro, price));
         }
-        return split(price, pro, base);
+        return split(price, pro, base, intermediaryFor(price));
     }
 
     /**
      * A divisao de um servico ja gravado, sem reconferir a regra do X,90 (o preco pode ser da regra de
      * 16/09). {@code null} se o preco nao cobre o profissional e o gateway — o servico volta a "a atualizar".
+     * Preco antigo que a taxa nova deixaria sem parte do app mantem a divisao antiga (DEC-91): so os 4% do preco.
      */
     public static PriceSplit read(BigDecimal clientPrice, BigDecimal proReceives, BigDecimal basePrice) {
         if (clientPrice == null || proReceives == null || basePrice == null) {
             return null;
         }
-        PriceSplit split = split(clientPrice.setScale(CENTS, RoundingMode.HALF_UP),
-                proReceives.setScale(CENTS, RoundingMode.HALF_UP), basePrice.setScale(CENTS, RoundingMode.HALF_UP));
-        return split.platformFee().signum() < 0 ? null : split;
+        BigDecimal price = clientPrice.setScale(CENTS, RoundingMode.HALF_UP);
+        BigDecimal pro = proReceives.setScale(CENTS, RoundingMode.HALF_UP);
+        BigDecimal base = basePrice.setScale(CENTS, RoundingMode.HALF_UP);
+        PriceSplit split = split(price, pro, base, intermediaryFor(price));
+        if (split.platformFee().signum() >= 0) {
+            return split;
+        }
+        // preco antigo que a taxa nova nao cobre: segue valendo com os 4% do preco (DEC-91)
+        PriceSplit legacy = split(price, pro, base, cents(price.multiply(INTERMEDIARY_RATE)));
+        return legacy.platformFee().signum() < 0 ? null : legacy;
     }
 
     /**
      * O preco do cliente para o profissional receber {@code proReceives}: o X,90 logo acima de
-     * {@code recebe / 0,94}, subindo de R$ 1 em R$ 1 ate passar na prova real (de R$ 0,01 a R$ 500,00 o X,90
-     * de baixo nunca passa; a grade do PriceSplitTest confere). E a conta que o app do parceiro repete.
+     * {@code recebe}, subindo de R$ 1 em R$ 1 ate passar na prova real (a taxa nao e mais um percentual unico,
+     * entao nao ha atalho; a grade do PriceSplitTest confere que o X,90 de baixo nunca passa). E a conta que o app do parceiro repete.
      */
     public static BigDecimal clientPriceFor(BigDecimal proReceives) {
         BigDecimal pro = money("valor que o profissional recebe", proReceives);
-        BigDecimal floor = pro.divide(NET_RATE, 6, RoundingMode.HALF_UP);
-        BigDecimal price = floor.setScale(0, RoundingMode.FLOOR).add(NINETY_CENTS);
-        if (price.compareTo(floor) < 0) {
+        BigDecimal price = pro.setScale(0, RoundingMode.FLOOR).add(NINETY_CENTS);
+        if (price.compareTo(pro) < 0) {
             price = price.add(BigDecimal.ONE);
         }
         while (!passesProof(price, pro)) {
@@ -108,15 +122,23 @@ public record PriceSplit(
         return price;
     }
 
+    /**
+     * A taxa do gateway cobrada no preco: o maior entre o Pix cheio e o credito a vista cheio. Arredonda o
+     * centavo para cima — a taxa cobrada nunca fica abaixo da real.
+     */
+    public static BigDecimal intermediaryFor(BigDecimal price) {
+        BigDecimal card = CARD_FIXED_FEE.add(price.multiply(CARD_RATE)).setScale(CENTS, RoundingMode.CEILING);
+        return PIX_FEE.max(card);
+    }
+
     /** Prova real: depois do gateway e dos 2% do app, sobra ao menos o que o profissional recebe. */
     static boolean passesProof(BigDecimal price, BigDecimal pro) {
-        return price.subtract(cents(price.multiply(INTERMEDIARY_RATE)))
+        return price.subtract(intermediaryFor(price))
                 .subtract(cents(price.multiply(APP_RATE)))
                 .compareTo(pro) >= 0;
     }
 
-    private static PriceSplit split(BigDecimal price, BigDecimal pro, BigDecimal base) {
-        BigDecimal intermediary = cents(price.multiply(INTERMEDIARY_RATE));
+    private static PriceSplit split(BigDecimal price, BigDecimal pro, BigDecimal base, BigDecimal intermediary) {
         return new PriceSplit(price, pro, base, intermediary, price.subtract(pro).subtract(intermediary));
     }
 
