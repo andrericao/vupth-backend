@@ -149,6 +149,10 @@ class PenaltyPaymentServiceTest {
         assertThat(response.amount()).isEqualByComparingTo("8.00");
         assertThat(response.status()).isEqualTo("PENDING");
         assertThat(response.expiresAt()).isAfter(response.createdAt().plusHours(23));
+        org.mockito.ArgumentCaptor<PenaltyPayment> saved = org.mockito.ArgumentCaptor.forClass(PenaltyPayment.class);
+        org.mockito.Mockito.verify(payments).save(saved.capture());
+        assertThat(saved.getValue().getClientId()).isEqualTo(client);
+        assertThat(saved.getValue().getStatus()).isEqualTo(PenaltyPayment.Status.PENDING);
         assertThat(a.getPenaltyPaymentId()).isEqualTo(response.id());
         assertThat(b.getPenaltyPaymentId()).isEqualTo(response.id());
         org.mockito.Mockito.verify(events).saveAll(List.of(a, b));

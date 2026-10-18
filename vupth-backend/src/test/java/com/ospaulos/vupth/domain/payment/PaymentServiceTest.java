@@ -547,4 +547,44 @@ class PaymentServiceTest {
         assertThat(r.pixOwner()).isEqualTo("PROFESSIONAL");
         assertThat(r.pixCopyPaste()).contains("beto@mail.com");
     }
+
+    // ─── mutacao-pit-no-dinheiro (DEC-99): os mutantes que sobreviveram ───
+
+    @Test
+    @DisplayName("PIT: cancelado e ainda pendente nao tem pagamento: dizer que pagou e o Recebi dao 409 PaymentNotAvailable, nao seguem")
+    void claimAndConfirmNeedAnAvailablePayment() {
+        Attendance cancelled = attendance(AttendanceStatus.CANCELLED, PaymentStatus.PENDING);
+
+        assertThatThrownBy(() -> service.claim(cancelled.getId(), clientId)).isInstanceOf(PaymentNotAvailableException.class);
+        assertThatThrownBy(() -> service.confirm(cancelled.getId(), professionalId)).isInstanceOf(PaymentNotAvailableException.class);
+        assertThat(cancelled.getPaymentStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("PIT: apagar a chave limpa a chave, o tipo e o titular; o titular de 25 letras vale e o de 26 nao")
+    void deleteClearsEverythingAndHolderLimit() {
+        when(userRepository.findById(professionalId)).thenReturn(Optional.of(professional.getBaseUser()));
+        service.setPixKey(professionalId, new PixKeyRequest(PixKeyType.EMAIL, "b@m.com", "x".repeat(25)));
+        assertThat(professional.getBaseUser().getPixHolderName()).hasSize(25);
+
+        service.deletePixKey(professionalId);
+
+        assertThat(professional.getBaseUser().getPixKey()).isNull();
+        assertThat(professional.getBaseUser().getPixKeyType()).isNull();
+        assertThat(professional.getBaseUser().getPixHolderName()).isNull();
+    }
+
+    @Test
+    @DisplayName("PIT: a fila do profissional conta so os que dizem que pagaram; o status de um atendimento sai direto")
+    void awaitingCountAndStatusOf() {
+        Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        Attendance awaitingToo = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        Attendance pending = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        when(attendanceRepository.findOpenPaymentsOfProfessional(professionalId))
+                .thenReturn(List.of(awaiting, awaitingToo, pending));
+
+        assertThat(service.pendingOfProfessional(professionalId).awaitingCount()).isEqualTo(2);
+        assertThat(service.statusOf(awaiting.getId())).isEqualTo(PaymentStatus.AWAITING_CONFIRMATION);
+        assertThat(service.statusOf(pending.getId())).isEqualTo(PaymentStatus.PENDING);
+    }
 }

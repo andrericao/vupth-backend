@@ -248,4 +248,55 @@ class LateArrivalServiceTest {
 
         assertThat(service.registerLate(attendance(null), professional, NOW)).isEqualTo(1);
     }
+
+    // ─── mutacao-pit-no-dinheiro (DEC-99) ───
+
+    @Test
+    @DisplayName("PIT: so conta a vez de corte CONCLUIDO e de HOJE; refeicao encerrada hoje tambem conta, a nao feita nao")
+    void turnArrivedOnlyFromFinishedToday() {
+        Attendance scheduled = attendance(null);
+        scheduled.setScheduledTime(NOW.minusHours(2));
+
+        // em andamento com horario de fim hoje: nao e a vez de ninguem
+        Attendance running = new Attendance();
+        running.setStatus(AttendanceStatus.IN_PROGRESS);
+        running.setEndTime(NOW.minusMinutes(1));
+        professionalAttendances.add(running);
+        // concluido ontem: nao conta hoje
+        finishedAt(NOW.minusDays(1));
+        assertThat(service.noShowAvailableAt(scheduled, professional, NOW)).isEqualTo(NOW.minusMinutes(110));
+
+        // refeicao encerrada hoje conta; a que nao foi feita hoje, nao
+        var done = mock(com.ospaulos.vupth.domain.professional.model.ProfessionalInterval.class);
+        when(done.isDoneOn(NOW.toLocalDate())).thenReturn(true);
+        when(done.getActualEndTime()).thenReturn(NOW.minusMinutes(3));
+        var notDone = mock(com.ospaulos.vupth.domain.professional.model.ProfessionalInterval.class);
+        when(notDone.isDoneOn(any())).thenReturn(false);
+        lenient().when(notDone.getActualEndTime()).thenReturn(NOW.minusMinutes(1)); // se entrasse, a hora comunicada mudaria
+        when(professional.getIntervals()).thenReturn(List.of(done, notDone));
+        assertThat(service.noShowAvailableAt(scheduled, professional, NOW)).isEqualTo(NOW.plusMinutes(7));
+    }
+
+    @Test
+    @DisplayName("PIT: o aviso do 1o, do 2o e do 3o atraso: texto, quantos faltam para a multa e se foi para o fim da fila")
+    void pushTextAndData() {
+        for (int count = 1; count <= 3; count++) {
+            client.setLateCount(count - 1);
+            clearInvocations(pushPublisher);
+
+            service.registerLate(attendance(NOW.minusMinutes(10)), professional, NOW);
+
+            ArgumentCaptor<java.util.Map<String, Object>> data = ArgumentCaptor.forClass(java.util.Map.class);
+            ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+            verify(pushPublisher).notifyUser(eq(client.getId()), any(), body.capture(), data.capture());
+            assertThat(data.getValue().get("lateCount")).isEqualTo(String.valueOf(count));
+            assertThat(data.getValue().get("latesUntilPenalty")).isEqualTo(String.valueOf(3 - count));
+            assertThat(data.getValue().get("movedToEnd")).isEqualTo(String.valueOf(count == 3));
+            if (count == 3) {
+                assertThat(body.getValue()).contains("Você foi para o fim da fila");
+            } else {
+                assertThat(body.getValue()).contains("No 3º, multa de R$ 5,00");
+            }
+        }
+    }
 }

@@ -200,6 +200,19 @@ class PriceSplitTest {
         }
 
         @Test
+        @DisplayName("PIT: a parte do app exatamente zero ainda vale: com a taxa nova (12,00 recebendo 10,01) e com os 4% antigos (25,00 recebendo 24,00)")
+        void appShareExactlyZeroIsStillValid() {
+            PriceSplit byNewRule = PriceSplit.read(brl("12.00"), brl("10.01"), brl("10.01"));
+            assertThat(byNewRule.intermediaryFee()).isEqualByComparingTo("1.99");
+            assertThat(byNewRule.platformFee()).isEqualByComparingTo("0.00");
+
+            PriceSplit byOldRule = PriceSplit.read(brl("25.00"), brl("24.00"), brl("24.00"));
+            assertThat(byOldRule).isNotNull();
+            assertThat(byOldRule.intermediaryFee()).isEqualByComparingTo("1.00");
+            assertThat(byOldRule.platformFee()).isEqualByComparingTo("0.00");
+        }
+
+        @Test
         @DisplayName("preco que nao cobre o profissional e o gateway -> null (a atualizar)")
         void doesNotCover() {
             assertThat(PriceSplit.read(brl("30.90"), brl("30.00"), brl("30.00"))).isNull();

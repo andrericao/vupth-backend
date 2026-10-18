@@ -121,4 +121,38 @@ class ClientPenaltyServiceBranchesTest {
         assertThat(byAttendance.get(carrier.getId()).get(1).originDate()).isEqualTo(orphan.getCreatedAt());
         assertThat(service.chargedTo(List.of())).isEqualTo(Map.of());
     }
+
+    @Test
+    @DisplayName("PIT: na entrada na fila o atendimento passa a carregar as multas pendentes e solta o pagamento avulso vencido; convidado e sem multa nao mexem")
+    void chargeOnIngress() {
+        Attendance guest = attendance(AttendanceStatus.SCHEDULED);
+        service.chargeOnIngress(guest);
+        org.mockito.Mockito.verifyNoInteractions(events);
+
+        com.ospaulos.vupth.domain.client.model.Client client = new com.ospaulos.vupth.domain.client.model.Client();
+        client.setId(clientId);
+        Attendance carrier = attendance(AttendanceStatus.SCHEDULED);
+        carrier.setClient(client);
+
+        when(events.findByClientIdAndAmountIsNotNullOrderByCreatedAtAsc(clientId)).thenReturn(List.of());
+        service.chargeOnIngress(carrier);
+        org.mockito.Mockito.verify(events, org.mockito.Mockito.never()).saveAll(any());
+
+        ClientPenaltyEvent a = event("5.00");
+        a.setPenaltyPaymentId(UUID.randomUUID());
+        ClientPenaltyEvent b = event("3.00");
+        when(events.findByClientIdAndAmountIsNotNullOrderByCreatedAtAsc(clientId)).thenReturn(List.of(a, b));
+        PenaltyPayment expired = new PenaltyPayment();
+        expired.setId(a.getPenaltyPaymentId());
+        expired.setStatus(PenaltyPayment.Status.PENDING);
+        expired.setExpiresAt(OffsetDateTime.now().minusHours(1));
+        when(payments.findAllById(any())).thenReturn(List.of(expired));
+
+        service.chargeOnIngress(carrier);
+
+        assertThat(a.getChargedAttendanceId()).isEqualTo(carrier.getId());
+        assertThat(b.getChargedAttendanceId()).isEqualTo(carrier.getId());
+        assertThat(a.getPenaltyPaymentId()).isNull();
+        org.mockito.Mockito.verify(events).saveAll(List.of(a, b));
+    }
 }
