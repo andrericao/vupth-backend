@@ -27496,6 +27496,37 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/finance/cuts-and-penalties sem o papel ADMIN → 403 (relatorio-corte-e-multa, DEC-93)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+         "// DEC-94: o cliente nunca ve a taxa do Asaas nem o lucro do app",
+         "pm.test(\"sem taxa nem lucro no corpo\", () => pm.expect(pm.response.text()).to.not.include(\"app_profit\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/cuts-and-penalties",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

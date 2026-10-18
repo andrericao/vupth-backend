@@ -502,3 +502,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/048-add-payment_method-to-attendance.yaml
       relativeToChangeLogFile: true
+
+  # o que o app ganha em cada atendimento pago, por origem (corte x multa)
+  - include:
+      file: changesets/80-attendance/049-create-app_ledger.yaml
+      relativeToChangeLogFile: true

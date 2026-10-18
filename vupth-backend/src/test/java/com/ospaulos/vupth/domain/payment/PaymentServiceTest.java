@@ -359,6 +359,23 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-93: ao confirmar o pagamento o corte e a multa que foi junto entram no livro do app; sem o livro nada quebra")
+    void confirmRecordsLedger() {
+        com.ospaulos.vupth.domain.payment.service.AppLedgerService ledger =
+                mock(com.ospaulos.vupth.domain.payment.service.AppLedgerService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appLedger", ledger);
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent penalty = mock(com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent.class);
+        when(penalty.getAmount()).thenReturn(new BigDecimal("5.00"));
+        when(penalty.getChargedAttendanceId()).thenReturn(a.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(penalty));
+
+        service.confirm(a.getId(), professionalId);
+
+        verify(ledger).record(eq(a), argThat(v -> v.compareTo(new BigDecimal("5.00")) == 0), eq(a.getPaymentConfirmedAt()));
+    }
+
+    @Test
     @DisplayName("DEC-85 (fase de testes, o padrao): o profissional ve o total como valor a receber, sem rotulo de multa; Pix total; sem Pix da multa")
     void testModeProfessionalSeesTotal() {
         withPixKey();

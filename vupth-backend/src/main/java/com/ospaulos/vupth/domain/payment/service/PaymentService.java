@@ -63,6 +63,10 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
 
+    /** O livro do app por origem (DEC-93): sem ele (testes de unidade) nada e gravado. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AppLedgerService appLedger;
+
     private boolean splitPix() {
         return paymentMode != null && paymentMode.splitPix();
     }
@@ -265,6 +269,10 @@ public class PaymentService {
         }
         attendance.setPaymentConfirmedAt(OffsetDateTime.now(clock));
         attendanceRepository.save(attendance);
+        if (appLedger != null) {
+            appLedger.record(attendance, penaltiesOf(List.of(attendance.getId())).get(attendance.getId()),
+                    attendance.getPaymentConfirmedAt());
+        }
     }
 
     private void assertAvailable(Attendance attendance) {
