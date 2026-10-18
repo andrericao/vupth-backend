@@ -135,6 +135,11 @@ public class PaymentService {
 
     /** "Recebi": o profissional do atendimento ou o dono da loja, de PENDING ou AWAITING_CONFIRMATION para PAID. */
     public PaymentResponse confirm(UUID attendanceId, UUID userId) {
+        return confirm(attendanceId, userId, null);
+    }
+
+    /** "Recebi" com a forma de recebimento (opcional): Pix, cartao, dinheiro ou nota — qualquer uma quita (DEC-85). */
+    public PaymentResponse confirm(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
         Attendance attendance = attendance(attendanceId);
         if (!canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja confirmam o pagamento.");
@@ -143,8 +148,8 @@ public class PaymentService {
         if (attendance.getPaymentStatus() == PaymentStatus.PAID) {
             throw new PaymentInvalidStatusException(PaymentStatus.PAID, "confirmar");
         }
-        markPaid(attendance);
-        log.info("[Payment] Recebi — attendance={} by={}", attendanceId, userId);
+        markPaid(attendance, method);
+        log.info("[Payment] Recebi — attendance={} by={} forma={}", attendanceId, userId, method);
         return toPayment(attendance, isClient(attendance, userId));
     }
 
@@ -153,6 +158,10 @@ public class PaymentService {
      * agora (so entao o cliente recebe o aviso de pagamento confirmado).
      */
     public boolean confirmOnFinish(UUID attendanceId, UUID userId) {
+        return confirmOnFinish(attendanceId, userId, null);
+    }
+
+    public boolean confirmOnFinish(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
         Attendance attendance = attendance(attendanceId);
         if (!canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja confirmam o pagamento.");
@@ -161,8 +170,8 @@ public class PaymentService {
         if (current == null || current == PaymentStatus.PAID) {
             return false;
         }
-        markPaid(attendance);
-        log.info("[Payment] Recebi no Finalizar — attendance={} by={}", attendanceId, userId);
+        markPaid(attendance, method);
+        log.info("[Payment] Recebi no Finalizar — attendance={} by={} forma={}", attendanceId, userId, method);
         return true;
     }
 
@@ -249,8 +258,11 @@ public class PaymentService {
 
     // ─── apoio ───
 
-    private void markPaid(Attendance attendance) {
+    private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
         attendance.setPaymentStatus(PaymentStatus.PAID);
+        if (method != null) {
+            attendance.setPaymentMethod(method);
+        }
         attendance.setPaymentConfirmedAt(OffsetDateTime.now(clock));
         attendanceRepository.save(attendance);
     }
@@ -322,7 +334,8 @@ public class PaymentService {
                 attendance.getPaymentConfirmedAt(),
                 !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER",
                 penaltyPix ? appPix.copyPaste(realPenalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
-                penaltyPix && appPix.configured() ? appPix.holderName() : null);
+                penaltyPix && appPix.configured() ? appPix.holderName() : null,
+                attendance.getPaymentMethod());
     }
 
     /** O valor que cai no Pix do profissional: o servico (SPLIT_PIX) ou o total (fase de testes). Para o aviso "diz que pagou". */

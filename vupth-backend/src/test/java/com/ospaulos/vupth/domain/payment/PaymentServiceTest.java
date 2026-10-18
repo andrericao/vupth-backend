@@ -339,6 +339,26 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-85: o Recebi quita por qualquer forma (Pix, cartao, dinheiro ou nota) e guarda a forma; sem informar, fica nula")
+    void confirmWithMethod() {
+        Attendance card = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        PaymentResponse r = service.confirm(card.getId(), professionalId, com.ospaulos.vupth.domain.payment.PaymentMethod.CARTAO);
+        assertThat(r.status()).isEqualTo(PaymentStatus.PAID);
+        assertThat(r.paymentMethod()).isEqualTo(com.ospaulos.vupth.domain.payment.PaymentMethod.CARTAO);
+        assertThat(card.getPaymentMethod()).isEqualTo(com.ospaulos.vupth.domain.payment.PaymentMethod.CARTAO);
+
+        Attendance noMethod = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        assertThat(service.confirm(noMethod.getId(), ownerId).paymentMethod()).isNull();
+        assertThat(noMethod.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+
+        Attendance onFinish = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        assertThat(service.confirmOnFinish(onFinish.getId(), professionalId,
+                com.ospaulos.vupth.domain.payment.PaymentMethod.NOTA)).isTrue();
+        assertThat(onFinish.getPaymentMethod()).isEqualTo(com.ospaulos.vupth.domain.payment.PaymentMethod.NOTA);
+        assertThat(onFinish.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    @Test
     @DisplayName("DEC-85 (fase de testes, o padrao): o profissional ve o total como valor a receber, sem rotulo de multa; Pix total; sem Pix da multa")
     void testModeProfessionalSeesTotal() {
         withPixKey();

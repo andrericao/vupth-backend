@@ -218,6 +218,11 @@ public class Attendance implements Serializable {
     @Column(name = "payment_status", length = 30)
     private com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus;
 
+    /** Como o profissional disse que recebeu (DEC-85): PIX, CARTAO, DINHEIRO ou NOTA. Nulo = nao informado. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", length = 10)
+    private com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod;
+
     /** Quando o cliente tocou "Ja paguei". */
     @Column(name = "payment_claimed_at")
     private OffsetDateTime paymentClaimedAt;

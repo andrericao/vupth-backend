@@ -65,9 +65,12 @@ public class PaymentController {
     /** "Recebi" (profissional ou dono). Avisa o cliente: push e WS PAYMENT_CONFIRMED. */
     @PostMapping("/attendances/{attendanceId}/payment/confirm")
     public ResponseEntity<PaymentResponse> confirm(@PathVariable UUID attendanceId,
+                                                   @RequestBody(required = false)
+                                                   com.ospaulos.vupth.api.payment.dto.request.ConfirmPaymentRequest body,
                                                    @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("PAYMENT CONTROLLER CONFIRM {} by={}", attendanceId, principal.getUserId());
-        PaymentResponse response = paymentService.confirm(attendanceId, principal.getUserId());
+        PaymentResponse response = paymentService.confirm(attendanceId, principal.getUserId(),
+                body == null ? null : body.method());
         paymentNotifier.confirmed(attendanceId);
         return ResponseEntity.ok(response);
     }

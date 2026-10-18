@@ -1,0 +1,17 @@
+databaseChangeLog:
+  # forma-de-recebimento (DEC-85, fase de testes sem gateway): como o profissional diz que recebeu (PIX, CARTAO, DINHEIRO
+  # ou NOTA). Opcional; so o registro, para a conciliacao futura. Nao muda nada do que ja existe.
+  - changeSet:
+      id: 048-add-payment_method-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: payment_method
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: payment_method, type: VARCHAR(10)}
