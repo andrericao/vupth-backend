@@ -1,0 +1,32 @@
+databaseChangeLog:
+  # relatorio-corte-e-multa-por-atendimento (DEC-93): o que o app ganha em cada atendimento pago, separado por origem
+  # (SERVICE = o corte, PENALTY = a multa que foi na mesma cobranca). Uma linha por atendimento e origem, gravada quando
+  # o pagamento e confirmado. So o registro: nada do que existe muda.
+  - changeSet:
+      id: 049-create-app_ledger
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: app_ledger
+      changes:
+        - createTable:
+            tableName: app_ledger
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_app_ledger, nullable: false}}
+              - column: {name: attendance_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: origin, type: VARCHAR(10), constraints: {nullable: false}}
+              - column: {name: amount, type: "NUMERIC(10,2)", constraints: {nullable: false}}
+              - column: {name: gateway_fee, type: "NUMERIC(10,2)", constraints: {nullable: false}}
+              - column: {name: app_profit, type: "NUMERIC(10,2)"}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+        - addUniqueConstraint:
+            tableName: app_ledger
+            columnNames: attendance_id, origin
+            constraintName: uq_app_ledger_attendance_origin
+        - createIndex:
+            tableName: app_ledger
+            indexName: ix_app_ledger_created_at
+            columns:
+              - column: {name: created_at}

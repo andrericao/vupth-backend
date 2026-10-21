@@ -100,9 +100,9 @@ class ReportIntegrationTest {
         this.serviceItemIds = List.of(UUID.fromString(s1.id()), UUID.fromString(s2.id()));
 
         // Receita LIQUIDA: os dois servicos entram na regra de preco. O atendimento congela
-        // 31,90 + 21,90 = 53,80, dos quais o profissional recebe 30,00 + 20,00 = 50,00.
+        // 32,90 + 22,90 = 55,80, dos quais o profissional recebe 30,00 + 20,00 = 50,00.
         priceService(s1.id(), "32.90", "30.00", "30.00");
-        priceService(s2.id(), "21.90", "20.00", "20.00");
+        priceService(s2.id(), "22.90", "20.00", "20.00");
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         this.clientId = client.id();
@@ -173,7 +173,7 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.professionals[0].name").exists())
                 .andExpect(jsonPath("$.professionals[0].attendances").value(1))
                 .andExpect(jsonPath("$.professionals[0].revenue").exists())
-                .andExpect(jsonPath("$.totalRevenue").value(54.80))
+                .andExpect(jsonPath("$.totalRevenue").value(55.80))
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andExpect(jsonPath("$.professionals[0].netRevenue").value(50.00))
@@ -262,7 +262,7 @@ class ReportIntegrationTest {
                 .andExpect(jsonPath("$.totalRevenue").exists())
                 .andExpect(jsonPath("$.avgDurationMinutes").exists())
                 .andExpect(jsonPath("$.topService").exists())
-                .andExpect(jsonPath("$.totalRevenue").value(54.80))
+                .andExpect(jsonPath("$.totalRevenue").value(55.80))
                 .andExpect(jsonPath("$.netRevenue").value(50.00))
                 .andExpect(jsonPath("$.attendancesWithoutSplit").value(0))
                 .andDo(print());
@@ -360,7 +360,7 @@ class ReportIntegrationTest {
         mvc.perform(get("/owner/me/reports").param("groupBy", "month").header("Authorization", ownerProfToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.total.finished").value(1))
-                .andExpect(jsonPath("$.total.gross_revenue").value(54.80))
+                .andExpect(jsonPath("$.total.gross_revenue").value(55.80))
                 .andExpect(jsonPath("$.total.professionals_net").value(50.00))
                 .andExpect(jsonPath("$.total.gateway_fee").isNumber())
                 .andExpect(jsonPath("$.total.app_fee").isNumber())

@@ -3,7 +3,8 @@ package com.ospaulos.vupth.web.rest.attendance.controller;
 import com.ospaulos.vupth.api.attendance.dto.request.AddServiceItemsRequest;
 import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
 import com.ospaulos.vupth.api.attendance.dto.response.AttendanceInQueueResponse;
-import com.ospaulos.vupth.api.attendance.dto.response.AttendanceListResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.ClientAttendanceResponse;
+import com.ospaulos.vupth.api.attendance.dto.response.StoreAttendanceResponse;
 import com.ospaulos.vupth.api.queue.dto.response.QueueResponse;
 import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
@@ -60,22 +61,36 @@ public class AttendanceController {
             @AuthenticationPrincipal UserDetailsImpl principal) {
 
         var pagination = com.ospaulos.vupth.domain.establishment.valueObject.ShowcasePage.from(page, size);
+
+        // Partner BUG8 (sintoma b): o cliente lista os PROPRIOS atendimentos por aqui (?clientId=), com a resposta do
+        // CLIENTE (DEC-94: um DTO por perfil). clientId so pode ser o do proprio JWT — nao se lista fila de outro.
+        if (clientId != null) {
+            if (!clientId.equals(principal.getUserId())) {
+                throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException(
+                        "You can only list your own attendances.");
+            }
+            return pagination != null
+                    ? ResponseEntity.ok(attendanceService.listClientAttendancesPage(
+                            clientId, status, dateFrom, dateTo, pagination))
+                    : ResponseEntity.ok(attendanceService.listClientAttendances(clientId, status, dateFrom, dateTo));
+        }
+
         if (pagination != null) {
             return ResponseEntity.ok(attendanceService.listAttendancesPage(
-                    principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo,
+                    principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo,
                     status, pagination));
         }
 
-        log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} client={} dateFrom={} dateTo={} status={}",
-                principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo, status);
+        log.info("ATTENDANCE CONTROLLER LIST — user={} establishment={} professional={} dateFrom={} dateTo={} status={}",
+                principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo, status);
 
-        List<AttendanceListResponse> response = attendanceService.listAttendances(
-                principal.getUserId(), establishmentId, professionalId, clientId, dateFrom, dateTo, status);
+        List<StoreAttendanceResponse> response = attendanceService.listAttendances(
+                principal.getUserId(), establishmentId, professionalId, dateFrom, dateTo, status);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/client/me")
-    public ResponseEntity<List<AttendanceListResponse>> listClientAttendances(
+    public ResponseEntity<List<ClientAttendanceResponse>> listClientAttendances(
             @RequestParam(required = false) AttendanceStatus status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
@@ -84,7 +99,7 @@ public class AttendanceController {
         log.info("ATTENDANCE CONTROLLER LIST CLIENT — clientId={} status={} dateFrom={} dateTo={}",
                 principal.getUserId(), status, dateFrom, dateTo);
 
-        List<AttendanceListResponse> response = attendanceService.listClientAttendances(
+        List<ClientAttendanceResponse> response = attendanceService.listClientAttendances(
                 principal.getUserId(), status, dateFrom, dateTo);
         return ResponseEntity.ok(response);
     }

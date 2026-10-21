@@ -151,7 +151,9 @@ public class ProfessionalQuickCreateController {
                 professional.getEstablishment() != null && professional.getEstablishment().getStatus() != null
                         ? (professional.getEstablishment().getStatus() == com.ospaulos.vupth.domain.establishment.valueObject.EstablishmentStatus.DEACTIVATED
                                 ? "DEACTIVATED" : "ACTIVE")
-                        : null
+                        : null,
+                professional.getRatingAverage(),
+                professional.getRatingCount()
         ));
     }
 

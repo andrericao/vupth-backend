@@ -40,10 +40,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Integration tests — o "nao compareceu" SAIU (Andre, 26/09): a regra dos 3 atrasos cobre o sumico.
- *
- * <p>O endpoint {@code PATCH /attendances/{id}/no-show} fica respondendo 410 NO_SHOW_REMOVED ate os apps
- * tirarem o botao — e nao mexe em nada: o cliente continua na fila, sem multa.
+ * Integration tests — o "nao compareceu" (falta-vira-atraso, DEC-86): depois da espera, o profissional
+ * marca {@code PATCH /attendances/{id}/no-show} e vale como um atraso (troca de lugar, soma no contador);
+ * so no 3o vem a multa. Substitui a multa imediata da falta (DEC-83).
  */
 @Slf4j
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -189,7 +188,7 @@ class NoShowEscalationIntegrationTest {
 
     @Test
     @Order(10)
-    @DisplayName("falta-do-cliente: cedo demais -> 409 NO_SHOW_TOO_EARLY com available_at; o segundo da fila -> 409 NO_SHOW_NOT_FIRST")
+    @DisplayName("falta-vira-atraso: cedo demais -> 409 NO_SHOW_TOO_EARLY com available_at; o segundo da fila -> 409 NO_SHOW_NOT_FIRST")
     void noShow_tooEarlyAndNotFirst() throws Exception {
         Q first = createWalkin();
         Q second = createWalkin();
@@ -210,8 +209,8 @@ class NoShowEscalationIntegrationTest {
 
     @Test
     @Order(11)
-    @DisplayName("falta-do-cliente: passada a espera, o profissional marca -> REMOVED, multa NO_SHOW de R$ 5 e o proximo sobe")
-    void noShow_happyPath() throws Exception {
+    @DisplayName("falta-vira-atraso (DEC-86): passada a espera, o 1o no-show vira ATRASADO, o proximo sobe e nao ha multa")
+    void noShow_firstTimeIsLate() throws Exception {
         Q first = createWalkin();
         Q second = createWalkin();
         jdbc.update("UPDATE attendance SET promised_time = now() - interval '2 hours', "
@@ -220,17 +219,36 @@ class NoShowEscalationIntegrationTest {
         mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 
-        assertThat(statusOf(first.id())).isEqualTo(AttendanceStatus.REMOVED);
-        var events = penaltyEventRepository.findByClientIdOrderByCreatedAtDesc(UUID.fromString(first.clientId()));
-        assertThat(events).hasSize(1);
-        assertThat(events.get(0).getType()).isEqualTo(com.ospaulos.vupth.domain.client.model.PenaltyType.NO_SHOW);
-        assertThat(events.get(0).getAmount()).isEqualByComparingTo("5.00");
-        assertThat(events.get(0).getAttendanceId()).isEqualTo(UUID.fromString(first.id()));
-        assertThat(inWaiting(second.id())).isTrue();
-        // o atendimento ja nao esta mais em andamento: marcar de novo nao vale
-        mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
-                .andExpect(status().isBadRequest());
+        assertThat(statusOf(first.id())).isEqualTo(AttendanceStatus.LATE);
+        assertThat(inWaiting(first.id())).isTrue();
+        assertThat(penaltyEventRepository.countByClientId(UUID.fromString(first.clientId()))).isZero();
+        List<Attendance> waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
+                UUID.fromString(professionalId), UUID.fromString(establishmentId));
+        assertThat(waiting.get(0).getId().toString()).isEqualTo(second.id());
+        cancel(first);
         cancel(second);
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("falta-vira-atraso (DEC-86): no 3o no-show do mesmo cliente nasce a multa de atraso e ele vai para o fim, ainda na fila")
+    void noShow_thirdTimeCostsPenalty() throws Exception {
+        Q only = createWalkin();
+        jdbc.update("UPDATE attendance SET promised_time = now() - interval '2 hours', "
+                + "scheduled_time = now() - interval '2 hours' WHERE id = ?", UUID.fromString(only.id()));
+
+        for (int i = 0; i < 3; i++) {
+            mvc.perform(patch("/attendances/{id}/no-show", only.id()).header("Authorization", ownerProfToken))
+                    .andExpect(status().isOk());
+        }
+
+        var events = penaltyEventRepository.findByClientIdOrderByCreatedAtDesc(UUID.fromString(only.clientId()));
+        assertThat(events).hasSize(1);
+        assertThat(events.get(0).getType()).isEqualTo(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
+        assertThat(events.get(0).getAmount()).isEqualByComparingTo("5.00");
+        assertThat(statusOf(only.id())).isEqualTo(AttendanceStatus.SCHEDULED);
+        assertThat(inWaiting(only.id())).isTrue();
+        cancel(only);
     }
 
     @Test

@@ -79,6 +79,45 @@ class PaymentReminderSchedulerTest {
     }
 
     @Test
+    @DisplayName("nao depende do relogio real: em varias horas simuladas (virada do dia, fuso, antes e depois das 10h) o proximo disparo e sempre as 10h de Sao Paulo, hoje ou amanha")
+    void nextFireAtSimulatedHours() {
+        record Case(String now, String expected) {}
+        for (Case c : List.of(
+                new Case("2026-10-17T00:00:00-03:00", "2026-10-17T10:00:00-03:00"),
+                new Case("2026-10-17T09:59:59-03:00", "2026-10-17T10:00:00-03:00"),
+                new Case("2026-10-17T10:00:00-03:00", "2026-10-18T10:00:00-03:00"),
+                new Case("2026-10-17T10:00:01-03:00", "2026-10-18T10:00:00-03:00"),
+                new Case("2026-10-17T23:59:59-03:00", "2026-10-18T10:00:00-03:00"),
+                new Case("2026-12-31T23:59:59-03:00", "2027-01-01T10:00:00-03:00"),
+                new Case("2028-02-28T12:00:00-03:00", "2028-02-29T10:00:00-03:00"))) {
+            assertThat(at(c.now()).nextFire()).as("agora %s", c.now())
+                    .isEqualTo(ZonedDateTime.parse(c.expected() + "[America/Sao_Paulo]").toInstant());
+        }
+        // o mesmo instante visto em UTC (22h de Sao Paulo = 01h UTC do dia seguinte): o dia que vale e o de Sao Paulo
+        Instant utcNight = ZonedDateTime.parse("2026-10-18T01:00:00Z").toInstant();
+        var scheduler = new PaymentReminderScheduler(paymentService, push, Clock.fixed(utcNight, SP));
+        assertThat(scheduler.nextFire())
+                .isEqualTo(ZonedDateTime.parse("2026-10-18T10:00:00-03:00[America/Sao_Paulo]").toInstant());
+    }
+
+    @Test
+    @DisplayName("relogio fixo no passado do relogio real: armar o proximo disparo nao roda nada em segundo plano (era o teste que falhava depois das 10h de 18/10)")
+    void fixedClockNeverFiresInTheBackground() throws Exception {
+        when(paymentService.remindersFinishedBefore(any())).thenReturn(List.of());
+        for (String now : List.of("2026-10-17T10:00:00-03:00", "2020-01-01T09:00:00-03:00", "2040-06-01T23:00:00-03:00")) {
+            var scheduler = at(now);
+            scheduler.init();
+            try {
+                scheduler.onBoot();
+                Thread.sleep(150);
+            } finally {
+                scheduler.shutdown();
+            }
+        }
+        org.mockito.Mockito.verifyNoInteractions(paymentService);
+    }
+
+    @Test
     @DisplayName("fire() manda e rearma; falha no ciclo nao derruba o timer")
     void fire() {
         var scheduler = at("2026-10-17T10:00:00-03:00");

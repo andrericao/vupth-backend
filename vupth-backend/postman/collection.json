@@ -3482,6 +3482,11 @@
          "  pm.expect(r).to.have.property(\"specialty\");",
          "  pm.expect(r).to.have.property(\"is_available\");",
          "});",
+         "pm.test(\"nota-no-professional-me: rating_average e rating_count no /professional/me\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r).to.have.property(\"rating_average\");",
+         "  pm.expect(r.rating_count).to.be.a(\"number\");",
+         "});",
          "pm.test(\"BUG10: apelido volta no /professional/me\", () => {",
          "  pm.expect(pm.response.json().nickname).to.eql(\"Bibba\");",
          "});",
@@ -6295,8 +6300,8 @@
        "listen": "test",
        "script": {
         "exec": [
-         "// Regra do Andre (15/10, preco-sobre-o-total): o menor X,90 em que, tirados 4% + 2% do PRECO, sobra o recebe.",
-         "// 30,00 -> 30 / 0,94 = 31,91 -> preco 32,90; pagamento 4% de 32,90 = 1,32; app = o resto (1,58).",
+         "// Regra do Andre (15/10, preco-sobre-o-total): o menor X,90 em que, tirados o gateway (pior caso: o maior entre R$ 1,99 e R$ 0,49 + 2,99%) e 2% do PRECO, sobra o recebe.",
+         "// 30,00 -> 30 / 0,94 = 31,91 -> preco 32,90; gateway = max(1,99; 0,49 + 2,99% de 32,90 = 1,47) = 1,99 (DEC-91); app = o resto (0,91).",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
          "if (pm.response.code === 200) {",
          "  const r = pm.response.json();",
@@ -6304,8 +6309,8 @@
          "    pm.expect(Number(r.pro_receives)).to.eql(30);",
          "    pm.expect(Number(r.base_price)).to.eql(30);",
          "  });",
-         "  pm.test(\"intermediary_fee = 4% do preco\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.32));",
-         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(1.58));",
+         "  pm.test(\"intermediary_fee = pior caso do gateway (max(1,99; 0,49 + 2,99%))\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.99));",
+         "  pm.test(\"platform_fee = o resto (2% + arredondamento)\", () => pm.expect(Number(r.platform_fee)).to.eql(0.91));",
          "  pm.test(\"as tres partes somam o preco\", () => {",
          "    const sum = Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100);",
          "    pm.expect(sum).to.eql(Math.round(Number(r.price) * 100));",
@@ -6372,6 +6377,219 @@
       "body": {
        "mode": "raw",
        "raw": "{\"price\":31.90,\"pro_receives\":30.00,\"base_price\":30.00}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Pior caso: R$ 10 a receber -> R$ 12,90, gateway no piso do Pix (1,99) (taxa-fixa, DEC-91)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// taxa-fixa-pelo-pior-caso (DEC-91): gateway = max(R$ 1,99; R$ 0,49 + 2,99% do preco), centavo para cima.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intermediary_fee do pior caso\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.99));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(0.91));",
+         "  pm.test(\"as tres partes somam o preco\", () => pm.expect(Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100)).to.eql(Math.round(Number(r.price) * 100)));",
+         "  pm.test(\"o app nunca perde: sobra ao menos os 2% do preco\", () => pm.expect(Number(r.platform_fee)).to.be.at.least(Math.round(Number(r.price) * 2) / 100 - 0.005));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 12.9, \"pro_receives\": 10.0, \"base_price\": 10.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Pior caso: R$ 100 a receber -> R$ 105,90, gateway 0,49 + 2,99% (3,66) (taxa-fixa, DEC-91)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// taxa-fixa-pelo-pior-caso (DEC-91): gateway = max(R$ 1,99; R$ 0,49 + 2,99% do preco), centavo para cima.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intermediary_fee do pior caso\", () => pm.expect(Number(r.intermediary_fee)).to.eql(3.66));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(2.24));",
+         "  pm.test(\"as tres partes somam o preco\", () => pm.expect(Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100)).to.eql(Math.round(Number(r.price) * 100)));",
+         "  pm.test(\"o app nunca perde: sobra ao menos os 2% do preco\", () => pm.expect(Number(r.platform_fee)).to.be.at.least(Math.round(Number(r.price) * 2) / 100 - 0.005));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 105.9, \"pro_receives\": 100.0, \"base_price\": 100.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] Pior caso: R$ 10,90 para receber R$ 10 (nao cobre o Pix) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// o preco que nao e o menor X,90 da regra nova e recusado.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 10.9, \"pro_receives\": 10.0, \"base_price\": 10.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] Pior caso: R$ 85,90 para receber R$ 80 (acima do menor X,90, 84,90) -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// o preco que nao e o menor X,90 da regra nova e recusado.",
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"code SERVICE_PRICE_SPLIT_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"SERVICE_PRICE_SPLIT_INVALID\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 85.9, \"pro_receives\": 80.0, \"base_price\": 80.0}"
+      },
+      "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "Pior caso: volta o servico para R$ 32,90 / R$ 30 (restaura o cenario)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// taxa-fixa-pelo-pior-caso (DEC-91): gateway = max(R$ 1,99; R$ 0,49 + 2,99% do preco), centavo para cima.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "if (pm.response.code === 200) {",
+         "  const r = pm.response.json();",
+         "  pm.test(\"intermediary_fee do pior caso\", () => pm.expect(Number(r.intermediary_fee)).to.eql(1.99));",
+         "  pm.test(\"platform_fee = o resto\", () => pm.expect(Number(r.platform_fee)).to.eql(0.91));",
+         "  pm.test(\"as tres partes somam o preco\", () => pm.expect(Math.round((Number(r.pro_receives) + Number(r.intermediary_fee) + Number(r.platform_fee)) * 100)).to.eql(Math.round(Number(r.price) * 100)));",
+         "  pm.test(\"o app nunca perde: sobra ao menos os 2% do preco\", () => pm.expect(Number(r.platform_fee)).to.be.at.least(Math.round(Number(r.price) * 2) / 100 - 0.005));",
+         "}"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"price\": 32.9, \"pro_receives\": 30.0, \"base_price\": 30.0}"
       },
       "url": "{{base_url}}/professional-queue/{{owner_id}}/service-items/{{disposable_service_item_id}}",
       "auth": {
@@ -7675,9 +7893,10 @@
          "  pm.expect(b.total, \"total\").to.be.a(\"number\");",
          "  pm.expect(b.penalties, \"penalties\").to.be.an(\"array\");",
          "  b.penalties.forEach(p => {",
-         "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\", \"gatewayFee\", \"appShare\",",
+         "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\",",
          "      \"originAttendanceId\", \"originDate\", \"originProfessionalName\", \"originEstablishmentName\");",
-         "    pm.expect(p.gatewayFee + p.appShare).to.be.closeTo(p.amount, 0.001);",
+         "    // DEC-94: o cliente nunca ve a taxa do gateway nem a parte do app",
+         "    pm.expect(p).to.not.have.any.keys(\"gatewayFee\", \"appShare\");",
          "  });",
          "});"
         ]
@@ -9270,7 +9489,7 @@
   },
   {
    "name": "08g - \"nao compareceu\" saiu (26/09) — regra dos 3 atrasos",
-   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. Em 17/10 (falta-do-cliente, DEC-83) o PATCH /attendances/{id}/no-show voltou: o primeiro da fila, 10 min depois da hora comunicada, leva multa de R$ 5 e sai (409 NO_SHOW_TOO_EARLY / NO_SHOW_NOT_FIRST antes disso).",
+   "description": "O \"nao compareceu\" saiu em 26/09 (Andre): a regra dos 3 atrasos cobre o sumico — no 3o atraso o cliente leva multa de R$ 5 e vai para o fim da fila. Em 17/10 (falta-do-cliente, DEC-83) o PATCH /attendances/{id}/no-show voltou: o primeiro da fila, 10 min depois da hora comunicada, vale como um atraso (troca de lugar e soma no contador; no 3o, multa de R$ 5 e fim da fila; DEC-86, 18/10). 409 NO_SHOW_TOO_EARLY / NO_SHOW_NOT_FIRST antes disso.",
    "item": [
     {
      "name": "create walk-in para no-show -> 201",
@@ -27486,6 +27705,37 @@
        }
       ],
       "url": "{{base_url}}/admin/referrals/payouts",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/finance/cuts-and-penalties sem o papel ADMIN → 403 (relatorio-corte-e-multa, DEC-93)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+         "// DEC-94: o cliente nunca ve a taxa do Asaas nem o lucro do app",
+         "pm.test(\"sem taxa nem lucro no corpo\", () => pm.expect(pm.response.text()).to.not.include(\"app_profit\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/cuts-and-penalties",
       "auth": {
        "type": "noauth"
       }

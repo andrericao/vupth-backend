@@ -50,8 +50,27 @@ public record ProfessionalQuickCreateResponse(
 
         // desativar-conta (S42): ACTIVE | DEACTIVATED da loja onde trabalha; null sem loja ou onde nao foi lido
         @JsonProperty("establishment_status")
-        String establishmentStatus
+        String establishmentStatus,
+
+        // nota-no-professional-me: mesma nota do professionals-with-queue (media com 2 casas, null sem votos);
+        // so o GET /professional/me preenche (rating_count 0 sem votos); null nas demais respostas
+        @JsonProperty("rating_average")
+        Double ratingAverage,
+
+        @JsonProperty("rating_count")
+        Long ratingCount
 ) {
+    public ProfessionalQuickCreateResponse(
+            UUID id, String name, String specialty, String nickname, UUID establishmentId,
+            String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,
+            Boolean acceptingNew,
+            com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
+            String message, String contactPhone, Boolean showPosition, String establishmentStatus) {
+        this(id, name, specialty, nickname, establishmentId, establishmentName, isAvailable,
+                workStatus, acceptingNew, operationMode, message, contactPhone, showPosition,
+                establishmentStatus, null, null);
+    }
+
     public ProfessionalQuickCreateResponse(
             UUID id, String name, String specialty, String nickname, UUID establishmentId,
             String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,

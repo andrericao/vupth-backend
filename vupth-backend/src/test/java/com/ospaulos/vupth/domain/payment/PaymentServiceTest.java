@@ -359,6 +359,23 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-93: ao confirmar o pagamento o corte e a multa que foi junto entram no livro do app; sem o livro nada quebra")
+    void confirmRecordsLedger() {
+        com.ospaulos.vupth.domain.payment.service.AppLedgerService ledger =
+                mock(com.ospaulos.vupth.domain.payment.service.AppLedgerService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appLedger", ledger);
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent penalty = mock(com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent.class);
+        when(penalty.getAmount()).thenReturn(new BigDecimal("5.00"));
+        when(penalty.getChargedAttendanceId()).thenReturn(a.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(penalty));
+
+        service.confirm(a.getId(), professionalId);
+
+        verify(ledger).record(eq(a), argThat(v -> v.compareTo(new BigDecimal("5.00")) == 0), eq(a.getPaymentConfirmedAt()));
+    }
+
+    @Test
     @DisplayName("DEC-85 (fase de testes, o padrao): o profissional ve o total como valor a receber, sem rotulo de multa; Pix total; sem Pix da multa")
     void testModeProfessionalSeesTotal() {
         withPixKey();
@@ -433,5 +450,141 @@ class PaymentServiceTest {
 
         when(attendanceRepository.findOpenPaymentsOfProfessional(strangerId)).thenReturn(List.of());
         assertThat(service.pendingOfProfessional(strangerId).items()).isEmpty();
+    }
+
+    // ─── testes-de-pagamento-massivos (DEC-92): todos os ramos do dinheiro ───
+
+    private void chargePenalty(Attendance a, String amount) {
+        ClientPenaltyEvent fine = new ClientPenaltyEvent();
+        fine.setAmount(new BigDecimal(amount));
+        fine.setChargedAttendanceId(a.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(fine));
+    }
+
+    @Test
+    @DisplayName("SPLIT_PIX: sem o Pix do app, sem multa ou com o app sem chave, a multa nao gera o copia-e-cola dela")
+    void splitWithoutPenaltyPix() {
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "paymentMode",
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX"));
+        withPixKey();
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+
+        // sem multa carregada
+        assertThat(service.getPayment(a.getId(), clientId).penaltyPixCopyPaste()).isNull();
+
+        chargePenalty(a, "5.00");
+        // multa, mas o app nao tem Pix configurado no contexto (testes de unidade)
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appPix", null);
+        PaymentResponse noAppPix = service.getPayment(a.getId(), clientId);
+        assertThat(noAppPix.penaltiesValue()).isEqualByComparingTo("5.00");
+        assertThat(noAppPix.penaltyPixCopyPaste()).isNull();
+        assertThat(noAppPix.penaltyHolderName()).isNull();
+
+        // multa, app com Pix mas sem chave: o copia-e-cola e o titular saem nulos
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "appPix",
+                new com.ospaulos.vupth.infrastructure.config.AppPix("", "VUPTH", "SAO PAULO"));
+        PaymentResponse unconfigured = service.getPayment(a.getId(), clientId);
+        assertThat(unconfigured.penaltyPixCopyPaste()).isNull();
+        assertThat(unconfigured.penaltyHolderName()).isNull();
+    }
+
+    @Test
+    @DisplayName("quem recebe o Pix: profissional sem chave e sem dono, dono sem chave, atendimento sem profissional ou sem loja")
+    void pixKeyOwnerCorners() {
+        BaseUser dona = establishment.getOwner().getBaseUser();
+        dona.setPixKeyType(PixKeyType.EMAIL);
+        dona.setPixKey("dona@mail.com");
+        dona.setPixHolderName("Dona");
+
+        // sem profissional na linha (removido): vale a chave do dono, e nao e "PROFESSIONAL"
+        Attendance noProfessional = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        noProfessional.setProfessional(null);
+        PaymentResponse r = service.getPayment(noProfessional.getId(), clientId);
+        assertThat(r.pixOwner()).isEqualTo("OWNER");
+        assertThat(r.pixCopyPaste()).contains("dona@mail.com");
+
+        // sem loja: sem dono, sem cidade e sem chave
+        Attendance noEstablishment = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        noEstablishment.setEstablishment(null);
+        PaymentResponse none = service.getPayment(noEstablishment.getId(), clientId);
+        assertThat(none.pixCopyPaste()).isNull();
+        assertThat(none.pixOwner()).isNull();
+
+        // loja sem dono: sem chave
+        establishment.setOwner(null);
+        Attendance noOwner = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        assertThat(service.getPayment(noOwner.getId(), clientId).pixCopyPaste()).isNull();
+
+        // dono sem chave Pix: sem chave
+        Owner ownerWithoutKey = new Owner(user("Dona sem chave"));
+        establishment.setOwner(ownerWithoutKey);
+        Attendance ownerNoKey = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        assertThat(service.getPayment(ownerNoKey.getId(), clientId).pixCopyPaste()).isNull();
+    }
+
+    @Test
+    @DisplayName("amountForProfessional: o servico no SPLIT_PIX e o total (servico + multa) na fase de testes")
+    void amountForProfessionalByMode() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        chargePenalty(a, "5.00");
+
+        assertThat(service.amountForProfessional(a.getId())).isEqualByComparingTo("45.00");
+
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "paymentMode",
+                new com.ospaulos.vupth.infrastructure.config.PaymentMode("SPLIT_PIX"));
+        assertThat(service.amountForProfessional(a.getId())).isEqualByComparingTo("40.00");
+    }
+
+    @Test
+    @DisplayName("a chave do profissional vale mesmo com o atendimento sem loja: o Pix sai sem cidade")
+    void keyWithoutEstablishmentHasNoCity() {
+        withPixKey();
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        a.setEstablishment(null);
+
+        PaymentResponse r = service.getPayment(a.getId(), clientId);
+
+        assertThat(r.pixOwner()).isEqualTo("PROFESSIONAL");
+        assertThat(r.pixCopyPaste()).contains("beto@mail.com");
+    }
+
+    // ─── mutacao-pit-no-dinheiro (DEC-99): os mutantes que sobreviveram ───
+
+    @Test
+    @DisplayName("PIT: cancelado e ainda pendente nao tem pagamento: dizer que pagou e o Recebi dao 409 PaymentNotAvailable, nao seguem")
+    void claimAndConfirmNeedAnAvailablePayment() {
+        Attendance cancelled = attendance(AttendanceStatus.CANCELLED, PaymentStatus.PENDING);
+
+        assertThatThrownBy(() -> service.claim(cancelled.getId(), clientId)).isInstanceOf(PaymentNotAvailableException.class);
+        assertThatThrownBy(() -> service.confirm(cancelled.getId(), professionalId)).isInstanceOf(PaymentNotAvailableException.class);
+        assertThat(cancelled.getPaymentStatus()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("PIT: apagar a chave limpa a chave, o tipo e o titular; o titular de 25 letras vale e o de 26 nao")
+    void deleteClearsEverythingAndHolderLimit() {
+        when(userRepository.findById(professionalId)).thenReturn(Optional.of(professional.getBaseUser()));
+        service.setPixKey(professionalId, new PixKeyRequest(PixKeyType.EMAIL, "b@m.com", "x".repeat(25)));
+        assertThat(professional.getBaseUser().getPixHolderName()).hasSize(25);
+
+        service.deletePixKey(professionalId);
+
+        assertThat(professional.getBaseUser().getPixKey()).isNull();
+        assertThat(professional.getBaseUser().getPixKeyType()).isNull();
+        assertThat(professional.getBaseUser().getPixHolderName()).isNull();
+    }
+
+    @Test
+    @DisplayName("PIT: a fila do profissional conta so os que dizem que pagaram; o status de um atendimento sai direto")
+    void awaitingCountAndStatusOf() {
+        Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        Attendance awaitingToo = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        Attendance pending = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        when(attendanceRepository.findOpenPaymentsOfProfessional(professionalId))
+                .thenReturn(List.of(awaiting, awaitingToo, pending));
+
+        assertThat(service.pendingOfProfessional(professionalId).awaitingCount()).isEqualTo(2);
+        assertThat(service.statusOf(awaiting.getId())).isEqualTo(PaymentStatus.AWAITING_CONFIRMATION);
+        assertThat(service.statusOf(pending.getId())).isEqualTo(PaymentStatus.PENDING);
     }
 }

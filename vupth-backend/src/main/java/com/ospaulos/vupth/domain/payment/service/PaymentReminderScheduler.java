@@ -63,6 +63,9 @@ public class PaymentReminderScheduler {
         scheduler.setThreadNamePrefix("payment-reminder-");
         scheduler.setRemoveOnCancelPolicy(true);
         scheduler.setDaemon(true); // nunca segura o encerramento da JVM (ver IntentionPromotionScheduler)
+        // o atraso do proximo disparo conta no MESMO relogio do nextFire (producao: o do sistema). Sem isto, com um
+        // relogio fixo no passado o disparo caia no passado do relogio real, rodava na hora e se rearmava sem parar.
+        scheduler.setClock(clock);
         scheduler.initialize();
         this.taskScheduler = scheduler;
     }
