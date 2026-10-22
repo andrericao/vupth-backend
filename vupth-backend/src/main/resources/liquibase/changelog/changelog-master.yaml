@@ -507,3 +507,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/049-create-app_ledger.yaml
       relativeToChangeLogFile: true
+
+  # admin-caixa-de-suporte: as mensagens do formulario do suporte, para o painel listar
+  - include:
+      file: changesets/96-campaign/051-create-support_message.yaml
+      relativeToChangeLogFile: true
