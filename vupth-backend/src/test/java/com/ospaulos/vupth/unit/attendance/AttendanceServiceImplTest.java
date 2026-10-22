@@ -95,6 +95,7 @@ class AttendanceServiceImplTest {
     // Cobranca da multa no proximo atendimento (D4).
     @Mock com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
 
+    @Mock com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
     @InjectMocks AttendanceServiceImpl attendanceService;
 
     // shared test data

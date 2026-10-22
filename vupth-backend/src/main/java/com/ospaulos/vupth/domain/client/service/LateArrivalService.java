@@ -33,6 +33,8 @@ import java.util.stream.Stream;
  *       e punido por nao estar la antes do que lhe foi dito, nem pelo atraso em cascata que o sistema
  *       criou quando a fila andou antes. A marcacao em si segue livre (#19 — o cliente cai de posicao):
  *       barra-la quebraria o app do Partner e a fila, que precisam andar.</li>
+ *   <li><b>Primeiro atendimento sem multa</b> (DEC-104, 22/10): o cliente sem nenhum atendimento FINALIZADO nao
+ *       conta atraso nem falta; o atraso dele nao entra no contador dos 3.</li>
  *   <li><b>Sem aviso nao ha multa</b> (18/09): cada atraso avisa o cliente "este e o seu Nº atraso".</li>
  * </ul>
  */
@@ -48,6 +50,7 @@ public class LateArrivalService {
 
     private final ClientPenaltyEventRepository penaltyEventRepository;
     private final PushNotificationPublisher pushPublisher;
+    private final FirstAttendanceExemption firstAttendanceExemption;
 
     /** falta-do-cliente (DEC-86): a espera antes de o profissional poder marcar que o cliente nao compareceu. */
     @org.springframework.beans.factory.annotation.Value("${vupth.penalty.no-show-wait-minutes:10}")
@@ -93,6 +96,13 @@ public class LateArrivalService {
         Client client = attendance.getClient();
         if (client == null) {
             return 0; // convidado — sem conta, sem contador
+        }
+        // sem-multa-no-primeiro-atendimento (DEC-104): quem nunca concluiu um atendimento nao e multado por atraso
+        // nem por falta (a falta entra aqui como atraso, DEC-86) e o atraso nao entra no contador dos 3.
+        if (firstAttendanceExemption.applies(client.getId())) {
+            log.info("[Late] primeiro atendimento — atraso nao conta (client={} attendance={})",
+                    client.getId(), attendance.getId());
+            return 0;
         }
         if (!countsAsLate(attendance, professional, now)) {
             log.info("[Late] marcacao dentro da tolerancia — nao conta (client={} attendance={})",

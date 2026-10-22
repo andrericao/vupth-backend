@@ -42,6 +42,7 @@ public class QueueServiceImpl implements QueueService {
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
     private final ClientWaitCalculator clientWaitCalculator;
+    private final com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
     private final com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository penaltyEventRepository;
 
     @Override
@@ -134,6 +135,7 @@ public class QueueServiceImpl implements QueueService {
         AttendanceInQueueResponse attendanceQueue = AttendanceInQueueResponse.fromEntity(attendance);
 
         UUID clientId = attendance.getClient() != null ? attendance.getClient().getId() : null;
+        boolean penaltyExempt = firstAttendanceExemption.applies(clientId);
 
         return new ClientInQueueResponse(
                 attendance.getId(),
@@ -146,15 +148,17 @@ public class QueueServiceImpl implements QueueService {
                 displayedWait,
                 startTime,
                 attendance.getToleranceUntil(),
-                // quem ja pagou a multa do 3o atraso sai sem nova multa (Andre, 26/09)
-                penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
+                // quem ja pagou a multa do 3o atraso sai sem nova multa (Andre, 26/09); e o cliente sem atendimento
+                // finalizado tambem (DEC-104)
+                penaltyExempt || penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
                         com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
                         ? new java.math.BigDecimal("0.00")
                         : ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
                 attendance.getClient() != null ? attendance.getClient().getLateCount() : 0,
                 attendance.getClient() != null ? attendance.getClient().getLatesUntilPenalty()
                         : com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY,
-                attendance.getPromisedTime()
+                attendance.getPromisedTime(),
+                penaltyExempt
         );
     }
 

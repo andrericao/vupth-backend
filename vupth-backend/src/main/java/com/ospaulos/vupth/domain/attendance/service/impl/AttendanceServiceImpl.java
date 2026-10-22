@@ -85,6 +85,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRatingRepository attendanceRatingRepository;
     private final com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
     private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
+    private final com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /**
@@ -923,6 +924,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         Client client = attendance.getClient();
         if (client == null) {
             return; // convidado — sem conta, sem multa
+        }
+
+        // DEC-104: sem nenhum atendimento finalizado (cancelado ou removido nao conta), sair da fila nao gera multa
+        if (firstAttendanceExemption.applies(client.getId())) {
+            return;
         }
 
         OffsetDateTime now = OffsetDateTime.now();

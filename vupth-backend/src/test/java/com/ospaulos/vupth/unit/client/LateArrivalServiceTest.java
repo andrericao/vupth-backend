@@ -2,6 +2,7 @@ package com.ospaulos.vupth.unit.client;
 
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
+import com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption;
 import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent;
 import com.ospaulos.vupth.domain.client.model.PenaltyType;
@@ -39,6 +40,7 @@ class LateArrivalServiceTest {
 
     @Mock ClientPenaltyEventRepository penaltyEventRepository;
     @Mock PushNotificationPublisher pushPublisher;
+    @Mock FirstAttendanceExemption firstAttendanceExemption;
     @InjectMocks LateArrivalService service;
 
     private static final OffsetDateTime NOW = BusinessClock.at(LocalDate.parse("2026-09-25"), LocalTime.parse("15:00"));
@@ -298,5 +300,32 @@ class LateArrivalServiceTest {
                 assertThat(body.getValue()).contains("No 3º, multa de R$ 5,00");
             }
         }
+    }
+
+    @Test
+    @DisplayName("DEC-104: sem nenhum atendimento finalizado, o atraso nao conta, nao avisa e nao entra no contador")
+    void firstAttendance_neverCounted() {
+        when(firstAttendanceExemption.applies(client.getId())).thenReturn(true);
+        client.setLateCount(2);
+
+        int n = service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW);
+
+        assertThat(n).isZero();
+        assertThat(client.getLateCount()).as("o contador nao anda").isEqualTo(2);
+        verifyNoInteractions(pushPublisher);
+        verifyNoInteractions(penaltyEventRepository);
+    }
+
+    @Test
+    @DisplayName("DEC-104: depois do primeiro concluido a regra volta — o 3o atraso gera a multa de R$ 5")
+    void afterFirstFinished_thirdLateFines() {
+        client.setLateCount(2);
+
+        int n = service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW);
+
+        assertThat(n).isEqualTo(3);
+        ArgumentCaptor<ClientPenaltyEvent> event = ArgumentCaptor.forClass(ClientPenaltyEvent.class);
+        verify(penaltyEventRepository).save(event.capture());
+        assertThat(event.getValue().getType()).isEqualTo(PenaltyType.LATE_ARRIVAL);
     }
 }
