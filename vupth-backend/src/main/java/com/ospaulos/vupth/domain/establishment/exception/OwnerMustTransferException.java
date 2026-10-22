@@ -4,6 +4,6 @@ package com.ospaulos.vupth.domain.establishment.exception;
 public class OwnerMustTransferException extends RuntimeException {
 
     public OwnerMustTransferException() {
-        super("You still own an establishment. Transfer it to a professional or delete it before deleting your account.");
+        super("Você ainda é dono de uma loja. Apague a loja ou passe a posse para um profissional antes de excluir a sua conta.");
     }
 }

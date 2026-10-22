@@ -25814,7 +25814,7 @@
          "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
          "pm.test(\"code ACCOUNT_DELETE_NOT_ALLOWED\", () => pm.expect(pm.response.json().code).to.eql(\"ACCOUNT_DELETE_NOT_ALLOWED\"));",
          "// Bloqueio TEMPORARIO: a mensagem tem de dizer o que fazer para destravar.",
-         "pm.test(\"a mensagem orienta o usuario\", () => pm.expect(pm.response.json().message).to.match(/queue/i));"
+         "pm.test(\"a mensagem orienta o usuario\", () => pm.expect(pm.response.json().message).to.match(/fila/i));"
         ],
         "type": "text/javascript"
        }
@@ -25857,7 +25857,7 @@
          "// tambem o profissional que atende, entao quem barra e o portao do PROFISSIONAL: o do",
          "// estabelecimento so seria alcancado com a fila em OUTRO profissional (coberto pelo",
          "// AccountDeletionIntegrationTest, que monta um funcionario a mais).",
-         "pm.test(\"a mensagem e a do profissional, nao a do dono\", () => pm.expect(pm.response.json().message).to.match(/active attendances/i));"
+         "pm.test(\"a mensagem e a do profissional, nao a do dono\", () => pm.expect(pm.response.json().message).to.match(/atendimentos em andamento/i));"
         ],
         "type": "text/javascript"
        }

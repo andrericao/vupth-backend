@@ -89,6 +89,28 @@ class PaymentSweepTest {
     }
 
     @Test
+    @DisplayName("servico abaixo de R$ 30 (servico-abaixo-de-30): todo valor digitado de R$ 0,01 a R$ 29,99, sem absorver e absorvendo os 6%, passa em of() e em read() com a mesma divisao e o app sem prejuizo")
+    void everyBaseUnderThirtyIsAccepted() {
+        for (int c = 1; c < 3_000; c++) {
+            BigDecimal base = cents(c);
+            BigDecimal maxAbsorbed = base.multiply(PriceSplit.FEE_RATE).setScale(2, RoundingMode.HALF_UP);
+            for (BigDecimal pro : new BigDecimal[]{base, base.subtract(maxAbsorbed)}) {
+                if (pro.signum() <= 0) {
+                    continue;
+                }
+                BigDecimal price = PriceSplit.clientPriceFor(pro);
+
+                PriceSplit split = PriceSplit.of(price, pro, base);
+
+                assertThat(PriceSplit.read(price, pro, base)).as("read de %s/%s", price, pro).isEqualTo(split);
+                assertThat(split.platformFee().signum()).as("app em %s", price).isPositive();
+                assertThat(split.proReceives().add(split.intermediaryFee()).add(split.platformFee()))
+                        .as("soma de %s", price).isEqualByComparingTo(price);
+            }
+        }
+    }
+
+    @Test
     @DisplayName("multa junto do corte (uma cobranca) nunca rende menos ao app que a separada (duas cobrancas); as duas partes somam a taxa da cobranca inteira")
     void penaltyTogetherNeverWorseThanSeparate() {
         for (int reais = 5; reais <= 500; reais++) {
