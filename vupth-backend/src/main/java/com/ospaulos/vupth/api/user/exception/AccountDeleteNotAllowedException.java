@@ -17,16 +17,16 @@ public class AccountDeleteNotAllowedException extends RuntimeException {
 
     public static AccountDeleteNotAllowedException clientInQueue() {
         return new AccountDeleteNotAllowedException(
-                "You are still in a queue. Leave the queue (or wait to be served) before deleting your account.");
+                "Você ainda está em uma fila. Saia da fila (ou espere ser atendido) antes de excluir a sua conta.");
     }
 
     public static AccountDeleteNotAllowedException professionalWithActiveAttendances() {
         return new AccountDeleteNotAllowedException(
-                "You still have active attendances. Finish or cancel them before deleting your account.");
+                "Você ainda tem atendimentos em andamento. Termine ou cancele esses atendimentos antes de excluir a sua conta.");
     }
 
     public static AccountDeleteNotAllowedException establishmentWithActiveQueue() {
         return new AccountDeleteNotAllowedException(
-                "Your establishment still has clients in the queue. Wait until it is empty before deleting your account.");
+                "A sua loja ainda tem clientes na fila. Espere a fila esvaziar antes de excluir a sua conta.");
     }
 }

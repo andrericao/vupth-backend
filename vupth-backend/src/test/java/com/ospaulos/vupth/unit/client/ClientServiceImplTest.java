@@ -135,7 +135,7 @@ class ClientServiceImplTest {
             when(attendanceService.createAttendance(any(), any(), any(), any())).thenReturn(attendance);
             when(queueService.enqueueAttendance(any(), any())).thenReturn(
                     new com.ospaulos.vupth.api.client.dto.response.ClientInQueueResponse(
-                            attendance.getId(), clientId, 1, null, 1, 30, 30, 30, null, null, null, 0, 3, null));
+                            attendance.getId(), clientId, 1, null, 1, 30, 30, 30, null, null, null, 0, 3, null, false));
 
             var result = clientService.createAndAddtAttendanceInQueue(request);
 

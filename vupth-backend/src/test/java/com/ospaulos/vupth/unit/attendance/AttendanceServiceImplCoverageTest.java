@@ -73,6 +73,7 @@ class AttendanceServiceImplCoverageTest {
     @Mock ClientWaitCalculator clientWaitCalculator;
     @Mock ClientPenaltyService clientPenaltyService;
 
+    @Mock com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
     @InjectMocks AttendanceServiceImpl attendanceService;
 
     private UUID professionalId, clientId, establishmentId, attendanceId;

@@ -247,7 +247,7 @@ class AccountDeletionIntegrationTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(409);
         assertThat(result.getResponse().getContentAsString())
                 .contains("ACCOUNT_DELETE_NOT_ALLOWED")
-                .contains("still in a queue");
+                .contains("ainda está em uma fila");
     }
 
     /**
@@ -264,7 +264,7 @@ class AccountDeletionIntegrationTest {
         assertThat(result.getResponse().getStatus()).isEqualTo(409);
         assertThat(result.getResponse().getContentAsString())
                 .contains("ACCOUNT_DELETE_NOT_ALLOWED")
-                .contains("active attendances");
+                .contains("atendimentos em andamento");
     }
 
     // ───────────────────────────────────────────
@@ -362,7 +362,7 @@ class AccountDeletionIntegrationTest {
                 .contains("ACCOUNT_DELETE_NOT_ALLOWED")
                 .as("a mensagem tem de ser a do ESTABELECIMENTO — se vier a do profissional, "
                         + "o portao do dono continua sem cobertura")
-                .contains("establishment still has clients");
+                .contains("A sua loja ainda tem clientes na fila");
 
         BaseUser stillThere = userRepository.findById(UUID.fromString(ownerId)).orElseThrow();
         assertThat(stillThere.isDeleted())
@@ -387,7 +387,7 @@ class AccountDeletionIntegrationTest {
         // desativar-conta (d): loja sem dono nao existe — com loja, o apagar da conta recusa.
         MvcResult refused = deleteAccount(ownerToken, ownerPassword);
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
-        assertThat(refused.getResponse().getContentAsString()).contains("OWNER_MUST_TRANSFER");
+        assertThat(refused.getResponse().getContentAsString()).contains("OWNER_MUST_TRANSFER").contains("Apague a loja");
 
         mvc.perform(delete("/establishment/{id}", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)

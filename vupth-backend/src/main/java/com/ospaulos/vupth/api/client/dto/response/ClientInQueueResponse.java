@@ -27,5 +27,10 @@ public record ClientInQueueResponse(
          * O horario que vale para o atraso (D4/D8): o prometido na entrada, ou o adiantado que o cliente
          * aceitou. Se {@code startTime} vier bem antes dele, a vez adiantou e o convite pode ser aceito.
          */
-        OffsetDateTime promisedTime
+        OffsetDateTime promisedTime,
+        /**
+         * DEC-104: o cliente sem nenhum atendimento finalizado nao e multado por atraso, falta nem saida da fila;
+         * o app mostra "sair sem multa". Com {@code true}, {@code exitPenaltyValue} vem 0.00.
+         */
+        boolean penaltyExempt
 ) {}
