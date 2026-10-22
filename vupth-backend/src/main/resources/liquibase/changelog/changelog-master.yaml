@@ -512,3 +512,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/051-create-support_message.yaml
       relativeToChangeLogFile: true
+
+  # modo-piloto-sem-cobranca: a marca de piloto por loja
+  - include:
+      file: changesets/50-establishment/032-add-pilot-to-establishment.yaml
+      relativeToChangeLogFile: true

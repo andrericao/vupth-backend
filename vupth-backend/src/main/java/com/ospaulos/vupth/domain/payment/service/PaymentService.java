@@ -269,7 +269,8 @@ public class PaymentService {
         }
         attendance.setPaymentConfirmedAt(OffsetDateTime.now(clock));
         attendanceRepository.save(attendance);
-        if (appLedger != null) {
+        // atendimento de teste (piloto, DEC-106): o Recebi quita como sempre, mas fica fora do livro-caixa do app
+        if (appLedger != null && !attendance.isTest()) {
             appLedger.record(attendance, penaltiesOf(List.of(attendance.getId())).get(attendance.getId()),
                     attendance.getPaymentConfirmedAt());
         }

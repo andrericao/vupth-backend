@@ -560,6 +560,21 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.infrastructure.asaas.AsaasException.class)
+    public ResponseEntity<ErrorResponse> handleAsaas(
+            com.ospaulos.vupth.infrastructure.asaas.AsaasException ex, HttpServletRequest req) {
+        log.warn("[{}] Asaas {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.testrun.exception.TestRunException.class)
+    public ResponseEntity<ErrorResponse> handleTestRun(
+            com.ospaulos.vupth.domain.testrun.exception.TestRunException ex, HttpServletRequest req) {
+        log.warn("[409] TestRun {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build("TEST_RUN_NOT_FOUND".equals(ex.getCode()) ? HttpStatus.NOT_FOUND : HttpStatus.CONFLICT,
+                ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.admin.exception.AdminInvitationException.class)
     public ResponseEntity<ErrorResponse> handleAdminInvitation(
             com.ospaulos.vupth.domain.admin.exception.AdminInvitationException ex, HttpServletRequest req) {

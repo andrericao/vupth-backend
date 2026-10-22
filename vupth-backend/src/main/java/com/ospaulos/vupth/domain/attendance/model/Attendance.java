@@ -218,6 +218,17 @@ public class Attendance implements Serializable {
     @Column(name = "payment_status", length = 30)
     private com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus;
 
+    /**
+     * Atendimento de teste (DEC-106, piloto): criado com um teste ativo na loja, marcado na criacao e nunca alterado.
+     * Tudo funciona como sempre (o profissional toca "Recebi"), mas fica fora do livro-caixa e do dinheiro real do painel.
+     */
+    @Column(name = "test", nullable = false)
+    private boolean test;
+
+    /** A rodada de teste (test_run) a que este atendimento pertence; nulo fora de teste. */
+    @Column(name = "test_run_id")
+    private UUID testRunId;
+
     /** Como o profissional disse que recebeu (DEC-85): PIX, CARTAO, DINHEIRO ou NOTA. Nulo = nao informado. */
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", length = 10)

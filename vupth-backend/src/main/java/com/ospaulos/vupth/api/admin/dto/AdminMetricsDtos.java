@@ -73,11 +73,17 @@ public final class AdminMetricsDtos {
             @JsonProperty("credits_paid") BigDecimal creditsPaid,
             @JsonProperty("credits_unpaid") BigDecimal creditsUnpaid) {}
 
+    /** Atendimentos de teste (piloto, DEC-106): fora do dinheiro real, valores simbolicos. */
+    public record Pilot(
+            @JsonProperty("attendances") long attendances,
+            @JsonProperty("amount") BigDecimal amount) {}
+
     public record Finance(
             @JsonProperty("period") Window period,
             @JsonProperty("money") Money money,
             @JsonProperty("by_payment_status") List<StatusTotal> byPaymentStatus,
-            @JsonProperty("referral") Referral referral) {}
+            @JsonProperty("referral") Referral referral,
+            @JsonProperty("pilot") Pilot pilot) {}
 
     public record StuckPayment(
             @JsonProperty("attendance_id") UUID attendanceId,
