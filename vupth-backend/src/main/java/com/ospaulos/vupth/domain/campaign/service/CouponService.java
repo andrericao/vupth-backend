@@ -56,6 +56,11 @@ public class CouponService {
                 && validOn(campaign, now)
                 && redemptionRepository.existsByCampaign_IdAndUserId(couponCampaignId, clientId)
                 && !used(clientId, couponCampaignId);
+        if (!valid && campaign.getType() == CampaignType.DISCOUNT && campaign.hasEnded(now)
+                && redemptionRepository.existsByCampaign_IdAndUserId(couponCampaignId, clientId) && !used(clientId, couponCampaignId)) {
+            log.info("[Coupon] campanha encerrada — campaign={} client={}", couponCampaignId, clientId);
+            throw CampaignException.ended(); // ativou e nao usou ate o fim da campanha (DEC-124)
+        }
         if (!valid) {
             log.info("[Coupon] cupom fora da lista de ativos — campaign={} client={}", couponCampaignId, clientId);
             throw CampaignException.couponNotActive();

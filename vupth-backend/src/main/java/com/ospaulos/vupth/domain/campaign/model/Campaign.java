@@ -109,6 +109,11 @@ public class Campaign {
     @Column(name = "max_total_cost", precision = 10, scale = 2)
     private BigDecimal maxTotalCost;
 
+    /** Passou do prazo ({@code ends_at}) em {@code now}: encerrada para todos (DEC-124). */
+    public boolean hasEnded(OffsetDateTime now) {
+        return !now.isBefore(endsAt);
+    }
+
     /** Ligada e dentro da janela em {@code now}. */
     public boolean isRunning(OffsetDateTime now) {
         return active && !now.isBefore(startsAt) && now.isBefore(endsAt);

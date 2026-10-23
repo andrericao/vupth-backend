@@ -819,6 +819,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setIsTimerActive(true);
         attendance.setStatus(AttendanceStatus.IN_PROGRESS);
         attendanceRepository.save(attendance);
+        eventPublisher.publishEvent(new com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent(attendance.getId()));
 
         String clientName = attendance.getClient() != null
                 ? attendance.getClient().getFirstName()

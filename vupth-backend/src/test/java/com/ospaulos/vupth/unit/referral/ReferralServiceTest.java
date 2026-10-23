@@ -45,8 +45,10 @@ class ReferralServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final com.ospaulos.vupth.domain.campaign.repository.CampaignRedemptionRepository redemptionRepository =
             mock(com.ospaulos.vupth.domain.campaign.repository.CampaignRedemptionRepository.class);
+    private final com.ospaulos.vupth.domain.campaign.repository.CampaignRepository campaignRepository =
+            mock(com.ospaulos.vupth.domain.campaign.repository.CampaignRepository.class);
     private final ReferralService service = new ReferralService(codeRepository, referralRepository, creditRepository,
-            userRepository, redemptionRepository, "https://vupth.pages.dev/i/");
+            userRepository, redemptionRepository, campaignRepository, "https://vupth.pages.dev/i/");
 
     private final UUID referrerId = UUID.randomUUID();
     private final UUID clientId = UUID.randomUUID();
@@ -187,6 +189,49 @@ class ReferralServiceTest {
         when(redemptionRepository.findReferralParticipations(referrerId)).thenReturn(List.of());
         assertThat(service.claim(clientId, "K7M2QX", null).campaignId()).as("antes da adesao: sem premio").isNull();
         verify(referralRepository, times(4)).save(any());
+    }
+
+    @Test
+    @DisplayName("DEC-124: o link de campanha encerrada ou esgotada abre, mas o claim devolve CAMPAIGN_ENDED / CAMPAIGN_SOLD_OUT (prazo primeiro)")
+    void claimEndedOrSoldOut() {
+        user(referrerId, RoleType.PROFESSIONAL);
+        when(codeRepository.findByCode("K7M2QX"))
+                .thenReturn(Optional.of(new ReferralCode(referrerId, "K7M2QX", OffsetDateTime.now())));
+        when(referralRepository.findById(clientId)).thenReturn(Optional.empty());
+        Campaign link = campaign(null, false);
+        link.setMaxRedemptions(1);
+        when(campaignRepository.findById(link.getId())).thenReturn(Optional.of(link));
+        when(referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(link.getId())).thenReturn(1L);
+
+        assertThatThrownBy(() -> service.claim(clientId, "K7M2QX", link.getId()))
+                .isInstanceOfSatisfying(com.ospaulos.vupth.domain.campaign.exception.CampaignException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("CAMPAIGN_ENDED"));
+
+        link.setEndsAt(OffsetDateTime.now().plusDays(5));
+        assertThatThrownBy(() -> service.claim(clientId, "K7M2QX", link.getId()))
+                .isInstanceOfSatisfying(com.ospaulos.vupth.domain.campaign.exception.CampaignException.class,
+                        e -> assertThat(e.getCode()).isEqualTo("CAMPAIGN_SOLD_OUT"));
+        verify(referralRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("DEC-124: uso unico do link por cliente — outra campanha do mesmo indicador e 409; a corrida de dois claims cai no mesmo resultado")
+    void claimOncePerClient() {
+        user(referrerId, RoleType.PROFESSIONAL);
+        when(codeRepository.findByCode("K7M2QX"))
+                .thenReturn(Optional.of(new ReferralCode(referrerId, "K7M2QX", OffsetDateTime.now())));
+        UUID first = UUID.randomUUID();
+        Referral linked = new Referral(clientId, referrerId, OffsetDateTime.now(), first);
+        when(referralRepository.findById(clientId)).thenReturn(Optional.of(linked));
+
+        assertThat(service.claim(clientId, "K7M2QX", first).campaignId()).isEqualTo(first);
+        assertThat(service.claim(clientId, "K7M2QX", null).campaignId()).isEqualTo(first);
+        assertCode(() -> service.claim(clientId, "K7M2QX", UUID.randomUUID()), HttpStatus.CONFLICT, "REFERRAL_ALREADY_SET");
+
+        // corrida: nao havia ligacao ao conferir, mas a outra tentativa gravou primeiro (chave do cliente)
+        when(referralRepository.findById(clientId)).thenReturn(Optional.empty(), Optional.of(linked));
+        when(referralRepository.save(any())).thenThrow(new org.springframework.dao.DataIntegrityViolationException("dup"));
+        assertThat(service.claim(clientId, "K7M2QX", first).campaignId()).isEqualTo(first);
     }
 
     @Test

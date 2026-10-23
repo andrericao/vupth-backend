@@ -43,12 +43,14 @@ public class CampaignService {
     private final UserRepository userRepository;
     private final AttendanceRepository attendanceRepository;
     private final CouponService couponService;
+    private final com.ospaulos.vupth.domain.referral.repository.ReferralRepository referralRepository;
     private final Clock clock = Clock.systemUTC();
 
     @Transactional(readOnly = true)
     public List<CampaignResponse> activePublic() {
         return campaignRepository.findRunning(CampaignVisibility.PUBLIC, OffsetDateTime.now(clock)).stream()
-                .map(c -> CampaignResponse.of(c, true, redemptionRepository.countByCampaign_Id(c.getId()), null))
+                .filter(c -> !soldOut(c))
+                .map(c -> CampaignResponse.of(c, true, slotsUsed(c), null))
                 .toList();
     }
 
@@ -64,7 +66,8 @@ public class CampaignService {
         }
         return campaignRepository.findRunning(CampaignVisibility.PUBLIC, OffsetDateTime.now(clock)).stream()
                 .filter(c -> c.getAudience() == null || user.hasRole(c.getAudience().role()))
-                .map(c -> CampaignResponse.of(c, true, redemptionRepository.countByCampaign_Id(c.getId()), null))
+                .filter(c -> !soldOut(c))
+                .map(c -> CampaignResponse.of(c, true, slotsUsed(c), null))
                 .toList();
     }
 
@@ -88,6 +91,10 @@ public class CampaignService {
 
     private CampaignResponse accept(UUID userId, Campaign campaign, RedemptionVia via) {
         OffsetDateTime now = OffsetDateTime.now(clock);
+        // campanha-vaga-e-prazo (DEC-124): primeiro o prazo, depois a vaga
+        if (campaign.hasEnded(now)) {
+            throw CampaignException.ended();
+        }
         if (!campaign.isRunning(now)) {
             throw CampaignException.notAvailable();
         }
@@ -103,13 +110,25 @@ public class CampaignService {
         if (redemptionRepository.existsByCampaign_IdAndUserId(campaign.getId(), userId)) {
             throw CampaignException.alreadyRedeemed();
         }
-        if (campaign.getMaxRedemptions() != null
-                && redemptionRepository.countByCampaign_Id(campaign.getId()) >= campaign.getMaxRedemptions()) {
-            throw CampaignException.notAvailable();
+        if (soldOut(campaign)) {
+            throw CampaignException.soldOut(); // depois do prazo e de quem ja tem o cupom (DEC-124)
         }
         CampaignRedemption redemption = redemptionRepository.save(new CampaignRedemption(campaign, userId, now, via));
         log.info("[Campaign] cupom aceito — campaign={} user={}", campaign.getId(), userId);
         return CampaignResponse.of(campaign, true, null, redemption.getRedeemedAt());
+    }
+
+    /**
+     * As vagas ja usadas: no cupom, as ativacoes; no link, os indicados cujo corte iniciou (a adesao ao link nao gasta vaga, DEC-124).
+     */
+    private long slotsUsed(Campaign c) {
+        return c.getType() == CampaignType.REFERRAL_BONUS
+                ? referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(c.getId())
+                : redemptionRepository.countByCampaign_Id(c.getId());
+    }
+
+    private boolean soldOut(Campaign c) {
+        return c.getMaxRedemptions() != null && slotsUsed(c) >= c.getMaxRedemptions();
     }
 
     @Transactional(readOnly = true)

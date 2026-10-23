@@ -108,7 +108,7 @@ class CouponServiceTest {
     }
 
     @Test
-    @DisplayName("fora da lista de ativos: inexistente, nao ativado, vencido, desligado, ja usado, outro tipo, outro publico, dia errado, valor zero")
+    @DisplayName("fora da lista de ativos: inexistente, nao ativado, (vencido: CAMPAIGN_ENDED), desligado, ja usado, outro tipo, outro publico, dia errado, valor zero")
     void refusals() {
         assertRefused(attendance("30.90", null), UUID.randomUUID());
 
@@ -116,9 +116,12 @@ class CouponServiceTest {
         when(redemptions.existsByCampaign_IdAndUserId(notActivated.getId(), clientId)).thenReturn(false);
         assertRefused(attendance("30.90", null), notActivated.getId());
 
+        // ativado e nao usado ate o fim da campanha: CAMPAIGN_ENDED (DEC-124), nao COUPON_NOT_ACTIVE
         Campaign ended = campaign(new BigDecimal("5.00"), null, BenefitBase.WITH_FEE);
         ended.setEndsAt(OffsetDateTime.now().minusMinutes(1));
-        assertRefused(attendance("30.90", null), ended.getId());
+        Attendance endedAttendance = attendance("30.90", null);
+        assertThatThrownBy(() -> service.apply(endedAttendance, ended.getId()))
+                .isInstanceOfSatisfying(CampaignException.class, e -> assertThat(e.getCode()).isEqualTo("CAMPAIGN_ENDED"));
 
         Campaign off = campaign(new BigDecimal("5.00"), null, BenefitBase.WITH_FEE);
         off.setActive(false);

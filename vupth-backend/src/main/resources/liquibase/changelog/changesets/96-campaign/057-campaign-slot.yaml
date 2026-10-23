@@ -1,0 +1,14 @@
+databaseChangeLog:
+  # campanha-vaga-e-prazo (DEC-124): a vaga da campanha de link e consumida quando o corte do indicado INICIA e nao volta mais
+  - changeSet:
+      id: 057-referral-slot_taken_at
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: referral, columnName: slot_taken_at}
+      changes:
+        - addColumn:
+            tableName: referral
+            columns:
+              - column: {name: slot_taken_at, type: TIMESTAMP WITH TIME ZONE}

@@ -557,3 +557,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/056-share-and-win.yaml
       relativeToChangeLogFile: true
+
+  # campanha-vaga-e-prazo (DEC-124): a vaga do link so e consumida quando o corte do indicado inicia
+  - include:
+      file: changesets/96-campaign/057-campaign-slot.yaml
+      relativeToChangeLogFile: true

@@ -32,9 +32,11 @@ class CampaignServiceTest {
     private final CampaignRedemptionRepository redemptionRepository = mock(CampaignRedemptionRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final AttendanceRepository attendanceRepository = mock(AttendanceRepository.class);
+    private final com.ospaulos.vupth.domain.referral.repository.ReferralRepository referralRepository =
+            mock(com.ospaulos.vupth.domain.referral.repository.ReferralRepository.class);
     private final CampaignService service =
             new CampaignService(campaignRepository, redemptionRepository, userRepository, attendanceRepository,
-                    org.mockito.Mockito.mock(com.ospaulos.vupth.domain.campaign.service.CouponService.class));
+                    org.mockito.Mockito.mock(com.ospaulos.vupth.domain.campaign.service.CouponService.class), referralRepository);
 
     private final UUID userId = UUID.randomUUID();
     private Campaign campaign;
@@ -88,7 +90,7 @@ class CampaignServiceTest {
     }
 
     @Test
-    @DisplayName("desligada, antes do inicio ou depois do fim -> 409 CAMPAIGN_NOT_AVAILABLE")
+    @DisplayName("desligada ou antes do inicio -> 409 CAMPAIGN_NOT_AVAILABLE; depois do fim -> 409 CAMPAIGN_ENDED (DEC-124)")
     void notRunning() {
         campaign.setActive(false);
         assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_NOT_AVAILABLE");
@@ -97,7 +99,30 @@ class CampaignServiceTest {
         assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_NOT_AVAILABLE");
         campaign.setStartsAt(OffsetDateTime.now().minusDays(30));
         campaign.setEndsAt(OffsetDateTime.now().minusMinutes(1));
-        assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_NOT_AVAILABLE");
+        assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_ENDED");
+    }
+
+    @Test
+    @DisplayName("DEC-124: o prazo vence primeiro — encerrada E sem vaga devolve CAMPAIGN_ENDED, nao SOLD_OUT")
+    void endedBeatsSoldOut() {
+        campaign.setEndsAt(OffsetDateTime.now().minusMinutes(1));
+        when(redemptionRepository.countByCampaign_Id(campaign.getId())).thenReturn(2L);
+        assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_ENDED");
+    }
+
+    @Test
+    @DisplayName("DEC-124: campanha de link — a vaga e o corte iniciado do indicado, nao a adesao; esgotada -> CAMPAIGN_SOLD_OUT no join")
+    void linkCampaignSlotsAreStartedCuts() {
+        campaign.setType(com.ospaulos.vupth.domain.campaign.model.CampaignType.REFERRAL_BONUS);
+        campaign.setVisibility(com.ospaulos.vupth.domain.campaign.model.CampaignVisibility.PUBLIC);
+        when(campaignRepository.findById(campaign.getId())).thenReturn(Optional.of(campaign));
+        when(redemptionRepository.countByCampaign_Id(campaign.getId())).thenReturn(2L); // adesoes nao contam
+        when(referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(campaign.getId())).thenReturn(1L);
+        service.join(userId, campaign.getId());
+        verify(redemptionRepository).save(any());
+
+        when(referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(campaign.getId())).thenReturn(2L);
+        assertCode(() -> service.join(userId, campaign.getId()), HttpStatus.CONFLICT, "CAMPAIGN_SOLD_OUT");
     }
 
     @Test
@@ -116,14 +141,14 @@ class CampaignServiceTest {
     }
 
     @Test
-    @DisplayName("ja aceitou -> 409 CAMPAIGN_ALREADY_REDEEMED; sem vaga -> 409 CAMPAIGN_NOT_AVAILABLE")
+    @DisplayName("ja aceitou -> 409 CAMPAIGN_ALREADY_REDEEMED; sem vaga no prazo -> 409 CAMPAIGN_SOLD_OUT (DEC-124)")
     void alreadyAndFull() {
         when(redemptionRepository.existsByCampaign_IdAndUserId(campaign.getId(), userId)).thenReturn(true);
         assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_ALREADY_REDEEMED");
 
         when(redemptionRepository.existsByCampaign_IdAndUserId(campaign.getId(), userId)).thenReturn(false);
         when(redemptionRepository.countByCampaign_Id(campaign.getId())).thenReturn(2L);
-        assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_NOT_AVAILABLE");
+        assertCode(() -> service.redeem(userId, "parceiro10"), HttpStatus.CONFLICT, "CAMPAIGN_SOLD_OUT");
         verify(redemptionRepository, never()).save(any());
     }
 

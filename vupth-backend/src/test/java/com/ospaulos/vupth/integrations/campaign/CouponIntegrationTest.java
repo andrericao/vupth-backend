@@ -171,8 +171,8 @@ class CouponIntegrationTest {
         activate(client.token(), ended);
         ended.setEndsAt(OffsetDateTime.now().minusMinutes(1));
         campaignRepository.save(ended);
-        enter(shop, client, ended.getId()).andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.code").value("COUPON_NOT_ACTIVE"));
+        enter(shop, client, ended.getId()).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_ENDED")); // ativou e nao usou ate o fim (DEC-124)
 
         Campaign tenPercent = coupon(null, new BigDecimal("10.00"), BenefitBase.WITHOUT_FEE);
         activate(client.token(), tenPercent);

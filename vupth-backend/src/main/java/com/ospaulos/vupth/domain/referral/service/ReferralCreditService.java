@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.referral.service;
 
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.event.AttendanceFinishedEvent;
+import com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.campaign.model.Campaign;
@@ -55,6 +56,44 @@ public class ReferralCreditService {
     private final EstablishmentRepository establishmentRepository;
     private final ProfessionalRepository professionalRepository;
 
+    /**
+     * campanha-vaga-e-prazo (DEC-124): a vaga da campanha de link e consumida quando o corte do indicado INICIA, e nao volta (nem se o
+     * corte for pausado, cancelado ou removido). Sem prazo ou sem vaga nesse instante, o indicado fica sem vaga e nao rende premio.
+     */
+    @TransactionalEventListener(fallbackExecution = true)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void onStarted(AttendanceStartedEvent event) {
+        try {
+            takeSlot(event.attendanceId());
+        } catch (Exception e) {
+            log.error("[Referral] vaga falhou — attendance={}: {}", event.attendanceId(), e.getMessage(), e);
+        }
+    }
+
+    public void takeSlot(UUID attendanceId) {
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId).orElse(null);
+        if (attendance == null || attendance.getClient() == null) {
+            return;
+        }
+        Referral referral = referralRepository.findById(attendance.getClient().getId()).orElse(null);
+        if (referral == null || referral.getCampaignId() == null || referral.getSlotTakenAt() != null) {
+            return;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        Campaign campaign = campaignRepository.findById(referral.getCampaignId()).orElse(null);
+        boolean open = campaign != null && campaign.isRunning(now)
+                && (campaign.getMaxRedemptions() == null
+                || referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(campaign.getId()) < campaign.getMaxRedemptions());
+        if (!open) {
+            log.info("[Referral] corte iniciou sem vaga (encerrada ou esgotada) — attendance={} campanha={}", attendanceId,
+                    referral.getCampaignId());
+            return;
+        }
+        referral.takeSlot(now);
+        referralRepository.save(referral);
+        log.info("[Referral] vaga consumida — campanha={} cliente={} (attendance={})", campaign.getId(), referral.getClientId(), attendanceId);
+    }
+
     @TransactionalEventListener
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onFinished(AttendanceFinishedEvent event) {
@@ -86,6 +125,11 @@ public class ReferralCreditService {
             log.info("[Referral] indicado sem campanha de adesao — nao paga (attendance={} cliente={})", attendanceId, clientId);
             return;
         }
+        // DEC-124: so rende premio quem tem a vaga, tomada quando o corte iniciou; a vaga ja foi contada la, nao se confere de novo
+        if (referral.get().getSlotTakenAt() == null) {
+            log.info("[Referral] indicado sem vaga na campanha — nao paga (attendance={} cliente={})", attendanceId, clientId);
+            return;
+        }
         // antifraude-emitir-nao-e-usar (DEC-123): quem compartilhou nao usa o proprio link (o claim recusa, REFERRAL_SELF); ja o
         // profissional que trouxe o cliente ao app ganha quando ele corta, com ele ou com outro — por isso nao ha trava por profissional.
         OffsetDateTime when = attendance.getEndTime() != null ? attendance.getEndTime() : OffsetDateTime.now();
@@ -95,12 +139,10 @@ public class ReferralCreditService {
                 .orElse(false);
 
         Optional<Campaign> campaign = campaignRepository.findById(campaignId).stream()
-                .filter(c -> c.getType() == CampaignType.REFERRAL_BONUS && c.isRunning(when))
+                .filter(c -> c.getType() == CampaignType.REFERRAL_BONUS && c.isActive())
                 .filter(c -> c.getValueAmount() != null)
                 .filter(c -> validOn(c, when))
                 .filter(c -> c.getReferralScope() != ReferralScope.REFERRER_ESTABLISHMENT || referrerOwnsShop || referrerWorksThere)
-                .filter(c -> c.getMaxRedemptions() == null
-                        || creditRepository.countClientsByCampaign(c.getId()) < c.getMaxRedemptions())
                 // teto de gasto da campanha: a soma dos premios (liberados ou nao) nao passa dele
                 .filter(c -> c.getMaxTotalCost() == null
                         || creditRepository.sumByCampaign(c.getId()).add(c.getValueAmount()).compareTo(c.getMaxTotalCost()) <= 0)

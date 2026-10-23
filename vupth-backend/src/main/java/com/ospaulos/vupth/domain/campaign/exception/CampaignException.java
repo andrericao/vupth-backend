@@ -7,6 +7,8 @@ import org.springframework.http.HttpStatus;
  * <ul>
  *   <li>404 {@code CAMPAIGN_NOT_FOUND} — cupom que nao existe;</li>
  *   <li>409 {@code CAMPAIGN_NOT_AVAILABLE} — desligada, fora da janela ou sem vaga;</li>
+ *   <li>409 {@code CAMPAIGN_ENDED} — passou do prazo ({@code ends_at}); vale para todos, inclusive quem ativou o cupom e nao usou (DEC-124);</li>
+ *   <li>409 {@code CAMPAIGN_SOLD_OUT} — no prazo, mas sem vaga (esgotada, DEC-124);</li>
  *   <li>409 {@code CAMPAIGN_ALREADY_REDEEMED} — a pessoa ja aceitou;</li>
  *   <li>403 {@code CAMPAIGN_NOT_FOR_YOU} — o perfil nao e o da campanha, ou nao e cliente novo;</li>
  *   <li>422 {@code COUPON_NOT_ACTIVE} — no corte, o cupom nao esta na lista de ativos de quem pede;</li>
@@ -31,6 +33,14 @@ public class CampaignException extends RuntimeException {
 
     public static CampaignException notAvailable() {
         return new CampaignException(HttpStatus.CONFLICT, "CAMPAIGN_NOT_AVAILABLE", "Esta campanha nao esta disponivel agora.");
+    }
+
+    public static CampaignException ended() {
+        return new CampaignException(HttpStatus.CONFLICT, "CAMPAIGN_ENDED", "Esta campanha foi encerrada.");
+    }
+
+    public static CampaignException soldOut() {
+        return new CampaignException(HttpStatus.CONFLICT, "CAMPAIGN_SOLD_OUT", "As vagas desta campanha esgotaram.");
     }
 
     public static CampaignException alreadyRedeemed() {

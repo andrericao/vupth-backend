@@ -4,7 +4,10 @@ import com.ospaulos.vupth.api.referral.dto.ReferralClaimResponse;
 import com.ospaulos.vupth.api.referral.dto.ReferralMeResponse;
 import com.ospaulos.vupth.domain.campaign.model.Campaign;
 import com.ospaulos.vupth.domain.campaign.model.CampaignRedemption;
+import com.ospaulos.vupth.domain.campaign.exception.CampaignException;
+import com.ospaulos.vupth.domain.campaign.model.CampaignType;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRedemptionRepository;
+import com.ospaulos.vupth.domain.campaign.repository.CampaignRepository;
 import com.ospaulos.vupth.domain.referral.exception.ReferralException;
 import com.ospaulos.vupth.domain.referral.model.Referral;
 import com.ospaulos.vupth.domain.referral.model.ReferralCode;
@@ -47,19 +50,21 @@ public class ReferralService {
     private final ReferralCreditRepository creditRepository;
     private final UserRepository userRepository;
     private final CampaignRedemptionRepository redemptionRepository;
+    private final CampaignRepository campaignRepository;
     private final String linkBase;
     private final SecureRandom random = new SecureRandom();
     private final Clock clock = Clock.systemUTC();
 
     public ReferralService(ReferralCodeRepository codeRepository, ReferralRepository referralRepository,
                            ReferralCreditRepository creditRepository, UserRepository userRepository,
-                           CampaignRedemptionRepository redemptionRepository,
+                           CampaignRedemptionRepository redemptionRepository, CampaignRepository campaignRepository,
                            @Value("${vupth.referral.link-base:https://vupth.pages.dev/i/}") String linkBase) {
         this.codeRepository = codeRepository;
         this.referralRepository = referralRepository;
         this.creditRepository = creditRepository;
         this.userRepository = userRepository;
         this.redemptionRepository = redemptionRepository;
+        this.campaignRepository = campaignRepository;
         this.linkBase = linkBase;
     }
 
@@ -99,16 +104,55 @@ public class ReferralService {
         }
         Optional<Referral> existing = referralRepository.findById(clientId);
         if (existing.isPresent()) {
-            if (!existing.get().getReferrerId().equals(code.getUserId())) {
-                throw ReferralException.alreadySet();
-            }
-            return new ReferralClaimResponse(code.getCode(), existing.get().getCreatedAt(), existing.get().getCampaignId());
+            return sameClaim(existing.get(), code, campaignId);
         }
+        requireOpen(campaignId);
         UUID chosen = userRepository.findById(code.getUserId())
                 .map(referrer -> chooseCampaign(referrer, campaignId)).orElse(null);
-        Referral referral = referralRepository.save(new Referral(clientId, code.getUserId(), OffsetDateTime.now(clock), chosen));
+        Referral referral;
+        try {
+            referral = referralRepository.save(new Referral(clientId, code.getUserId(), OffsetDateTime.now(clock), chosen));
+        } catch (org.springframework.dao.DataIntegrityViolationException race) {
+            // uso unico por cliente: duas tentativas ao mesmo tempo, a chave do cliente (referral.client_id) deixa passar so uma
+            return sameClaim(referralRepository.findById(clientId).orElseThrow(ReferralException::alreadySet), code, campaignId);
+        }
         log.info("[Referral] cliente={} indicado por={} campanha={}", clientId, code.getUserId(), chosen);
         return new ReferralClaimResponse(code.getCode(), referral.getCreatedAt(), chosen);
+    }
+
+    /**
+     * O cliente ja esta ligado a alguem (uso unico por cliente, DEC-124): repetir o mesmo codigo e a mesma campanha do link e
+     * inofensivo; outro codigo, ou outra campanha da qual ele ja saiu escolhida, e 409 REFERRAL_ALREADY_SET.
+     */
+    private ReferralClaimResponse sameClaim(Referral existing, ReferralCode code, UUID campaignId) {
+        boolean otherCampaign = campaignId != null && existing.getCampaignId() != null && !campaignId.equals(existing.getCampaignId());
+        if (!existing.getReferrerId().equals(code.getUserId()) || otherCampaign) {
+            throw ReferralException.alreadySet();
+        }
+        return new ReferralClaimResponse(code.getCode(), existing.getCreatedAt(), existing.getCampaignId());
+    }
+
+    /**
+     * campanha-vaga-e-prazo (DEC-124): o link de uma campanha encerrada ou esgotada continua abrindo, mas o claim devolve o erro padrao
+     * (CAMPAIGN_ENDED ou CAMPAIGN_SOLD_OUT; primeiro o prazo, depois a vaga). Sem campanha no link, nada a conferir.
+     */
+    private void requireOpen(UUID campaignId) {
+        if (campaignId == null) {
+            return;
+        }
+        campaignRepository.findById(campaignId).filter(c -> c.getType() == CampaignType.REFERRAL_BONUS).ifPresent(c -> {
+            OffsetDateTime now = OffsetDateTime.now(clock);
+            if (c.hasEnded(now)) {
+                throw CampaignException.ended();
+            }
+            if (!c.isRunning(now)) {
+                throw CampaignException.notAvailable();
+            }
+            if (c.getMaxRedemptions() != null
+                    && referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(c.getId()) >= c.getMaxRedemptions()) {
+                throw CampaignException.soldOut();
+            }
+        });
     }
 
     private UUID chooseCampaign(BaseUser referrer, UUID wanted) {

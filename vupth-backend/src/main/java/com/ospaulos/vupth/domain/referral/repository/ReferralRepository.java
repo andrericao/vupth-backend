@@ -11,4 +11,7 @@ public interface ReferralRepository extends JpaRepository<Referral, UUID> {
 
     /** Clientes que chegaram pelo link da pessoa nesta campanha. */
     long countByReferrerIdAndCampaignId(UUID referrerId, UUID campaignId);
+
+    /** Vagas ja consumidas da campanha de link: os indicados cujo corte iniciou (DEC-124). */
+    long countByCampaignIdAndSlotTakenAtIsNotNull(UUID campaignId);
 }

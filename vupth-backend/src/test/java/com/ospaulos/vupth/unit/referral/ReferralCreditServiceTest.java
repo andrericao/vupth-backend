@@ -98,8 +98,61 @@ class ReferralCreditServiceTest {
 
     /** O cliente chegou pelo link de {@code referrerId} na campanha do teste. */
     private void referredBy(UUID referrerId) {
-        when(referralRepository.findById(clientId))
-                .thenReturn(Optional.of(new Referral(clientId, referrerId, OffsetDateTime.now(), campaign.getId())));
+        Referral referral = referredWithoutSlot(referrerId);
+        referral.takeSlot(OffsetDateTime.now()); // o corte iniciou e levou a vaga (DEC-124)
+    }
+
+    private Referral referredWithoutSlot(UUID referrerId) {
+        Referral referral = new Referral(clientId, referrerId, OffsetDateTime.now(), campaign.getId());
+        when(referralRepository.findById(clientId)).thenReturn(Optional.of(referral));
+        return referral;
+    }
+
+    @Test
+    @DisplayName("DEC-124: o corte iniciou no prazo e ha vaga → o indicado leva a vaga")
+    void startTakesSlot() {
+        Referral referral = referredWithoutSlot(otherId);
+        campaign.setMaxRedemptions(2);
+        when(referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(campaign.getId())).thenReturn(1L);
+
+        service.onStarted(new com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent(attendance.getId()));
+
+        assertThat(referral.getSlotTakenAt()).isNotNull();
+        verify(referralRepository).save(referral);
+    }
+
+    @Test
+    @DisplayName("DEC-124: sem vaga ou encerrada no instante do inicio → nao leva a vaga e nao paga no fim")
+    void startWithoutSlotDoesNotTake() {
+        Referral referral = referredWithoutSlot(otherId);
+        campaign.setMaxRedemptions(2);
+        when(referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(campaign.getId())).thenReturn(2L);
+        service.onStarted(new com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent(attendance.getId()));
+        assertThat(referral.getSlotTakenAt()).as("esgotada").isNull();
+
+        campaign.setMaxRedemptions(null);
+        campaign.setEndsAt(OffsetDateTime.now().minusMinutes(1));
+        service.onStarted(new com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent(attendance.getId()));
+        assertThat(referral.getSlotTakenAt()).as("encerrada").isNull();
+
+        service.onFinished(new AttendanceFinishedEvent(attendance.getId()));
+        verify(creditRepository, never()).save(any());
+        verify(referralRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("DEC-124: a vaga nao volta — recomecar o corte nao consome outra, e quem ja a tem nao a perde se a campanha acabar")
+    void slotIsKept() {
+        Referral referral = referredWithoutSlot(otherId);
+        OffsetDateTime first = OffsetDateTime.now().minusHours(1);
+        referral.takeSlot(first);
+        campaign.setEndsAt(OffsetDateTime.now().minusMinutes(1));
+
+        service.onStarted(new com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent(attendance.getId()));
+        assertThat(referral.getSlotTakenAt()).isEqualTo(first);
+
+        service.onFinished(new AttendanceFinishedEvent(attendance.getId()));
+        assertThat(saved(1)).hasSize(1); // paga, mesmo com a campanha encerrada depois do inicio
     }
 
     private List<ReferralCredit> saved(int times) {
@@ -218,7 +271,7 @@ class ReferralCreditServiceTest {
     }
 
     @Test
-    @DisplayName("fora dos dias da campanha, sem valor em reais ou sem vaga: sem credito")
+    @DisplayName("fora dos dias da campanha ou sem valor em reais: sem credito (a vaga e tomada no inicio do corte, DEC-124)")
     void campaignFilters() {
         referredBy(otherId);
         campaign.setWeekdays("MONDAY,WEDNESDAY");
@@ -228,13 +281,10 @@ class ReferralCreditServiceTest {
         campaign.setValueAmount(null);
         service.credit(attendance.getId());
 
+        // a vaga nao se confere no fim (DEC-124): foi contada quando o corte iniciou
         campaign.setValueAmount(new BigDecimal("5.00"));
-        campaign.setMaxRedemptions(2);
-        when(creditRepository.countClientsByCampaign(campaign.getId())).thenReturn(2L);
-        service.credit(attendance.getId());
         verify(creditRepository, never()).save(any());
 
-        when(creditRepository.countClientsByCampaign(campaign.getId())).thenReturn(1L);
         service.credit(attendance.getId());
         assertThat(saved(1)).hasSize(1);
     }

@@ -31,6 +31,14 @@ public class Referral {
     @Column(name = "campaign_id")
     private UUID campaignId;
 
+    /** Quando o corte do indicado iniciou e consumiu a vaga da campanha (DEC-124); nulo = ainda sem vaga, nao rende premio. */
+    @Column(name = "slot_taken_at")
+    private OffsetDateTime slotTakenAt;
+
+    public void takeSlot(OffsetDateTime when) {
+        this.slotTakenAt = when;
+    }
+
     public Referral(UUID clientId, UUID referrerId, OffsetDateTime createdAt) {
         this(clientId, referrerId, createdAt, null);
     }
