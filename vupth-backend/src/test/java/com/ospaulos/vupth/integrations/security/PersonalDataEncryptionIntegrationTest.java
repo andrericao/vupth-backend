@@ -5,8 +5,10 @@ import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.infrastructure.crypto.PersonalDataEncryptionMigrator;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = {
         "vupth.security.data-encryption.key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "vupth.security.data-encryption.required=true"})
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PersonalDataEncryptionIntegrationTest {
 
     @Autowired MockMvc mvc;
@@ -73,5 +76,16 @@ class PersonalDataEncryptionIntegrationTest {
                 .andExpect(jsonPath("$.holder_name").value("Ana"));
         assertThat(migrator.migrate()).isZero();
         migrator.onBoot();
+    }
+
+    /**
+     * O banco e compartilhado entre as classes e as outras rodam sem a chave: o dado cifrado que sobra aqui quebra o
+     * {@code userRepository.deleteAll()} de quem roda depois ("Dado cifrado no banco, mas DATA_ENCRYPTION_KEY nao esta
+     * configurada"), conforme a ordem das classes. Limpa no fim.
+     */
+    @AfterAll
+    void clearEncryptedData() {
+        jdbc.update("UPDATE base_user SET pix_key = NULL, pix_holder_name = NULL"
+                + " WHERE pix_key LIKE 'enc:v1:%' OR pix_holder_name LIKE 'enc:v1:%'");
     }
 }
