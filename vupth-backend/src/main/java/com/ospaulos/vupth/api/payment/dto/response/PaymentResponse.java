@@ -29,6 +29,8 @@ public record PaymentResponse(
         @JsonProperty("penalty_pix_copy_paste") String penaltyPixCopyPaste,
         @JsonProperty("penalty_holder_name") String penaltyHolderName,
         // DEC-85: como o profissional disse que recebeu (PIX, CARTAO, DINHEIRO ou NOTA); nulo = nao informado ou ainda nao pago
-        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod
+        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod,
+        // pix-key-no-pagamento: a chave em texto, a MESMA do pix_copy_paste (de quem diz pix_owner); so o cliente a recebe, nulo sem Pix
+        @JsonProperty("pix_key") String pixKey
 ) {
 }

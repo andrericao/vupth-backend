@@ -127,7 +127,12 @@ class PaymentIntegrationTest {
                 .andExpect(jsonPath("$.services_value").value(price))
                 .andExpect(jsonPath("$.penalties_value").value(0.0))
                 .andExpect(jsonPath("$.pix_copy_paste", startsWith("000201")))
+                .andExpect(jsonPath("$.pix_key").value("+5511987654321"))
                 .andExpect(jsonPath("$.key_type").value("PHONE"));
+        // pix-key-no-pagamento: a chave em texto e so do cliente do atendimento
+        mvc.perform(get("/attendances/{id}/payment", firstId).header("Authorization", profToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pix_key").value(nullValue()));
         mvc.perform(get("/attendances/{id}/payment", firstId).header("Authorization", strangerToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("PAYMENT_ACCESS_DENIED"));
@@ -243,6 +248,7 @@ class PaymentIntegrationTest {
         mvc.perform(get("/attendances/{id}/payment", secondId).header("Authorization", clientToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pix_copy_paste").value(nullValue()))
+                .andExpect(jsonPath("$.pix_key").value(nullValue()))
                 .andExpect(jsonPath("$.holder_name").value(nullValue()))
                 .andExpect(jsonPath("$.amount").value(price));
     }

@@ -344,7 +344,8 @@ public class PaymentService {
                 !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER",
                 penaltyPix ? appPix.copyPaste(realPenalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
                 penaltyPix && appPix.configured() ? appPix.holderName() : null,
-                attendance.getPaymentMethod());
+                attendance.getPaymentMethod(),
+                hasKey && forClient ? keyOwner.getPixKey() : null);
     }
 
     /** O valor que cai no Pix do profissional: o servico (SPLIT_PIX) ou o total (fase de testes). Para o aviso "diz que pagou". */

@@ -10598,7 +10598,8 @@
          "const b = pm.response.json();",
          "pm.test(\"PENDING\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
          "pm.test(\"valor = servicos + multas\", () => pm.expect(Number(b.amount)).to.eql(Number(b.services_value) + Number(b.penalties_value)));",
-         "pm.test(\"BR Code\", () => pm.expect(b.pix_copy_paste).to.match(/^000201/));"
+         "pm.test(\"BR Code\", () => pm.expect(b.pix_copy_paste).to.match(/^000201/));",
+         "pm.test(\"pix_key em texto (pix-key-no-pagamento)\", () => pm.expect(b.pix_key).to.be.a(\"string\").and.not.empty);"
         ]
        }
       }
