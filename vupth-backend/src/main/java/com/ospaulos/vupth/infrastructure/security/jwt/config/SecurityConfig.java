@@ -131,7 +131,7 @@ public class SecurityConfig {
                         // testes-asaas-sandbox: o aviso do Asaas nao tem login; o controller confere o asaas-access-token
                         .requestMatchers(HttpMethod.POST, "/webhooks/asaas").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/referrals/me").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/referrals/me").authenticated() // todo papel tem link (DEC-113)
                         .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
