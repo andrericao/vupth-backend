@@ -69,6 +69,37 @@ class CampaignIntegrationTest {
     }
 
     @Test
+    @DisplayName("campanhas-ativas-para-o-client: com login, so as do publico de quem pede (cliente, dono) e as sem publico")
+    void activeFiltersByRole() throws Exception {
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var owner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
+        Campaign forAll = campaign(CampaignVisibility.PUBLIC, null, null);
+        Campaign forClients = campaign(CampaignVisibility.PUBLIC, CampaignAudience.CLIENT, null);
+        Campaign forOwners = campaign(CampaignVisibility.PUBLIC, CampaignAudience.OWNER, null);
+        Campaign forPros = campaign(CampaignVisibility.PUBLIC, CampaignAudience.PROFESSIONAL, null);
+        Campaign privateOne = campaign(CampaignVisibility.PRIVATE, CampaignAudience.CLIENT, null);
+
+        mvc.perform(get("/campaigns/active").header("Authorization", client.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forAll.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forClients.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forOwners.getId()).doesNotExist())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forPros.getId()).doesNotExist())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", privateOne.getId()).doesNotExist());
+
+        mvc.perform(get("/campaigns/active").header("Authorization", owner.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forAll.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forOwners.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forPros.getId()).doesNotExist());
+
+        // sem login continua devolvendo todas as publicas (pagina do suporte)
+        mvc.perform(get("/campaigns/active"))
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forPros.getId()).exists());
+    }
+
+    @Test
     @DisplayName("cupom: aceita (201), de novo 409, perfil errado 403, sem vaga 409, inexistente 404, sem login 401")
     void redeemRules() throws Exception {
         var ana = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);

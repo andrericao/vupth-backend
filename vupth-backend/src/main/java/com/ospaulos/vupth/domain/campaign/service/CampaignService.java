@@ -49,6 +49,22 @@ public class CampaignService {
                 .toList();
     }
 
+    /**
+     * campanhas-ativas-para-o-client: as campanhas publicas em andamento (ativas e dentro das datas) que o usuario logado pode
+     * aceitar — as sem publico definido e as do seu papel (cliente, profissional ou dono). A mais proxima de acabar vem primeiro.
+     */
+    @Transactional(readOnly = true)
+    public List<CampaignResponse> activeFor(UUID userId) {
+        BaseUser user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return List.of();
+        }
+        return campaignRepository.findRunning(CampaignVisibility.PUBLIC, OffsetDateTime.now(clock)).stream()
+                .filter(c -> c.getAudience() == null || user.hasRole(c.getAudience().role()))
+                .map(c -> CampaignResponse.of(c, true, redemptionRepository.countByCampaign_Id(c.getId()), null))
+                .toList();
+    }
+
     public CampaignResponse redeem(UUID userId, String code) {
         Campaign campaign = campaignRepository.findByCodeIgnoreCase(code.trim())
                 .orElseThrow(CampaignException::notFound);

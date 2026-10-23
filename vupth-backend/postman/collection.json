@@ -27458,6 +27458,35 @@
      "response": []
     },
     {
+     "name": "GET /campaigns/active com login de cliente → 200 so do publico dele (campanhas-ativas-para-o-client)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const list = pm.response.json();",
+         "pm.test(\"lista\", () => pm.expect(list).to.be.an('array'));",
+         "pm.test(\"so campanhas sem publico ou de cliente\", () => list.forEach(c => pm.expect([undefined, 'CLIENT']).to.include(c.audience)));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/campaigns/active"
+     },
+     "response": []
+    },
+    {
      "name": "[ERRO] POST /campaigns/redeem cupom inexistente → 404 CAMPAIGN_NOT_FOUND",
      "event": [
       {
