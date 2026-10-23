@@ -403,6 +403,24 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_OFFER_NOT_FOUND");
     }
 
+    /** politica-de-preco-com-ciencia (DEC-100): 409 com a versao e o prazo, para o Partner abrir a tela da politica. */
+    @ExceptionHandler(com.ospaulos.vupth.domain.pricepolicy.exception.PricePolicyException.class)
+    public ResponseEntity<PricePolicyErrorResponse> handlePricePolicy(
+            com.ospaulos.vupth.domain.pricepolicy.exception.PricePolicyException ex, HttpServletRequest req) {
+        log.warn("[{}] PricePolicy {} | {} {}", ex.getStatus(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return ResponseEntity.status(ex.getStatus()).body(new PricePolicyErrorResponse(
+                ex.getStatus(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getPolicyVersion(), ex.getDeadlineAt()));
+    }
+
+    public record PricePolicyErrorResponse(
+            int status,
+            String message,
+            String code,
+            OffsetDateTime timestamp,
+            @com.fasterxml.jackson.annotation.JsonProperty("policy_version") Integer policyVersion,
+            @com.fasterxml.jackson.annotation.JsonProperty("deadline_at") OffsetDateTime deadlineAt) {
+    }
+
     @ExceptionHandler(ProfessionalNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleProfessionalNotFound(
             ProfessionalNotFoundException ex, HttpServletRequest req) {

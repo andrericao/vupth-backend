@@ -51,6 +51,10 @@ public class UpdateProfessionalStatusUseCase {
     private final AttendanceRepository attendanceRepository;
     private final EstablishmentOpenStatusService openStatusService;
 
+    /** politica-de-preco-com-ciencia (DEC-100): sem a ciencia no prazo de 7 dias, abrir a loja e a fila e barrado. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.pricepolicy.service.PricePolicyService pricePolicy;
+
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, UpdateProfessionalStatusRequest request) {
         ProfessionalStatus target = request.status();
@@ -59,6 +63,10 @@ public class UpdateProfessionalStatusUseCase {
         Professional professional = professionalRepository
                 .findByIdWithBaseUserAndEstablishment(userId)
                 .orElseThrow(() -> new ProfessionalNotFoundException(userId));
+
+        if (target.countsAsOpen() && pricePolicy != null) {
+            pricePolicy.assertAcknowledged(userId);
+        }
 
         if (target.countsAsOpen() && !hasService(professional)) {
             throw new ProfessionalHasNoServiceException(userId);

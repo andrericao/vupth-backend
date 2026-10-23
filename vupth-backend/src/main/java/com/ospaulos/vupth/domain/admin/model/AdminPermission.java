@@ -30,7 +30,8 @@ public enum AdminPermission {
         if (path.startsWith("/admin/users")) {
             return USERS;
         }
-        if (path.startsWith("/admin/establishments") || path.startsWith("/admin/test-runs")) {
+        if (path.startsWith("/admin/establishments") || path.startsWith("/admin/test-runs")
+                || path.startsWith("/admin/price-policy")) {
             return ESTABLISHMENTS;
         }
         if (path.startsWith("/admin/finance") || path.startsWith("/admin/referrals")

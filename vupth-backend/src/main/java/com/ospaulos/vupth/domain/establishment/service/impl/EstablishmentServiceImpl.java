@@ -51,6 +51,11 @@ import java.util.UUID;
 public class EstablishmentServiceImpl implements EstablishmentService {
 
     private final OwnerRepository ownerRepository;
+
+    /** politica-de-preco-com-ciencia (DEC-100): sem a ciencia no prazo de 7 dias, abrir a loja e barrado. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.pricepolicy.service.PricePolicyService pricePolicy;
+
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
     private final GetEstablishmentsQueueSummaryUseCase queueSummaryUseCase;
@@ -380,6 +385,10 @@ public class EstablishmentServiceImpl implements EstablishmentService {
 
         // Gate de abertura (só ao virar OPEN):
         if (newStatus == OpenStatus.OPEN) {
+            // politica-de-preco-com-ciencia (DEC-100): sem a ciencia no prazo, nao abre
+            if (pricePolicy != null) {
+                pricePolicy.assertAcknowledged(requesterId);
+            }
             // (#31) ao menos um profissional com ao menos um serviço.
             if (!hasProfessionalWithService(establishment)) {
                 throw new EstablishmentNotReadyException(establishmentId);

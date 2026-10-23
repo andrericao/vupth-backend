@@ -532,3 +532,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/033-test-run-stores.yaml
       relativeToChangeLogFile: true
+
+  # politica-de-preco-com-ciencia: versao da politica e a ciencia do profissional em 7 dias
+  - include:
+      file: changesets/50-establishment/034-price-policy.yaml
+      relativeToChangeLogFile: true

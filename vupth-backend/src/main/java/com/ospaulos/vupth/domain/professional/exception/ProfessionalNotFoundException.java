@@ -4,6 +4,6 @@ import java.util.UUID;
 
 public class ProfessionalNotFoundException extends RuntimeException {
     public ProfessionalNotFoundException(UUID id) {
-        super("Professional not found with id: " + id);
+        super("Perfil de profissional não encontrado (" + id + "). Entre na loja como profissional, ou peça ao dono para te afiliar, e tente de novo.");
     }
 }
