@@ -75,6 +75,8 @@ class ServiceItemServiceImplTest {
     @Mock com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository professionalRepository;
     @Mock com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository establishmentRepository;
 
+    @Mock com.ospaulos.vupth.domain.setting.AppSettingService settings;
+
     @InjectMocks ServiceItemServiceImpl serviceItemService;
 
     private Professional professional;
@@ -83,6 +85,7 @@ class ServiceItemServiceImplTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(settings.serviceMinPrice()).thenReturn(new BigDecimal("5.00"));
         serviceItemId = UUID.randomUUID();
 
         establishment = new Establishment();
@@ -131,6 +134,60 @@ class ServiceItemServiceImplTest {
             assertThat(result.price()).isEqualByComparingTo(BigDecimal.valueOf(35));
             assertThat(result.serviceItemType()).isEqualTo(ServiceItemType.CORTE_MAQUINA);
             verify(serviceItemRepository).save(any(ServiceItem.class));
+        }
+
+        @Test
+        @DisplayName("valor-minimo (DEC-121): preco acima do minimo → traz min_price e nenhum aviso")
+        void create_aboveMinimum_noWarning() {
+            ServiceItem saved = savedAt(BigDecimal.valueOf(35));
+            when(serviceItemRepository.save(any(ServiceItem.class))).thenReturn(saved);
+
+            ServiceItemResponse result = serviceItemService.createServiceItem(professional, requestAt(35));
+
+            assertThat(result.minPrice()).isEqualByComparingTo("5.00");
+            assertThat(result.warning()).isNull();
+        }
+
+        @Test
+        @DisplayName("valor-minimo (DEC-121): preco igual ao minimo → aviso PRICE_BELOW_MINIMUM, cadastro permitido")
+        void create_equalToMinimum_warns() {
+            ServiceItem saved = savedAt(new BigDecimal("5.00"));
+            when(serviceItemRepository.save(any(ServiceItem.class))).thenReturn(saved);
+
+            ServiceItemResponse result = serviceItemService.createServiceItem(professional, requestAt(5));
+
+            assertThat(result.warning()).isNotNull();
+            assertThat(result.warning().code()).isEqualTo("PRICE_BELOW_MINIMUM");
+            assertThat(result.warning().message()).contains("R$ 5,00");
+            verify(serviceItemRepository).save(any(ServiceItem.class));
+        }
+
+        @Test
+        @DisplayName("valor-minimo (DEC-121): o minimo vem da flag, nao do codigo")
+        void create_minimumFromFlag() {
+            when(settings.serviceMinPrice()).thenReturn(new BigDecimal("12.50"));
+            ServiceItem saved = savedAt(BigDecimal.valueOf(10));
+            when(serviceItemRepository.save(any(ServiceItem.class))).thenReturn(saved);
+
+            ServiceItemResponse result = serviceItemService.createServiceItem(professional, requestAt(10));
+
+            assertThat(result.minPrice()).isEqualByComparingTo("12.50");
+            assertThat(result.warning()).isNotNull();
+            assertThat(result.warning().message()).contains("R$ 12,50");
+        }
+
+        private ServiceItemRequest requestAt(int price) {
+            return new ServiceItemRequest(establishment.getId(), ServiceItemType.CORTE_MAQUINA, "Corte",
+                    BigDecimal.valueOf(price), 30, null, null);
+        }
+
+        private ServiceItem savedAt(BigDecimal price) {
+            ServiceItem item = new ServiceItem();
+            item.setCustomName("Corte");
+            item.setPrice(price);
+            item.setServiceItemType(ServiceItemType.CORTE_MAQUINA);
+            item.setProfessional(professional);
+            return item;
         }
 
         /**
