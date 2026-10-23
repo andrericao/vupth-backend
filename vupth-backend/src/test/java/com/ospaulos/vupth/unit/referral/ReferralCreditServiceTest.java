@@ -109,13 +109,16 @@ class ReferralCreditServiceTest {
     }
 
     @Test
-    @DisplayName("quem compartilhou atendeu o proprio indicado: nao paga (antifraude, DEC-117)")
-    void referrerAttendedDoesNotPay() {
+    @DisplayName("quem compartilhou atendeu o proprio indicado: leva o valor inteiro (DEC-123, quem trouxe o cliente ganha)")
+    void referrerAttendedStillPays() {
         referredBy(attendedById);
 
         service.onFinished(new AttendanceFinishedEvent(attendance.getId()));
 
-        verify(creditRepository, never()).save(any());
+        ReferralCredit c = saved(1).get(0);
+        assertThat(c.getBeneficiaryId()).isEqualTo(attendedById);
+        assertThat(c.getShare()).isEqualTo(ReferralShare.REFERRER);
+        assertThat(c.getAmount()).isEqualByComparingTo("5.00");
     }
 
     @Test

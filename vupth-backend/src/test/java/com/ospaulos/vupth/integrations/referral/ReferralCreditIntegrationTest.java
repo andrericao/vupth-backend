@@ -79,7 +79,7 @@ class ReferralCreditIntegrationTest {
     }
 
     @Test
-    @DisplayName("cliente pelo link do dono que atende: o Finalizar credita a ele a parte do dono (R$ 2, 40% de R$ 5), a do profissional vai a quem cortou; o segundo corte nao")
+    @DisplayName("cliente pelo link do dono que atende: o Finalizar credita R$ 5 a ele (DEC-123: quem trouxe o cliente ganha mesmo cortando); o segundo corte nao; o segundo corte nao")
     void creditOnFirstCut() throws Exception {
         String admin = adminToken();
         String campaignId = new JSONObject(mvc.perform(post("/admin/campaigns").header("Authorization", admin)
@@ -91,11 +91,10 @@ class ReferralCreditIntegrationTest {
         var pro = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         String establishmentId = TestUserUtils.becomeOwner(mvc, mapper, faker, pro.token()).id();
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
-        // antifraude (DEC-117): o profissional do corte e outro, nao o dono que compartilhou o link
-        var barber = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
-        TestUserUtils.becomeProfessional(mvc, mapper, faker, barber.token(), establishmentId, "Beto");
+        // DEC-123: o profissional que divulgou o link pode cortar o indicado dele (ganha a bonificacao); so nao pode usar o proprio link
+        TestUserUtils.becomeProfessional(mvc, mapper, faker, pro.token(), establishmentId, "Beto");
         TestUserUtils.startShift(professionalRepository, establishmentId);
-        var item = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, barber.token(),
+        var item = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, pro.token(),
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
         List<UUID> items = List.of(UUID.fromString(item.id()));
 
@@ -108,17 +107,17 @@ class ReferralCreditIntegrationTest {
         mvc.perform(post("/referrals/claim").header("Authorization", client.token())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"" + code + "\"}")).andExpect(status().isOk());
 
-        cut(barber.id(), establishmentId, client.id(), client.token(), barber.token(), items);
+        cut(pro.id(), establishmentId, client.id(), client.token(), pro.token(), items);
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.referred_clients").value(1))
                 .andExpect(jsonPath("$.credited_clients").value(1))
-                .andExpect(jsonPath("$.pending_release").value(2.0))
+                .andExpect(jsonPath("$.pending_release").value(5.0))
                 .andExpect(jsonPath("$.to_receive").value(0));
 
-        cut(barber.id(), establishmentId, client.id(), client.token(), barber.token(), items);
+        cut(pro.id(), establishmentId, client.id(), client.token(), pro.token(), items);
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.credited_clients").value(1))
-                .andExpect(jsonPath("$.pending_release").value(2.0));
+                .andExpect(jsonPath("$.pending_release").value(5.0));
 
         // O premio nasce travado: o Andre libera (so entao entra no "a receber" e no painel de pagamentos)
         mvc.perform(post("/admin/referrals/release").header("Authorization", admin)
@@ -126,13 +125,13 @@ class ReferralCreditIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.pending_release").value(0))
-                .andExpect(jsonPath("$.to_receive").value(2.0));
+                .andExpect(jsonPath("$.to_receive").value(5.0));
 
         // O painel ve o que pagar, paga a mao e marca; o "a receber" zera
         String row = "$[?(@.beneficiary_id == '" + pro.id() + "')]";
         String payouts = mvc.perform(get("/admin/referrals/payouts").header("Authorization", admin))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath(row + ".amount").value(2.0))
+                .andExpect(jsonPath(row + ".amount").value(5.0))
                 .andExpect(jsonPath(row + ".payout_period").value("MONTHLY"))
                 .andReturn().getResponse().getContentAsString();
         String payoutCampaignId = com.jayway.jsonpath.JsonPath.<List<String>>read(payouts, row + ".campaign_id").get(0);

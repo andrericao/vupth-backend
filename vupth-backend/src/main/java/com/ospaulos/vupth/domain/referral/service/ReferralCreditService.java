@@ -86,11 +86,8 @@ public class ReferralCreditService {
             log.info("[Referral] indicado sem campanha de adesao — nao paga (attendance={} cliente={})", attendanceId, clientId);
             return;
         }
-        // ... e o profissional do corte tem de ser diferente de quem compartilhou (antifraude: ninguem se paga cortando o proprio "cliente")
-        if (referrerId.equals(attendedBy)) {
-            log.info("[Referral] o corte foi de quem compartilhou — nao paga (attendance={} referrer={})", attendanceId, referrerId);
-            return;
-        }
+        // antifraude-emitir-nao-e-usar (DEC-123): quem compartilhou nao usa o proprio link (o claim recusa, REFERRAL_SELF); ja o
+        // profissional que trouxe o cliente ao app ganha quando ele corta, com ele ou com outro — por isso nao ha trava por profissional.
         OffsetDateTime when = attendance.getEndTime() != null ? attendance.getEndTime() : OffsetDateTime.now();
         boolean referrerOwnsShop = establishmentRepository.findByIdAndOwnerId(shopId, referrerId).isPresent();
         boolean referrerWorksThere = professionalRepository.findById(referrerId)
