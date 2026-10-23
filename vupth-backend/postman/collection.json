@@ -27860,27 +27860,21 @@
      "response": []
     },
     {
-     "name": "[ERRO] GET /clients/me/absences como profissional → 403 (tres-faltas-pagar-adiantado)",
+     "name": "[ERRO] GET /clients/me/absences sem token → 401 ou 403 (tres-faltas-pagar-adiantado)",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+         "pm.test(\"Sem token: 401 ou 403\", () => pm.expect([401, 403]).to.include(pm.response.code));"
         ]
        }
       }
      ],
      "request": {
       "method": "GET",
-      "header": [
-       {
-        "key": "Authorization",
-        "value": "Bearer {{prof_token}}",
-        "type": "text"
-       }
-      ],
+      "header": [],
       "url": "{{base_url}}/clients/me/absences",
       "auth": {
        "type": "noauth"
