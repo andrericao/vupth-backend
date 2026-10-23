@@ -42,6 +42,7 @@ public class AttendanceController {
     private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
     private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
     private final com.ospaulos.vupth.domain.payment.service.PaymentNotifier paymentNotifier;
+    private final com.ospaulos.vupth.domain.attendance.service.NoShowHintService noShowHintService;
 
     /**
      * GET /attendances — sem {@code page}/{@code size}, a lista inteira de sempre; com um dos dois
@@ -149,6 +150,8 @@ public class AttendanceController {
 
         // WS: cliente entrou na fila → atualiza a fila ao vivo da loja
         queuePublisher.broadcastQueue(response.establishmentId());
+        // DEC-101: avisa o profissional so se o unico cliente da fila esta atrasado ha mais de 10 min
+        noShowHintService.onQueueEntry(response.id());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -430,6 +433,17 @@ public class AttendanceController {
      * ele leva multa de R$ 5,00 (configuravel) e sai com o motivo "removido por atraso". Convidado sai sem multa.
      * 409 NO_SHOW_NOT_FIRST / NO_SHOW_TOO_EARLY (com available_at). O 1o e o 2o atraso seguem so avisando ({@code /late}).
      */
+    /**
+     * GET /attendances/{attendanceId}/no-show-status — regra-do-atraso-na-fila-vazia (DEC-101): se o NAO CHEGOU ja vale
+     * e quanto falta ({@code seconds_left}, relogio do servidor). Profissional do atendimento ou dono da loja.
+     */
+    @GetMapping("/{attendanceId}/no-show-status")
+    public ResponseEntity<com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse> noShowStatus(
+            @PathVariable UUID attendanceId,
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(professionalService.noShowStatus(principal.getUserId(), attendanceId));
+    }
+
     @PatchMapping("/{attendanceId}/no-show")
     public ResponseEntity<?> markNoShow(
             @PathVariable UUID attendanceId,

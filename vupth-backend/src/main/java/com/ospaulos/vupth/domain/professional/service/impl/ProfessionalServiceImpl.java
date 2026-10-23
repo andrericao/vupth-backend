@@ -196,6 +196,40 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse noShowStatus(UUID userId, UUID attendanceId) {
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = attendance.getProfessional();
+        assertCanMarkNoShow(userId, establishment, professional);
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        int wait = lateArrivalService.noShowWaitMinutes();
+        boolean first = !waiting.isEmpty() && waiting.get(0).getId().equals(attendanceId);
+        if (!first) {
+            return new com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse(
+                    attendanceId, false, false, "NOT_FIRST", null, null, wait);
+        }
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        java.time.OffsetDateTime availableAt = lateArrivalService.noShowAvailableAt(attendance, professional, now);
+        long left = Math.max(0, java.time.Duration.between(now, availableAt).getSeconds());
+        boolean can = left == 0
+                && (attendance.getStatus() == AttendanceStatus.SCHEDULED || attendance.getStatus() == AttendanceStatus.LATE);
+        return new com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse(
+                attendanceId, true, can, can ? null : "TOO_EARLY", availableAt, left, wait);
+    }
+
+    private static void assertCanMarkNoShow(UUID userId, Establishment establishment, Professional professional) {
+        boolean isProfessional = professional.getId().equals(userId);
+        boolean isOwner = establishment.getOwner() != null && establishment.getOwner().getId().equals(userId);
+        if (!isProfessional && !isOwner) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException(
+                    "Only the professional of the attendance or the owner of the establishment can mark a no-show.");
+        }
+    }
+
+    @Override
     @Transactional
     public QueueResponse markNoShow(UUID userId, UUID attendanceId) {
         log.info("[Professional] markNoShow — user={} attendance={}", userId, attendanceId);

@@ -228,6 +228,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/no-show").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/attendances/*/no-show-status").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/promote").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/fit-in").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-fit").hasRole("PROFESSIONAL")

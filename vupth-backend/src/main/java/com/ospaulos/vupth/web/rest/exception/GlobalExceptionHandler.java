@@ -259,7 +259,9 @@ public class GlobalExceptionHandler {
             com.ospaulos.vupth.domain.attendance.exception.NoShowException ex, HttpServletRequest req) {
         log.warn("[409] NoShow {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new NoShowErrorResponse(
-                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getAvailableAt()));
+                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getAvailableAt(),
+                ex.getAvailableAt() == null ? null
+                        : Math.max(0, java.time.Duration.between(OffsetDateTime.now(), ex.getAvailableAt()).getSeconds())));
     }
 
     /** 409 da falta: com {@code available_at} (a hora a partir da qual o botao vale), quando for cedo. */
@@ -268,7 +270,8 @@ public class GlobalExceptionHandler {
             String message,
             String code,
             OffsetDateTime timestamp,
-            @com.fasterxml.jackson.annotation.JsonProperty("available_at") OffsetDateTime availableAt) {
+            @com.fasterxml.jackson.annotation.JsonProperty("available_at") OffsetDateTime availableAt,
+            @com.fasterxml.jackson.annotation.JsonProperty("seconds_left") Long secondsLeft) {
     }
 
     @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException.class)

@@ -196,7 +196,20 @@ class NoShowEscalationIntegrationTest {
         mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NO_SHOW_TOO_EARLY"))
-                .andExpect(jsonPath("$.available_at").isNotEmpty());
+                .andExpect(jsonPath("$.available_at").isNotEmpty())
+                .andExpect(jsonPath("$.seconds_left").isNumber());
+        // regra-do-atraso-na-fila-vazia (DEC-101): o app so mostra o que o servidor diz que falta
+        mvc.perform(get("/attendances/{id}/no-show-status", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.is_first").value(true))
+                .andExpect(jsonPath("$.can_mark_no_show").value(false))
+                .andExpect(jsonPath("$.reason").value("TOO_EARLY"))
+                .andExpect(jsonPath("$.wait_minutes").value(10))
+                .andExpect(jsonPath("$.seconds_left").value(org.hamcrest.Matchers.greaterThan(0)));
+        mvc.perform(get("/attendances/{id}/no-show-status", second.id()).header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.is_first").value(false))
+                .andExpect(jsonPath("$.reason").value("NOT_FIRST"))
+                .andExpect(jsonPath("$.seconds_left").doesNotExist());
         mvc.perform(patch("/attendances/{id}/no-show", second.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NO_SHOW_NOT_FIRST"));
@@ -216,6 +229,10 @@ class NoShowEscalationIntegrationTest {
         jdbc.update("UPDATE attendance SET promised_time = now() - interval '2 hours', "
                 + "scheduled_time = now() - interval '2 hours' WHERE id = ?", UUID.fromString(first.id()));
 
+        mvc.perform(get("/attendances/{id}/no-show-status", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.can_mark_no_show").value(true))
+                .andExpect(jsonPath("$.seconds_left").value(0))
+                .andExpect(jsonPath("$.reason").doesNotExist());
         mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 
