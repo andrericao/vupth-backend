@@ -562,3 +562,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/057-campaign-slot.yaml
       relativeToChangeLogFile: true
+
+  # asaas-sandbox-no-fluxo (DEC-119): a cobranca do Asaas ligada ao atendimento
+  - include:
+      file: changesets/80-attendance/058-attendance-asaas-charge.yaml
+      relativeToChangeLogFile: true

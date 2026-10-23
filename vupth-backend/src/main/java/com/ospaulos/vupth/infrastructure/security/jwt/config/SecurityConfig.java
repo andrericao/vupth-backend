@@ -130,6 +130,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/support/articles/*/vote").permitAll()
                         // testes-asaas-sandbox: o aviso do Asaas nao tem login; o controller confere o asaas-access-token
                         .requestMatchers(HttpMethod.POST, "/webhooks/asaas").permitAll()
+                        // asaas-sandbox-no-fluxo: o estado da conexao (conectado, modo) e publico e sem dado sensivel
+                        .requestMatchers(HttpMethod.GET, "/payment-gateway").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/referrals/me").authenticated() // todo papel tem link (DEC-113)
                         .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")

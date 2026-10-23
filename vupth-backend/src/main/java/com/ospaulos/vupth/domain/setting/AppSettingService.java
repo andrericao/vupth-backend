@@ -17,6 +17,9 @@ public class AppSettingService {
     /** A divida do "pagamento por fora" e real (so depois de o Asaas estar implantado); desligada, tudo e teste. */
     public static final String DEBT_REAL = "debt.real";
 
+    /** A conexao com o Asaas esta ligada (asaas-sandbox-no-fluxo, DEC-119); desligada por padrao. Liga e desliga sem deploy. */
+    public static final String ASAAS_CONNECTED = "asaas.connected";
+
     /** valor-minimo-do-servico (DEC-121): o menor preco de servico sem aviso, em reais; muda sem mexer no codigo. */
     public static final String SERVICE_MIN_PRICE = "service.min_price";
     public static final BigDecimal SERVICE_MIN_PRICE_DEFAULT = new BigDecimal("5.00");

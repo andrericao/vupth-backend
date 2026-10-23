@@ -44,7 +44,7 @@ class AppBalanceServiceTest {
     @DisplayName("soma a bonificacao por pessoa (varias campanhas), o devedor total e o que espera liberacao; maior primeiro")
     void owedByPerson() {
         owes();
-        when(asaas.enabled()).thenReturn(false);
+        when(asaas.configured()).thenReturn(false);
 
         Balance b = service.balance();
 
@@ -60,7 +60,7 @@ class AppBalanceServiceTest {
     @DisplayName("sem conexao com o Asaas: so o devedor, sem saldo nem diferenca")
     void withoutAsaas() {
         owes();
-        when(asaas.enabled()).thenReturn(false);
+        when(asaas.configured()).thenReturn(false);
 
         Balance b = service.balance();
 
@@ -73,7 +73,7 @@ class AppBalanceServiceTest {
     @DisplayName("com o Asaas: saldo menor que o devedor → a diferenca a depositar; saldo que cobre → zero")
     void depositNeeded() {
         owes();
-        when(asaas.enabled()).thenReturn(true);
+        when(asaas.configured()).thenReturn(true);
         when(asaas.balance()).thenReturn(new BigDecimal("20.00"));
         Balance short_ = service.balance();
         assertThat(short_.asaasConnected()).isTrue();
@@ -88,7 +88,7 @@ class AppBalanceServiceTest {
     @DisplayName("Asaas fora do ar: conectado mas sem saldo, com o codigo do erro; o devedor segue")
     void asaasFailure() {
         owes();
-        when(asaas.enabled()).thenReturn(true);
+        when(asaas.configured()).thenReturn(true);
         when(asaas.balance()).thenThrow(new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_REJECTED", "recusou"));
 
         Balance b = service.balance();

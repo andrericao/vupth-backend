@@ -1,0 +1,20 @@
+databaseChangeLog:
+  # asaas-sandbox-no-fluxo (DEC-119): a cobranca Pix do Asaas ligada ao atendimento. Guarda a cobranca e o modo (sandbox ou real)
+  # em que nasceu: cobranca aberta num modo termina nele, mesmo que a conexao seja desligada ou trocada depois.
+  - changeSet:
+      id: 058-attendance-asaas-charge
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: asaas_payment_id}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: asaas_payment_id, type: "VARCHAR(60)"}
+              - column: {name: asaas_mode, type: "VARCHAR(10)"}
+              - column: {name: asaas_status, type: "VARCHAR(40)"}
+              - column: {name: asaas_pix_payload, type: TEXT}
+              - column: {name: asaas_pix_image, type: TEXT}
+              - column: {name: asaas_invoice_url, type: "VARCHAR(500)"}

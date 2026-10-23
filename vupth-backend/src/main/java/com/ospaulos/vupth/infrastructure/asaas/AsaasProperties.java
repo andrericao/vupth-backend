@@ -30,6 +30,21 @@ public class AsaasProperties {
         return !apiKey.isEmpty() && baseUrl.toLowerCase(java.util.Locale.ROOT).contains("sandbox");
     }
 
+    /** A chave esta configurada (sandbox ou real): a conexao PODE ligar; quem liga e a configuracao (asaas-sandbox-no-fluxo, DEC-119). */
+    public boolean keyConfigured() {
+        return !apiKey.isEmpty();
+    }
+
+    /** A URL e a do sandbox (o dinheiro nao e real). */
+    public boolean sandbox() {
+        return baseUrl.toLowerCase(java.util.Locale.ROOT).contains("sandbox");
+    }
+
+    /** SANDBOX ou REAL, pela URL. */
+    public String mode() {
+        return sandbox() ? "SANDBOX" : "REAL";
+    }
+
     public boolean webhookEnabled() {
         return !webhookToken.isEmpty();
     }

@@ -71,6 +71,10 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.domain.debt.service.ProfessionalDebtService debtService;
 
+    /** A conexao com o Asaas (DEC-119): sem ele (testes de unidade) vale so o fluxo de sempre. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PaymentGatewayService gateway;
+
     private boolean splitPix() {
         return paymentMode != null && paymentMode.splitPix();
     }
@@ -114,13 +118,21 @@ public class PaymentService {
 
     // ─── o pagamento de um atendimento ───
 
-    @Transactional(readOnly = true)
     public PaymentResponse getPayment(UUID attendanceId, UUID userId) {
         Attendance attendance = attendance(attendanceId);
         if (!isClient(attendance, userId) && !canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o cliente, o profissional e o dono da loja veem este pagamento.");
         }
         assertAvailable(attendance);
+        // DEC-119: com a conexao ligada, a primeira vez que o cliente abre o pagamento pendente nasce a cobranca do Asaas
+        if (gateway != null && isClient(attendance, userId) && attendance.getEffectivePaymentStatus() == PaymentStatus.PENDING
+                && attendance.getAsaasPaymentId() == null) {
+            gateway.ensureCharge(attendance, attendance.getAmountDue()
+                    .add(penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO)));
+            if (attendance.getAsaasPaymentId() != null) {
+                attendanceRepository.save(attendance);
+            }
+        }
         return toPayment(attendance, isClient(attendance, userId));
     }
 
@@ -181,6 +193,29 @@ public class PaymentService {
         markPaid(attendance, method);
         log.info("[Payment] Recebi no Finalizar — attendance={} by={} forma={}", attendanceId, userId, method);
         return true;
+    }
+
+    /**
+     * O aviso do Asaas sobre a cobranca do atendimento (webhook): guarda o status e, se o Pix foi recebido, quita o pagamento como
+     * o "Recebi" faria (forma PIX). So vale se a cobranca e a que este atendimento guardou; aviso repetido nao muda nada.
+     */
+    public boolean onGatewayEvent(UUID attendanceId, String asaasPaymentId, String status, boolean paid) {
+        Attendance attendance = attendanceRepository.findById(attendanceId).orElse(null);
+        if (attendance == null || asaasPaymentId == null || !asaasPaymentId.equals(attendance.getAsaasPaymentId())) {
+            return false;
+        }
+        if (status != null) {
+            attendance.setAsaasStatus(status);
+        }
+        boolean marked = false;
+        if (paid && attendance.getPaymentStatus() != PaymentStatus.PAID) {
+            markPaid(attendance, com.ospaulos.vupth.domain.payment.PaymentMethod.PIX);
+            marked = true;
+            log.info("[Payment] Pix recebido pelo Asaas — attendance={} payment={}", attendanceId, asaasPaymentId);
+        } else {
+            attendanceRepository.save(attendance);
+        }
+        return marked;
     }
 
     /** O status do pagamento para mostrar (o efetivo), sem checar quem pergunta: so para a resposta do finish. */
@@ -352,7 +387,18 @@ public class PaymentService {
                 penaltyPix ? appPix.copyPaste(realPenalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
                 penaltyPix && appPix.configured() ? appPix.holderName() : null,
                 attendance.getPaymentMethod(),
-                hasKey && forClient ? keyOwner.getPixKey() : null);
+                hasKey && forClient ? keyOwner.getPixKey() : null,
+                gatewayOf(attendance, forClient));
+    }
+
+    /** A cobranca do Asaas deste atendimento (DEC-119): o Pix so vai ao cliente; o profissional ve o modo e o status do webhook. */
+    private static PaymentResponse.Gateway gatewayOf(Attendance attendance, boolean forClient) {
+        if (attendance.getAsaasPaymentId() == null) {
+            return null;
+        }
+        return new PaymentResponse.Gateway("ASAAS", attendance.getAsaasMode(), attendance.getAsaasStatus(),
+                forClient ? attendance.getAsaasPixPayload() : null, forClient ? attendance.getAsaasPixImage() : null,
+                forClient ? attendance.getAsaasInvoiceUrl() : null);
     }
 
     /** O valor que cai no Pix do profissional: o servico (SPLIT_PIX) ou o total (fase de testes). Para o aviso "diz que pagou". */

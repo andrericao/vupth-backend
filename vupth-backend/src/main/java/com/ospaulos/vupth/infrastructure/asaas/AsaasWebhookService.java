@@ -27,6 +27,10 @@ public class AsaasWebhookService {
     private final AsaasProperties properties;
     private final AsaasEventRepository events;
 
+    /** O pagamento do atendimento (DEC-119): sem ele (testes de unidade) o aviso so e registrado. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.payment.service.PaymentService payments;
+
     public Result receive(String token, JsonNode body) {
         if (!properties.webhookEnabled()) {
             return Result.DISABLED;
@@ -61,7 +65,23 @@ public class AsaasWebhookService {
         saved.setReceivedAt(OffsetDateTime.now());
         events.save(saved);
         log.info("[Asaas] {} payment={} value={} net={}", event, paymentId, saved.getValue(), saved.getNetValue());
+        confirmAttendance(event, paymentId, saved);
         return Result.OK;
+    }
+
+    /** O Pix recebido ou confirmado quita o atendimento da cobranca (externalReference = id do atendimento). */
+    private void confirmAttendance(String event, String paymentId, AsaasEvent saved) {
+        if (payments == null || paymentId == null || saved.getExternalReference() == null) {
+            return;
+        }
+        try {
+            boolean paid = "PAYMENT_RECEIVED".equals(event) || "PAYMENT_CONFIRMED".equals(event);
+            payments.onGatewayEvent(UUID.fromString(saved.getExternalReference()), paymentId, saved.getStatus(), paid);
+        } catch (IllegalArgumentException notAnAttendance) {
+            // cobranca de teste do ADMIN sem atendimento: so o registro
+        } catch (RuntimeException e) {
+            log.error("[Asaas] nao deu para atualizar o atendimento da cobranca {}: {}", paymentId, e.getMessage(), e);
+        }
     }
 
     private static String text(JsonNode node, String field) {

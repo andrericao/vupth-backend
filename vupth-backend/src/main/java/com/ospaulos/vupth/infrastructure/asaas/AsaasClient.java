@@ -54,13 +54,24 @@ public class AsaasClient {
     public record Charge(String id, String status, BigDecimal value, String billingType, String invoiceUrl,
                          String externalReference) {}
 
+    /** Sandbox ligado (chave + URL de sandbox): so as rotas de teste do ADMIN usam esta. */
     public boolean enabled() {
         return properties.clientEnabled();
     }
 
+    /** Ha chave configurada (sandbox ou real): o fluxo normal pode cobrar quando a conexao estiver ligada. */
+    public boolean configured() {
+        return properties.keyConfigured();
+    }
+
+    /** As rotas de teste do ADMIN nunca cobram no real: exigem o sandbox. */
+    public void requireSandbox() {
+        requireEnabled();
+    }
+
     /** O cliente de teste do sandbox: acha o que ja existe ou cria um com o CPF dado (ou o de teste). */
     public String ensureCustomer(String cpfCnpj) {
-        requireEnabled();
+        requireKey();
         JsonNode found = get("/customers?externalReference=" + TEST_CUSTOMER_REF);
         JsonNode data = found == null ? null : found.get("data");
         if (data != null && data.isArray() && !data.isEmpty() && data.get(0).hasNonNull("id")) {
@@ -80,7 +91,7 @@ public class AsaasClient {
     /** Cria a cobranca (vence amanha). {@code billingType}: PIX, BOLETO, CREDIT_CARD ou UNDEFINED. */
     public Charge createCharge(String customerId, BigDecimal value, String billingType, String externalReference,
                                String description) {
-        requireEnabled();
+        requireKey();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("customer", customerId);
         body.put("billingType", billingType);
@@ -103,12 +114,30 @@ public class AsaasClient {
 
     /** O saldo disponivel da conta ({@code GET /finance/balance}); o Painel compara com o que o app deve (saldo-do-app-e-bonificacao). */
     public BigDecimal balance() {
-        requireEnabled();
+        requireKey();
         JsonNode body = get("/finance/balance");
         if (body == null || !body.hasNonNull("balance")) {
             throw new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_BAD_RESPONSE", "O Asaas nao devolveu o saldo.");
         }
         return body.get("balance").decimalValue();
+    }
+
+    /** O QR Pix de uma cobranca PIX: {@code GET /payments/{id}/pixQrCode} → {@code payload} (copia e cola) e {@code encodedImage} (base64). */
+    public PixQr pixQrCode(String paymentId) {
+        requireKey();
+        JsonNode body = get("/payments/" + paymentId + "/pixQrCode");
+        if (body == null || !body.hasNonNull("payload")) {
+            throw new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_BAD_RESPONSE", "O Asaas nao devolveu o QR Pix.");
+        }
+        return new PixQr(body.get("payload").asText(), text(body, "encodedImage"));
+    }
+
+    public record PixQr(String payload, String encodedImage) {}
+
+    private void requireKey() {
+        if (!properties.keyConfigured()) {
+            throw new AsaasException(HttpStatus.SERVICE_UNAVAILABLE, "ASAAS_NOT_CONFIGURED", "Falta a ASAAS_API_KEY.");
+        }
     }
 
     private void requireEnabled() {

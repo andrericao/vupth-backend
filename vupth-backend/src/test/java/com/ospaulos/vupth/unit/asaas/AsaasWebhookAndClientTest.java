@@ -23,6 +23,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -137,6 +138,48 @@ class AsaasWebhookAndClientTest {
         assertThat(second.getValue()).isNull();
     }
 
+    @Test
+    @DisplayName("DEC-119: PAYMENT_RECEIVED e PAYMENT_CONFIRMED quitam o atendimento da cobranca; os outros avisos so atualizam o status; referencia que nao e atendimento so e registrada")
+    void webhookConfirmsAttendance() throws Exception {
+        AsaasEventRepository repo = mock(AsaasEventRepository.class);
+        com.ospaulos.vupth.domain.payment.service.PaymentService payments =
+                mock(com.ospaulos.vupth.domain.payment.service.PaymentService.class);
+        AsaasWebhookService service = webhook("segredo", repo);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "payments", payments);
+        UUID attendance = UUID.randomUUID();
+
+        service.receive("segredo", json("{\"id\":\"e1\",\"event\":\"PAYMENT_RECEIVED\",\"payment\":{\"id\":\"pay_9\","
+                + "\"externalReference\":\"" + attendance + "\",\"status\":\"RECEIVED\"}}"));
+        verify(payments).onGatewayEvent(attendance, "pay_9", "RECEIVED", true);
+
+        service.receive("segredo", json("{\"id\":\"e2\",\"event\":\"PAYMENT_CONFIRMED\",\"payment\":{\"id\":\"pay_9\","
+                + "\"externalReference\":\"" + attendance + "\",\"status\":\"CONFIRMED\"}}"));
+        verify(payments).onGatewayEvent(attendance, "pay_9", "CONFIRMED", true);
+
+        service.receive("segredo", json("{\"id\":\"e3\",\"event\":\"PAYMENT_OVERDUE\",\"payment\":{\"id\":\"pay_9\","
+                + "\"externalReference\":\"" + attendance + "\",\"status\":\"OVERDUE\"}}"));
+        verify(payments).onGatewayEvent(attendance, "pay_9", "OVERDUE", false);
+
+        service.receive("segredo", json("{\"id\":\"e4\",\"event\":\"PAYMENT_RECEIVED\",\"payment\":{\"id\":\"pay_8\","
+                + "\"externalReference\":\"teste-manual\",\"status\":\"RECEIVED\"}}"));
+        verify(payments, org.mockito.Mockito.times(3)).onGatewayEvent(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+
+        org.mockito.Mockito.doThrow(new IllegalStateException("banco fora")).when(payments)
+                .onGatewayEvent(any(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+        assertThat(service.receive("segredo", json("{\"id\":\"e5\",\"event\":\"PAYMENT_RECEIVED\",\"payment\":{\"id\":\"pay_9\","
+                + "\"externalReference\":\"" + attendance + "\"}}"))).as("o aviso nao cai por causa do atendimento").isEqualTo(Result.OK);
+    }
+
+    @Test
+    @DisplayName("DEC-119: a conexao so pode ligar com a chave (sandbox ou real); o modo vem da URL")
+    void connectionProperties() {
+        assertThat(new AsaasProperties("k", "https://api.asaas.com/v3", "").keyConfigured()).isTrue();
+        assertThat(new AsaasProperties("k", "https://api.asaas.com/v3", "").mode()).isEqualTo("REAL");
+        assertThat(new AsaasProperties("k", "https://api.asaas.com/v3", "").sandbox()).isFalse();
+        assertThat(new AsaasProperties("k", "https://api-sandbox.asaas.com/v3", "").mode()).isEqualTo("SANDBOX");
+        assertThat(new AsaasProperties("", "https://api.asaas.com/v3", "").keyConfigured()).isFalse();
+    }
+
     // ─── cliente do sandbox ───
 
     private AsaasClient client(String key) throws IOException {
@@ -154,15 +197,17 @@ class AsaasWebhookAndClientTest {
     }
 
     @Test
-    @DisplayName("cliente: desligado (sem chave) responde 503 ASAAS_SANDBOX_DISABLED e nao chama a rede")
+    @DisplayName("cliente: desligado (sem chave) responde 503 ASAAS_NOT_CONFIGURED e nao chama a rede")
     void clientDisabled() throws Exception {
         AsaasClient disabled = client("");
 
         assertThat(disabled.enabled()).isFalse();
         assertThatThrownBy(() -> disabled.ensureCustomer(null)).isInstanceOfSatisfying(AsaasException.class, e -> {
             assertThat(e.getStatus()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
-            assertThat(e.getCode()).isEqualTo("ASAAS_SANDBOX_DISABLED");
+            assertThat(e.getCode()).isEqualTo("ASAAS_NOT_CONFIGURED");
         });
+        assertThatThrownBy(disabled::requireSandbox).isInstanceOfSatisfying(AsaasException.class,
+                e -> assertThat(e.getCode()).isEqualTo("ASAAS_SANDBOX_DISABLED"));
         assertThatThrownBy(() -> disabled.createCharge("cus", new BigDecimal("10"), "PIX", null, null))
                 .isInstanceOf(AsaasException.class);
     }

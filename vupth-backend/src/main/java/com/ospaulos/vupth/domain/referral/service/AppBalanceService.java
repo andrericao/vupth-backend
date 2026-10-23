@@ -67,7 +67,7 @@ public class AppBalanceService {
         BigDecimal pending = referrals.pendingRelease().stream().map(AdminReferralPayoutResponse::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        if (!asaas.enabled()) {
+        if (!asaas.configured()) {
             return new Balance(owed, pending, people, false, null, null, null);
         }
         try {

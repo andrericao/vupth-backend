@@ -44,6 +44,10 @@ public class AsaasSandboxReportService {
     private final AppLedgerRepository ledger;
     private final Clock clock;
 
+    /** A bonificacao por link do corte (DEC-119): sem ele (testes de unidade) a bonificacao aparece zerada. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.referral.repository.ReferralCreditRepository referralCredits;
+
     @org.springframework.beans.factory.annotation.Autowired
     public AsaasSandboxReportService(AsaasEventRepository events, AttendanceRepository attendances, AppLedgerRepository ledger) {
         this(events, attendances, ledger, Clock.systemUTC());
@@ -78,7 +82,7 @@ public class AsaasSandboxReportService {
             app = app.add(nz(line.appNet()));
         }
         return new Report(new Window(start, end), lines, new Totals(paid, fee, pro, app, OffsetDateTime.now(clock)),
-                List.of("bonus"));
+                List.of());
     }
 
     private Line line(String paymentId, List<AsaasEvent> list) {
@@ -95,7 +99,7 @@ public class AsaasSandboxReportService {
             String note = reference == null ? "Cobranca sem atendimento: so o que o Asaas informou."
                     : attendance == null ? "O atendimento da referencia nao foi encontrado." : "Atendimento de servico antigo, sem a divisao gravada.";
             return new Line(paymentId, reference, billing, last.getStatus(), names, value, net, real,
-                    null, null, null, null, null, null, null, note);
+                    null, null, null, null, null, null, null, note, null, null, null, null);
         }
         BigDecimal service = attendance.getTotalValue();
         BigDecimal penalty = ZERO;
@@ -111,10 +115,16 @@ public class AsaasSandboxReportService {
         BigDecimal leftover = real == null ? null : charged.subtract(real);
         BigDecimal appNet = value == null || real == null ? null
                 : value.subtract(attendance.getProReceives()).subtract(real);
+        BigDecimal discount = nz(attendance.getDiscount());
+        BigDecimal bonus = referralCredits == null ? ZERO : nz(referralCredits.sumByAttendance(attendance.getId()));
+        // o esperado e o corte, menos o cupom, mais a multa; a diferenca (em centavos) mostra qualquer desvio do valor cobrado
+        BigDecimal expected = service.subtract(discount).max(ZERO).add(penalty);
+        Long differenceCents = value == null ? null : value.subtract(expected).movePointRight(2).longValue();
         return new Line(paymentId, reference, billing, last.getStatus(), names, value, net, real,
                 attendance.getProReceives(), twoPercent, rounding, penalty, charged, leftover, appNet,
-                value != null && value.compareTo(service.add(penalty)) != 0
-                        ? "O valor cobrado nao e o corte mais a multa do atendimento." : null);
+                differenceCents != null && differenceCents != 0
+                        ? "O valor cobrado nao e o corte, menos o cupom, mais a multa do atendimento." : null,
+                service, discount, bonus, differenceCents);
     }
 
     private Attendance attendanceOf(String reference) {

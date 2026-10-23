@@ -49,7 +49,12 @@ public final class AsaasSandboxDtos {
             @JsonProperty("fee_charged_in_price") BigDecimal feeChargedInPrice,
             @JsonProperty("fee_leftover") BigDecimal feeLeftover,
             @JsonProperty("app_net") BigDecimal appNet,
-            @JsonProperty("note") String note) {}
+            @JsonProperty("note") String note,
+            // asaas-sandbox-no-fluxo (DEC-119): o que o cupom e a bonificacao fazem com o valor cobrado
+            @JsonProperty("list_price") BigDecimal listPrice,
+            @JsonProperty("coupon_discount") BigDecimal couponDiscount,
+            @JsonProperty("bonus") BigDecimal bonus,
+            @JsonProperty("difference_cents") Long differenceCents) {}
 
     public record Report(
             @JsonProperty("period") AdminMetricsDtos.Window period,

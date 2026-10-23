@@ -252,6 +252,26 @@ public class Attendance implements Serializable {
     @Column(name = "payment_method", length = 10)
     private com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod;
 
+    /** A cobranca Pix do Asaas deste atendimento (asaas-sandbox-no-fluxo, DEC-119); nulo = vale o Pix do profissional. */
+    @Column(name = "asaas_payment_id", length = 60)
+    private String asaasPaymentId;
+
+    /** SANDBOX ou REAL: o modo em que a cobranca nasceu; ela termina nele mesmo que a conexao mude depois. */
+    @Column(name = "asaas_mode", length = 10)
+    private String asaasMode;
+
+    @Column(name = "asaas_status", length = 40)
+    private String asaasStatus;
+
+    @Column(name = "asaas_pix_payload", columnDefinition = "TEXT")
+    private String asaasPixPayload;
+
+    @Column(name = "asaas_pix_image", columnDefinition = "TEXT")
+    private String asaasPixImage;
+
+    @Column(name = "asaas_invoice_url", length = 500)
+    private String asaasInvoiceUrl;
+
     /** Quando o cliente tocou "Ja paguei". */
     @Column(name = "payment_claimed_at")
     private OffsetDateTime paymentClaimedAt;

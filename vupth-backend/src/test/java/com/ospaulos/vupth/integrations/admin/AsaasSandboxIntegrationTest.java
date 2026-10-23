@@ -96,7 +96,7 @@ class AsaasSandboxIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.payments[?(@.payment_id == '" + payment + "')].client_paid").value(55.90))
                 .andExpect(jsonPath("$.payments[?(@.payment_id == '" + payment + "')].asaas_fee_real").value(1.99))
-                .andExpect(jsonPath("$.not_measured[0]").value("bonus"));
+                .andExpect(jsonPath("$.not_measured").isEmpty());
 
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         mvc.perform(get("/admin/finance/asaas/sandbox/report").header("Authorization", client.token()))

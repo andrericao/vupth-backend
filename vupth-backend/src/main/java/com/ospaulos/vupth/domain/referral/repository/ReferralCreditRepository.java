@@ -93,4 +93,8 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
         WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL
         """)
     int markPaid(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("now") OffsetDateTime now);
+
+    /** A bonificacao por link que o corte gerou (premio do indicador), liberada ou nao; para o relatorio do Asaas. */
+    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId = :attendanceId")
+    BigDecimal sumByAttendance(@Param("attendanceId") UUID attendanceId);
 }

@@ -101,7 +101,7 @@ class AsaasSandboxReportServiceTest {
         assertThat(report.totals().asaasFeeReal()).isEqualByComparingTo("1.99");
         assertThat(report.totals().professionalPlanned()).isEqualByComparingTo("47.86");
         assertThat(report.totals().appNet()).isEqualByComparingTo("6.05");
-        assertThat(report.notMeasured()).containsExactly("bonus");
+        assertThat(report.notMeasured()).isEmpty(); // DEC-119: o cupom e a bonificacao agora sao medidos
     }
 
     @Test
@@ -114,8 +114,33 @@ class AsaasSandboxReportServiceTest {
 
         Line line = service.report(null, null).payments().get(0);
 
-        assertThat(line.note()).contains("nao e o corte mais a multa");
+        assertThat(line.note()).contains("menos o cupom, mais a multa");
         assertThat(line.penalty()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    @DisplayName("DEC-119: o corte com cupom e bonificacao traz preco de tabela, desconto, bonificacao e a diferenca em centavos (zero quando bate)")
+    void couponAndBonus() {
+        Attendance a = attendance("30.90", "28.29", "1.99", "0.62");
+        ReflectionTestUtils.setField(a, "discount", new BigDecimal("5.00"));
+        var referralCredits = mock(com.ospaulos.vupth.domain.referral.repository.ReferralCreditRepository.class);
+        when(referralCredits.sumByAttendance(a.getId())).thenReturn(new BigDecimal("5.00"));
+        ReflectionTestUtils.setField(service, "referralCredits", referralCredits);
+        when(attendances.findById(a.getId())).thenReturn(Optional.of(a));
+        when(ledger.findByAttendanceId(a.getId())).thenReturn(List.of());
+        given(event("PAYMENT_RECEIVED", "pay_3", "25.90", "24.91", "RECEIVED", a.getId().toString(), 1));
+
+        Line line = service.report(null, null).payments().get(0);
+
+        assertThat(line.listPrice()).isEqualByComparingTo("30.90");
+        assertThat(line.couponDiscount()).isEqualByComparingTo("5.00");
+        assertThat(line.bonus()).isEqualByComparingTo("5.00");
+        assertThat(line.clientPaid()).isEqualByComparingTo("25.90");
+        assertThat(line.differenceCents()).isZero();
+        assertThat(line.note()).isNull();
+
+        given(event("PAYMENT_RECEIVED", "pay_3", "25.95", "24.96", "RECEIVED", a.getId().toString(), 2));
+        assertThat(service.report(null, null).payments().get(0).differenceCents()).isEqualTo(5);
     }
 
     @Test

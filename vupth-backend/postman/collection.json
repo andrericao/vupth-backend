@@ -28117,7 +28117,7 @@
    ]
   },
   {
-   "name": "27 - valor minimo (DEC-121), relatorio do profissional (PAR-3) e saldo do app (DEC-120)",
+   "name": "27 - valor minimo (DEC-121), relatorio do profissional (PAR-3), saldo do app (DEC-120) e conexao do Asaas (DEC-119)",
    "item": [
     {
      "name": "GET /settings/service-min-price (logado) → 200 min_price (padrao 5.00)",
@@ -28254,6 +28254,72 @@
       "url": "{{base_url}}/admin/finance/app-balance",
       "auth": {
        "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET /payment-gateway (sem login) → 200 connected=false por padrao (asaas-sandbox-no-fluxo, DEC-119)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"desconectado\", () => pm.expect(pm.response.json().connected).to.eql(false));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/payment-gateway",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] PUT /admin/settings/asaas-connection sem o papel ADMIN → 403",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/settings/asaas-connection",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"connected\":true}"
       }
      },
      "response": []

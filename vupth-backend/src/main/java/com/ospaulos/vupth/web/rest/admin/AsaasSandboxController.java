@@ -42,6 +42,7 @@ public class AsaasSandboxController {
             throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(HttpStatus.UNPROCESSABLE_ENTITY,
                     "ASAAS_BILLING_TYPE_INVALID", "billing_type deve ser PIX, BOLETO, CREDIT_CARD ou UNDEFINED.");
         }
+        client.requireSandbox(); // a rota de teste nunca cobra no real (DEC-119: o real so pelo fluxo normal)
         String customer = client.ensureCustomer(request.cpfCnpj());
         String reference = request.attendanceId() == null ? null : request.attendanceId().toString();
         AsaasClient.Charge charge = client.createCharge(customer, request.amount(), billing, reference,
