@@ -61,6 +61,25 @@ public class AdminReferralService {
                 .toList();
     }
 
+    /** Os premios ganhos que esperam a liberacao do Andre, por campanha e pessoa. */
+    @Transactional(readOnly = true)
+    public List<AdminReferralPayoutResponse> pendingRelease() {
+        LocalDate today = LocalDate.now(BusinessClock.zone());
+        return creditRepository.findPendingRelease().stream().map(row -> toResponse(row, today)).toList();
+    }
+
+    /** O Andre manda: os premios travados da campanha (de uma pessoa, ou de todas) passam a valer no "a pagar". */
+    public com.ospaulos.vupth.api.referral.dto.AdminReferralReleasedResponse release(UUID adminId, UUID campaignId, UUID userId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        int released = userId == null ? creditRepository.releaseAll(campaignId, now)
+                : creditRepository.releaseFor(campaignId, userId, now);
+        if (released == 0) {
+            throw ReferralException.nothingToRelease();
+        }
+        log.info("[Referral] admin={} liberou campaign={} user={} creditos={}", adminId, campaignId, userId, released);
+        return new com.ospaulos.vupth.api.referral.dto.AdminReferralReleasedResponse(released, now);
+    }
+
     public AdminReferralPaidResponse markPaid(UUID adminId, UUID campaignId, UUID userId) {
         OffsetDateTime now = OffsetDateTime.now();
         int paid = creditRepository.markPaid(campaignId, userId, now) + couponCreditRepository.markPaid(campaignId, userId, now);

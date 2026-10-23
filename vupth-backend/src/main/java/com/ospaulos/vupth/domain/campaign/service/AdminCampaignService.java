@@ -189,6 +189,7 @@ public class AdminCampaignService {
         c.setPayoutPeriod(r.payoutPeriod());
         c.setPayoutDay(r.payoutDay());
         c.setBenefitBase(r.benefitBase() == null ? BenefitBase.WITH_FEE : r.benefitBase());
+        c.setMaxTotalCost(r.maxTotalCost());
     }
 
     private static String blankToNull(String value) {

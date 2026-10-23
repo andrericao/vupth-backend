@@ -37,6 +37,13 @@ public class CampaignController {
         return ResponseEntity.status(HttpStatus.CREATED).body(campaignService.redeem(principal.getUserId(), request.code()));
     }
 
+    /** Participar (compartilhe-e-ganhe): adere a uma campanha publica sem cupom. 201; 404, 403, 409 como o {@code redeem}. */
+    @PostMapping("/{id}/join")
+    public ResponseEntity<CampaignResponse> join(@PathVariable java.util.UUID id,
+                                                 @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(campaignService.join(principal.getUserId(), id));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<List<CampaignResponse>> mine(@AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.ok(campaignService.mine(principal.getUserId()));

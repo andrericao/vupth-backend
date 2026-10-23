@@ -80,18 +80,33 @@ public class ReferralCreditService {
         UUID referrerId = referral.get().getReferrerId();
         UUID shopId = attendance.getEstablishment().getId();
         UUID attendedBy = attendance.getProfessional().getId();
+        // compartilhe-e-ganhe (DEC-113/115/117): so rende premio quem chegou por uma campanha de adesao (a unica do link) ...
+        UUID campaignId = referral.get().getCampaignId();
+        if (campaignId == null) {
+            log.info("[Referral] indicado sem campanha de adesao — nao paga (attendance={} cliente={})", attendanceId, clientId);
+            return;
+        }
+        // ... e o profissional do corte tem de ser diferente de quem compartilhou (antifraude: ninguem se paga cortando o proprio "cliente")
+        if (referrerId.equals(attendedBy)) {
+            log.info("[Referral] o corte foi de quem compartilhou — nao paga (attendance={} referrer={})", attendanceId, referrerId);
+            return;
+        }
         OffsetDateTime when = attendance.getEndTime() != null ? attendance.getEndTime() : OffsetDateTime.now();
         boolean referrerOwnsShop = establishmentRepository.findByIdAndOwnerId(shopId, referrerId).isPresent();
         boolean referrerWorksThere = professionalRepository.findById(referrerId)
                 .map(p -> p.getEstablishment() != null && shopId.equals(p.getEstablishment().getId()))
                 .orElse(false);
 
-        Optional<Campaign> campaign = campaignRepository.findRunningOfType(CampaignType.REFERRAL_BONUS, when).stream()
+        Optional<Campaign> campaign = campaignRepository.findById(campaignId).stream()
+                .filter(c -> c.getType() == CampaignType.REFERRAL_BONUS && c.isRunning(when))
                 .filter(c -> c.getValueAmount() != null)
                 .filter(c -> validOn(c, when))
                 .filter(c -> c.getReferralScope() != ReferralScope.REFERRER_ESTABLISHMENT || referrerOwnsShop || referrerWorksThere)
                 .filter(c -> c.getMaxRedemptions() == null
                         || creditRepository.countClientsByCampaign(c.getId()) < c.getMaxRedemptions())
+                // teto de gasto da campanha: a soma dos premios (liberados ou nao) nao passa dele
+                .filter(c -> c.getMaxTotalCost() == null
+                        || creditRepository.sumByCampaign(c.getId()).add(c.getValueAmount()).compareTo(c.getMaxTotalCost()) <= 0)
                 .findFirst();
         if (campaign.isEmpty()) {
             log.info("[Referral] sem campanha de indicacao que valha — attendance={} cliente={}", attendanceId, clientId);

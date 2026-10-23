@@ -9,6 +9,7 @@ import com.ospaulos.vupth.domain.campaign.model.CampaignAudience;
 import com.ospaulos.vupth.domain.campaign.model.CampaignRedemption;
 import com.ospaulos.vupth.domain.campaign.model.CampaignType;
 import com.ospaulos.vupth.domain.campaign.model.CampaignVisibility;
+import com.ospaulos.vupth.domain.campaign.model.RedemptionVia;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRedemptionRepository;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRepository;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
@@ -70,6 +71,22 @@ public class CampaignService {
     public CampaignResponse redeem(UUID userId, String code) {
         Campaign campaign = campaignRepository.findByCodeIgnoreCase(code.trim())
                 .orElseThrow(CampaignException::notFound);
+        return accept(userId, campaign, RedemptionVia.CUPOM);
+    }
+
+    /**
+     * "Participar" (compartilhe-e-ganhe, DEC-113): a adesao a uma campanha publica sem digitar o cupom. E a mesma lista dos cupons
+     * aceitos, com a via PARTICIPAR; as mesmas regras (no ar, publico, vaga, uma vez so) valem.
+     */
+    public CampaignResponse join(UUID userId, UUID campaignId) {
+        Campaign campaign = campaignRepository.findById(campaignId).orElseThrow(CampaignException::notFound);
+        if (campaign.getVisibility() != CampaignVisibility.PUBLIC) {
+            throw CampaignException.notFound(); // campanha privada so entra com o cupom
+        }
+        return accept(userId, campaign, RedemptionVia.PARTICIPAR);
+    }
+
+    private CampaignResponse accept(UUID userId, Campaign campaign, RedemptionVia via) {
         OffsetDateTime now = OffsetDateTime.now(clock);
         if (!campaign.isRunning(now)) {
             throw CampaignException.notAvailable();
@@ -90,7 +107,7 @@ public class CampaignService {
                 && redemptionRepository.countByCampaign_Id(campaign.getId()) >= campaign.getMaxRedemptions()) {
             throw CampaignException.notAvailable();
         }
-        CampaignRedemption redemption = redemptionRepository.save(new CampaignRedemption(campaign, userId, now));
+        CampaignRedemption redemption = redemptionRepository.save(new CampaignRedemption(campaign, userId, now, via));
         log.info("[Campaign] cupom aceito — campaign={} user={}", campaign.getId(), userId);
         return CampaignResponse.of(campaign, true, null, redemption.getRedeemedAt());
     }

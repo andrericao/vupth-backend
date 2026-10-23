@@ -105,6 +105,10 @@ public class Campaign {
     @Column(name = "benefit_base", length = 12, nullable = false)
     private BenefitBase benefitBase = BenefitBase.WITH_FEE;
 
+    /** Teto de gasto da campanha de link (compartilhe-e-ganhe): a soma dos premios nao passa dele; nulo = sem teto. */
+    @Column(name = "max_total_cost", precision = 10, scale = 2)
+    private BigDecimal maxTotalCost;
+
     /** Ligada e dentro da janela em {@code now}. */
     public boolean isRunning(OffsetDateTime now) {
         return active && !now.isBefore(startsAt) && now.isBefore(endsAt);

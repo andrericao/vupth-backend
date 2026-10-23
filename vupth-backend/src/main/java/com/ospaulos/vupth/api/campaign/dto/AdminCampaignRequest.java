@@ -43,6 +43,7 @@ public record AdminCampaignRequest(
         @JsonProperty("referral_scope") ReferralScope referralScope,
         @JsonProperty("payout_period") PayoutPeriod payoutPeriod,
         @JsonProperty("payout_day") @Min(1) @Max(28) Integer payoutDay,
-        @JsonProperty("benefit_base") BenefitBase benefitBase
+        @JsonProperty("benefit_base") BenefitBase benefitBase,
+        @JsonProperty("max_total_cost") @DecimalMin("0.01") @Digits(integer = 8, fraction = 2) BigDecimal maxTotalCost
 ) {
 }

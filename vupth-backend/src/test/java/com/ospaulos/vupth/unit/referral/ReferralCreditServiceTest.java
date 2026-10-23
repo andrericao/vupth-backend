@@ -90,12 +90,16 @@ class ReferralCreditServiceTest {
         campaign.setReferralProfessionalPercent(new BigDecimal("60"));
         campaign.setReferralOwnerPercent(new BigDecimal("40"));
         campaign.setReferralScope(ReferralScope.ANY_PROFESSIONAL);
-        when(campaignRepository.findRunningOfType(eq(CampaignType.REFERRAL_BONUS), any())).thenReturn(List.of(campaign));
+        campaign.setStartsAt(OffsetDateTime.now().minusDays(30));
+        campaign.setEndsAt(tuesday.plusDays(30));
+        when(campaignRepository.findById(campaign.getId())).thenReturn(Optional.of(campaign));
+        when(creditRepository.sumByCampaign(any())).thenReturn(BigDecimal.ZERO);
     }
 
+    /** O cliente chegou pelo link de {@code referrerId} na campanha do teste. */
     private void referredBy(UUID referrerId) {
         when(referralRepository.findById(clientId))
-                .thenReturn(Optional.of(new Referral(clientId, referrerId, OffsetDateTime.now())));
+                .thenReturn(Optional.of(new Referral(clientId, referrerId, OffsetDateTime.now(), campaign.getId())));
     }
 
     private List<ReferralCredit> saved(int times) {
@@ -105,19 +109,49 @@ class ReferralCreditServiceTest {
     }
 
     @Test
-    @DisplayName("quem gerou o link atendeu: leva o valor inteiro")
-    void referrerAttended() {
+    @DisplayName("quem compartilhou atendeu o proprio indicado: nao paga (antifraude, DEC-117)")
+    void referrerAttendedDoesNotPay() {
         referredBy(attendedById);
 
         service.onFinished(new AttendanceFinishedEvent(attendance.getId()));
 
+        verify(creditRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("outro profissional atendeu: quem compartilhou leva o valor inteiro, travado ate o Andre liberar")
+    void referrerOtherAttended() {
+        referredBy(otherId);
+
+        service.onFinished(new AttendanceFinishedEvent(attendance.getId()));
+
         ReferralCredit c = saved(1).get(0);
-        assertThat(c.getBeneficiaryId()).isEqualTo(attendedById);
+        assertThat(c.getBeneficiaryId()).isEqualTo(otherId);
         assertThat(c.getShare()).isEqualTo(ReferralShare.REFERRER);
         assertThat(c.getAmount()).isEqualByComparingTo("5.00");
         assertThat(c.getCampaignId()).isEqualTo(campaign.getId());
         assertThat(c.getClientId()).isEqualTo(clientId);
         assertThat(c.getAttendanceId()).isEqualTo(attendance.getId());
+        assertThat(c.getReleasedAt()).as("o premio nasce travado").isNull();
+    }
+
+    @Test
+    @DisplayName("indicado sem campanha de adesao nao paga; teto de gasto da campanha: nao passa dele")
+    void noCampaignAndCap() {
+        when(referralRepository.findById(clientId))
+                .thenReturn(Optional.of(new Referral(clientId, otherId, OffsetDateTime.now())));
+        service.credit(attendance.getId());
+        verify(creditRepository, never()).save(any());
+
+        referredBy(otherId);
+        campaign.setMaxTotalCost(new BigDecimal("12.00"));
+        when(creditRepository.sumByCampaign(campaign.getId())).thenReturn(new BigDecimal("8.00"));
+        service.credit(attendance.getId());
+        verify(creditRepository, never()).save(any());
+
+        when(creditRepository.sumByCampaign(campaign.getId())).thenReturn(new BigDecimal("7.00"));
+        service.credit(attendance.getId());
+        assertThat(saved(1)).hasSize(1);
     }
 
     @Test
@@ -183,7 +217,7 @@ class ReferralCreditServiceTest {
     @Test
     @DisplayName("fora dos dias da campanha, sem valor em reais ou sem vaga: sem credito")
     void campaignFilters() {
-        referredBy(attendedById);
+        referredBy(otherId);
         campaign.setWeekdays("MONDAY,WEDNESDAY");
         service.credit(attendance.getId());
 
@@ -207,7 +241,7 @@ class ReferralCreditServiceTest {
     void noCredit() {
         service.credit(attendance.getId());
 
-        referredBy(attendedById);
+        referredBy(otherId);
         when(creditRepository.existsByClientId(clientId)).thenReturn(true);
         service.credit(attendance.getId());
 
@@ -216,7 +250,7 @@ class ReferralCreditServiceTest {
         service.credit(attendance.getId());
 
         when(attendanceRepository.countByClient_IdAndStatus(clientId, AttendanceStatus.FINISHED)).thenReturn(1L);
-        when(campaignRepository.findRunningOfType(eq(CampaignType.REFERRAL_BONUS), any())).thenReturn(List.of());
+        when(campaignRepository.findById(campaign.getId())).thenReturn(Optional.empty());
         service.credit(attendance.getId());
 
         attendance.setStatus(AttendanceStatus.IN_PROGRESS);
@@ -235,7 +269,7 @@ class ReferralCreditServiceTest {
     @Test
     @DisplayName("sem hora de fim, usa agora; uma falha so e logada, nao derruba o Finalizar")
     void endTimeFallbackAndFailureSwallowed() {
-        referredBy(attendedById);
+        referredBy(otherId);
         attendance.setEndTime(null);
         service.credit(attendance.getId());
         assertThat(saved(1)).hasSize(1);

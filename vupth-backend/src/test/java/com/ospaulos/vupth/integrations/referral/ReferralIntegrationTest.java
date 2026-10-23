@@ -90,10 +90,14 @@ class ReferralIntegrationTest {
     }
 
     @Test
-    @DisplayName("cliente nao tem link (403); sem login, 401; codigo vazio, 422")
+    @DisplayName("todo papel tem link (cliente tambem, DEC-113); sem login, 401; codigo vazio, 422")
     void guards() throws Exception {
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
-        mvc.perform(get("/referrals/me").header("Authorization", client.token())).andExpect(status().isForbidden());
+        mvc.perform(get("/referrals/me").header("Authorization", client.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").isNotEmpty())
+                .andExpect(jsonPath("$.campaigns.length()").value(0))
+                .andExpect(jsonPath("$.pending_release").value(0));
         mvc.perform(get("/referrals/me")).andExpect(status().isUnauthorized());
         mvc.perform(post("/referrals/claim").header("Authorization", client.token())
                         .contentType(MediaType.APPLICATION_JSON).content(claim("")))
