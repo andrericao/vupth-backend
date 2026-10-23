@@ -542,3 +542,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/053-coupon-discount.yaml
       relativeToChangeLogFile: true
+
+  # tres-faltas-pagar-adiantado: as ocorrencias do cliente e a marca de pagamento adiantado no agendamento
+  - include:
+      file: changesets/70-client/054-client-absence.yaml
+      relativeToChangeLogFile: true

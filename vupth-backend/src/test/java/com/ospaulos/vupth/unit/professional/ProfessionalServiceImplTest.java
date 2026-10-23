@@ -80,6 +80,7 @@ class ProfessionalServiceImplTest {
     @Mock ProfessionalIntervalService intervalService;
     // Contador de atrasos (D4): o mark/undo-late conta e desconta aqui.
     @Mock com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrivalService;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ProfessionalServiceImpl professionalService;
 

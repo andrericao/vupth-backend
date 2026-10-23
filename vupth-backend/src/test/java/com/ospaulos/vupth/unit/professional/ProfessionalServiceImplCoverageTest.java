@@ -63,6 +63,7 @@ class ProfessionalServiceImplCoverageTest {
     @Mock EstablishmentRepository establishmentRepository;
     @Mock EstablishmentOpenStatusService openStatusService;
     @Mock LateArrivalService lateArrivalService;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ProfessionalServiceImpl professionalService;
 

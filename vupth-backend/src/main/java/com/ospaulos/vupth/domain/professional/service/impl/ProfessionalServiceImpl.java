@@ -53,6 +53,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     private final EstablishmentRepository establishmentRepository;
     private final EstablishmentOpenStatusService openStatusService;
     private final com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrivalService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // ─────────────────────────────────────────────────────────────
     // GUEST
@@ -263,7 +264,14 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         // DEC-86: nao comparecer e um atraso — troca de lugar com o proximo e soma no contador; no 3o, a multa.
         // Mesmo caminho do /late; a espera de 10 min acima passa da tolerancia de 5, entao o atraso sempre conta.
         log.info("[Professional] markNoShow — attendance={} vira atraso", attendanceId);
-        return markAttendanceLate(professional.getId(), attendanceId);
+        QueueResponse response = markAttendanceLate(professional.getId(), attendanceId);
+        // tres-faltas-pagar-adiantado (DEC-115): o "nao cheguei" conta nas tres ocorrencias, inclusive do cliente isento
+        if (attendance.getClient() != null) {
+            eventPublisher.publishEvent(new com.ospaulos.vupth.domain.client.event.ClientAbsenceEvent(
+                    attendance.getClient().getId(), attendanceId,
+                    com.ospaulos.vupth.domain.client.model.ClientAbsenceType.NO_SHOW));
+        }
+        return response;
     }
 
     @Override

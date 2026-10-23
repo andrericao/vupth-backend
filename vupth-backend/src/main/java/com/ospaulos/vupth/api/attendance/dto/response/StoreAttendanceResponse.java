@@ -47,14 +47,16 @@ public record StoreAttendanceResponse(
         // cupom-ativado-em-configuracoes: aqui o totalValue segue o preco cheio (a divisao soma ele); o cliente paga amountDue
         // e o app repassa o desconto ao profissional
         @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount,
-        @com.fasterxml.jackson.annotation.JsonProperty("amount_due") BigDecimal amountDue
+        @com.fasterxml.jackson.annotation.JsonProperty("amount_due") BigDecimal amountDue,
+        // tres-faltas-pagar-adiantado: agendamento de cliente com tres ocorrencias; o profissional confirma o recebimento
+        @com.fasterxml.jackson.annotation.JsonProperty("prepay_required") boolean prepayRequired
 ) {
 
     public StoreAttendanceResponse withReason(String reason, boolean late) {
         return new StoreAttendanceResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime,
                 startTime, endTime, durationInMinutes, proReceives, intermediaryFee, platformFee, paymentStatus,
-                reason, late, discount, amountDue);
+                reason, late, discount, amountDue, prepayRequired);
     }
 
     public static StoreAttendanceResponse fromEntity(Attendance attendance) {
@@ -88,7 +90,8 @@ public record StoreAttendanceResponse(
                 null,
                 null,
                 attendance.getDiscount(),
-                attendance.getAmountDue()
+                attendance.getAmountDue(),
+                attendance.isPrepayRequired()
         );
     }
 

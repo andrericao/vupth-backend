@@ -1,0 +1,44 @@
+databaseChangeLog:
+  # tres-faltas-pagar-adiantado (DEC-105/115): cada "nao cheguei" e cada saida da fila de um cliente, gravados mesmo para o cliente
+  # isento (DEC-104, que nao gera multa). O contador nao sai da multa: sai daqui. O agendamento de quem tem 3 ocorrencias leva a marca
+  # prepay_required (o profissional confirma que recebeu antes, na hora ou depois).
+  - changeSet:
+      id: 054-create-client_absence
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: client_absence
+      changes:
+        - createTable:
+            tableName: client_absence
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_client_absence, nullable: false}}
+              - column: {name: client_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: attendance_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: type, type: "VARCHAR(12)", constraints: {nullable: false}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+        - addUniqueConstraint:
+            tableName: client_absence
+            columnNames: attendance_id, type
+            constraintName: uk_client_absence_attendance_type
+        - createIndex:
+            tableName: client_absence
+            indexName: ix_client_absence_client
+            columns:
+              - column: {name: client_id}
+              - column: {name: created_at}
+
+  - changeSet:
+      id: 054-attendance-prepay_required
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: prepay_required}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: prepay_required, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}

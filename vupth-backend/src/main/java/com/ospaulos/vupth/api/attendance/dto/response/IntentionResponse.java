@@ -33,7 +33,9 @@ public record IntentionResponse(
         OffsetDateTime desiredTime,
         OffsetDateTime estimatedStartTime,
         // cupom-ativado-em-configuracoes: o desconto do cupom; o totalValue ja vem com ele
-        @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount
+        @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount,
+        // tres-faltas-pagar-adiantado: o cliente tem tres ocorrencias; o profissional confirma o recebimento (antes, na hora ou depois)
+        @com.fasterxml.jackson.annotation.JsonProperty("prepay_required") boolean prepayRequired
 ) {
     public static IntentionResponse fromEntity(Attendance attendance, OffsetDateTime estimatedStartTime) {
         UUID clientId = attendance.getClient() != null ? attendance.getClient().getId() : null;
@@ -57,7 +59,8 @@ public record IntentionResponse(
                 attendance.getEstimatedTotalMinutes(),
                 attendance.getDesiredTime(),
                 estimatedStartTime,
-                attendance.getDiscount()
+                attendance.getDiscount(),
+                attendance.isPrepayRequired()
         );
     }
 }

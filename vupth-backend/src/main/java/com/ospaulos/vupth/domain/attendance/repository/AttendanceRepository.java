@@ -324,6 +324,14 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     boolean existsByClient_IdAndCouponCampaignIdAndStatusNotIn(UUID clientId, UUID couponCampaignId,
                                                                 List<AttendanceStatus> statuses);
 
+    /** Quando o cliente concluiu e pagou o ultimo corte (zera o contador de ocorrencias, tres-faltas-pagar-adiantado). */
+    @Query("""
+        SELECT MAX(a.endTime) FROM Attendance a
+        WHERE a.client.id = :clientId AND a.status = com.ospaulos.vupth.domain.attendance.AttendanceStatus.FINISHED
+          AND a.paymentStatus = com.ospaulos.vupth.domain.payment.PaymentStatus.PAID
+        """)
+    java.time.OffsetDateTime lastPaidFinishedEnd(@Param("clientId") UUID clientId);
+
     /** Quantos atendimentos do cliente estao no status (a bonificacao por link vale so o primeiro concluido). */
     long countByClient_IdAndStatus(UUID clientId, AttendanceStatus status);
 

@@ -88,6 +88,13 @@ public class Attendance implements Serializable {
     @Column(name = "total_value", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalValue;
 
+    /**
+     * tres-faltas-pagar-adiantado (DEC-105/115): agendamento de cliente com tres ocorrencias. Agendar segue livre; o cliente mostra
+     * ao profissional que pagou e o profissional confirma o recebimento antes, na hora ou depois. Nunca true em loja de teste.
+     */
+    @Column(name = "prepay_required", nullable = false)
+    private boolean prepayRequired = false;
+
     /** Cupom ativado usado neste corte (cupom-ativado-em-configuracoes); nulo = sem cupom. */
     @Column(name = "coupon_campaign_id")
     private UUID couponCampaignId;

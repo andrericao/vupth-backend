@@ -89,6 +89,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.testrun.service.TestRunService testRunService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.ospaulos.vupth.domain.campaign.service.CouponService couponService;
+    private final com.ospaulos.vupth.domain.client.service.ClientAbsenceService clientAbsenceService;
 
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
@@ -344,6 +345,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setScheduledTime(estimatedStart);
 
         testRunService.tag(attendance); // teste ativo na loja (DEC-106)
+        // tres-faltas-pagar-adiantado: com tres ocorrencias o agendamento leva a marca de pagamento adiantado; no piloto so marca o contador
+        attendance.setPrepayRequired(!attendance.isTest() && clientAbsenceService.prepayRequired(clientId));
         Attendance saved = attendanceRepository.save(attendance);
         couponService.apply(saved, couponCampaignId); // cupom ativado (422 COUPON_NOT_ACTIVE se nao valer); desfaz o save na transacao
         initializeLazyAssociations(saved);
@@ -904,6 +907,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        publishLeftQueue(attendance);
 
         String clientName = attendance.getClient() != null
                 ? attendance.getClient().getFirstName()
@@ -912,6 +916,15 @@ public class AttendanceServiceImpl implements AttendanceService {
                 clientName, attendance.getProfessional().getName());
 
         return AttendanceInQueueResponse.fromEntity(saved);
+    }
+
+    /** tres-faltas-pagar-adiantado (DEC-115): a saida da fila conta nas tres ocorrencias, inclusive do cliente isento. */
+    private void publishLeftQueue(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        if (attendance.getClient() != null) {
+            eventPublisher.publishEvent(new com.ospaulos.vupth.domain.client.event.ClientAbsenceEvent(
+                    attendance.getClient().getId(), attendance.getId(),
+                    com.ospaulos.vupth.domain.client.model.ClientAbsenceType.LEFT_QUEUE));
+        }
     }
 
     /**
@@ -1069,6 +1082,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         Attendance saved = attendanceRepository.save(attendance);
+        publishLeftQueue(attendance);
 
         log.info("[Attendance] leaveQueue — client='{}' left the queue voluntarily",
                 attendance.getClient().getFirstName());
