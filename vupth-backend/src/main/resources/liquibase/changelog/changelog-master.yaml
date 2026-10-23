@@ -508,6 +508,11 @@ databaseChangeLog:
       file: changesets/80-attendance/049-create-app_ledger.yaml
       relativeToChangeLogFile: true
 
+  # os avisos do Asaas (sandbox) para o relatorio de para onde vai cada centavo
+  - include:
+      file: changesets/80-attendance/050-create-asaas_event.yaml
+      relativeToChangeLogFile: true
+
   # admin-caixa-de-suporte: as mensagens do formulario do suporte, para o painel listar
   - include:
       file: changesets/96-campaign/051-create-support_message.yaml
