@@ -100,6 +100,11 @@ public class Campaign {
     @Column(name = "payout_day")
     private Integer payoutDay;
 
+    /** Base do desconto do cupom (cupom-ativado-em-configuracoes): o preco do cliente ou o que o profissional recebe. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "benefit_base", length = 12, nullable = false)
+    private BenefitBase benefitBase = BenefitBase.WITH_FEE;
+
     /** Ligada e dentro da janela em {@code now}. */
     public boolean isRunning(OffsetDateTime now) {
         return active && !now.isBefore(startsAt) && now.isBefore(endsAt);

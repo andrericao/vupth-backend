@@ -88,6 +88,17 @@ public class Attendance implements Serializable {
     @Column(name = "total_value", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalValue;
 
+    /** Cupom ativado usado neste corte (cupom-ativado-em-configuracoes); nulo = sem cupom. */
+    @Column(name = "coupon_campaign_id")
+    private UUID couponCampaignId;
+
+    /**
+     * Desconto do cupom. O {@code totalValue} segue sendo o preco cheio (a divisao soma ele); o cliente paga
+     * {@link #getAmountDue()} e o app repassa o desconto ao profissional.
+     */
+    @Column(name = "discount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal discount = BigDecimal.ZERO;
+
     /**
      * Divisao do preco CONGELADA na criacao (Receita LIQUIDA): a soma, servico a servico, do que o
      * profissional recebe, dos 4% da empresa de pagamento e da parte do app. As tres somam o
@@ -390,6 +401,13 @@ public class Attendance implements Serializable {
     @Transient
     public int getEstimatedTotalMinutes() {
         return this.estimatedMinutes != null ? this.estimatedMinutes : 0;
+    }
+
+    /** O que o cliente paga pelo corte: o preco cheio menos o desconto do cupom. */
+    @Transient
+    public BigDecimal getAmountDue() {
+        BigDecimal d = this.discount != null ? this.discount : BigDecimal.ZERO;
+        return getTotalValue().subtract(d).max(BigDecimal.ZERO);
     }
 
     @Transient

@@ -59,7 +59,8 @@ public class AttendanceIntentionController {
         paymentService.assertNoPendingPayment(principal.getUserId());
 
         IntentionResponse response = attendanceService.createIntention(
-                request.professionalId(), request.serviceItemIds(), request.desiredTime(), principal.getUserId());
+                request.professionalId(), request.serviceItemIds(), request.desiredTime(), principal.getUserId(),
+                request.couponCampaignId());
 
         // Pos-commit: a cabeca/timer de promocao se recalculam (a nova intencao pode ser a proxima a promover).
         promotionScheduler.reschedule();

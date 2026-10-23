@@ -537,3 +537,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/034-price-policy.yaml
       relativeToChangeLogFile: true
+
+  # cupom-ativado-em-configuracoes: base do desconto, cupom no atendimento e credito do profissional
+  - include:
+      file: changesets/96-campaign/053-coupon-discount.yaml
+      relativeToChangeLogFile: true

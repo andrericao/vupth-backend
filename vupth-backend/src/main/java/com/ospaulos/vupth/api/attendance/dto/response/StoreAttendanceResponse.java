@@ -43,14 +43,18 @@ public record StoreAttendanceResponse(
         com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus,
         // relatorio-sem-multa (DEC-83): CLIENT_CANCELLED, PROFESSIONAL_REMOVED ou REMOVED_FOR_LATENESS; sem valor
         @com.fasterxml.jackson.annotation.JsonProperty("not_realized_reason") String notRealizedReason,
-        @com.fasterxml.jackson.annotation.JsonProperty("late_arrival") Boolean lateArrival
+        @com.fasterxml.jackson.annotation.JsonProperty("late_arrival") Boolean lateArrival,
+        // cupom-ativado-em-configuracoes: aqui o totalValue segue o preco cheio (a divisao soma ele); o cliente paga amountDue
+        // e o app repassa o desconto ao profissional
+        @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount,
+        @com.fasterxml.jackson.annotation.JsonProperty("amount_due") BigDecimal amountDue
 ) {
 
     public StoreAttendanceResponse withReason(String reason, boolean late) {
         return new StoreAttendanceResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime,
                 startTime, endTime, durationInMinutes, proReceives, intermediaryFee, platformFee, paymentStatus,
-                reason, late);
+                reason, late, discount, amountDue);
     }
 
     public static StoreAttendanceResponse fromEntity(Attendance attendance) {
@@ -82,7 +86,9 @@ public record StoreAttendanceResponse(
                 attendance.getPlatformFee(),
                 attendance.getEffectivePaymentStatus(),
                 null,
-                null
+                null,
+                attendance.getDiscount(),
+                attendance.getAmountDue()
         );
     }
 

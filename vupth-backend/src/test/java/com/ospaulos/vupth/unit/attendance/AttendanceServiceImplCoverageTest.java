@@ -75,6 +75,7 @@ class AttendanceServiceImplCoverageTest {
 
     @Mock com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
     @Mock com.ospaulos.vupth.domain.testrun.service.TestRunService testRunService;
+    @Mock com.ospaulos.vupth.domain.campaign.service.CouponService couponService;
     @InjectMocks AttendanceServiceImpl attendanceService;
 
     private UUID professionalId, clientId, establishmentId, attendanceId;

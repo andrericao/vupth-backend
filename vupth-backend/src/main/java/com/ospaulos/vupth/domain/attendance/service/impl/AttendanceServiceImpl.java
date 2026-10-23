@@ -88,6 +88,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
     private final com.ospaulos.vupth.domain.testrun.service.TestRunService testRunService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final com.ospaulos.vupth.domain.campaign.service.CouponService couponService;
 
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
@@ -305,7 +306,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
-                                             OffsetDateTime desiredTime, UUID clientId) {
+                                             OffsetDateTime desiredTime, UUID clientId, UUID couponCampaignId) {
         log.info("[Intention] createIntention — professionalId={} clientId={} desiredTime={}",
                 professionalId, clientId, desiredTime);
 
@@ -344,6 +345,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         testRunService.tag(attendance); // teste ativo na loja (DEC-106)
         Attendance saved = attendanceRepository.save(attendance);
+        couponService.apply(saved, couponCampaignId); // cupom ativado (422 COUPON_NOT_ACTIVE se nao valer); desfaz o save na transacao
         initializeLazyAssociations(saved);
         log.info("[Intention] createIntention — created id={} desiredTime={} estimatedStart={} status=INTENTION",
                 saved.getId(), saved.getDesiredTime(), estimatedStart);
@@ -743,6 +745,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         testRunService.tag(attendance); // teste ativo na loja (DEC-106)
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento (cobra tambem no teste, DEC-108)
+        couponService.apply(saved, request.couponCampaignId()); // cupom ativado (422 COUPON_NOT_ACTIVE se nao valer; a transacao desfaz tudo)
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={} intent={} targetTime={}",
                 saved.getId(), saved.getTotalValue(), saved.isIntent(), saved.getTargetTime());

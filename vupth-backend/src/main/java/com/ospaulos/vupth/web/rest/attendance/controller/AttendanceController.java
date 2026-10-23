@@ -143,7 +143,8 @@ public class AttendanceController {
                 request.scheduledTime(),
                 request.estimatedMinutes(),
                 request.local(),
-                request.targetTime()    // item #40: horario-alvo (intencao de fila)
+                request.targetTime(),   // item #40: horario-alvo (intencao de fila)
+                request.couponCampaignId() // cupom-ativado-em-configuracoes
         );
 
         var response = attendanceService.createAttendance(secureRequest);

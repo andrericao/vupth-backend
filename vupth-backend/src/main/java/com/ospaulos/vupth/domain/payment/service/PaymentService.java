@@ -192,7 +192,7 @@ public class PaymentService {
         if (a.getEffectivePaymentStatus() != PaymentStatus.PENDING) {
             return null;
         }
-        return a.getTotalValue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
+        return a.getAmountDue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
     /** Um lembrete de pagamento pendente (push-pagamento-pendente): para quem, qual atendimento e quanto. */
@@ -206,7 +206,7 @@ public class PaymentService {
         Map<UUID, BigDecimal> penalties = penaltiesOf(open.stream().map(Attendance::getId).toList());
         return open.stream()
                 .map(a -> new PaymentReminder(a.getClient().getId(), a.getId(), a.getEstablishment().getId(),
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO))))
+                        a.getAmountDue().add(penalties.getOrDefault(a.getId(), ZERO))))
                 .toList();
     }
 
@@ -220,7 +220,7 @@ public class PaymentService {
                 .map(a -> new PendingPaymentsResponse.Item(
                         a.getId(),
                         a.getPaymentStatus(),
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO)),
+                        a.getAmountDue().add(penalties.getOrDefault(a.getId(), ZERO)),
                         a.getProfessional().getName(),
                         a.getEstablishment().getName(),
                         a.getEndTime()))
@@ -249,7 +249,7 @@ public class PaymentService {
                         a.getId(),
                         a.getPaymentStatus(),
                         // SPLIT_PIX: so o servico (a multa e do app, DEC-83); fase de testes: o total que cai no Pix (DEC-85)
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO)),
+                        a.getAmountDue().add(penalties.getOrDefault(a.getId(), ZERO)),
                         a.getClient() != null ? a.getClient().getFirstName() : a.getGuestName(),
                         a.getEndTime(),
                         a.getPaymentClaimedAt()))
@@ -302,7 +302,7 @@ public class PaymentService {
      *                  ({@code TEST_PIX_TOTAL}, DEC-85), o total que cai no Pix, como "valor a receber" e sem rotulo de multa.
      */
     private PaymentResponse toPayment(Attendance attendance, boolean forClient) {
-        BigDecimal services = attendance.getTotalValue();
+        BigDecimal services = attendance.getAmountDue();
         BigDecimal realPenalties = penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO);
         boolean split = splitPix();
         BigDecimal shownServices;
@@ -352,8 +352,8 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public BigDecimal amountForProfessional(UUID attendanceId) {
         Attendance a = attendance(attendanceId);
-        return splitPix() ? a.getTotalValue()
-                : a.getTotalValue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
+        return splitPix() ? a.getAmountDue()
+                : a.getAmountDue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
     /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */

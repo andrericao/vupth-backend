@@ -33,7 +33,8 @@ class CampaignServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final AttendanceRepository attendanceRepository = mock(AttendanceRepository.class);
     private final CampaignService service =
-            new CampaignService(campaignRepository, redemptionRepository, userRepository, attendanceRepository);
+            new CampaignService(campaignRepository, redemptionRepository, userRepository, attendanceRepository,
+                    org.mockito.Mockito.mock(com.ospaulos.vupth.domain.campaign.service.CouponService.class));
 
     private final UUID userId = UUID.randomUUID();
     private Campaign campaign;

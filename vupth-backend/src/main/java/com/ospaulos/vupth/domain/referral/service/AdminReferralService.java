@@ -38,6 +38,7 @@ import java.util.stream.Stream;
 public class AdminReferralService {
 
     private final ReferralCreditRepository creditRepository;
+    private final com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository;
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
 
@@ -45,7 +46,13 @@ public class AdminReferralService {
     @Transactional(readOnly = true)
     public List<AdminReferralPayoutResponse> payouts() {
         LocalDate today = LocalDate.now(BusinessClock.zone());
-        return creditRepository.findUnpaidPayouts().stream()
+        // a bonificacao por link e o desconto dos cupons (cupom-ativado-em-configuracoes) saem no mesmo painel, somados por pessoa e campanha
+        java.util.Map<String, ReferralPayoutRow> merged = new java.util.LinkedHashMap<>();
+        Stream.concat(creditRepository.findUnpaidPayouts().stream(), couponCreditRepository.findUnpaidPayouts().stream())
+                .forEach(row -> merged.merge(row.campaignId() + ":" + row.beneficiaryId(), row,
+                        (a, b) -> new ReferralPayoutRow(a.campaignId(), a.beneficiaryId(), a.amount().add(b.amount()),
+                                a.credits() + b.credits())));
+        return merged.values().stream()
                 .map(row -> toResponse(row, today))
                 .sorted(Comparator.comparing(AdminReferralPayoutResponse::nextPayoutOn,
                                 Comparator.nullsLast(Comparator.naturalOrder()))
@@ -56,7 +63,7 @@ public class AdminReferralService {
 
     public AdminReferralPaidResponse markPaid(UUID adminId, UUID campaignId, UUID userId) {
         OffsetDateTime now = OffsetDateTime.now();
-        int paid = creditRepository.markPaid(campaignId, userId, now);
+        int paid = creditRepository.markPaid(campaignId, userId, now) + couponCreditRepository.markPaid(campaignId, userId, now);
         if (paid == 0) {
             throw ReferralException.nothingToPay();
         }

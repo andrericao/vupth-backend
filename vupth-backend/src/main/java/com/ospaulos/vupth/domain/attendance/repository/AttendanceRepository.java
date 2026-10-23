@@ -320,6 +320,10 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
     // O portao do PROFISSIONAL reusa o existsByProfessional_IdAndStatusIn acima.
     boolean existsByClient_IdAndStatusIn(UUID clientId, List<AttendanceStatus> statuses);
 
+    /** O cupom ja esta em um corte do cliente que nao foi desfeito (cancelado ou retirado devolve o cupom). */
+    boolean existsByClient_IdAndCouponCampaignIdAndStatusNotIn(UUID clientId, UUID couponCampaignId,
+                                                                List<AttendanceStatus> statuses);
+
     /** Quantos atendimentos do cliente estao no status (a bonificacao por link vale so o primeiro concluido). */
     long countByClient_IdAndStatus(UUID clientId, AttendanceStatus status);
 

@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.campaign.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.ospaulos.vupth.domain.campaign.model.BenefitBase;
 import com.ospaulos.vupth.domain.campaign.model.CampaignAudience;
 import com.ospaulos.vupth.domain.campaign.model.CampaignType;
 import com.ospaulos.vupth.domain.campaign.model.PayoutPeriod;
@@ -41,6 +42,7 @@ public record AdminCampaignRequest(
         BigDecimal referralOwnerPercent,
         @JsonProperty("referral_scope") ReferralScope referralScope,
         @JsonProperty("payout_period") PayoutPeriod payoutPeriod,
-        @JsonProperty("payout_day") @Min(1) @Max(28) Integer payoutDay
+        @JsonProperty("payout_day") @Min(1) @Max(28) Integer payoutDay,
+        @JsonProperty("benefit_base") BenefitBase benefitBase
 ) {
 }

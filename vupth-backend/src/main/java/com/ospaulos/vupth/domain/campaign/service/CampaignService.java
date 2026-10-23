@@ -7,6 +7,7 @@ import com.ospaulos.vupth.domain.campaign.exception.CampaignException;
 import com.ospaulos.vupth.domain.campaign.model.Campaign;
 import com.ospaulos.vupth.domain.campaign.model.CampaignAudience;
 import com.ospaulos.vupth.domain.campaign.model.CampaignRedemption;
+import com.ospaulos.vupth.domain.campaign.model.CampaignType;
 import com.ospaulos.vupth.domain.campaign.model.CampaignVisibility;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRedemptionRepository;
 import com.ospaulos.vupth.domain.campaign.repository.CampaignRepository;
@@ -40,6 +41,7 @@ public class CampaignService {
     private final CampaignRedemptionRepository redemptionRepository;
     private final UserRepository userRepository;
     private final AttendanceRepository attendanceRepository;
+    private final CouponService couponService;
     private final Clock clock = Clock.systemUTC();
 
     @Transactional(readOnly = true)
@@ -95,8 +97,10 @@ public class CampaignService {
 
     @Transactional(readOnly = true)
     public List<CampaignResponse> mine(UUID userId) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
         return redemptionRepository.findByUserIdWithCampaign(userId).stream()
-                .map(r -> CampaignResponse.of(r.getCampaign(), true, null, r.getRedeemedAt()))
+                .map(r -> CampaignResponse.ofActivated(r.getCampaign(), r.getRedeemedAt(),
+                        r.getCampaign().getType() == CampaignType.DISCOUNT && couponService.used(userId, r.getCampaign().getId()), now))
                 .toList();
     }
 }

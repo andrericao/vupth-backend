@@ -31,7 +31,9 @@ public record IntentionResponse(
         BigDecimal totalValue,
         Integer estimatedMinutes,
         OffsetDateTime desiredTime,
-        OffsetDateTime estimatedStartTime
+        OffsetDateTime estimatedStartTime,
+        // cupom-ativado-em-configuracoes: o desconto do cupom; o totalValue ja vem com ele
+        @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount
 ) {
     public static IntentionResponse fromEntity(Attendance attendance, OffsetDateTime estimatedStartTime) {
         UUID clientId = attendance.getClient() != null ? attendance.getClient().getId() : null;
@@ -51,10 +53,11 @@ public record IntentionResponse(
                         .map(ServiceItemSummary::fromEntity)
                         .collect(Collectors.toList()),
                 attendance.getStatus(),
-                attendance.getTotalValue(),
+                attendance.getAmountDue(),
                 attendance.getEstimatedTotalMinutes(),
                 attendance.getDesiredTime(),
-                estimatedStartTime
+                estimatedStartTime,
+                attendance.getDiscount()
         );
     }
 }

@@ -1,0 +1,61 @@
+databaseChangeLog:
+  # cupom-ativado-em-configuracoes (DEC-110/112/115): o desconto do cupom ativado usado no corte. A campanha diz sobre qual valor o
+  # desconto incide (benefit_base); o atendimento guarda o cupom e o desconto; o desconto vira credito do profissional (o app arca),
+  # pago no repasse da campanha.
+  - changeSet:
+      id: 053-campaign-benefit_base
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: campaign, columnName: benefit_base}
+      changes:
+        - addColumn:
+            tableName: campaign
+            columns:
+              - column: {name: benefit_base, type: "VARCHAR(12)", defaultValue: WITH_FEE, constraints: {nullable: false}}
+
+  - changeSet:
+      id: 053-attendance-coupon
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: coupon_campaign_id}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: coupon_campaign_id, type: UUID}
+              - column: {name: discount, type: "NUMERIC(10,2)", defaultValueNumeric: 0, constraints: {nullable: false}}
+        - createIndex:
+            tableName: attendance
+            indexName: ix_attendance_coupon
+            columns:
+              - column: {name: coupon_campaign_id}
+              - column: {name: client_id}
+
+  - changeSet:
+      id: 053-create-coupon_credit
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: coupon_credit
+      changes:
+        - createTable:
+            tableName: coupon_credit
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_coupon_credit, nullable: false}}
+              - column: {name: campaign_id, type: UUID, constraints: {nullable: false, foreignKeyName: fk_coupon_credit_campaign, references: campaign(id)}}
+              - column: {name: attendance_id, type: UUID, constraints: {nullable: false, unique: true, uniqueConstraintName: uk_coupon_credit_attendance}}
+              - column: {name: beneficiary_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: amount, type: "NUMERIC(10,2)", constraints: {nullable: false}}
+              - column: {name: created_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: paid_at, type: TIMESTAMP WITH TIME ZONE}
+        - createIndex:
+            tableName: coupon_credit
+            indexName: ix_coupon_credit_beneficiary
+            columns:
+              - column: {name: beneficiary_id}

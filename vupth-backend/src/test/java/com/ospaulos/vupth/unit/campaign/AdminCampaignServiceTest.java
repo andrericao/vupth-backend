@@ -55,14 +55,14 @@ class AdminCampaignServiceTest {
                                                 BigDecimal amount, BigDecimal percent,
                                                 OffsetDateTime starts, OffsetDateTime ends, Integer max) {
         return new AdminCampaignRequest(" Lancamento ", " ", code, type, visibility, CampaignAudience.CLIENT, amount,
-                percent, starts, ends, "TUESDAY,WEDNESDAY", max, true, null, null, null, null, null);
+                percent, starts, ends, "TUESDAY,WEDNESDAY", max, true, null, null, null, null, null, null);
     }
 
     private AdminCampaignRequest referral(BigDecimal professional, BigDecimal owner, ReferralScope scope,
                                           PayoutPeriod period, Integer day) {
         return new AdminCampaignRequest("Indique", null, null, CampaignType.REFERRAL_BONUS, CampaignVisibility.PUBLIC,
                 null, new BigDecimal("5.00"), null, now.minusHours(1), now.plusDays(28), null, null, true,
-                professional, owner, scope, period, day);
+                professional, owner, scope, period, day, null);
     }
 
     private AdminCampaignRequest valid(String code) {
@@ -234,7 +234,7 @@ class AdminCampaignServiceTest {
                 HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
         AdminCampaignRequest percentOnly = new AdminCampaignRequest("Indique", null, null, CampaignType.REFERRAL_BONUS,
                 CampaignVisibility.PUBLIC, null, null, new BigDecimal("10"), now.minusHours(1), now.plusDays(28), null,
-                null, true, sixty, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 1);
+                null, true, sixty, forty, ReferralScope.ANY_PROFESSIONAL, PayoutPeriod.WEEKLY, 1, null);
         assertCode(() -> service.create(adminId, percentOnly), HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
 
         for (int i = 0; i < 5; i++) {
@@ -248,7 +248,7 @@ class AdminCampaignServiceTest {
             AdminCampaignRequest discount = new AdminCampaignRequest("Desconto", null, "D" + i, CampaignType.DISCOUNT,
                     CampaignVisibility.PRIVATE, null, new BigDecimal("5.00"), null, now.minusHours(1), now.plusDays(1),
                     null, null, false, (BigDecimal) p[0], (BigDecimal) p[1], (ReferralScope) p[2], (PayoutPeriod) p[3],
-                    (Integer) p[4]);
+                    (Integer) p[4], null);
             assertCode(() -> service.create(adminId, discount), HttpStatus.UNPROCESSABLE_ENTITY, "CAMPAIGN_INVALID");
         }
         verify(campaignRepository, never()).save(any());

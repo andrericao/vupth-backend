@@ -36,7 +36,9 @@ public record AttendanceInQueueResponse(
         boolean placedAfterBreak,
         // pagamento-pix (10/10): a flag do pagamento, ao lado do status (null = fora do fluxo)
         @com.fasterxml.jackson.annotation.JsonProperty("payment_status")
-        com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus
+        com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus,
+        // cupom-ativado-em-configuracoes: o desconto do cupom; o totalValue ja vem com ele
+        @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount
 ) {
     public static AttendanceInQueueResponse fromEntity(Attendance attendance) {
 
@@ -56,7 +58,7 @@ public record AttendanceInQueueResponse(
                         .map(ServiceItemSummary::fromEntity)
                         .collect(Collectors.toList()),
                 attendance.getStatus(),
-                attendance.getTotalValue(),
+                attendance.getAmountDue(),
                 attendance.getScheduledTime(),
                 attendance.getEstimatedTotalMinutes(),
                 //attendance.getPausedTime
@@ -64,7 +66,8 @@ public record AttendanceInQueueResponse(
                 attendance.isIntent(),
                 attendance.getTargetTime(),
                 attendance.isPlacedAfterBreak(),
-                attendance.getEffectivePaymentStatus()
+                attendance.getEffectivePaymentStatus(),
+                attendance.getDiscount()
         );
     }
 
