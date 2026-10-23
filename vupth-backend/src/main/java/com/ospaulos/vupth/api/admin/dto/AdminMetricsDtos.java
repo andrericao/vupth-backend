@@ -97,5 +97,17 @@ public final class AdminMetricsDtos {
             @JsonProperty("payments_stuck") List<StuckPayment> paymentsStuck,
             @JsonProperty("referral_unpaid_count") long referralUnpaidCount,
             @JsonProperty("referral_unpaid_amount") BigDecimal referralUnpaidAmount,
-            @JsonProperty("not_measured") List<String> notMeasured) {}
+            @JsonProperty("not_measured") List<String> notMeasured,
+            @JsonProperty("push_refused") Counter pushRefused,
+            @JsonProperty("http_5xx") Counter http5xx) {}
+
+    /** admin-alertas-push-e-5xx: o total da ultima hora e das ultimas 24 h, e a serie por hora (a mais velha primeiro). */
+    public record Counter(
+            @JsonProperty("last_hour") long lastHour,
+            @JsonProperty("last_24h") long last24h,
+            @JsonProperty("by_hour") List<HourCount> byHour) {}
+
+    public record HourCount(
+            @JsonProperty("hour") OffsetDateTime hour,
+            @JsonProperty("count") long count) {}
 }

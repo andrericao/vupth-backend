@@ -1,6 +1,8 @@
 package com.ospaulos.vupth.domain.admin.service;
 
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Alerts;
+import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Counter;
+import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.HourCount;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Finance;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Funnel;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Health;
@@ -220,7 +222,21 @@ public class AdminMetricsService {
         BigDecimal unpaidAmount = sum("SELECT coalesce(sum(amount),0) FROM referral_credit WHERE paid_at IS NULL "
                 + "AND created_at < ?", old);
         return new Alerts(h, stuckCount, stuckAmount, stuck, unpaid, unpaidAmount,
-                List.of("push_refused", "http_5xx"));
+                List.of(), counter("PUSH_REFUSED"), counter("HTTP_5XX"));
+    }
+
+    /** admin-alertas-push-e-5xx: o contador por hora das ultimas 24 h (sem dado pessoal). */
+    private Counter counter(String kind) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        OffsetDateTime thisHour = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS);
+        List<HourCount> byHour = jdbc.query("""
+                SELECT hour, n FROM ops_counter WHERE kind = ? AND hour > ? ORDER BY hour ASC
+                """, (rs, i) -> new HourCount(rs.getTimestamp("hour").toInstant().atOffset(ZoneOffset.UTC), rs.getLong("n")),
+                kind, ts(thisHour.minusHours(24)));
+        long lastHour = byHour.stream().filter(c -> c.hour().toInstant().equals(thisHour.toInstant()))
+                .mapToLong(HourCount::count).sum();
+        long last24h = byHour.stream().mapToLong(HourCount::count).sum();
+        return new Counter(lastHour, last24h, byHour);
     }
 
     // ─── apoio ───

@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # admin-alertas-push-e-5xx (23/10): contador pequeno por hora para os alertas do painel (push recusado e erro 5xx).
+  # So kind + hora + total: nenhum dado pessoal. As linhas com mais de 7 dias saem sozinhas (OpsCounter).
+  - changeSet:
+      id: 052-create-ops_counter
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: ops_counter
+      changes:
+        - createTable:
+            tableName: ops_counter
+            columns:
+              - column: {name: hour, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: kind, type: VARCHAR(20), constraints: {nullable: false}}
+              - column: {name: n, type: BIGINT, defaultValueNumeric: 0, constraints: {nullable: false}}
+        - addPrimaryKey:
+            tableName: ops_counter
+            columnNames: hour, kind
+            constraintName: pk_ops_counter

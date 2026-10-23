@@ -522,3 +522,8 @@ databaseChangeLog:
   - include:
       file: changesets/50-establishment/032-add-pilot-to-establishment.yaml
       relativeToChangeLogFile: true
+
+  # admin-alertas-push-e-5xx: contador por hora de push recusado e erro 5xx
+  - include:
+      file: changesets/96-campaign/052-create-ops_counter.yaml
+      relativeToChangeLogFile: true
