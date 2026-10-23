@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.payment.service;
 
+import com.ospaulos.vupth.domain.shared.Brl;
 import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import jakarta.annotation.PostConstruct;
@@ -17,7 +18,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -130,7 +130,6 @@ public class PaymentReminderScheduler {
 
     /** "Atendimento concluído. Falta o pagamento de R$ 12,90." */
     public static String pendingText(BigDecimal amount) {
-        return "Atendimento concluído. Falta o pagamento de R$ "
-                + String.format(Locale.forLanguageTag("pt-BR"), "%.2f", amount) + ".";
+        return "Atendimento concluído. Falta o pagamento de " + Brl.of(amount) + ".";
     }
 }

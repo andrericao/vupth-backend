@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.attendance.exception;
 
+import com.ospaulos.vupth.domain.shared.Brl;
 import lombok.Getter;
 
 import java.math.BigDecimal;
@@ -18,8 +19,8 @@ public class ExitPenaltyNotAcknowledgedException extends RuntimeException {
 
     public ExitPenaltyNotAcknowledgedException(BigDecimal exitPenaltyValue, BigDecimal acknowledged) {
         super(acknowledged == null
-                ? "Sair agora gera uma multa de R$ " + exitPenaltyValue + " no proximo atendimento. Confirme para sair."
-                : "A multa de sair agora e R$ " + exitPenaltyValue + ", maior que a confirmada (R$ " + acknowledged + "). Confirme de novo.");
+                ? "Sair agora gera uma multa de " + Brl.of(exitPenaltyValue) + " no proximo atendimento. Confirme para sair."
+                : "A multa de sair agora e " + Brl.of(exitPenaltyValue) + ", maior que a confirmada (" + Brl.of(acknowledged) + "). Confirme de novo.");
         this.exitPenaltyValue = exitPenaltyValue;
     }
 }
