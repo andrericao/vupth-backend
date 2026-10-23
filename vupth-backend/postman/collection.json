@@ -27773,6 +27773,35 @@
      "response": []
     },
     {
+     "name": "[ERRO] GET /admin/multas sem o papel ADMIN → 403 (admin-multas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/multas?type=NO_SHOW",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "[ERRO] POST /webhooks/asaas sem o token do Asaas nunca grava: 404 (desligado) ou 403 (testes-asaas-sandbox)",
      "event": [
       {
