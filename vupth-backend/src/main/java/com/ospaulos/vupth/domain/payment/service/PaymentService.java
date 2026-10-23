@@ -67,6 +67,10 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private AppLedgerService appLedger;
 
+    /** A divida do corte pago por fora (divida-por-fora-e-abatimento): sem ele (testes de unidade) nada e gravado. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.debt.service.ProfessionalDebtService debtService;
+
     private boolean splitPix() {
         return paymentMode != null && paymentMode.splitPix();
     }
@@ -269,6 +273,9 @@ public class PaymentService {
         }
         attendance.setPaymentConfirmedAt(OffsetDateTime.now(clock));
         attendanceRepository.save(attendance);
+        if (debtService != null) {
+            debtService.recordOnReceived(attendance, attendance.getPaymentMethod());
+        }
         // atendimento de teste (piloto, DEC-106): o Recebi quita como sempre, mas fica fora do livro-caixa do app
         if (appLedger != null && !attendance.isTest()) {
             appLedger.record(attendance, penaltiesOf(List.of(attendance.getId())).get(attendance.getId()),

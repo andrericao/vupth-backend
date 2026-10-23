@@ -196,6 +196,7 @@ public class SecurityConfig {
                         .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers("/professional/me/price-policy/**").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/credits").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/professional/me/debt").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente

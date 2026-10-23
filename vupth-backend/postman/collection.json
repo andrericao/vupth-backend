@@ -27883,6 +27883,64 @@
      "response": []
     },
     {
+     "name": "[ERRO] GET /admin/debts sem o papel ADMIN → 403 (divida-por-fora-e-abatimento)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/debts",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/settings/debt sem o papel ADMIN → 403 (divida-por-fora-e-abatimento)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/settings/debt",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "[ERRO] POST /webhooks/asaas sem o token do Asaas nunca grava: 404 (desligado) ou 403 (testes-asaas-sandbox)",
      "event": [
       {

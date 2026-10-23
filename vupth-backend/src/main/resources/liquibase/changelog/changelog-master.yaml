@@ -547,3 +547,8 @@ databaseChangeLog:
   - include:
       file: changesets/70-client/054-client-absence.yaml
       relativeToChangeLogFile: true
+
+  # divida-por-fora-e-abatimento: divida do profissional pelo Recebi por fora e a flag "divida real" do Painel
+  - include:
+      file: changesets/60-professional/055-professional-debt.yaml
+      relativeToChangeLogFile: true
