@@ -14,6 +14,8 @@ public interface ProfessionalDebtRepository extends JpaRepository<ProfessionalDe
 
     boolean existsByAttendanceId(UUID attendanceId);
 
+    List<ProfessionalDebt> findByAttendanceIdIn(java.util.Collection<UUID> attendanceIds);
+
     List<ProfessionalDebt> findByProfessionalIdOrderByCreatedAtDesc(UUID professionalId);
 
     List<ProfessionalDebt> findByProfessionalIdAndStatusAndSimulated(UUID professionalId, DebtStatus status, boolean simulated);
