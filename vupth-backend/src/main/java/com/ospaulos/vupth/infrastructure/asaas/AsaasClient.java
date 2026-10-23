@@ -101,6 +101,16 @@ public class AsaasClient {
                 text(created, "billingType"), text(created, "invoiceUrl"), text(created, "externalReference"));
     }
 
+    /** O saldo disponivel da conta ({@code GET /finance/balance}); o Painel compara com o que o app deve (saldo-do-app-e-bonificacao). */
+    public BigDecimal balance() {
+        requireEnabled();
+        JsonNode body = get("/finance/balance");
+        if (body == null || !body.hasNonNull("balance")) {
+            throw new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_BAD_RESPONSE", "O Asaas nao devolveu o saldo.");
+        }
+        return body.get("balance").decimalValue();
+    }
+
     private void requireEnabled() {
         if (!properties.clientEnabled()) {
             throw new AsaasException(HttpStatus.SERVICE_UNAVAILABLE, "ASAAS_SANDBOX_DISABLED",
