@@ -15,7 +15,10 @@
 	<description>Demo project for Spring Boot</description>
 	<url/>
 	<licenses>
-		<license/>
+		<license>
+			<name>Proprietary</name>
+			<comments>Copyright (c) VUPTH. Todos os direitos reservados.</comments>
+		</license>
 	</licenses>
 	<developers>
 		<developer/>
