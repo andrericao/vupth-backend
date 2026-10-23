@@ -67,7 +67,8 @@ public class AdminReadService {
                        t.id AS test_id, t.name AS test_name
                   FROM establishment e
                   LEFT JOIN base_user b ON b.id = e.owner_id
-                  LEFT JOIN test_run t ON t.establishment_id = e.id AND t.ended_at IS NULL
+                  LEFT JOIN test_run_store ts ON ts.establishment_id = e.id AND ts.left_at IS NULL
+                  LEFT JOIN test_run t ON t.id = ts.test_run_id AND t.ended_at IS NULL
                  WHERE ?::text IS NULL OR lower(e.name) LIKE ?
                  ORDER BY e.created_at DESC, e.id
                  LIMIT ? OFFSET ?

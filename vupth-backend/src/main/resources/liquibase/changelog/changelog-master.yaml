@@ -527,3 +527,8 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/052-create-ops_counter.yaml
       relativeToChangeLogFile: true
+
+  # teste-com-varias-lojas: um teste com nome cobre varias lojas
+  - include:
+      file: changesets/50-establishment/033-test-run-stores.yaml
+      relativeToChangeLogFile: true

@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,14 +33,23 @@ public class AdminTestRunController {
 
     private final TestRunService service;
 
-    /** Inicia o teste da loja, com um nome. 201; 409 TEST_RUN_ALREADY_ACTIVE se a loja ja tem um ativo. */
-    @PostMapping("/establishments/{id}/test-runs")
-    public ResponseEntity<Row> start(@AuthenticationPrincipal UserDetailsImpl user, @PathVariable UUID id,
-                                     @RequestBody @Valid StartRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.start(id, request.name(), user.getUserId()));
+    /**
+     * Inicia UM teste com nome e as lojas escolhidas (DEC-108). 201; 409 TEST_RUN_ALREADY_ACTIVE se alguma loja ja esta em
+     * outro teste ativo; 404 se a loja nao existe.
+     */
+    @PostMapping("/test-runs")
+    public ResponseEntity<Row> start(@AuthenticationPrincipal UserDetailsImpl user, @RequestBody @Valid StartRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(service.start(request.name(), request.establishmentIds(), user.getUserId()));
     }
 
-    /** Encerra o teste. 409 TEST_RUN_ALREADY_ENDED se ja acabou. */
+    /** Tira UMA loja do teste em andamento (ela volta ao normal; as outras seguem). 409 se a loja nao esta no teste. */
+    @DeleteMapping("/test-runs/{id}/establishments/{establishmentId}")
+    public ResponseEntity<Row> leave(@PathVariable UUID id, @PathVariable UUID establishmentId) {
+        return ResponseEntity.ok(service.leave(id, establishmentId));
+    }
+
+    /** "Finalizar teste": encerra o teste e tira todas as lojas. 409 TEST_RUN_ALREADY_ENDED se ja acabou. */
     @PostMapping("/test-runs/{id}/end")
     public ResponseEntity<Row> end(@PathVariable UUID id) {
         return ResponseEntity.ok(service.end(id));

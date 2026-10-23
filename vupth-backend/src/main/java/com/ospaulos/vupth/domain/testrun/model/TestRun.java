@@ -12,8 +12,8 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
- * Uma rodada de teste numa loja (modo-piloto-sem-cobranca, DEC-106): o ADMIN a declara pelo painel, com um nome, e a
- * encerra depois. So uma ativa por loja. Os atendimentos criados enquanto ela esta ativa levam a flag test e o id dela.
+ * Uma rodada de teste (modo-piloto-sem-cobranca, DEC-106; varias lojas, DEC-108): o ADMIN a declara pelo painel, com um nome,
+ * escolhe as lojas (tabela test_run_store) e a encerra depois. Uma loja so esta em um teste ativo. Os atendimentos criados enquanto ela esta ativa levam a flag test e o id dela.
  */
 @Getter
 @Setter
@@ -27,9 +27,6 @@ public class TestRun {
 
     @Column(name = "name", length = 120, nullable = false)
     private String name;
-
-    @Column(name = "establishment_id", nullable = false)
-    private UUID establishmentId;
 
     @Column(name = "started_at", nullable = false)
     private OffsetDateTime startedAt;

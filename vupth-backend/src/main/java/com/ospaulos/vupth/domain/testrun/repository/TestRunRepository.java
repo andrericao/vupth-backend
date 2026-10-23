@@ -7,6 +7,4 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface TestRunRepository extends JpaRepository<TestRun, UUID> {
-
-    Optional<TestRun> findByEstablishmentIdAndEndedAtIsNull(UUID establishmentId);
 }
