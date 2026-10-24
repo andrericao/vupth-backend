@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -116,9 +117,34 @@ public class AsaasClient {
         return new Customer(created.get("id").asText(), email != null);
     }
 
-    /** Cria a cobranca (vence amanha). {@code billingType}: PIX, BOLETO, CREDIT_CARD ou UNDEFINED. */
+    /** Uma parte da cobranca que vai direto para a carteira (walletId) de uma subconta: o valor fixo, em reais. */
+    public record Split(String walletId, BigDecimal fixedValue) {}
+
+    /** A subconta criada: o id da conta e a carteira ({@code walletId}) que recebe a divisao. A chave de API dela nao e guardada. */
+    public record Subaccount(String id, String walletId) {}
+
+    /**
+     * Cria a subconta do profissional ({@code POST /accounts}). Os campos vem da documentacao publica do Asaas e os nomes exatos
+     * ficam "a confirmar" na primeira rodada no sandbox; a resposta traz {@code id}, {@code walletId} e {@code apiKey} (esta ultima
+     * descartada aqui).
+     */
+    public Subaccount createSubaccount(Map<String, Object> body) {
+        requireKey();
+        JsonNode created = post("/accounts", body);
+        if (created == null || !created.hasNonNull("id") || !created.hasNonNull("walletId")) {
+            throw new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_BAD_RESPONSE", "O Asaas nao devolveu a subconta criada.");
+        }
+        return new Subaccount(created.get("id").asText(), created.get("walletId").asText());
+    }
+
     public Charge createCharge(String customerId, BigDecimal value, String billingType, String externalReference,
                                String description) {
+        return createCharge(customerId, value, billingType, externalReference, description, List.of());
+    }
+
+    /** Cria a cobranca (vence amanha). {@code billingType}: PIX, BOLETO, CREDIT_CARD ou UNDEFINED. Com {@code splits}, divide ao receber. */
+    public Charge createCharge(String customerId, BigDecimal value, String billingType, String externalReference,
+                               String description, List<Split> splits) {
         requireKey();
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("customer", customerId);
@@ -130,6 +156,14 @@ public class AsaasClient {
         }
         if (description != null && !description.isBlank()) {
             body.put("description", description);
+        }
+        if (splits != null && !splits.isEmpty()) {
+            body.put("split", splits.stream().map(sp -> {
+                Map<String, Object> one = new LinkedHashMap<>();
+                one.put("walletId", sp.walletId());
+                one.put("fixedValue", sp.fixedValue());
+                return one;
+            }).toList());
         }
         JsonNode created = post("/payments", body);
         if (created == null || !created.hasNonNull("id")) {

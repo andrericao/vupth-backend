@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * asaas-sandbox-no-fluxo (DEC-119): o Asaas como uma CONEXAO que liga e desliga por configuracao (sandbox ou real, pela URL).
@@ -27,6 +28,7 @@ public class PaymentGatewayService {
     private final AsaasProperties properties;
     private final AsaasClient client;
     private final AppSettingService settings;
+    private final PaymentAccountService paymentAccounts;
 
     /** Ligada: a chave esta configurada E a flag {@code asaas.connected} esta ligada. */
     public boolean connected() {
@@ -66,7 +68,7 @@ public class PaymentGatewayService {
             AsaasClient.Customer customer = client.ensureCustomer(new AsaasClient.Party(
                     "vupth-user-" + attendance.getClient().getId(), displayName(attendance), attendance.getClient().getEmail()), null);
             AsaasClient.Charge charge = client.createCharge(customer.id(), amount, "PIX", attendance.getId().toString(),
-                    "VUPTH - atendimento");
+                    "VUPTH - atendimento", splitsFor(attendance, amount));
             AsaasClient.PixQr qr = client.pixQrCode(charge.id());
             attendance.setAsaasPaymentId(charge.id());
             attendance.setAsaasMode(mode());
@@ -86,5 +88,23 @@ public class PaymentGatewayService {
         boolean empty = name == null || name.isBlank() || name.contains("null");
         String email = attendance.getClient().getEmail();
         return empty ? (email == null ? "Cliente VUPTH" : email.substring(0, Math.max(1, email.indexOf('@') < 0 ? email.length() : email.indexOf('@')))) : name.trim();
+    }
+
+    /**
+     * A divisao do pagamento (fatia 1): o que o profissional estipulou vai direto para a carteira da subconta dele; o resto (a taxa,
+     * a margem do app e a multa) fica na conta do app. So com conta de recebimento no mesmo modo e SEM cupom (o desconto sai do app,
+     * DEC-120, e fica para a fatia 2: o valor do profissional pode passar do cobrado). Sem isso, sem divisao: o fluxo de antes.
+     */
+    List<AsaasClient.Split> splitsFor(Attendance attendance, BigDecimal charged) {
+        BigDecimal pro = attendance.getProReceives();
+        if (pro == null || pro.signum() <= 0 || pro.compareTo(charged) >= 0) {
+            return List.of();
+        }
+        if (attendance.getDiscount() != null && attendance.getDiscount().signum() > 0) {
+            log.info("[Gateway] atendimento com cupom: sem divisao nesta fatia (attendance={})", attendance.getId());
+            return List.of();
+        }
+        return paymentAccounts.walletFor(attendance.getProfessional().getId(), mode())
+                .map(wallet -> List.of(new AsaasClient.Split(wallet, pro))).orElse(List.of());
     }
 }

@@ -197,6 +197,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
                         // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
                         .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers("/professional/me/payment-account").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers("/professional/me/price-policy/**").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/credits").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/debt").hasAnyRole("PROFESSIONAL", "OWNER")

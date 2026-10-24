@@ -650,6 +650,79 @@
      "response": []
     },
     {
+     "name": "ow.6b dono: abre a conta de recebimento no Asaas (subconta de TESTE, aceite marcado como teste; a divisao do pagamento vai para ela)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201 (subconta de teste criada no sandbox)\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test(\"ativa, no sandbox e marcada como teste\", () => { pm.expect(b.status).to.eql(\"ACTIVE\"); pm.expect(b.mode).to.eql(\"SANDBOX\"); pm.expect(b.test).to.eql(true); pm.expect(b.accept_version).to.eql(\"2026-10-24-rascunho\"); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/payment-account",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"accept\":true,\"accept_version\":\"2026-10-24-rascunho\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.6c dono: o estado da conta de recebimento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"ativa e de teste\", () => { const b = pm.response.json(); pm.expect(b.status).to.eql(\"ACTIVE\"); pm.expect(b.test).to.eql(true); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/payment-account",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "ow.7 dono: servico de R$ 32,90 que paga R$ 30,00 ao profissional",
      "event": [
       {

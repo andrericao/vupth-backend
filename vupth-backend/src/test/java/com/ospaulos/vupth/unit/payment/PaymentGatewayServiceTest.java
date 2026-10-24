@@ -6,6 +6,7 @@ import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository;
 import com.ospaulos.vupth.domain.payment.PaymentMethod;
 import com.ospaulos.vupth.domain.payment.PaymentStatus;
+import com.ospaulos.vupth.domain.payment.service.PaymentAccountService;
 import com.ospaulos.vupth.domain.payment.service.PaymentGatewayService;
 import com.ospaulos.vupth.domain.payment.service.PaymentService;
 import com.ospaulos.vupth.domain.setting.AppSettingService;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,9 +44,11 @@ class PaymentGatewayServiceTest {
     private final AsaasClient client = mock(AsaasClient.class);
     private final AppSettingService settings = mock(AppSettingService.class);
 
+    private final PaymentAccountService paymentAccounts = mock(PaymentAccountService.class);
+
     private PaymentGatewayService gateway(String key, String url, boolean flag) {
         when(settings.flag(AppSettingService.ASAAS_CONNECTED, false)).thenReturn(flag);
-        return new PaymentGatewayService(new AsaasProperties(key, url, ""), client, settings);
+        return new PaymentGatewayService(new AsaasProperties(key, url, ""), client, settings, paymentAccounts);
     }
 
     private Attendance attendance() {
@@ -61,7 +65,7 @@ class PaymentGatewayServiceTest {
 
     private void asaasAnswers() {
         when(client.ensureCustomer(any(AsaasClient.Party.class), isNull())).thenReturn(new AsaasClient.Customer("cus_1", true));
-        when(client.createCharge(eq("cus_1"), any(), eq("PIX"), anyString(), anyString()))
+        when(client.createCharge(eq("cus_1"), any(), eq("PIX"), anyString(), anyString(), any()))
                 .thenReturn(new AsaasClient.Charge("pay_1", "PENDING", new BigDecimal("30.90"), "PIX", "https://asaas/i/1", "ref"));
         when(client.pixQrCode("pay_1")).thenReturn(new AsaasClient.PixQr("000201PIX", "base64img"));
     }
@@ -107,7 +111,7 @@ class PaymentGatewayServiceTest {
         assertThat(a.getAsaasPixPayload()).isEqualTo("000201PIX");
         assertThat(a.getAsaasPixImage()).isEqualTo("base64img");
         assertThat(a.getAsaasInvoiceUrl()).isEqualTo("https://asaas/i/1");
-        verify(client).createCharge("cus_1", new BigDecimal("30.90"), "PIX", a.getId().toString(), "VUPTH - atendimento");
+        verify(client).createCharge("cus_1", new BigDecimal("30.90"), "PIX", a.getId().toString(), "VUPTH - atendimento", List.of());
         // email-do-cliente-no-asaas: o cliente do Asaas e a pessoa logada, com o e-mail e o nome do cadastro
         org.mockito.ArgumentCaptor<AsaasClient.Party> party = org.mockito.ArgumentCaptor.forClass(AsaasClient.Party.class);
         verify(client).ensureCustomer(party.capture(), isNull());
@@ -198,5 +202,44 @@ class PaymentGatewayServiceTest {
         // o webhook agora acha esta cobranca e quita o atendimento
         a.setPaymentStatus(PaymentStatus.PENDING);
         assertThat(payments.onGatewayEvent(a.getId(), "pay_7", "RECEIVED", true)).isTrue();
+    }
+
+    private Attendance attendanceOf(String proReceives, String discount) {
+        Attendance a = attendance();
+        org.springframework.test.util.ReflectionTestUtils.setField(a, "proReceives", proReceives == null ? null : new BigDecimal(proReceives));
+        org.springframework.test.util.ReflectionTestUtils.setField(a, "discount", new BigDecimal(discount));
+        BaseUser proUser = new BaseUser();
+        proUser.setId(UUID.randomUUID());
+        a.setProfessional(new com.ospaulos.vupth.domain.professional.model.Professional(proUser));
+        return a;
+    }
+
+    @Test
+    @DisplayName("fatia 1: com a conta de recebimento no mesmo modo, o que o profissional estipulou vai a carteira dele e o resto fica no app")
+    void splitToProfessionalWallet() {
+        asaasAnswers();
+        Attendance a = attendanceOf("30.00", "0.00");
+        when(paymentAccounts.walletFor(a.getProfessional().getId(), "SANDBOX")).thenReturn(Optional.of("wallet-pro"));
+
+        gateway("k", SANDBOX, true).ensureCharge(a, new BigDecimal("32.90"));
+
+        verify(client).createCharge("cus_1", new BigDecimal("32.90"), "PIX", a.getId().toString(), "VUPTH - atendimento",
+                List.of(new AsaasClient.Split("wallet-pro", new BigDecimal("30.00"))));
+    }
+
+    @Test
+    @DisplayName("fatia 1: sem conta de recebimento, com cupom, sem o valor do profissional ou com ele >= cobrado: sem divisao")
+    void noSplit() {
+        asaasAnswers();
+        PaymentGatewayService g = gateway("k", SANDBOX, true);
+        Attendance noAccount = attendanceOf("30.00", "0.00");
+        when(paymentAccounts.walletFor(any(), any())).thenReturn(Optional.empty());
+        assertThat(g.splitsFor(noAccount, new BigDecimal("32.90"))).isEmpty();
+
+        when(paymentAccounts.walletFor(any(), any())).thenReturn(Optional.of("wallet-pro"));
+        assertThat(g.splitsFor(attendanceOf("30.00", "5.00"), new BigDecimal("27.90"))).as("cupom: fatia 2").isEmpty();
+        assertThat(g.splitsFor(attendanceOf(null, "0.00"), new BigDecimal("32.90"))).as("servico antigo").isEmpty();
+        assertThat(g.splitsFor(attendanceOf("32.90", "0.00"), new BigDecimal("32.90"))).as("nada sobraria ao app").isEmpty();
+        assertThat(g.splitsFor(attendanceOf("30.00", "0.00"), new BigDecimal("32.90"))).hasSize(1);
     }
 }

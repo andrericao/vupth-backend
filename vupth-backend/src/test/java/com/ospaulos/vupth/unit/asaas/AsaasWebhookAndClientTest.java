@@ -304,6 +304,44 @@ class AsaasWebhookAndClientTest {
     }
 
     @Test
+    @DisplayName("gateway fatia 1: cria a subconta (devolve id e walletId, descarta a apiKey) e a cobranca leva a divisao para a carteira")
+    void subaccountAndSplit() throws Exception {
+        AsaasClient client = client("k");
+        List<String> bodies = new ArrayList<>();
+        server.createContext("/sandbox/v3/accounts", exchange -> {
+            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            reply(exchange, 200, "{\"id\":\"acc_9\",\"walletId\":\"wallet_9\",\"apiKey\":\"segredo-da-subconta\"}");
+        });
+        server.createContext("/sandbox/v3/payments", exchange -> {
+            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            reply(exchange, 200, "{\"id\":\"pay_2\",\"status\":\"PENDING\",\"value\":32.9,\"billingType\":\"PIX\"}");
+        });
+        server.start();
+
+        AsaasClient.Subaccount sub = client.createSubaccount(java.util.Map.of("name", "Beto Teste VUPTH"));
+        assertThat(sub.id()).isEqualTo("acc_9");
+        assertThat(sub.walletId()).isEqualTo("wallet_9");
+        assertThat(sub.toString()).doesNotContain("segredo-da-subconta");
+
+        client.createCharge("cus_1", new BigDecimal("32.90"), "PIX", "att-1", "t",
+                List.of(new AsaasClient.Split("wallet_9", new BigDecimal("30.00"))));
+        assertThat(bodies.get(1)).contains("\"split\":[{\"walletId\":\"wallet_9\",\"fixedValue\":30.00}]");
+
+        client.createCharge("cus_1", new BigDecimal("32.90"), "PIX", "att-2", "t");
+        assertThat(bodies.get(2)).doesNotContain("split");
+    }
+
+    @Test
+    @DisplayName("gateway fatia 1: subconta sem walletId na resposta vira ASAAS_BAD_RESPONSE")
+    void subaccountBadResponse() throws Exception {
+        AsaasClient client = client("k");
+        server.createContext("/sandbox/v3/accounts", exchange -> reply(exchange, 200, "{\"id\":\"acc_9\"}"));
+        server.start();
+        assertThatThrownBy(() -> client.createSubaccount(java.util.Map.of("name", "x"))).isInstanceOfSatisfying(AsaasException.class,
+                e -> assertThat(e.getCode()).isEqualTo("ASAAS_BAD_RESPONSE"));
+    }
+
+    @Test
     @DisplayName("email-do-cliente-no-asaas: nenhum e-mail vai ao log nem a mensagem de erro")
     void emailsAreMasked() {
         assertThat(AsaasClient.maskEmails("{\"errors\":[{\"description\":\"E-mail ana.cliente+x@vupth.test invalido\"}]}"))

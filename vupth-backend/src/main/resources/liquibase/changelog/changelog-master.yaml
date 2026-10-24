@@ -573,3 +573,7 @@ databaseChangeLog:
       file: changesets/97-finance/059-finance-account.yaml
       relativeToChangeLogFile: true
 
+  # gateway-de-pagamento, fatia 1: a conta de recebimento (subconta do Asaas) do profissional, com o aceite
+  - include:
+      file: changesets/97-finance/060-payment-account.yaml
+      relativeToChangeLogFile: true
