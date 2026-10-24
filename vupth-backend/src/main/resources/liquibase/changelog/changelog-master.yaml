@@ -577,3 +577,8 @@ databaseChangeLog:
   - include:
       file: changesets/97-finance/060-payment-account.yaml
       relativeToChangeLogFile: true
+
+  # solicitar-agendamento: o pedido de corte para um dia sem agenda liberada
+  - include:
+      file: changesets/80-attendance/061-cut-request-agenda-requested.yaml
+      relativeToChangeLogFile: true

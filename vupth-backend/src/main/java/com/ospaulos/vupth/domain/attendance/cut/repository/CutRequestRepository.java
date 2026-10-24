@@ -35,6 +35,9 @@ public interface CutRequestRepository extends JpaRepository<CutRequest, UUID> {
      */
     java.util.Optional<CutRequest> findFirstByStatusAndExpiresAtIsNotNullOrderByExpiresAtAsc(CutRequestStatus status);
 
+    /** Pedidos PENDING para dia sem agenda liberada de um profissional (solicitar-agendamento): o aviso da primeira vez e o vencimento ao abrir o dia. */
+    List<CutRequest> findByProfessionalIdAndStatusAndAgendaRequestedTrue(UUID professionalId, CutRequestStatus status);
+
     /** Carrega com os serviceItems (para o aceite montar o Attendance sem LazyInit). */
     @Query("SELECT c FROM CutRequest c LEFT JOIN FETCH c.serviceItems WHERE c.id = :id")
     java.util.Optional<CutRequest> findByIdEager(@Param("id") UUID id);

@@ -1,0 +1,15 @@
+databaseChangeLog:
+  # solicitar-agendamento (24/10): o pedido de corte feito para um dia que o profissional nao liberou (agenda fechada naquele dia).
+  # Marca esses pedidos: o aviso "libere a agenda", o dot no Partner e o vencimento quando o dia e aberto sem aceitar.
+  - changeSet:
+      id: 061-cut-request-agenda-requested
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: cut_request, columnName: agenda_requested}
+      changes:
+        - addColumn:
+            tableName: cut_request
+            columns:
+              - column: {name: agenda_requested, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}

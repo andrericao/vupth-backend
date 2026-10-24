@@ -13,6 +13,9 @@ import com.ospaulos.vupth.domain.client.model.Client;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
+import com.ospaulos.vupth.domain.establishment.valueObject.WeekdayHours;
 import com.ospaulos.vupth.domain.professional.model.Professional;
 import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
 import com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus;
@@ -32,6 +35,7 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -301,5 +305,240 @@ class CutRequestValidityTest {
         assertThat(CutRequestServiceImpl.requestPushBody(" Ana ")).startsWith("Ana pediu um corte.");
         assertThat(CutRequestServiceImpl.requestPushBody(null)).startsWith("Um cliente pediu um corte.");
         assertThat(CutRequestServiceImpl.requestPushBody("  ")).startsWith("Um cliente pediu um corte.");
+    }
+
+    @Nested
+    @DisplayName("solicitar-agendamento: pedido para um dia sem agenda liberada")
+    class AgendaRequest {
+
+        private final UUID profId = UUID.randomUUID();
+        private final UUID clientId = UUID.randomUUID();
+        private final UUID cutId = UUID.randomUUID();
+        // um dia a frente, no fuso da loja, sempre no futuro; a agenda dele fecha so esse dia da semana
+        private final LocalDate target = BusinessClock.today().plusDays(3);
+        private final OffsetDateTime desired = BusinessClock.at(target, LocalTime.of(14, 0));
+
+        private CutRequestRepository cutRepo;
+        private ProfessionalRepository professionalRepo;
+        private AttendanceService attendanceService;
+        private QueueWebSocketPublisher queuePublisher;
+        private PushNotificationPublisher pushPublisher;
+        private CutRequestServiceImpl service;
+        private Professional professional;
+        private Establishment establishment;
+        private Client client;
+        private com.ospaulos.vupth.domain.serviceItem.model.ServiceItem item;
+
+        @BeforeEach
+        void setUp() {
+            cutRepo = mock(CutRequestRepository.class);
+            professionalRepo = mock(ProfessionalRepository.class);
+            EstablishmentRepository establishmentRepo = mock(EstablishmentRepository.class);
+            ClientRepository clientRepo = mock(ClientRepository.class);
+            ServiceItemRepository itemRepo = mock(ServiceItemRepository.class);
+            attendanceService = mock(AttendanceService.class);
+            queuePublisher = mock(QueueWebSocketPublisher.class);
+            pushPublisher = mock(PushNotificationPublisher.class);
+            service = new CutRequestServiceImpl(cutRepo, professionalRepo, establishmentRepo, clientRepo, itemRepo,
+                    attendanceService, queuePublisher, pushPublisher);
+
+            establishment = new Establishment();
+            establishment.setId(UUID.randomUUID());
+            establishment.applyBusinessHours(BusinessHours.everyDay(DayHours.open(LocalTime.of(8, 0), LocalTime.of(18, 0))));
+            com.ospaulos.vupth.domain.user.model.BaseUser pu = new com.ospaulos.vupth.domain.user.model.BaseUser("p@x.com");
+            pu.setFirstName("Beto");
+            professional = new Professional(pu);
+            professional.setId(profId);
+            professional.setEstablishment(establishment);
+            // a agenda do profissional: todos os dias, menos o dia da semana do alvo
+            professional.applyWorkingHours(BusinessHours.weekly(java.util.Arrays.stream(java.time.DayOfWeek.values())
+                    .map(d -> new WeekdayHours(d, d == target.getDayOfWeek() ? DayHours.closedDay()
+                            : DayHours.open(LocalTime.of(8, 0), LocalTime.of(18, 0)))).toList()));
+            com.ospaulos.vupth.domain.user.model.BaseUser cu = new com.ospaulos.vupth.domain.user.model.BaseUser("c@x.com");
+            cu.setFirstName("Ana");
+            client = new Client(cu);
+            client.setId(clientId);
+            item = new com.ospaulos.vupth.domain.serviceItem.model.ServiceItem();
+            item.setId(UUID.randomUUID());
+            item.setProfessional(professional);
+
+            when(establishmentRepo.findById(any())).thenReturn(Optional.of(establishment));
+            when(professionalRepo.findById(profId)).thenReturn(Optional.of(professional));
+            when(clientRepo.findById(clientId)).thenReturn(Optional.of(client));
+            when(itemRepo.findAllById(any())).thenReturn(List.of(item));
+            when(cutRepo.save(any(CutRequest.class))).thenAnswer(inv -> {
+                CutRequest c = inv.getArgument(0);
+                if (c.getId() == null) {
+                    c.setId(cutId);
+                }
+                return c;
+            });
+            when(cutRepo.findByProfessionalIdAndStatusAndAgendaRequestedTrue(profId, CutRequestStatus.PENDING))
+                    .thenReturn(List.of());
+        }
+
+        private com.ospaulos.vupth.api.attendance.dto.request.CutRequestRequest request(OffsetDateTime when) {
+            return new com.ospaulos.vupth.api.attendance.dto.request.CutRequestRequest(
+                    profId, establishment.getId(), List.of(item.getId()), when);
+        }
+
+        @Test
+        @DisplayName("isAgendaClosedOn: dia fechado para ele sim; dia aberto, sem horario pedido e profissional sem agenda, nao")
+        void closedDayDetection() {
+            assertThat(CutRequestServiceImpl.isAgendaClosedOn(professional, desired)).isTrue();
+            assertThat(CutRequestServiceImpl.isAgendaClosedOn(professional, desired.plusDays(1))).isFalse();
+            assertThat(CutRequestServiceImpl.isAgendaClosedOn(professional, null)).isFalse();
+            Professional free = new Professional(new com.ospaulos.vupth.domain.user.model.BaseUser("f@x.com"));
+            assertThat(CutRequestServiceImpl.isAgendaClosedOn(free, desired)).isFalse();
+        }
+
+        @Test
+        @DisplayName("pedido para o dia fechado nasce agenda_requested; o primeiro avisa 'libere a agenda' alem do push com acao")
+        void firstRequestAlertsToReleaseTheAgenda() {
+            var response = service.createCutRequest(request(desired), clientId);
+
+            assertThat(response.agendaRequested()).isTrue();
+            ArgumentCaptor<String> bodies = ArgumentCaptor.forClass(String.class);
+            verify(pushPublisher).notifyUser(eq(profId), eq("Solicitação de agendamento"), bodies.capture(), anyMap());
+            assertThat(bodies.getValue()).startsWith("Ana solicitou agendamento para ").contains("Aceitar abre a agenda");
+            ArgumentCaptor<Map<String, Object>> release = ArgumentCaptor.forClass(Map.class);
+            verify(pushPublisher).notifyUser(eq(profId), eq("Libere a sua agenda"), anyString(), release.capture());
+            assertThat(release.getValue()).containsEntry("type", "AGENDA_RELEASE_PROMPT").containsEntry("target", "agenda");
+        }
+
+        @Test
+        @DisplayName("a segunda solicitacao nao repete o aviso de agenda; so a notificacao da solicitacao")
+        void secondRequestOnlyNotifiesTheRequest() {
+            when(cutRepo.findByProfessionalIdAndStatusAndAgendaRequestedTrue(profId, CutRequestStatus.PENDING))
+                    .thenReturn(List.of(new CutRequest()));
+
+            service.createCutRequest(request(desired), clientId);
+
+            verify(pushPublisher).notifyUser(eq(profId), eq("Solicitação de agendamento"), anyString(), anyMap());
+            verify(pushPublisher, never()).notifyUser(eq(profId), eq("Libere a sua agenda"), anyString(), anyMap());
+        }
+
+        @Test
+        @DisplayName("dia aberto ou sem horario pedido: pedido de corte comum, sem agenda_requested e sem aviso de agenda")
+        void openDayIsAnOrdinaryCutRequest() {
+            var open = service.createCutRequest(request(desired.plusDays(1)), clientId);
+            var asap = service.createCutRequest(request(null), clientId);
+
+            assertThat(open.agendaRequested()).isFalse();
+            assertThat(asap.agendaRequested()).isFalse();
+            verify(pushPublisher, never()).notifyUser(eq(profId), eq("Libere a sua agenda"), anyString(), anyMap());
+            verify(pushPublisher, org.mockito.Mockito.times(2)).notifyUser(eq(profId), eq("Novo pedido de corte"), anyString(), anyMap());
+        }
+
+        private CutRequest pending() {
+            CutRequest cut = new CutRequest();
+            cut.setId(cutId);
+            cut.setProfessional(professional);
+            cut.setClient(client);
+            cut.setEstablishment(establishment);
+            cut.setServiceItems(List.of(item));
+            cut.setStatus(CutRequestStatus.PENDING);
+            cut.setDesiredTime(desired);
+            cut.setExpiresAt(desired);
+            cut.setAgendaRequested(true);
+            when(cutRepo.findByIdEager(cutId)).thenReturn(Optional.of(cut));
+            return cut;
+        }
+
+        @Test
+        @DisplayName("aceitar abre o dia (horario da loja), vira o agendamento e vence os outros pedidos desse dia")
+        void acceptOpensTheDay() {
+            CutRequest cut = pending();
+            CutRequest other = new CutRequest();
+            other.setId(UUID.randomUUID());
+            other.setProfessional(professional);
+            other.setClient(client);
+            other.setEstablishment(establishment);
+            other.setStatus(CutRequestStatus.PENDING);
+            other.setDesiredTime(desired.plusHours(1));
+            other.setAgendaRequested(true);
+            when(cutRepo.findByProfessionalIdAndStatusAndAgendaRequestedTrue(profId, CutRequestStatus.PENDING))
+                    .thenReturn(List.of(other));
+            Attendance attendance = mock(Attendance.class);
+            when(attendance.getId()).thenReturn(UUID.randomUUID());
+            when(attendanceService.createIntentionFromCutRequest(any(), any(), any(), any(), any())).thenReturn(attendance);
+            assertThat(professional.getEffectiveHours().on(target).closed()).isTrue();
+
+            service.acceptCutRequest(cutId, profId);
+
+            DayHours day = professional.getEffectiveHours().on(target);
+            assertThat(day.closed()).isFalse();
+            assertThat(day.opens()).isEqualTo(LocalTime.of(8, 0));
+            assertThat(day.closes()).isEqualTo(LocalTime.of(18, 0));
+            verify(professionalRepo).save(professional);
+            assertThat(cut.getStatus()).isEqualTo(CutRequestStatus.ACCEPTED);
+            assertThat(other.getStatus()).isEqualTo(CutRequestStatus.EXPIRED);
+            verify(pushPublisher).notifyUser(eq(clientId), eq("Agenda aberta"), anyString(), anyMap());
+        }
+
+        @Test
+        @DisplayName("aceitar com a loja fechada no dia nao abre a agenda: a intencao recusa pelo horario da loja")
+        void acceptWithStoreClosedDoesNotOpen() {
+            pending();
+            establishment.applyBusinessHours(BusinessHours.weekly(java.util.Arrays.stream(java.time.DayOfWeek.values())
+                    .map(d -> new WeekdayHours(d, d == target.getDayOfWeek() ? DayHours.closedDay()
+                            : DayHours.open(LocalTime.of(8, 0), LocalTime.of(18, 0)))).toList()));
+            when(attendanceService.createIntentionFromCutRequest(any(), any(), any(), any(), any()))
+                    .thenThrow(new com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException(desired));
+
+            assertThatThrownBy(() -> service.acceptCutRequest(cutId, profId))
+                    .isInstanceOf(com.ospaulos.vupth.domain.attendance.exception.IntentionOutsideBusinessHoursException.class);
+
+            assertThat(professional.getEffectiveHours().on(target).closed()).isTrue();
+            verify(professionalRepo, never()).save(any(Professional.class));
+        }
+
+        @Test
+        @DisplayName("loja sem horario configurado: o aceite abre o dia em 24 h")
+        void acceptWithUnconfiguredStoreOpensAllDay() {
+            pending();
+            establishment.applyBusinessHours(BusinessHours.notConfigured());
+            Attendance attendance = mock(Attendance.class);
+            when(attendance.getId()).thenReturn(UUID.randomUUID());
+            when(attendanceService.createIntentionFromCutRequest(any(), any(), any(), any(), any())).thenReturn(attendance);
+
+            service.acceptCutRequest(cutId, profId);
+
+            assertThat(professional.getWorkingHours().on(target).isAllDay()).isTrue();
+        }
+
+        @Test
+        @DisplayName("o profissional abriu o dia sem aceitar: o pedido vence, o cliente agenda direto e o card sai; dia ainda fechado fica")
+        void openingTheDayExpiresTheRequest() {
+            CutRequest cut = pending();
+            when(cutRepo.findByProfessionalIdAndStatusAndAgendaRequestedTrue(profId, CutRequestStatus.PENDING))
+                    .thenReturn(List.of(cut));
+
+            assertThat(service.expireRequestsForOpenedDays(profId)).isZero();
+            assertThat(cut.getStatus()).isEqualTo(CutRequestStatus.PENDING);
+
+            professional.applyWorkingHours(professional.getWorkingHours().withException(
+                    target, DayHours.open(LocalTime.of(9, 0), LocalTime.of(12, 0)), BusinessClock.today()));
+            assertThat(service.expireRequestsForOpenedDays(profId)).isEqualTo(1);
+
+            assertThat(cut.getStatus()).isEqualTo(CutRequestStatus.EXPIRED);
+            verify(pushPublisher).notifyUser(eq(clientId), eq("Agenda aberta"),
+                    org.mockito.ArgumentMatchers.contains("Agende direto"), anyMap());
+            verify(queuePublisher).notifyClient(eq(profId), any(QueueNotification.class));
+        }
+
+        @Test
+        @DisplayName("sem pedido pendente para dia sem agenda, nada acontece")
+        void nothingPending() {
+            assertThat(service.expireRequestsForOpenedDays(profId)).isZero();
+            verify(pushPublisher, never()).notifyUser(any(), anyString(), anyString(), anyMap());
+        }
+
+        @Test
+        @DisplayName("scheduleRequestPushBody: com e sem o nome do cliente")
+        void scheduleBody() {
+            assertThat(CutRequestServiceImpl.scheduleRequestPushBody("Ana", desired)).startsWith("Ana solicitou agendamento para ");
+            assertThat(CutRequestServiceImpl.scheduleRequestPushBody(" ", desired)).startsWith("Um cliente solicitou agendamento para ");
+        }
     }
 }

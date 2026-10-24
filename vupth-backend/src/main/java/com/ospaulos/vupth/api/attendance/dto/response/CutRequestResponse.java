@@ -44,7 +44,11 @@ public record CutRequestResponse(
 
         /** Dia e horario desejados pelo cliente (D6; Partner S26). null = "assim que abrir". */
         @JsonProperty("desired_time")
-        OffsetDateTime desiredTime
+        OffsetDateTime desiredTime,
+
+        /** O dia pedido nao estava liberado na agenda (solicitar-agendamento): o Partner mostra o dot e o aceite abre o dia. */
+        @JsonProperty("agenda_requested")
+        boolean agendaRequested
 ) {
     public static CutRequestResponse fromEntity(CutRequest c) {
         return new CutRequestResponse(
@@ -59,7 +63,8 @@ public record CutRequestResponse(
                 c.getExpiresAt(),
                 c.getCreatedAt(),
                 c.getResultingAttendance() != null ? c.getResultingAttendance().getId() : null,
-                c.getDesiredTime()
+                c.getDesiredTime(),
+                c.isAgendaRequested()
         );
     }
 }

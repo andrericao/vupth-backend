@@ -19150,6 +19150,7 @@
          "if(pm.response.code===201){ const r=pm.response.json();",
          "  pm.test(\"PENDING, vence no horario pedido (pedido-vence-no-horario)\", () => { pm.expect(r.status).to.equal(\"PENDING\"); pm.expect(new Date(r.expires_at).getTime()).to.equal(new Date(pm.collectionVariables.get(\"cut_desired_time\")).getTime()); });",
          "  pm.test(\"D6 (S26): desired_time volta na resposta\", () => pm.expect(r.desired_time.slice(0,10)).to.equal(pm.collectionVariables.get(\"cut_desired_time\").slice(0,10)));",
+         "  pm.test(\"solicitar-agendamento: agenda_requested e booleano (a loja do teste nao fecha o dia)\", () => pm.expect(r.agenda_requested).to.be.a(\"boolean\"));",
          "  pm.collectionVariables.set(\"cut_id\", r.id); }"
         ],
         "type": "text/javascript"
