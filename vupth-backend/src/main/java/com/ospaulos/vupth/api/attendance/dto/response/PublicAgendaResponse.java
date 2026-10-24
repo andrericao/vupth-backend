@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.api.attendance.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -29,5 +30,14 @@ public record PublicAgendaResponse(AgendaFrameResponse frame, List<Block> blocks
      * {@code opens}/{@code closes} (qualquer hora).
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record Day(LocalDate date, boolean closed, LocalTime opens, LocalTime closes) {}
+    public record Day(LocalDate date, boolean closed, LocalTime opens, LocalTime closes,
+                      @JsonProperty("store_open") boolean storeOpen,
+                      @JsonProperty("agenda_released") boolean agendaReleased) {}
+
+    /*
+     * agenda-publica-dias-liberados (24/10): por que o dia esta fechado. {@code store_open}: a loja abre naquele dia (ou nao
+     * configurou o horario). {@code agenda_released}: a agenda do PROPRIO profissional nao fecha o dia (ou ele nao configurou
+     * a agenda). O Client: loja nao abre = esconde o dia; loja abre e agenda nao liberada = mostra "Solicitar agendamento";
+     * os dois verdadeiros = agenda direto (closed=false).
+     */
 }

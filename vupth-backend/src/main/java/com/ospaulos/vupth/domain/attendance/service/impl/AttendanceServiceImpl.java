@@ -452,13 +452,21 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // agenda-do-profissional: o horario que vale de fato em cada dia (loja ∩ agenda dele), ate o horizonte.
         BusinessHours effective = professional.getEffectiveHours();
+        BusinessHours storeHours = professional.getEstablishment() != null
+                ? professional.getEstablishment().getBusinessHours() : BusinessHours.notConfigured();
+        BusinessHours ownHours = professional.getWorkingHours();
         List<PublicAgendaResponse.Day> days = new java.util.ArrayList<>();
         for (int i = 0; i <= INTENTION_HORIZON_DAYS; i++) {
             java.time.LocalDate date = today.plusDays(i);
             DayHours day = effective.on(date);
+            // agenda-publica-dias-liberados: por que o dia esta fechado (loja que nao abre x agenda que ele nao liberou)
+            DayHours storeDay = storeHours.on(date);
+            DayHours ownDay = ownHours.on(date);
+            boolean storeOpen = storeDay == null || !storeDay.closed();
+            boolean released = ownDay == null || !ownDay.closed();
             days.add(day == null
-                    ? new PublicAgendaResponse.Day(date, false, null, null)
-                    : new PublicAgendaResponse.Day(date, day.closed(), day.opens(), day.closes()));
+                    ? new PublicAgendaResponse.Day(date, false, null, null, storeOpen, released)
+                    : new PublicAgendaResponse.Day(date, day.closed(), day.opens(), day.closes(), storeOpen, released));
         }
         return new PublicAgendaResponse(frameFor(professional), blocks, days);
     }

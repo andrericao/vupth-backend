@@ -19730,6 +19730,10 @@
          "  pm.test('blocos em ordem de inicio', () => {",
          "    for (let i = 1; i < r.blocks.length; i++) pm.expect(Date.parse(r.blocks[i].start)).to.be.at.least(Date.parse(r.blocks[i - 1].start));",
          "  });",
+         "  pm.test('agenda-publica-dias-liberados: cada dia diz store_open e agenda_released (booleanos)', () => {",
+         "    pm.expect(r.days.length).to.be.above(0);",
+         "    r.days.forEach(d => { pm.expect(d.store_open).to.be.a('boolean'); pm.expect(d.agenda_released).to.be.a('boolean'); });",
+         "  });",
          "}"
         ]
        }

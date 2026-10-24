@@ -202,7 +202,11 @@ class ProfessionalHoursIntegrationTest {
                         DayOfWeek dow = LocalDate.parse(d.getString("date")).getDayOfWeek();
                         if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) {
                             Assertions.assertTrue(d.getBoolean("closed"), "fim de semana fechado: " + d);
+                            // agenda-publica-dias-liberados: a loja abre, a agenda dele nao liberou -> o Client mostra "Solicitar"
+                            Assertions.assertTrue(d.getBoolean("store_open"), d.toString());
+                            Assertions.assertFalse(d.getBoolean("agenda_released"), d.toString());
                         } else {
+                            Assertions.assertTrue(d.getBoolean("store_open") && d.getBoolean("agenda_released"), d.toString());
                             Assertions.assertEquals("09:00", d.getString("opens"), d.toString());
                             Assertions.assertEquals("17:00", d.getString("closes"), d.toString());
                         }

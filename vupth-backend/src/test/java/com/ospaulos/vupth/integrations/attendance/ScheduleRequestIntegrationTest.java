@@ -100,6 +100,18 @@ class ScheduleRequestIntegrationTest {
     }
 
     @Test
+    @Order(0)
+    @DisplayName("agenda publica: o dia fechado pela agenda dele traz store_open=true e agenda_released=false (o Client mostra Solicitar)")
+    void publicAgendaTellsWhyTheDayIsClosed() throws Exception {
+        mvc.perform(get("/attendances/intentions/professional/{id}", profId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days[?(@.date=='" + target + "')].closed").value(hasItem(true)))
+                .andExpect(jsonPath("$.days[?(@.date=='" + target + "')].store_open").value(hasItem(true)))
+                .andExpect(jsonPath("$.days[?(@.date=='" + target + "')].agenda_released").value(hasItem(false)))
+                .andExpect(jsonPath("$.days[?(@.date=='" + target.plusDays(1) + "')].agenda_released").value(hasItem(true)));
+    }
+
+    @Test
     @Order(1)
     @DisplayName("pedido para o dia sem agenda nasce agenda_requested e aparece na lista do profissional; dia aberto, nao")
     void requestForClosedDay() throws Exception {
