@@ -113,8 +113,8 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Pedido de troca de posicao sai com o botao OK (toda notificacao tem botao)")
-    void swapRequestCarriesCiencia() throws IOException {
+    @DisplayName("Pedido de troca de posicao sai com Trocar/Recusar (push-acoes-por-pergunta)")
+    void swapRequestCarriesSwapActions() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -122,7 +122,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Pedido de troca", "Aceite ou recuse.",
                 Map.of("type", "SWAP_REQUESTED"));
 
-        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
+        assertThat(body.get()).contains("\"categoryId\":\"TROCAR_RECUSAR\"");
     }
 
     @Test
@@ -148,6 +148,8 @@ class ExpoPushSenderTest {
             "CUT_EXPIRED, VER_ATENDIMENTO",
             "ATTENDANCE_FINISHED, AVALIAR",
             "PAYMENT_PENDING, PAGAR",
+            "OWNERSHIP_TRANSFER_REQUESTED, ACEITAR_RECUSAR",
+            "NO_SHOW_AVAILABLE, CIENCIA",
             "NO_SHOW_REMOVED, PAGAR_MULTA",
             "ATTENDANCE_STARTED, CIENCIA"
     })
@@ -163,8 +165,8 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Oferta de vez antes sai com o botao OK (toda notificacao tem botao)")
-    void earlierTurnOfferCarriesCiencia() throws IOException {
+    @DisplayName("Oferta de vez antes sai com Aceitar/Manter (push-acoes-por-pergunta)")
+    void earlierTurnOfferCarriesAcceptKeep() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -172,7 +174,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Vez antes", "Aceite ou recuse.",
                 Map.of("type", "EARLIER_TURN_OFFERED"));
 
-        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
+        assertThat(body.get()).contains("\"categoryId\":\"ACEITAR_MANTER\"");
     }
 
     @Test

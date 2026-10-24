@@ -85,7 +85,8 @@ public class QueueSwapServiceImpl implements QueueSwapService {
                     "Um cliente pediu para trocar de posicao com voce na fila."));
             pushPublisher.notifyUser(target.getClient().getId(), "Pedido de troca de posicao",
                     "Um cliente pediu para trocar de posicao com voce na fila.",
-                    java.util.Map.of("type", "SWAP_REQUESTED", "attendanceId", proposer.getId().toString()));
+                    java.util.Map.of("type", "SWAP_REQUESTED", "attendanceId", proposer.getId().toString(),
+                            "swapRequestId", String.valueOf(swap.getId())));
         }
 
         log.info("[Swap] propose — criada proposta {} (PENDING)", swap.getId());

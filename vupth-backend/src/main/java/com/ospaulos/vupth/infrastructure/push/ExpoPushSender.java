@@ -72,6 +72,15 @@ public class ExpoPushSender implements PushSender {
     static final String CUT_REQUEST_CATEGORY_ID = "ACEITAR_RECUSAR";
 
     /**
+     * push-acoes-por-pergunta (BAK-2, 24/10): so push que pergunta algo tem acao, e a acao e a mesma
+     * decisao que a tela faz ao tocar. Pedido de troca: Trocar / Recusar. Vez adiantada: Aceitar / Manter
+     * (manter nao chama nada: sem aceitar, segue valendo o horario prometido). Convite de dono: reusa
+     * ACEITAR_RECUSAR (o app escolhe o endpoint pelo data.type). O resto fica com o OK.
+     */
+    static final String SWAP_CATEGORY_ID = "TROCAR_RECUSAR";
+    static final String EARLIER_TURN_CATEGORY_ID = "ACEITAR_MANTER";
+
+    /**
      * Categorias do Client (push-categorias-do-client, DEC-43; o Client registrou em 7b5276bf): "Ver minha
      * vez" leva a fila, "Ver atendimento" leva ao atendimento. Os outros tipos seguem a regra geral (CIENCIA
      * ou, nos de decisao, nenhuma). O CUT_REQUESTED vai ao Partner com ACEITAR_RECUSAR (push-com-acoes). O
@@ -80,6 +89,9 @@ public class ExpoPushSender implements PushSender {
     static final Map<String, String> CATEGORY_BY_TYPE = Map.ofEntries(
             Map.entry("CLOSING_PROMPT", CLOSING_CATEGORY_ID),
             Map.entry("CUT_REQUESTED", CUT_REQUEST_CATEGORY_ID),
+            Map.entry("OWNERSHIP_TRANSFER_REQUESTED", CUT_REQUEST_CATEGORY_ID),
+            Map.entry("SWAP_REQUESTED", SWAP_CATEGORY_ID),
+            Map.entry("EARLIER_TURN_OFFERED", EARLIER_TURN_CATEGORY_ID),
             Map.entry("QUEUE_NEXT_IN_LINE", "VER_FILA"),
             Map.entry("ATTENDANCE_PROMOTED", "VER_FILA"),
             Map.entry("ATTENDANCE_CANCELLED", "VER_ATENDIMENTO"),
