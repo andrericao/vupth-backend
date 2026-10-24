@@ -122,4 +122,22 @@ class PaymentNotifierTest {
         when(attendanceRepository.findById(attendance.getId())).thenThrow(new RuntimeException("banco fora"));
         assertThatCode(() -> notifier.claimed(attendance.getId(), BigDecimal.ONE)).doesNotThrowAnyException();
     }
+
+    @Test
+    @DisplayName("Nao recebi: o cliente recebe push e WS PAYMENT_REFUSED dizendo que o profissional nao confirmou; convidado nao recebe")
+    void refusedNotifiesClient() {
+        notifier.refused(attendance.getId());
+
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(pushPublisher).notifyUser(eq(clientId), eq("Pagamento não confirmado"), body.capture(), anyMap());
+        assertThat(body.getValue()).startsWith("Beto não confirmou o seu pagamento.").contains("segue pendente");
+        ArgumentCaptor<QueueNotification> ws = ArgumentCaptor.forClass(QueueNotification.class);
+        verify(queuePublisher).notifyClient(eq(clientId), ws.capture());
+        assertThat(ws.getValue().type()).isEqualTo("PAYMENT_REFUSED");
+
+        attendance.setClient(null);
+        clearInvocations(pushPublisher, queuePublisher);
+        notifier.refused(attendance.getId());
+        verifyNoInteractions(pushPublisher, queuePublisher);
+    }
 }

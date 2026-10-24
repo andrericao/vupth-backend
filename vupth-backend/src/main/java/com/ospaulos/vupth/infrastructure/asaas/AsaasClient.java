@@ -196,6 +196,12 @@ public class AsaasClient {
 
     public record PixQr(String payload, String encodedImage) {}
 
+    /** Cancela a cobranca ({@code DELETE /payments/{id}}): o "Recebi" manual quita o atendimento e a do Asaas nao deve mais ser paga. */
+    public void cancelCharge(String paymentId) {
+        requireKey();
+        delete("/payments/" + paymentId);
+    }
+
     private void requireKey() {
         if (!properties.keyConfigured()) {
             throw new AsaasException(HttpStatus.SERVICE_UNAVAILABLE, "ASAAS_NOT_CONFIGURED", "Falta a ASAAS_API_KEY.");
@@ -222,6 +228,15 @@ public class AsaasClient {
         try {
             return rest.post().uri(properties.baseUrl() + path).header("access_token", properties.apiKey())
                     .contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(JsonNode.class);
+        } catch (RestClientException e) {
+            throw failure(e);
+        }
+    }
+
+    private JsonNode delete(String path) {
+        try {
+            return rest.delete().uri(properties.baseUrl() + path).header("access_token", properties.apiKey())
+                    .retrieve().body(JsonNode.class);
         } catch (RestClientException e) {
             throw failure(e);
         }

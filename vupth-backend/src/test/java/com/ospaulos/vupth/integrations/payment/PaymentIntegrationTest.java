@@ -155,6 +155,22 @@ class PaymentIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.awaiting_count").value(1))
                 .andExpect(jsonPath("$.items[0].attendance_id").value(firstId));
+
+        // pagamento-manual-e-asaas: o profissional recusa o "Ja paguei" (so ele ou o dono); segue pendente e o cliente pode dizer de novo
+        mvc.perform(post("/attendances/{id}/payment/refuse", firstId).header("Authorization", clientToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/attendances/{id}/payment/refuse", firstId).header("Authorization", profToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.claimed_at").value(nullValue()));
+        mvc.perform(post("/attendances/{id}/payment/refuse", firstId).header("Authorization", profToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PAYMENT_INVALID_STATUS"));
+        mvc.perform(get("/professional/me/pending-payments").header("Authorization", profToken))
+                .andExpect(jsonPath("$.awaiting_count").value(0));
+        mvc.perform(post("/attendances/{id}/payment/claim", firstId).header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AWAITING_CONFIRMATION"));
     }
 
     @Test

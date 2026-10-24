@@ -75,6 +75,16 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
+    /** "Nao recebi" (profissional ou dono): recusa o "Ja paguei"; o atendimento segue pendente e o cliente e avisado (PAYMENT_REFUSED). */
+    @PostMapping("/attendances/{attendanceId}/payment/refuse")
+    public ResponseEntity<PaymentResponse> refuse(@PathVariable UUID attendanceId,
+                                                  @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("PAYMENT CONTROLLER REFUSE {} by={}", attendanceId, principal.getUserId());
+        PaymentResponse response = paymentService.refuse(attendanceId, principal.getUserId());
+        paymentNotifier.refused(attendanceId);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/clients/me/pending-payments")
     public ResponseEntity<PendingPaymentsResponse> pendingOfClient(@AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.ok(paymentService.pendingOfClient(principal.getUserId()));

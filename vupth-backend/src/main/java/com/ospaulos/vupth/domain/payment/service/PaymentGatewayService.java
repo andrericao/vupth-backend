@@ -83,6 +83,27 @@ public class PaymentGatewayService {
         }
     }
 
+    /**
+     * pagamento-manual-e-asaas: o atendimento foi quitado a mao ("Recebi"), entao a cobranca do Asaas e cancelada para ninguem pagar
+     * duas vezes. Best-effort: sem cobranca, desligado ou recusado pelo Asaas (ja recebida, por exemplo), nada quebra; o webhook
+     * continua valendo e nao quita de novo um atendimento ja pago. Devolve se cancelou.
+     */
+    public boolean cancelCharge(Attendance attendance) {
+        String id = attendance.getAsaasPaymentId();
+        if (id == null || !properties.keyConfigured()) {
+            return false;
+        }
+        try {
+            client.cancelCharge(id);
+            attendance.setAsaasStatus("DELETED");
+            log.info("[Gateway] cobranca cancelada pelo Recebi manual — attendance={} payment={}", attendance.getId(), id);
+            return true;
+        } catch (AsaasException e) {
+            log.warn("[Gateway] cobranca nao cancelada — attendance={} payment={}: {}", attendance.getId(), id, e.getMessage());
+            return false;
+        }
+    }
+
     private static String displayName(Attendance attendance) {
         String name = attendance.getClient().getFullName();
         boolean empty = name == null || name.isBlank() || name.contains("null");

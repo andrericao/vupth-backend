@@ -29,6 +29,7 @@ public class PaymentNotifier {
 
     static final String PAYMENT_CLAIMED = "PAYMENT_CLAIMED";
     static final String PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED";
+    static final String PAYMENT_REFUSED = "PAYMENT_REFUSED";
 
     private final AttendanceRepository attendanceRepository;
     private final QueueWebSocketPublisher queuePublisher;
@@ -63,6 +64,20 @@ public class PaymentNotifier {
                     PAYMENT_CONFIRMED, attendanceId, a.getEstablishment().getId(), body));
             pushPublisher.notifyUser(a.getClient().getId(), "Pagamento efetuado", body,
                     data(PAYMENT_CONFIRMED, a));
+        });
+    }
+
+    /** "Nao recebi": o cliente fica sabendo que o profissional nao confirmou e que o atendimento segue pendente. */
+    public void refused(UUID attendanceId) {
+        withAttendance(attendanceId, a -> {
+            if (a.getClient() == null) {
+                return;
+            }
+            String body = a.getProfessional().getName() + " não confirmou o seu pagamento. Confira se o pagamento saiu da sua conta; "
+                    + "o atendimento segue pendente.";
+            queuePublisher.notifyClient(a.getClient().getId(), QueueNotification.of(
+                    PAYMENT_REFUSED, attendanceId, a.getEstablishment().getId(), body));
+            pushPublisher.notifyUser(a.getClient().getId(), "Pagamento não confirmado", body, data(PAYMENT_REFUSED, a));
         });
     }
 

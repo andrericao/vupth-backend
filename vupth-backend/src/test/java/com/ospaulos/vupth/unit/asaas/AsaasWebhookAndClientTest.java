@@ -388,4 +388,23 @@ class AsaasWebhookAndClientTest {
         assertThatThrownBy(() -> client.createCharge("c", new BigDecimal("9"), "PIX", null, null)).isInstanceOfSatisfying(
                 AsaasException.class, e -> assertThat(e.getCode()).isEqualTo("ASAAS_UNREACHABLE"));
     }
+
+    @Test
+    @DisplayName("pagamento-manual-e-asaas: cancelar a cobranca e um DELETE /payments/{id} com a chave; sem chave nao chama")
+    void cancelChargeCallsDelete() throws Exception {
+        AsaasClient client = client("chave-secreta");
+        List<String> calls = new ArrayList<>();
+        server.createContext("/sandbox/v3/payments/pay_1", exchange -> {
+            calls.add(exchange.getRequestMethod() + " " + exchange.getRequestHeaders().getFirst("access_token"));
+            reply(exchange, 200, "{\"deleted\":true,\"id\":\"pay_1\"}");
+        });
+        server.start();
+
+        client.cancelCharge("pay_1");
+
+        assertThat(calls).containsExactly("DELETE chave-secreta");
+        AsaasClient noKey = new AsaasClient(new AsaasProperties("", "http://localhost:1/sandbox/v3", ""), RestClient.create());
+        assertThatThrownBy(() -> noKey.cancelCharge("pay_1")).isInstanceOfSatisfying(
+                AsaasException.class, e -> assertThat(e.getCode()).isEqualTo("ASAAS_NOT_CONFIGURED"));
+    }
 }

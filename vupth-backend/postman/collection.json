@@ -10707,6 +10707,162 @@
      }
     },
     {
+     "name": "[ERRO] Nao recebi pelo cliente -> 403",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/refuse",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "refuse"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Nao recebi (profissional) -> volta a PENDING, sem claimed_at",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"PENDING\", () => pm.expect(pm.response.json().status).to.eql(\"PENDING\"));",
+         "pm.test(\"claimed_at nulo\", () => pm.expect(pm.response.json().claimed_at).to.be.oneOf([null, undefined]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/refuse",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "refuse"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "[ERRO] Nao recebi de novo -> 409 PAYMENT_INVALID_STATUS",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.eql(\"PAYMENT_INVALID_STATUS\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/refuse",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "refuse"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Ja paguei outra vez depois da recusa -> AWAITING_CONFIRMATION",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"AWAITING_CONFIRMATION\", () => pm.expect(pm.response.json().status).to.eql(\"AWAITING_CONFIRMATION\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/claim",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "claim"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
      "name": "dot do profissional -> awaiting_count >= 1",
      "event": [
       {

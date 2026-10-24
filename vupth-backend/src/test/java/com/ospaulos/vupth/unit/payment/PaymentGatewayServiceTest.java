@@ -242,4 +242,29 @@ class PaymentGatewayServiceTest {
         assertThat(g.splitsFor(attendanceOf("32.90", "0.00"), new BigDecimal("32.90"))).as("nada sobraria ao app").isEmpty();
         assertThat(g.splitsFor(attendanceOf("30.00", "0.00"), new BigDecimal("32.90"))).hasSize(1);
     }
+
+    @Test
+    @DisplayName("pagamento-manual-e-asaas: o Recebi manual cancela a cobranca; sem cobranca ou sem chave nada e chamado; o Asaas recusando nao quebra")
+    void cancelCharge() {
+        PaymentGatewayService on = gateway("chave", SANDBOX, true);
+        Attendance withCharge = attendance();
+        withCharge.setAsaasPaymentId("pay_1");
+        withCharge.setAsaasStatus("PENDING");
+
+        assertThat(on.cancelCharge(withCharge)).isTrue();
+        verify(client).cancelCharge("pay_1");
+        assertThat(withCharge.getAsaasStatus()).isEqualTo("DELETED");
+
+        assertThat(on.cancelCharge(attendance())).isFalse();
+        PaymentGatewayService noKey = gateway("", SANDBOX, true);
+        assertThat(noKey.cancelCharge(withCharge)).isFalse();
+
+        Attendance refused = attendance();
+        refused.setAsaasPaymentId("pay_2");
+        refused.setAsaasStatus("RECEIVED");
+        org.mockito.Mockito.doThrow(new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_REJECTED", "ja recebida"))
+                .when(client).cancelCharge("pay_2");
+        assertThat(on.cancelCharge(refused)).isFalse();
+        assertThat(refused.getAsaasStatus()).isEqualTo("RECEIVED");
+    }
 }

@@ -169,8 +169,36 @@ public class PaymentService {
             throw new PaymentInvalidStatusException(PaymentStatus.PAID, "confirmar");
         }
         markPaid(attendance, method);
+        cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi — attendance={} by={} forma={}", attendanceId, userId, method);
         return toPayment(attendance, isClient(attendance, userId));
+    }
+
+    /**
+     * "Nao recebi": o profissional ou o dono recusa o "Ja paguei" do cliente. O pagamento volta a PENDING (o atendimento segue em
+     * aberto, com a cobranca do Asaas viva) e o cliente e avisado pelo controller para conferir.
+     */
+    public PaymentResponse refuse(UUID attendanceId, UUID userId) {
+        Attendance attendance = attendance(attendanceId);
+        if (!canConfirm(attendance, userId)) {
+            throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja recusam o pagamento.");
+        }
+        assertAvailable(attendance);
+        if (attendance.getPaymentStatus() != PaymentStatus.AWAITING_CONFIRMATION) {
+            throw new PaymentInvalidStatusException(attendance.getPaymentStatus(), "recusar");
+        }
+        attendance.setPaymentStatus(PaymentStatus.PENDING);
+        attendance.setPaymentClaimedAt(null);
+        attendanceRepository.save(attendance);
+        log.info("[Payment] Nao recebi — attendance={} by={}", attendanceId, userId);
+        return toPayment(attendance, isClient(attendance, userId));
+    }
+
+    /** Quitado a mao: cancela a cobranca do Asaas, se houver (uma via anula a outra). */
+    private void cancelGatewayCharge(Attendance attendance) {
+        if (gateway != null && attendance.getAsaasPaymentId() != null && gateway.cancelCharge(attendance)) {
+            attendanceRepository.save(attendance);
+        }
     }
 
     /**
@@ -191,6 +219,7 @@ public class PaymentService {
             return false;
         }
         markPaid(attendance, method);
+        cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi no Finalizar — attendance={} by={} forma={}", attendanceId, userId, method);
         return true;
     }
