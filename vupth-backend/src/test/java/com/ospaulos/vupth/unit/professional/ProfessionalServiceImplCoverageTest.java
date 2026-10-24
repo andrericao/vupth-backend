@@ -202,31 +202,28 @@ class ProfessionalServiceImplCoverageTest {
     }
 
     @Nested
-    @DisplayName("markAttendanceLate — 3o atraso")
+    @DisplayName("markAttendanceLate — 3o atraso (nao-chegou-tres-atrasos): multa e saida da fila")
     class ThirdLate {
 
         @Test
-        @DisplayName("vai para depois do ultimo e volta a SCHEDULED")
-        void movesToEnd() {
+        @DisplayName("sai da fila: vira REMOVED (a loja tirando), com outros esperando atras")
+        void leavesTheQueue() {
             OffsetDateTime now = OffsetDateTime.now();
             Attendance last = waiting(UUID.randomUUID(), now.plusMinutes(30));
             loadAttendanceAndProfessional();
             when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(professionalId, establishmentId))
-                    .thenReturn(List.of(attendance))
                     .thenReturn(List.of(attendance, last));
             when(lateArrivalService.registerLate(eq(attendance), eq(professional), any()))
                     .thenReturn(LateArrivalService.LATES_PER_PENALTY);
 
             professionalService.markAttendanceLate(professionalId, attendanceId);
 
-            assertThat(attendance.getScheduledTime()).isEqualTo(last.getScheduledTime().plusMinutes(1));
-            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.SCHEDULED);
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.REMOVED);
         }
 
         @Test
-        @DisplayName("ja e o ultimo: fica onde esta")
-        void alreadyLast() {
-            OffsetDateTime original = attendance.getScheduledTime();
+        @DisplayName("sozinho na fila tambem sai")
+        void aloneAlsoLeaves() {
             loadAttendanceAndProfessional();
             when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(professionalId, establishmentId))
                     .thenReturn(List.of(attendance));
@@ -235,21 +232,18 @@ class ProfessionalServiceImplCoverageTest {
 
             professionalService.markAttendanceLate(professionalId, attendanceId);
 
-            assertThat(attendance.getScheduledTime()).isEqualTo(original);
-            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.SCHEDULED);
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.REMOVED);
         }
 
         @Test
-        @DisplayName("fila vazia: nada a mover")
-        void emptyQueue() {
-            OffsetDateTime original = attendance.getScheduledTime();
+        @DisplayName("antes do 3o atraso (1o e 2o) continua na fila, como LATE")
+        void beforeThirdStaysInTheQueue() {
             loadAttendanceAndProfessional();
-            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any()))
-                    .thenReturn(LateArrivalService.LATES_PER_PENALTY);
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any())).thenReturn(2);
 
             professionalService.markAttendanceLate(professionalId, attendanceId);
 
-            assertThat(attendance.getScheduledTime()).isEqualTo(original);
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.LATE);
         }
     }
 

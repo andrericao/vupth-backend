@@ -117,7 +117,7 @@ class LateArrivalServiceTest {
     }
 
     @Test
-    @DisplayName("soma entre atendimentos e o 3o gera a multa de R$ 5,00, zerando o contador")
+    @DisplayName("soma entre atendimentos e o 3o gera a multa de R$ 5,00; o contador fica em 3 ate a multa ser paga")
     void thirdLate_penaltyAndReset() {
         client.setLateCount(2); // dois atrasos de outros cortes
 
@@ -125,7 +125,7 @@ class LateArrivalServiceTest {
         int n = service.registerLate(a, professional, NOW);
 
         assertThat(n).isEqualTo(3);
-        assertThat(client.getLateCount()).as("zera quando a multa nasce").isZero();
+        assertThat(client.getLateCount()).as("so zera quando a multa e paga").isEqualTo(3);
         ArgumentCaptor<ClientPenaltyEvent> event = ArgumentCaptor.forClass(ClientPenaltyEvent.class);
         verify(penaltyEventRepository).save(event.capture());
         assertThat(event.getValue().getType()).isEqualTo(PenaltyType.LATE_ARRIVAL);
@@ -226,8 +226,8 @@ class LateArrivalServiceTest {
         service.undoLate(more);
         assertThat(client.getLateCount()).isZero();
 
-        // a multa do 3o atraso (ainda nao cobrada) sai: antes dele o cliente estava em (atual + 3 - contados)
-        client.setLateCount(0);
+        // a multa do 3o atraso (ainda nao cobrada) sai e o contador volta ao que era antes dele (3 - contados)
+        client.setLateCount(3);
         Attendance third = attendance(NOW);
         third.setCountedLates(1);
         ClientPenaltyEvent penalty = new ClientPenaltyEvent(client, PenaltyType.LATE_ARRIVAL, third.getId(), 0, new java.math.BigDecimal("5.00"));
@@ -293,13 +293,39 @@ class LateArrivalServiceTest {
             verify(pushPublisher).notifyUser(eq(client.getId()), any(), body.capture(), data.capture());
             assertThat(data.getValue().get("lateCount")).isEqualTo(String.valueOf(count));
             assertThat(data.getValue().get("latesUntilPenalty")).isEqualTo(String.valueOf(3 - count));
-            assertThat(data.getValue().get("movedToEnd")).isEqualTo(String.valueOf(count == 3));
+            assertThat(data.getValue().get("removedFromQueue")).isEqualTo(String.valueOf(count == 3));
+            assertThat(data.getValue().get("movedToEnd")).as("obsoleto").isEqualTo("false");
+            assertThat(body.getValue()).contains(count + " de 3");
             if (count == 3) {
-                assertThat(body.getValue()).contains("Você foi para o fim da fila");
+                assertThat(body.getValue()).contains("saiu da fila").contains("Pague a multa para zerar a contagem");
             } else {
-                assertThat(body.getValue()).contains("No 3º, multa de R$ 5,00");
+                assertThat(body.getValue()).contains("No 3º, multa de R$ 5,00 e você sai da fila");
             }
         }
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: com a multa ainda por pagar o contador segue em 3 e um novo atraso gera outra multa")
+    void armedCounterFinesAgain() {
+        client.setLateCount(3);
+
+        int n = service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW);
+
+        assertThat(n).isEqualTo(3);
+        assertThat(client.getLateCount()).isEqualTo(3);
+        verify(penaltyEventRepository).save(any(ClientPenaltyEvent.class));
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: pagar a multa de atraso zera o contador; sem contador ou sem cliente, nada muda")
+    void paidPenaltyResetsTheCounter() {
+        client.setLateCount(3);
+        service.resetOnPenaltyPaid(client);
+        assertThat(client.getLateCount()).isZero();
+
+        service.resetOnPenaltyPaid(client);
+        service.resetOnPenaltyPaid(null);
+        assertThat(client.getLateCount()).isZero();
     }
 
     @Test

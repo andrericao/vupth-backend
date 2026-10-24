@@ -649,4 +649,31 @@ class PaymentServiceTest {
         // depois de paga a mao, o aviso do Asaas nao quita de novo
         assertThat(service.onGatewayEvent(awaiting.getId(), "pay_1", "RECEIVED", true)).isFalse();
     }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: quitar o corte que carregava a multa de atraso zera o contador; multa de outro tipo, nao")
+    void paidLatePenaltyResetsTheLateCounter() {
+        com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrival =
+                mock(com.ospaulos.vupth.domain.client.service.LateArrivalService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "lateArrival", lateArrival);
+
+        Attendance withLate = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent late = mock(com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent.class);
+        when(late.getType()).thenReturn(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
+        when(late.getAmount()).thenReturn(new BigDecimal("5.00"));
+        when(late.getChargedAttendanceId()).thenReturn(withLate.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(late));
+        service.confirm(withLate.getId(), professionalId);
+        verify(lateArrival).resetOnPenaltyPaid(client);
+
+        org.mockito.Mockito.clearInvocations(lateArrival);
+        Attendance withCancel = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent cancel = mock(com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent.class);
+        when(cancel.getType()).thenReturn(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL);
+        when(cancel.getAmount()).thenReturn(new BigDecimal("5.00"));
+        when(cancel.getChargedAttendanceId()).thenReturn(withCancel.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(cancel));
+        service.confirm(withCancel.getId(), professionalId);
+        verify(lateArrival, never()).resetOnPenaltyPaid(any());
+    }
 }

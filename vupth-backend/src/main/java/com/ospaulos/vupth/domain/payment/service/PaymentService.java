@@ -75,6 +75,10 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private PaymentGatewayService gateway;
 
+    /** O contador de atrasos zera quando a multa de atraso e paga junto com o corte (nao-chegou-tres-atrasos). Opcional (testes de unidade). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrival;
+
     private boolean splitPix() {
         return paymentMode != null && paymentMode.splitPix();
     }
@@ -365,6 +369,12 @@ public class PaymentService {
         attendanceRepository.save(attendance);
         if (debtService != null) {
             debtService.recordOnReceived(attendance, attendance.getPaymentMethod());
+        }
+        if (lateArrival != null && attendance.getClient() != null
+                && penaltyEventRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(List.of(attendance.getId())).stream()
+                        .anyMatch(e -> e.getType() == com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL
+                                && e.getAmount() != null && e.getAmount().signum() > 0)) {
+            lateArrival.resetOnPenaltyPaid(attendance.getClient());
         }
         // atendimento de teste (piloto, DEC-106): o Recebi quita como sempre, mas fica fora do livro-caixa do app
         if (appLedger != null && !attendance.isTest()) {

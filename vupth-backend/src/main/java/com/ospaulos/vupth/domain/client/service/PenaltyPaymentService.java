@@ -3,6 +3,7 @@ package com.ospaulos.vupth.domain.client.service;
 import com.ospaulos.vupth.api.client.dto.response.PenaltyPaymentResponse;
 import com.ospaulos.vupth.domain.client.exception.PenaltyPaymentException;
 import com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent;
+import com.ospaulos.vupth.domain.client.model.PenaltyType;
 import com.ospaulos.vupth.domain.client.model.PenaltyPayment;
 import com.ospaulos.vupth.domain.client.repository.ClientPenaltyEventRepository;
 import com.ospaulos.vupth.domain.client.repository.ClientRepository;
@@ -38,6 +39,10 @@ public class PenaltyPaymentService {
     private final ClientRepository clientRepository;
     private final AppPix appPix;
     private final com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
+
+    /** nao-chegou-tres-atrasos: pagar a multa de atraso zera o contador. Opcional (testes de unidade). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private LateArrivalService lateArrivalService;
 
     /** Gera o Pix das multas pendentes; sem multa pendente devolve o pagamento vigente, se houver. */
     public PenaltyPaymentResponse pay(UUID clientId) {
@@ -111,6 +116,10 @@ public class PenaltyPaymentService {
         payment.setPaidAt(OffsetDateTime.now());
         payment.setConfirmedBy(adminId);
         payments.save(payment);
+        if (lateArrivalService != null && covered.stream().anyMatch(e -> e.getType() == PenaltyType.LATE_ARRIVAL)) {
+            // o cliente e uma entidade gerenciada na transacao: o contador zerado e gravado no commit
+            clientRepository.findById(payment.getClientId()).ifPresent(lateArrivalService::resetOnPenaltyPaid);
+        }
         log.info("[PenaltyPayment] pagamento={} confirmado por {}", paymentId, adminId);
         return toResponse(payment, true);
     }

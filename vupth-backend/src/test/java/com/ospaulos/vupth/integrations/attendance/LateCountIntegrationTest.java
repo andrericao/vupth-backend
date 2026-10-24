@@ -188,7 +188,7 @@ class LateCountIntegrationTest {
 
     @Test
     @Order(40)
-    @DisplayName("Somando cortes, o 3o atraso vira multa de R$ 5,00 pendente e o contador zera")
+    @DisplayName("Somando cortes, o 3o atraso vira multa de R$ 5,00 pendente, ele sai da fila e o contador fica em 3")
     void thirdLate_acrossAttendances_penalty() throws Exception {
         String second = enter();
         promisedTenMinutesAgo(second);
@@ -199,7 +199,9 @@ class LateCountIntegrationTest {
         promisedTenMinutesAgo(third);
         markLate(third); // 3o -> multa
 
-        assertThat(clientProfile().getInt("lateCount")).as("zera quando a multa nasce").isZero();
+        assertThat(clientProfile().getInt("lateCount")).as("so zera quando a multa e paga").isEqualTo(3);
+        assertThat(attendanceRepository.findById(UUID.fromString(third)).orElseThrow().getStatus())
+                .as("3o atraso: sai da fila").isEqualTo(AttendanceStatus.REMOVED);
         MvcResult r = mvc.perform(get("/clients/me/pending-penalties")
                         .header("Authorization", clientToken))
                 .andExpect(status().isOk())
@@ -212,11 +214,9 @@ class LateCountIntegrationTest {
 
     @Test
     @Order(50)
-    @DisplayName("No 3o atraso ele vai para o FIM da fila (Andre 26/09) e pode sair sem nova multa")
-    void thirdLate_movesToEnd_andLeavesFree() throws Exception {
-        leaveQueue(); // comeca limpo: contador em 0 depois da multa do caso anterior
-        // o atrasado na frente de outros quatro: tres quedas de uma posicao o deixariam em 4o de 5 — so a
-        // regra do 3o atraso o leva para o fim
+    @DisplayName("nao-chegou-tres-atrasos: no 3o atraso ele sai da fila (REMOVED), nao vai para o fim; os outros seguem na fila")
+    void thirdLate_leavesTheQueue() throws Exception {
+        // comeca limpo: o atendimento do caso anterior ja saiu (REMOVED); o contador esta em 3 ate a multa ser paga
         String late = enter();
         String last = null;
         for (int i = 0; i < 4; i++) {
@@ -224,32 +224,15 @@ class LateCountIntegrationTest {
             last = enterAs(other.id(), other.token());
         }
 
-        for (int i = 0; i < 3; i++) {
-            promisedTenMinutesAgo(late);
-            markLate(late);
-        }
+        promisedTenMinutesAgo(late);
+        markLate(late); // contador armado em 3: este atraso gera outra multa e a saida
 
         var waiting = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(
                 UUID.fromString(professionalId), UUID.fromString(establishmentId));
-        assertThat(waiting.get(waiting.size() - 1).getId().toString())
-                .as("3o atraso -> fim da fila, depois de quem era o ultimo").isEqualTo(late);
-        assertThat(waiting.get(waiting.size() - 2).getId().toString()).isEqualTo(last);
+        assertThat(waiting).extracting(a -> a.getId().toString()).doesNotContain(late).contains(last);
         assertThat(attendanceRepository.findById(UUID.fromString(late)).orElseThrow().getStatus())
-                .as("recomeca no fim como espera comum").isEqualTo(AttendanceStatus.SCHEDULED);
-
-        MvcResult wait = mvc.perform(get("/client-queue/{attendanceId}/wait-time", late)
-                        .param("clientId", clientId)
-                        .header("Authorization", clientToken))
-                .andExpect(status().isOk())
-                .andReturn();
-        assertThat(new BigDecimal(new JSONObject(wait.getResponse().getContentAsString()).get("exitPenaltyValue").toString()))
-                .as("ja pagou a do 3o: sair nao custa mais nada").isEqualByComparingTo("0.00");
-
-        long before = penaltyEventRepository.count();
-        mvc.perform(delete("/attendances/{id}/leave-queue", late)
-                        .header("Authorization", clientToken))
-                .andExpect(status().isOk());
-        assertThat(penaltyEventRepository.count()).as("sem nova multa ao sair").isEqualTo(before);
+                .isEqualTo(AttendanceStatus.REMOVED);
+        assertThat(clientProfile().getInt("lateCount")).isEqualTo(3);
     }
 
     private String enterAs(String id, String token) throws Exception {

@@ -180,14 +180,10 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         // A marcacao em si segue livre (#19): antes da tolerancia o cliente cai de posicao sem contar.
         int lateNumber = lateArrivalService.registerLate(attendance, professional, java.time.OffsetDateTime.now());
 
-        // Andre, 26/09: no 3o atraso, logo depois do registro, ele sai da vez e vai para o FIM da fila —
-        // pode continuar ali ou sair (sem nova multa: ja pagou a do 3o). Antes do 3o so troca com o proximo.
+        // nao-chegou-tres-atrasos (24/10): no 3o atraso o cliente e multado e SAI da fila (REMOVED, a loja tirando),
+        // em qualquer loja; antes do 3o so troca com o proximo. A multa fica pendente e o contador so zera ao pagar.
         if (lateNumber >= com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY) {
-            moveToEnd(attendance, attendanceRepository
-                    .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId()));
-            // Recomeca no fim como espera comum: a vez atrasada acabou, e ele pode sair (leave-queue so
-            // aceita SCHEDULED) ou continuar.
-            attendance.setStatus(AttendanceStatus.SCHEDULED);
+            attendance.setStatus(AttendanceStatus.REMOVED);
             attendanceRepository.save(attendance);
         }
 
@@ -311,15 +307,6 @@ public class ProfessionalServiceImpl implements ProfessionalService {
      * ultimo (ou nao estiver na lista), nada muda — permanece onde esta. A lista vem ordenada por
      * {@code scheduledTime} ASC e inclui SCHEDULED+LATE.
      */
-    /** Leva {@code target} para depois do ultimo da fila de espera (3o atraso — Andre, 26/09). */
-    private void moveToEnd(Attendance target, List<Attendance> waiting) {
-        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
-        if (last == null || last.getId().equals(target.getId())) {
-            return; // ja e o ultimo
-        }
-        target.setScheduledTime(last.getScheduledTime().plusMinutes(1));
-    }
-
     private void repositionBehindNext(Attendance target, List<Attendance> waiting) {
         int idx = -1;
         for (int i = 0; i < waiting.size(); i++) {
