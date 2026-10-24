@@ -1,0 +1,635 @@
+{
+ "info": {
+  "name": "VUPTH — Asaas sandbox: passo a passo do admin (newman-asaas)",
+  "description": "Executa DE VERDADE, contra o sandbox do Asaas no Render, o passo a passo do admin (orquestrador, passo O). Separada do postman/collection.json (depende de rede, da chave e de um token de ADMIN). O token vem pela variavel ADMIN_TOKEN (login pelo Authorize do Swagger) e NUNCA fica no repositorio. Rode com asaas-sandbox.sh.",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "item": [
+  {
+   "name": "00 token do ADMIN fornecido (variavel ADMIN_TOKEN)",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"ADMIN_TOKEN veio pela variavel (o login e do Authorize do Swagger; o token nunca vai ao repositorio)\", () => pm.expect(pm.variables.get(\"ADMIN_TOKEN\"), \"passe --env-var ADMIN_TOKEN=... (ou use asaas-sandbox.sh)\").to.be.a(\"string\").and.not.empty);",
+       "pm.test(\"staging acordado (readiness UP)\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql(\"UP\"); });"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": "{{base_url}}/actuator/health/readiness",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "01 estado publico da conexao: GET /payment-gateway",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+       "pm.test(\"tem connected\", () => pm.expect(pm.response.json().connected).to.be.a(\"boolean\"));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": "{{base_url}}/payment-gateway",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "02 admin le a conexao (e confere o sandbox)",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200 (token de ADMIN valido; se 401 o token venceu, gere outro no Authorize)\", () => pm.response.to.have.status(200));",
+       "pm.test(\"a chave do Asaas esta configurada (ASAAS_API_KEY no Render)\", () => pm.expect(pm.response.json().configured).to.eql(true));",
+       "pm.test(\"modo SANDBOX (a rodada nunca roda no real)\", () => pm.expect(pm.response.json().mode).to.eql(\"SANDBOX\"));",
+       "if (pm.response.code === 200 && pm.response.json().mode === \"REAL\") { pm.test(\"SO sandbox: o modo REAL interrompe a rodada\", () => pm.expect.fail(\"modo REAL: nada foi feito\")); postman.setNextRequest(null); }"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/settings/asaas-connection",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "03 conectar o sandbox: PUT /admin/settings/asaas-connection",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+       "pm.test(\"conectado em SANDBOX\", () => { const b = pm.response.json(); pm.expect(b.connected).to.eql(true); pm.expect(b.mode).to.eql(\"SANDBOX\"); });"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "PUT",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/settings/asaas-connection",
+    "auth": {
+     "type": "noauth"
+    },
+    "body": {
+     "mode": "raw",
+     "raw": "{\"connected\":true}"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "04 os apps passam a ver a conexao: GET /payment-gateway",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"conectado em SANDBOX\", () => { const b = pm.response.json(); pm.expect(b.connected).to.eql(true); pm.expect(b.mode).to.eql(\"SANDBOX\"); });"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     }
+    ],
+    "url": "{{base_url}}/payment-gateway",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "05 valor minimo do servico (DEC-121): GET /settings/service-min-price",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200 e numero\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().min_price).to.be.a(\"number\"); });"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/settings/service-min-price",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "06 criar a cobranca Pix no sandbox (R$ 32,90): POST .../sandbox/charges",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+       "const b = pm.response.json();",
+       "pm.test(\"cobranca criada e pendente\", () => { pm.expect(b.payment_id).to.be.a(\"string\"); pm.expect(b.status).to.eql(\"PENDING\"); pm.expect(b.billing_type).to.eql(\"PIX\"); });",
+       "pm.collectionVariables.set(\"payment_id\", b.payment_id);",
+       "console.log(\"PAGUE NO SANDBOX: abra a cobranca \" + b.payment_id + \" no painel do Asaas sandbox e simule o pagamento; depois rode de novo so a verificacao (PAYMENT_ID=\" + b.payment_id + \"). Link: \" + b.invoice_url);"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/finance/asaas/sandbox/charges",
+    "auth": {
+     "type": "noauth"
+    },
+    "body": {
+     "mode": "raw",
+     "raw": "{\"amount\":32.90,\"billing_type\":\"PIX\"}"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "07 relatorio do sandbox: sem bonus em not_measured; com o webhook, preco de tabela, cupom, bonificacao e diferenca",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+       "const b = pm.response.json();",
+       "pm.test(\"DEC-119: bonus deixou de ser nao medido\", () => pm.expect(b.not_measured).to.be.an(\"array\").that.is.empty);",
+       "const id = pm.variables.get(\"PAYMENT_ID\") || pm.collectionVariables.get(\"payment_id\");",
+       "const line = (b.payments || []).find(p => p.payment_id === id);",
+       "if (line && [\"RECEIVED\",\"CONFIRMED\",\"RECEIVED_IN_CASH\"].includes(line.status)) {",
+       "  pm.test(\"webhook chegou (\" + line.status + \"): valor pago e taxa real do Asaas\", () => { pm.expect(line.client_paid).to.be.a(\"number\"); pm.expect(line.asaas_net).to.be.a(\"number\"); pm.expect(line.asaas_fee_real).to.be.a(\"number\"); });",
+       "  if (line.attendance_id) pm.test(\"cobranca de atendimento: preco de tabela, cupom, bonificacao e diferenca em centavos\", () => { pm.expect(line.list_price).to.be.a(\"number\"); pm.expect(line.coupon_discount).to.be.a(\"number\"); pm.expect(line.bonus).to.be.a(\"number\"); pm.expect(line.difference_cents).to.be.a(\"number\"); });",
+       "} else { console.log(\"Sem aviso de pagamento ainda para \" + id + \": simule o pagamento no painel do Asaas sandbox e repita este passo.\"); }"
+      ]
+     }
+    },
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.request.url.query.add({key:\"from\", value:new Date(Date.now() - 24*3600e3).toISOString()});"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/finance/asaas/sandbox/report",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "08 saldo do app e bonificacao (DEC-120): GET /admin/finance/app-balance",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+       "const b = pm.response.json();",
+       "pm.test(\"devedor, travado e lista\", () => { pm.expect(b.owed_total).to.be.a(\"number\"); pm.expect(b.pending_release_total).to.be.a(\"number\"); pm.expect(b.beneficiaries).to.be.an(\"array\"); });",
+       "pm.test(\"com o Asaas conectado: saldo da conta e a diferenca a depositar\", () => { pm.expect(b.asaas_connected).to.eql(true); if (!b.asaas_error) { pm.expect(b.app_balance).to.be.a(\"number\"); pm.expect(b.deposit_needed).to.be.a(\"number\"); } });"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/finance/app-balance",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "09 cupom COM taxa: criar campanha de desconto (benefit_base WITH_FEE)",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+       "const b = pm.response.json();",
+       "pm.test(\"base com taxa\", () => pm.expect(b.benefit_base).to.eql(\"WITH_FEE\"));",
+       "pm.collectionVariables.set(\"cupom_com_taxa_id\", b.id);"
+      ]
+     }
+    },
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.variables.set(\"starts_at\", new Date(Date.now() - 3600e3).toISOString());",
+       "pm.variables.set(\"ends_at\", new Date(Date.now() + 7*86400e3).toISOString());",
+       "pm.variables.set(\"stamp\", String(Date.now()));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/campaigns",
+    "auth": {
+     "type": "noauth"
+    },
+    "body": {
+     "mode": "raw",
+     "raw": "{\"name\":\"Newman Asaas com taxa\",\"code\":\"NEWMANCOM{{stamp}}\",\"type\":\"DISCOUNT\",\"visibility\":\"PRIVATE\",\"audience\":\"CLIENT\",\"value_amount\":5.00,\"benefit_base\":\"WITH_FEE\",\"starts_at\":\"{{starts_at}}\",\"ends_at\":\"{{ends_at}}\",\"max_redemptions\":5}"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "10 cupom SEM taxa: criar campanha de desconto (benefit_base WITHOUT_FEE)",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+       "const b = pm.response.json();",
+       "pm.test(\"base sem taxa\", () => pm.expect(b.benefit_base).to.eql(\"WITHOUT_FEE\"));",
+       "pm.collectionVariables.set(\"cupom_sem_taxa_id\", b.id);"
+      ]
+     }
+    },
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.variables.set(\"starts_at\", new Date(Date.now() - 3600e3).toISOString());",
+       "pm.variables.set(\"ends_at\", new Date(Date.now() + 7*86400e3).toISOString());",
+       "pm.variables.set(\"stamp\", String(Date.now()));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/campaigns",
+    "auth": {
+     "type": "noauth"
+    },
+    "body": {
+     "mode": "raw",
+     "raw": "{\"name\":\"Newman Asaas sem taxa\",\"code\":\"NEWMANSEM{{stamp}}\",\"type\":\"DISCOUNT\",\"visibility\":\"PRIVATE\",\"audience\":\"CLIENT\",\"value_percent\":10.00,\"benefit_base\":\"WITHOUT_FEE\",\"starts_at\":\"{{starts_at}}\",\"ends_at\":\"{{ends_at}}\",\"max_redemptions\":5}"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "11 bonificacao por link: criar campanha de link com prazo, vagas e teto",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+       "const b = pm.response.json();",
+       "pm.test(\"link de bonificacao\", () => { pm.expect(b.type).to.eql(\"REFERRAL_BONUS\"); pm.expect(b.max_redemptions).to.eql(3); });",
+       "pm.collectionVariables.set(\"link_id\", b.id);"
+      ]
+     }
+    },
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.variables.set(\"starts_at\", new Date(Date.now() - 3600e3).toISOString());",
+       "pm.variables.set(\"ends_at\", new Date(Date.now() + 7*86400e3).toISOString());",
+       "pm.variables.set(\"stamp\", String(Date.now()));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "POST",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/campaigns",
+    "auth": {
+     "type": "noauth"
+    },
+    "body": {
+     "mode": "raw",
+     "raw": "{\"name\":\"Newman Asaas link\",\"type\":\"REFERRAL_BONUS\",\"visibility\":\"PUBLIC\",\"audience\":\"CLIENT\",\"value_amount\":2.00,\"referral_professional_percent\":60,\"referral_owner_percent\":40,\"referral_scope\":\"ANY_PROFESSIONAL\",\"payout_period\":\"MONTHLY\",\"payout_day\":5,\"max_redemptions\":3,\"max_total_cost\":10.00,\"starts_at\":\"{{starts_at}}\",\"ends_at\":\"{{ends_at}}\"}"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "12 premios travados e a pagar: GET /admin/referrals/pending-release",
+   "event": [
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"Status 200 e lista\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an(\"array\"); });"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "GET",
+    "header": [
+     {
+      "key": "Content-Type",
+      "value": "application/json"
+     },
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/referrals/pending-release",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "limpeza: encerrar a cupom com taxa",
+   "event": [
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.variables.set(\"cid\", pm.collectionVariables.get(\"cupom_com_taxa_id\") || \"00000000-0000-0000-0000-000000000000\");"
+      ]
+     }
+    },
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"encerrada (200) ou ja nao existe\", () => pm.expect([200,404]).to.include(pm.response.code));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "PATCH",
+    "header": [
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/campaigns/{{cid}}/end",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "limpeza: encerrar a cupom sem taxa",
+   "event": [
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.variables.set(\"cid\", pm.collectionVariables.get(\"cupom_sem_taxa_id\") || \"00000000-0000-0000-0000-000000000000\");"
+      ]
+     }
+    },
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"encerrada (200) ou ja nao existe\", () => pm.expect([200,404]).to.include(pm.response.code));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "PATCH",
+    "header": [
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/campaigns/{{cid}}/end",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  },
+  {
+   "name": "limpeza: encerrar a campanha de link",
+   "event": [
+    {
+     "listen": "prerequest",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.variables.set(\"cid\", pm.collectionVariables.get(\"link_id\") || \"00000000-0000-0000-0000-000000000000\");"
+      ]
+     }
+    },
+    {
+     "listen": "test",
+     "script": {
+      "type": "text/javascript",
+      "exec": [
+       "pm.test(\"encerrada (200) ou ja nao existe\", () => pm.expect([200,404]).to.include(pm.response.code));"
+      ]
+     }
+    }
+   ],
+   "request": {
+    "method": "PATCH",
+    "header": [
+     {
+      "key": "Authorization",
+      "value": "Bearer {{ADMIN_TOKEN}}",
+      "type": "text"
+     }
+    ],
+    "url": "{{base_url}}/admin/campaigns/{{cid}}/end",
+    "auth": {
+     "type": "noauth"
+    }
+   },
+   "response": []
+  }
+ ],
+ "variable": [
+  {
+   "key": "payment_id",
+   "value": ""
+  }
+ ]
+}

@@ -48,3 +48,6 @@ logs/
 # DOCKER
 # ==============================
 .env
+
+# newman-asaas: o token do ADMIN para o sandbox fica so no PC (nunca no repositorio)
+.env.asaas
