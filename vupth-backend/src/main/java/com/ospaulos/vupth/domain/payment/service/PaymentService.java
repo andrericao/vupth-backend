@@ -67,6 +67,14 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private AppLedgerService appLedger;
 
+    /** A divida do corte pago por fora (divida-por-fora-e-abatimento): sem ele (testes de unidade) nada e gravado. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.debt.service.ProfessionalDebtService debtService;
+
+    /** A conexao com o Asaas (DEC-119): sem ele (testes de unidade) vale so o fluxo de sempre. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private PaymentGatewayService gateway;
+
     private boolean splitPix() {
         return paymentMode != null && paymentMode.splitPix();
     }
@@ -110,13 +118,21 @@ public class PaymentService {
 
     // ─── o pagamento de um atendimento ───
 
-    @Transactional(readOnly = true)
     public PaymentResponse getPayment(UUID attendanceId, UUID userId) {
         Attendance attendance = attendance(attendanceId);
         if (!isClient(attendance, userId) && !canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o cliente, o profissional e o dono da loja veem este pagamento.");
         }
         assertAvailable(attendance);
+        // DEC-119: com a conexao ligada, a primeira vez que o cliente abre o pagamento pendente nasce a cobranca do Asaas
+        if (gateway != null && isClient(attendance, userId) && attendance.getEffectivePaymentStatus() == PaymentStatus.PENDING
+                && attendance.getAsaasPaymentId() == null) {
+            gateway.ensureCharge(attendance, attendance.getAmountDue()
+                    .add(penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO)));
+            if (attendance.getAsaasPaymentId() != null) {
+                attendanceRepository.save(attendance);
+            }
+        }
         return toPayment(attendance, isClient(attendance, userId));
     }
 
@@ -179,6 +195,55 @@ public class PaymentService {
         return true;
     }
 
+    /**
+     * O aviso do Asaas sobre a cobranca do atendimento (webhook): guarda o status e, se o Pix foi recebido, quita o pagamento como
+     * o "Recebi" faria (forma PIX). So vale se a cobranca e a que este atendimento guardou; aviso repetido nao muda nada.
+     */
+    public boolean onGatewayEvent(UUID attendanceId, String asaasPaymentId, String status, boolean paid) {
+        Attendance attendance = attendanceRepository.findById(attendanceId).orElse(null);
+        if (attendance == null || asaasPaymentId == null || !asaasPaymentId.equals(attendance.getAsaasPaymentId())) {
+            return false;
+        }
+        if (status != null) {
+            attendance.setAsaasStatus(status);
+        }
+        boolean marked = false;
+        if (paid && attendance.getPaymentStatus() != PaymentStatus.PAID) {
+            markPaid(attendance, com.ospaulos.vupth.domain.payment.PaymentMethod.PIX);
+            marked = true;
+            log.info("[Payment] Pix recebido pelo Asaas — attendance={} payment={}", attendanceId, asaasPaymentId);
+        } else {
+            attendanceRepository.save(attendance);
+        }
+        return marked;
+    }
+
+    /**
+     * Rota de teste do ADMIN (newman-asaas): o atendimento que ja tem cobranca do Asaas nao ganha outra (409 ASAAS_CHARGE_EXISTS).
+     * So essa rota usa isto; o fluxo normal ja respeita a cobranca guardada. Atendimento que nao existe: nada a conferir.
+     */
+    @Transactional(readOnly = true)
+    public void assertNoGatewayCharge(UUID attendanceId) {
+        attendanceRepository.findById(attendanceId).ifPresent(a -> {
+            if (a.getAsaasPaymentId() != null) {
+                throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                        "ASAAS_CHARGE_EXISTS", "Este atendimento ja tem uma cobranca do Asaas.");
+            }
+        });
+    }
+
+    /** A cobranca criada pela rota de teste fica ligada ao atendimento: o webhook a quita e o relatorio a encontra. */
+    public void attachGatewayCharge(UUID attendanceId, String asaasPaymentId, String mode, String status, String invoiceUrl) {
+        attendanceRepository.findById(attendanceId).ifPresent(a -> {
+            a.setAsaasPaymentId(asaasPaymentId);
+            a.setAsaasMode(mode);
+            a.setAsaasStatus(status);
+            a.setAsaasInvoiceUrl(invoiceUrl);
+            attendanceRepository.save(a);
+            log.info("[Payment] cobranca de teste ligada ao atendimento — attendance={} payment={}", attendanceId, asaasPaymentId);
+        });
+    }
+
     /** O status do pagamento para mostrar (o efetivo), sem checar quem pergunta: so para a resposta do finish. */
     @Transactional(readOnly = true)
     public PaymentStatus statusOf(UUID attendanceId) {
@@ -192,7 +257,7 @@ public class PaymentService {
         if (a.getEffectivePaymentStatus() != PaymentStatus.PENDING) {
             return null;
         }
-        return a.getTotalValue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
+        return a.getAmountDue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
     /** Um lembrete de pagamento pendente (push-pagamento-pendente): para quem, qual atendimento e quanto. */
@@ -206,7 +271,7 @@ public class PaymentService {
         Map<UUID, BigDecimal> penalties = penaltiesOf(open.stream().map(Attendance::getId).toList());
         return open.stream()
                 .map(a -> new PaymentReminder(a.getClient().getId(), a.getId(), a.getEstablishment().getId(),
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO))))
+                        a.getAmountDue().add(penalties.getOrDefault(a.getId(), ZERO))))
                 .toList();
     }
 
@@ -220,7 +285,7 @@ public class PaymentService {
                 .map(a -> new PendingPaymentsResponse.Item(
                         a.getId(),
                         a.getPaymentStatus(),
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO)),
+                        a.getAmountDue().add(penalties.getOrDefault(a.getId(), ZERO)),
                         a.getProfessional().getName(),
                         a.getEstablishment().getName(),
                         a.getEndTime()))
@@ -249,7 +314,7 @@ public class PaymentService {
                         a.getId(),
                         a.getPaymentStatus(),
                         // SPLIT_PIX: so o servico (a multa e do app, DEC-83); fase de testes: o total que cai no Pix (DEC-85)
-                        a.getTotalValue().add(penalties.getOrDefault(a.getId(), ZERO)),
+                        a.getAmountDue().add(penalties.getOrDefault(a.getId(), ZERO)),
                         a.getClient() != null ? a.getClient().getFirstName() : a.getGuestName(),
                         a.getEndTime(),
                         a.getPaymentClaimedAt()))
@@ -269,7 +334,11 @@ public class PaymentService {
         }
         attendance.setPaymentConfirmedAt(OffsetDateTime.now(clock));
         attendanceRepository.save(attendance);
-        if (appLedger != null) {
+        if (debtService != null) {
+            debtService.recordOnReceived(attendance, attendance.getPaymentMethod());
+        }
+        // atendimento de teste (piloto, DEC-106): o Recebi quita como sempre, mas fica fora do livro-caixa do app
+        if (appLedger != null && !attendance.isTest()) {
             appLedger.record(attendance, penaltiesOf(List.of(attendance.getId())).get(attendance.getId()),
                     attendance.getPaymentConfirmedAt());
         }
@@ -301,7 +370,7 @@ public class PaymentService {
      *                  ({@code TEST_PIX_TOTAL}, DEC-85), o total que cai no Pix, como "valor a receber" e sem rotulo de multa.
      */
     private PaymentResponse toPayment(Attendance attendance, boolean forClient) {
-        BigDecimal services = attendance.getTotalValue();
+        BigDecimal services = attendance.getAmountDue();
         BigDecimal realPenalties = penaltiesOf(List.of(attendance.getId())).getOrDefault(attendance.getId(), ZERO);
         boolean split = splitPix();
         BigDecimal shownServices;
@@ -343,15 +412,27 @@ public class PaymentService {
                 !hasKey ? null : isProfessional(attendance, keyOwner) ? "PROFESSIONAL" : "OWNER",
                 penaltyPix ? appPix.copyPaste(realPenalties, "VUPTHMULTA" + attendance.getId().toString().replace("-", "")) : null,
                 penaltyPix && appPix.configured() ? appPix.holderName() : null,
-                attendance.getPaymentMethod());
+                attendance.getPaymentMethod(),
+                hasKey && forClient ? keyOwner.getPixKey() : null,
+                gatewayOf(attendance, forClient));
+    }
+
+    /** A cobranca do Asaas deste atendimento (DEC-119): o Pix so vai ao cliente; o profissional ve o modo e o status do webhook. */
+    private static PaymentResponse.Gateway gatewayOf(Attendance attendance, boolean forClient) {
+        if (attendance.getAsaasPaymentId() == null) {
+            return null;
+        }
+        return new PaymentResponse.Gateway("ASAAS", attendance.getAsaasMode(), attendance.getAsaasStatus(),
+                forClient ? attendance.getAsaasPixPayload() : null, forClient ? attendance.getAsaasPixImage() : null,
+                forClient ? attendance.getAsaasInvoiceUrl() : null);
     }
 
     /** O valor que cai no Pix do profissional: o servico (SPLIT_PIX) ou o total (fase de testes). Para o aviso "diz que pagou". */
     @Transactional(readOnly = true)
     public BigDecimal amountForProfessional(UUID attendanceId) {
         Attendance a = attendance(attendanceId);
-        return splitPix() ? a.getTotalValue()
-                : a.getTotalValue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
+        return splitPix() ? a.getAmountDue()
+                : a.getAmountDue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
     /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */

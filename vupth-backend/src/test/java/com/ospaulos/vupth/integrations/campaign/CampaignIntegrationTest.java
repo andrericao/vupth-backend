@@ -69,7 +69,38 @@ class CampaignIntegrationTest {
     }
 
     @Test
-    @DisplayName("cupom: aceita (201), de novo 409, perfil errado 403, sem vaga 409, inexistente 404, sem login 401")
+    @DisplayName("campanhas-ativas-para-o-client: com login, so as do publico de quem pede (cliente, dono) e as sem publico")
+    void activeFiltersByRole() throws Exception {
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var owner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
+        Campaign forAll = campaign(CampaignVisibility.PUBLIC, null, null);
+        Campaign forClients = campaign(CampaignVisibility.PUBLIC, CampaignAudience.CLIENT, null);
+        Campaign forOwners = campaign(CampaignVisibility.PUBLIC, CampaignAudience.OWNER, null);
+        Campaign forPros = campaign(CampaignVisibility.PUBLIC, CampaignAudience.PROFESSIONAL, null);
+        Campaign privateOne = campaign(CampaignVisibility.PRIVATE, CampaignAudience.CLIENT, null);
+
+        mvc.perform(get("/campaigns/active").header("Authorization", client.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forAll.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forClients.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forOwners.getId()).doesNotExist())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forPros.getId()).doesNotExist())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", privateOne.getId()).doesNotExist());
+
+        mvc.perform(get("/campaigns/active").header("Authorization", owner.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forAll.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forOwners.getId()).exists())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forPros.getId()).doesNotExist());
+
+        // sem login continua devolvendo todas as publicas (pagina do suporte)
+        mvc.perform(get("/campaigns/active"))
+                .andExpect(jsonPath("$[?(@.id == '%s')]", forPros.getId()).exists());
+    }
+
+    @Test
+    @DisplayName("cupom: aceita (201), de novo 409, perfil errado 403, sem vaga 409 SOLD_OUT, inexistente 404, sem login 401")
     void redeemRules() throws Exception {
         var ana = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var beto = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
@@ -85,7 +116,7 @@ class CampaignIntegrationTest {
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_ALREADY_REDEEMED"));
         redeem(beto.token(), forClients.getCode())
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CAMPAIGN_NOT_AVAILABLE"));
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_SOLD_OUT"));
         redeem(beto.token(), forOwners.getCode())
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_NOT_FOR_YOU"));
@@ -98,5 +129,33 @@ class CampaignIntegrationTest {
         mvc.perform(get("/campaigns/me").header("Authorization", ana.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(forClients.getId().toString()));
+    }
+
+    @Test
+    @DisplayName("DEC-124: passou do prazo → 409 CAMPAIGN_ENDED (antes da vaga); a lista publica nao mostra encerrada nem esgotada")
+    void endedAndSoldOut() throws Exception {
+        var ana = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var beto = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        Campaign ended = campaign(CampaignVisibility.PUBLIC, CampaignAudience.CLIENT, 1);
+        redeem(ana.token(), ended.getCode()).andExpect(status().isCreated());
+        ended.setEndsAt(OffsetDateTime.now().minusMinutes(1));
+        campaignRepository.save(ended);
+
+        redeem(beto.token(), ended.getCode())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_ENDED"));
+        mvc.perform(post("/campaigns/{id}/join", ended.getId()).header("Authorization", beto.token()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_ENDED"));
+
+        Campaign soldOut = campaign(CampaignVisibility.PUBLIC, CampaignAudience.CLIENT, 1);
+        redeem(ana.token(), soldOut.getCode()).andExpect(status().isCreated());
+        mvc.perform(get("/campaigns/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", soldOut.getId()).doesNotExist())
+                .andExpect(jsonPath("$[?(@.id == '%s')]", ended.getId()).doesNotExist());
+        redeem(beto.token(), soldOut.getCode())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CAMPAIGN_SOLD_OUT"));
     }
 }

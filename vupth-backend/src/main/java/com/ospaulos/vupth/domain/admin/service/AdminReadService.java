@@ -63,9 +63,12 @@ public class AdminReadService {
         List<AdminEstablishmentRow> items = jdbc.query("""
                 SELECT e.id, e.name, e.status, e.current_open_status, e.owner_id, e.created_at,
                        trim(coalesce(b.first_name,'') || ' ' || coalesce(b.last_name,'')) AS owner_name,
-                       (SELECT count(*) FROM professional p WHERE p.establishment_id = e.id) AS professionals
+                       (SELECT count(*) FROM professional p WHERE p.establishment_id = e.id) AS professionals,
+                       t.id AS test_id, t.name AS test_name
                   FROM establishment e
                   LEFT JOIN base_user b ON b.id = e.owner_id
+                  LEFT JOIN test_run_store ts ON ts.establishment_id = e.id AND ts.left_at IS NULL
+                  LEFT JOIN test_run t ON t.id = ts.test_run_id AND t.ended_at IS NULL
                  WHERE ?::text IS NULL OR lower(e.name) LIKE ?
                  ORDER BY e.created_at DESC, e.id
                  LIMIT ? OFFSET ?
@@ -73,7 +76,8 @@ public class AdminReadService {
                 (UUID) rs.getObject("id"), rs.getString("name"), rs.getString("status"),
                 rs.getString("current_open_status"), (UUID) rs.getObject("owner_id"), rs.getString("owner_name"),
                 rs.getLong("professionals"),
-                rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime()),
+                rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toLocalDateTime(),
+                (UUID) rs.getObject("test_id"), rs.getString("test_name")),
                 like, like, s, p * s);
         return new AdminPage<>(items, p, s, total);
     }

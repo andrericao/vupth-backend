@@ -1,0 +1,44 @@
+databaseChangeLog:
+  # modo-piloto-sem-cobranca (DEC-106, 22/10): o ADMIN declara um teste (rodada com nome) numa loja pelo painel. Todo
+  # atendimento criado enquanto ha teste ativo na loja leva test=true e o test_run_id, gravados na criacao e nunca alterados.
+  # Tudo funciona como sempre (Recebi quita sem verificar), mas fica fora do livro-caixa e do dinheiro real do painel.
+  - changeSet:
+      id: 032-create-test_run
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: test_run
+      changes:
+        - createTable:
+            tableName: test_run
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_test_run, nullable: false}}
+              - column: {name: name, type: VARCHAR(120), constraints: {nullable: false}}
+              - column: {name: establishment_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: started_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: ended_at, type: TIMESTAMP WITH TIME ZONE}
+              - column: {name: created_by, type: UUID}
+        - createIndex:
+            tableName: test_run
+            indexName: ix_test_run_establishment
+            columns:
+              - column: {name: establishment_id}
+              - column: {name: ended_at}
+
+  - changeSet:
+      id: 032-add-test-to-attendance
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: test
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: test, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}
+              - column: {name: test_run_id, type: UUID}

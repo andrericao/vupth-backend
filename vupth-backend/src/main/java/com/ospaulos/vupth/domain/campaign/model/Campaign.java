@@ -100,6 +100,20 @@ public class Campaign {
     @Column(name = "payout_day")
     private Integer payoutDay;
 
+    /** Base do desconto do cupom (cupom-ativado-em-configuracoes): o preco do cliente ou o que o profissional recebe. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "benefit_base", length = 12, nullable = false)
+    private BenefitBase benefitBase = BenefitBase.WITH_FEE;
+
+    /** Teto de gasto da campanha de link (compartilhe-e-ganhe): a soma dos premios nao passa dele; nulo = sem teto. */
+    @Column(name = "max_total_cost", precision = 10, scale = 2)
+    private BigDecimal maxTotalCost;
+
+    /** Passou do prazo ({@code ends_at}) em {@code now}: encerrada para todos (DEC-124). */
+    public boolean hasEnded(OffsetDateTime now) {
+        return !now.isBefore(endsAt);
+    }
+
     /** Ligada e dentro da janela em {@code now}. */
     public boolean isRunning(OffsetDateTime now) {
         return active && !now.isBefore(startsAt) && now.isBefore(endsAt);

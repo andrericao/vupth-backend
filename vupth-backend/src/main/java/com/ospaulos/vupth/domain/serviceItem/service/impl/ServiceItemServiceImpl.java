@@ -3,6 +3,7 @@ package com.ospaulos.vupth.domain.serviceItem.service.impl;
 import com.ospaulos.vupth.api.serviceItem.dto.request.ServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.request.UpdateServiceItemRequest;
 import com.ospaulos.vupth.api.serviceItem.dto.response.ServiceItemResponse;
+import com.ospaulos.vupth.domain.setting.AppSettingService;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
@@ -36,6 +37,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
     private final EstablishmentRepository establishmentRepository;
     private final ServiceItemRepository serviceItemRepository;
     private final AttendanceRepository attendanceRepository;
+    private final AppSettingService settings;
 
     @Override
     @Transactional
@@ -52,7 +54,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
 
         ServiceItem saved = serviceItemRepository.save(serviceItem);
 
-        return ServiceItemResponse.fromEntity(saved);
+        return ServiceItemResponse.fromEntity(saved).withMinimum(settings.serviceMinPrice());
     }
 
     @Override
@@ -65,7 +67,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
 
         applyUpdate(item, request);
 
-        return ServiceItemResponse.fromEntity(serviceItemRepository.save(item));
+        return ServiceItemResponse.fromEntity(serviceItemRepository.save(item)).withMinimum(settings.serviceMinPrice());
     }
 
     @Override
@@ -98,7 +100,7 @@ public class ServiceItemServiceImpl implements ServiceItemService {
 
         applyUpdate(item, request);
 
-        return ServiceItemResponse.fromEntity(serviceItemRepository.save(item));
+        return ServiceItemResponse.fromEntity(serviceItemRepository.save(item)).withMinimum(settings.serviceMinPrice());
     }
 
     @Override

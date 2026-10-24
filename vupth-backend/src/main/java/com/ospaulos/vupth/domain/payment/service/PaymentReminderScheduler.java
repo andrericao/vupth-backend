@@ -1,7 +1,9 @@
 package com.ospaulos.vupth.domain.payment.service;
 
+import com.ospaulos.vupth.domain.shared.Brl;
 import com.ospaulos.vupth.infrastructure.config.ClusterLock;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
+import com.ospaulos.vupth.infrastructure.sentry.SentryCron;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +19,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -42,6 +43,9 @@ public class PaymentReminderScheduler {
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private ClusterLock clusterLock;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SentryCron sentryCron;
 
     private ThreadPoolTaskScheduler taskScheduler;
 
@@ -102,15 +106,25 @@ public class PaymentReminderScheduler {
     void fire() {
         try {
             if (clusterLock == null) {
-                sendReminders();
+                monitored();
             } else {
-                clusterLock.runExclusive("payment-reminder", this::sendReminders);
+                clusterLock.runExclusive("payment-reminder", this::monitored);
             }
         } catch (RuntimeException e) {
             log.error("[PaymentReminder] falha no ciclo: {}", e.getMessage(), e);
         } finally {
             scheduleNext();
         }
+    }
+
+    /** sentry-monitor-de-cron: o ciclo das 10h (Sao Paulo) manda check-in; se deixar de rodar ou falhar, o Sentry avisa. */
+    private void monitored() {
+        if (sentryCron == null) {
+            sendReminders();
+            return;
+        }
+        sentryCron.run("payment-reminder", io.sentry.MonitorSchedule.crontab("0 10 * * *"), ZONE.getId(), 30, 10,
+                this::sendReminders);
     }
 
     /** Manda o lembrete de cada pagamento pendente de atendimento finalizado antes de hoje; devolve quantos. */
@@ -130,7 +144,6 @@ public class PaymentReminderScheduler {
 
     /** "Atendimento concluído. Falta o pagamento de R$ 12,90." */
     public static String pendingText(BigDecimal amount) {
-        return "Atendimento concluído. Falta o pagamento de R$ "
-                + String.format(Locale.forLanguageTag("pt-BR"), "%.2f", amount) + ".";
+        return "Atendimento concluído. Falta o pagamento de " + Brl.of(amount) + ".";
     }
 }

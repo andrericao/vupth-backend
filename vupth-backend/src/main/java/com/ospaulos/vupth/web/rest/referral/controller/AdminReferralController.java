@@ -2,6 +2,7 @@ package com.ospaulos.vupth.web.rest.referral.controller;
 
 import com.ospaulos.vupth.api.referral.dto.AdminReferralPaidResponse;
 import com.ospaulos.vupth.api.referral.dto.AdminReferralPayoutResponse;
+import com.ospaulos.vupth.api.referral.dto.AdminReferralReleasedResponse;
 import com.ospaulos.vupth.domain.referral.service.AdminReferralService;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,24 @@ public class AdminReferralController {
     @GetMapping("/payouts")
     public ResponseEntity<List<AdminReferralPayoutResponse>> payouts() {
         return ResponseEntity.ok(adminReferralService.payouts());
+    }
+
+    /** Premios ja ganhos que esperam o Andre liberar (compartilhe-e-ganhe: o premio nao e pago sozinho). */
+    @GetMapping("/pending-release")
+    public ResponseEntity<List<AdminReferralPayoutResponse>> pendingRelease() {
+        return ResponseEntity.ok(adminReferralService.pendingRelease());
+    }
+
+    /** Libera os premios travados da campanha (de uma pessoa com {@code beneficiary_id}, ou de todas); eles entram no "a pagar". */
+    @PostMapping("/release")
+    public ResponseEntity<AdminReferralReleasedResponse> release(@RequestBody @jakarta.validation.Valid ReleaseRequest request,
+                                                                 @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(adminReferralService.release(principal.getUserId(), request.campaignId(), request.beneficiaryId()));
+    }
+
+    public record ReleaseRequest(
+            @com.fasterxml.jackson.annotation.JsonProperty("campaign_id") @jakarta.validation.constraints.NotNull UUID campaignId,
+            @com.fasterxml.jackson.annotation.JsonProperty("beneficiary_id") UUID beneficiaryId) {
     }
 
     @PostMapping("/payouts/{campaignId}/{userId}/paid")

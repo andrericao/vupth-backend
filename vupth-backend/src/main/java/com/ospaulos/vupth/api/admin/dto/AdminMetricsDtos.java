@@ -73,11 +73,17 @@ public final class AdminMetricsDtos {
             @JsonProperty("credits_paid") BigDecimal creditsPaid,
             @JsonProperty("credits_unpaid") BigDecimal creditsUnpaid) {}
 
+    /** Atendimentos de teste (piloto, DEC-106): fora do dinheiro real, valores simbolicos. */
+    public record Pilot(
+            @JsonProperty("attendances") long attendances,
+            @JsonProperty("amount") BigDecimal amount) {}
+
     public record Finance(
             @JsonProperty("period") Window period,
             @JsonProperty("money") Money money,
             @JsonProperty("by_payment_status") List<StatusTotal> byPaymentStatus,
-            @JsonProperty("referral") Referral referral) {}
+            @JsonProperty("referral") Referral referral,
+            @JsonProperty("pilot") Pilot pilot) {}
 
     public record StuckPayment(
             @JsonProperty("attendance_id") UUID attendanceId,
@@ -91,5 +97,17 @@ public final class AdminMetricsDtos {
             @JsonProperty("payments_stuck") List<StuckPayment> paymentsStuck,
             @JsonProperty("referral_unpaid_count") long referralUnpaidCount,
             @JsonProperty("referral_unpaid_amount") BigDecimal referralUnpaidAmount,
-            @JsonProperty("not_measured") List<String> notMeasured) {}
+            @JsonProperty("not_measured") List<String> notMeasured,
+            @JsonProperty("push_refused") Counter pushRefused,
+            @JsonProperty("http_5xx") Counter http5xx) {}
+
+    /** admin-alertas-push-e-5xx: o total da ultima hora e das ultimas 24 h, e a serie por hora (a mais velha primeiro). */
+    public record Counter(
+            @JsonProperty("last_hour") long lastHour,
+            @JsonProperty("last_24h") long last24h,
+            @JsonProperty("by_hour") List<HourCount> byHour) {}
+
+    public record HourCount(
+            @JsonProperty("hour") OffsetDateTime hour,
+            @JsonProperty("count") long count) {}
 }

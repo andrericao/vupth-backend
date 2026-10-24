@@ -24,10 +24,20 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
 
     private final UserRepository repository;
 
+    /** O token de teste (token-de-teste-sandbox): sem ele (testes de unidade) nenhum token de teste e aceito. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenPolicy testTokens;
+
     @Override
     public AbstractAuthenticationToken convert(Jwt jwt){
 
         try{
+            boolean testToken = Boolean.TRUE.equals(jwt.getClaim(com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenPolicy.CLAIM));
+            if (testToken && (testTokens == null || !testTokens.usable() || testTokens.revoked(jwt.getId(), jwt.getClaim(com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenPolicy.GENERATION_CLAIM) instanceof Number n ? n.longValue() : null))) {
+                // desligado, fora do sandbox (modo real) ou revogado: 401, como se o token nao existisse
+                log.warn("[JWT] token de teste recusado (desligado, modo real ou revogado) jti={}", jwt.getId());
+                throw new DisabledException("Test token refused");
+            }
             String id = jwt.getSubject();
             String email = jwt.getClaimAsString("email");
 
@@ -50,10 +60,17 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
 
             log.info("JWT CONVERTER END - id: {}", id);
 
+            java.util.List<org.springframework.security.core.GrantedAuthority> authorities =
+                    new java.util.ArrayList<>(userDetails.getAuthorities());
+            if (testToken) {
+                // marca o token de teste: o filtro de escopo so deixa passar a lista curta de rotas dele
+                authorities.add(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                        com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenPolicy.AUTHORITY));
+            }
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     userDetails,
                     null,
-                    userDetails.getAuthorities());
+                    authorities);
             // Como o login foi feito (pwd, totp): o painel confere se o segundo fator foi cumprido
             java.util.List<String> amr = jwt.getClaimAsStringList("amr");
             authentication.setDetails(amr == null ? java.util.List.<String>of() : amr);

@@ -259,7 +259,9 @@ public class GlobalExceptionHandler {
             com.ospaulos.vupth.domain.attendance.exception.NoShowException ex, HttpServletRequest req) {
         log.warn("[409] NoShow {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new NoShowErrorResponse(
-                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getAvailableAt()));
+                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getAvailableAt(),
+                ex.getAvailableAt() == null ? null
+                        : Math.max(0, java.time.Duration.between(OffsetDateTime.now(), ex.getAvailableAt()).getSeconds())));
     }
 
     /** 409 da falta: com {@code available_at} (a hora a partir da qual o botao vale), quando for cedo. */
@@ -268,7 +270,8 @@ public class GlobalExceptionHandler {
             String message,
             String code,
             OffsetDateTime timestamp,
-            @com.fasterxml.jackson.annotation.JsonProperty("available_at") OffsetDateTime availableAt) {
+            @com.fasterxml.jackson.annotation.JsonProperty("available_at") OffsetDateTime availableAt,
+            @com.fasterxml.jackson.annotation.JsonProperty("seconds_left") Long secondsLeft) {
     }
 
     @ExceptionHandler(com.ospaulos.vupth.domain.attendance.exception.NoShowRemovedException.class)
@@ -398,6 +401,24 @@ public class GlobalExceptionHandler {
             SwapOfferNotFoundException ex, HttpServletRequest req) {
         log.warn("[404] SwapOfferNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "QUEUE_SWAP_OFFER_NOT_FOUND");
+    }
+
+    /** politica-de-preco-com-ciencia (DEC-100): 409 com a versao e o prazo, para o Partner abrir a tela da politica. */
+    @ExceptionHandler(com.ospaulos.vupth.domain.pricepolicy.exception.PricePolicyException.class)
+    public ResponseEntity<PricePolicyErrorResponse> handlePricePolicy(
+            com.ospaulos.vupth.domain.pricepolicy.exception.PricePolicyException ex, HttpServletRequest req) {
+        log.warn("[{}] PricePolicy {} | {} {}", ex.getStatus(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return ResponseEntity.status(ex.getStatus()).body(new PricePolicyErrorResponse(
+                ex.getStatus(), ex.getMessage(), ex.getCode(), OffsetDateTime.now(), ex.getPolicyVersion(), ex.getDeadlineAt()));
+    }
+
+    public record PricePolicyErrorResponse(
+            int status,
+            String message,
+            String code,
+            OffsetDateTime timestamp,
+            @com.fasterxml.jackson.annotation.JsonProperty("policy_version") Integer policyVersion,
+            @com.fasterxml.jackson.annotation.JsonProperty("deadline_at") OffsetDateTime deadlineAt) {
     }
 
     @ExceptionHandler(ProfessionalNotFoundException.class)
@@ -558,6 +579,28 @@ public class GlobalExceptionHandler {
             com.ospaulos.vupth.domain.client.exception.PenaltyPaymentException ex, HttpServletRequest req) {
         log.warn("[{}] PenaltyPayment {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.infrastructure.asaas.AsaasException.class)
+    public ResponseEntity<ErrorResponse> handleAsaas(
+            com.ospaulos.vupth.infrastructure.asaas.AsaasException ex, HttpServletRequest req) {
+        log.warn("[{}] Asaas {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenException.class)
+    public ResponseEntity<ErrorResponse> handleTestToken(
+            com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenException ex, HttpServletRequest req) {
+        log.warn("[{}] TestToken {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.testrun.exception.TestRunException.class)
+    public ResponseEntity<ErrorResponse> handleTestRun(
+            com.ospaulos.vupth.domain.testrun.exception.TestRunException ex, HttpServletRequest req) {
+        log.warn("[409] TestRun {} | {} {}", ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build("TEST_RUN_NOT_FOUND".equals(ex.getCode()) ? HttpStatus.NOT_FOUND : HttpStatus.CONFLICT,
+                ex.getMessage(), ex.getCode());
     }
 
     @ExceptionHandler(com.ospaulos.vupth.domain.admin.exception.AdminInvitationException.class)

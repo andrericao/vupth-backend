@@ -159,6 +159,11 @@ public class LateArrivalService {
         return base.plusMinutes(noShowWaitMinutes);
     }
 
+    /** A espera (min) depois da hora comunicada para o NAO CHEGOU valer (DEC-101: 10). */
+    public int noShowWaitMinutes() {
+        return noShowWaitMinutes;
+    }
+
     private void notify(Client client, Attendance attendance, int count) {
         // No 3o ele vai para o fim da fila (Andre, 26/09): pode continuar ali ou sair sem nova multa.
         String body = count >= LATES_PER_PENALTY

@@ -1,0 +1,2459 @@
+{
+ "info": {
+  "name": "VUPTH — Asaas sandbox: passo a passo do admin (newman-asaas)",
+  "description": "Executa DE VERDADE, contra o sandbox do Asaas no Render, o passo a passo do admin (orquestrador, passo O). Separada do postman/collection.json (depende de rede, da chave e de um token de ADMIN). O token vem pela variavel ADMIN_TOKEN (login pelo Authorize do Swagger) e NUNCA fica no repositorio. Duas pastas: '1 montar' (agora) e '2 verificar' (depois de simular o pagamento das cobrancas no painel do Asaas). Rode com asaas-sandbox.sh.",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "item": [
+  {
+   "name": "1 montar",
+   "item": [
+    {
+     "name": "00 token do ADMIN fornecido (variavel ADMIN_TOKEN) e staging acordado",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"ADMIN_TOKEN veio pela variavel (o login e do Authorize do Swagger; o token nunca vai ao repositorio)\", () => pm.expect(pm.variables.get(\"ADMIN_TOKEN\"), \"passe ADMIN_TOKEN (use asaas-sandbox.sh)\").to.be.a(\"string\").and.not.empty);",
+         "pm.test(\"staging acordado (readiness UP)\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql(\"UP\"); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/health/readiness",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "01 estado publico da conexao: GET /payment-gateway",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"tem connected\", () => pm.expect(pm.response.json().connected).to.be.a(\"boolean\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/payment-gateway",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "02 admin le a conexao (e confere o sandbox)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200 (token de ADMIN valido; se 401 o token venceu, gere outro no Authorize)\", () => pm.response.to.have.status(200));",
+         "pm.test(\"a chave do Asaas esta configurada (ASAAS_API_KEY no Render)\", () => pm.expect(pm.response.json().configured).to.eql(true));",
+         "pm.test(\"modo SANDBOX (a rodada nunca roda no real)\", () => pm.expect(pm.response.json().mode).to.eql(\"SANDBOX\"));",
+         "if (pm.response.code === 200 && pm.response.json().mode === \"REAL\") { pm.test(\"SO sandbox: o modo REAL interrompe a rodada\", () => pm.expect.fail(\"modo REAL: nada foi feito\")); postman.setNextRequest(null); }"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/settings/asaas-connection",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "03 conectar o sandbox: PUT /admin/settings/asaas-connection",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"conectado em SANDBOX\", () => { const b = pm.response.json(); pm.expect(b.connected).to.eql(true); pm.expect(b.mode).to.eql(\"SANDBOX\"); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/settings/asaas-connection",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"connected\":true}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "04 os apps passam a ver a conexao: GET /payment-gateway",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"conectado em SANDBOX\", () => { const b = pm.response.json(); pm.expect(b.connected).to.eql(true); pm.expect(b.mode).to.eql(\"SANDBOX\"); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/payment-gateway",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "05 valor minimo do servico (DEC-121): GET /settings/service-min-price",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"min_price numero\", () => pm.expect(pm.response.json().min_price).to.be.a(\"number\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/settings/service-min-price",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "06 saldo do app ANTES (DEC-120): guarda app_balance para comparar depois do pagamento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"devedor, travado e lista\", () => { pm.expect(b.owed_total).to.be.a(\"number\"); pm.expect(b.pending_release_total).to.be.a(\"number\"); pm.expect(b.beneficiaries).to.be.an(\"array\"); });",
+         "pm.test(\"com o Asaas conectado: saldo da conta e a diferenca a depositar\", () => { pm.expect(b.asaas_connected).to.eql(true); if (!b.asaas_error) { pm.expect(b.app_balance).to.be.a(\"number\"); pm.expect(b.deposit_needed).to.be.a(\"number\"); } });",
+         "if (typeof b.app_balance === \"number\") { pm.environment.set(\"app_balance_before\", String(b.app_balance)); }"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/app-balance",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "07 cobranca Pix avulsa no sandbox (R$ 32,90, sem atendimento): POST .../sandbox/charges",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test(\"cobranca criada e pendente\", () => { pm.expect(b.payment_id).to.be.a(\"string\"); pm.expect(b.status).to.eql(\"PENDING\"); pm.expect(b.billing_type).to.eql(\"PIX\"); });",
+         "pm.environment.set(\"loose_payment_id\", b.payment_id);",
+         "pm.test(\"o cliente do Asaas tem e-mail (o do admin; o Asaas recusa cartao sem e-mail do titular)\", () => pm.expect(pm.response.json().customer_has_email).to.eql(true));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/asaas/sandbox/charges",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"amount\":32.90,\"billing_type\":\"PIX\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "08 passo pronto para DEBITO/CREDITO: cobranca CREDIT_CARD (o pagamento do cartao se simula a mao no painel do Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test(\"cobranca de cartao criada e pendente\", () => { pm.expect(b.payment_id).to.be.a(\"string\"); pm.expect(b.billing_type).to.eql(\"CREDIT_CARD\"); });",
+         "pm.environment.set(\"card_payment_id\", b.payment_id);",
+         "console.log(\"CARTAO: simule o pagamento da cobranca \" + b.payment_id + \" no painel do Asaas sandbox (debito e credito a vista); o relatorio mostra a taxa real de cada meio.\");",
+         "pm.test(\"o cliente do Asaas tem e-mail (o do admin; o Asaas recusa cartao sem e-mail do titular)\", () => pm.expect(pm.response.json().customer_has_email).to.eql(true));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/asaas/sandbox/charges",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"amount\":32.90,\"billing_type\":\"CREDIT_CARD\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "E1 [ERRO] cobranca abaixo do minimo do Asaas (R$ 4,99) → a rota recusa antes de chamar o Asaas: 422 VALIDATION_ERROR",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"codigo VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/asaas/sandbox/charges",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"amount\":4.99,\"billing_type\":\"PIX\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "E2 [ERRO] token malformado → 401 TOKEN_INVALID",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"motivo no corpo: TOKEN_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"TOKEN_INVALID\"));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.request.headers.add({key:\"Authorization\", value:\"Bearer token-malformado.xxx.yyy\"});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/admin/settings/asaas-connection",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "E3 [ERRO] sem token → 401 TOKEN_MISSING",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"motivo no corpo: TOKEN_MISSING\", () => pm.expect(pm.response.json().code).to.eql(\"TOKEN_MISSING\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/app-balance",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.1 dono e profissional: cadastro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"id\", () => pm.environment.set(\"ow_id\", pm.response.json().id));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"ow_email\", \"asaas_ow_\" + Date.now() + \"@vupth.test\");",
+         "pm.environment.set(\"ow_pass\", \"Senha@123\");"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ow_email}}\",\"password\":\"{{ow_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.2 dono e profissional: login",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.environment.set(\"ow_token\", pm.response.json().tokens.access_token);",
+         "pm.environment.set(\"ow_refresh\", pm.response.json().tokens.refresh_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ow_email}}\",\"password\":\"{{ow_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.3 dono e profissional: completa o perfil",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"200 ou 204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/general-infos",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\":\"Asaas\",\"last_name\":\"Donoeprofissional\",\"phone\":\"11999990003\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.4 dono: cria a loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.environment.set(\"estab_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Barbearia Asaas {{$timestamp}}\",\"serviceType\":\"BARBER\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.5 dono: vira profissional da propria loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Dono Asaas\",\"specialty\":\"Manager\",\"establishmentId\":\"{{estab_id}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.6 dono: renova o token (agora com o papel de profissional)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.environment.set(\"ow_token\", pm.response.json().access_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/refresh",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"refresh_token\":\"{{ow_refresh}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.7 dono: servico de R$ 32,90 que paga R$ 30,00 ao profissional",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.environment.set(\"service_id\", b.id);",
+         "pm.test(\"cliente paga 32,90 e o profissional recebe 30,00\", () => { pm.expect(b.price).to.eql(32.9); pm.expect(b.pro_receives).to.eql(30); });"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{estab_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Asaas {{$timestamp}}\",\"price\":32.90,\"pro_receives\":30.00,\"base_price\":30.00,\"estimatedMinutes\":30}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.8 dono: janela do dia inteiro, loja aberta e profissional trabalhando",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{estab_id}}/general-infos",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"opening_time\":\"00:00:00Z\",\"closing_time\":\"23:59:59Z\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.9 dono: abre a loja",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{estab_id}}/open-status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"openStatus\":\"OPEN\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ow.10 dono: chega (WORKING)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.1 cliente A, sem cupom: cadastro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"id\", () => pm.environment.set(\"ca_id\", pm.response.json().id));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"ca_email\", \"asaas_ca_\" + Date.now() + \"@vupth.test\");",
+         "pm.environment.set(\"ca_pass\", \"Senha@123\");"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ca_email}}\",\"password\":\"{{ca_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.2 cliente A, sem cupom: login",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.environment.set(\"ca_token\", pm.response.json().tokens.access_token);",
+         "pm.environment.set(\"ca_refresh\", pm.response.json().tokens.refresh_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ca_email}}\",\"password\":\"{{ca_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.3 cliente A, sem cupom: completa o perfil",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"200 ou 204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ca_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/general-infos",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\":\"Asaas\",\"last_name\":\"Clientea,semcupom\",\"phone\":\"11999990003\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.4 cliente A: entra na fila",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.environment.set(\"ca_attendance_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ca_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ow_id}}\",\"establishmentId\":\"{{estab_id}}\",\"serviceItemIds\":[\"{{service_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.5 cliente A: o dono inicia o corte",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{ca_attendance_id}}/start",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.6 cliente A: o dono finaliza SEM receber (o pagamento sai pelo Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{ca_attendance_id}}/finish",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":false}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.7 cliente A: abre o pagamento (nasce a cobranca Pix do Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"conectado: o pagamento vem do Asaas em SANDBOX, com o Pix\", () => { pm.expect(b.gateway, \"gateway ausente: a cobranca nao foi criada\").to.be.an(\"object\"); pm.expect(b.gateway.provider).to.eql(\"ASAAS\"); pm.expect(b.gateway.mode).to.eql(\"SANDBOX\"); pm.expect(b.gateway.pix_copy_paste).to.be.a(\"string\").and.not.empty; });",
+         "pm.test(\"ainda pendente (so o webhook quita)\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
+         "pm.test(\"valor cobrado 32.9 (preco - cupom + multa)\", () => pm.expect(b.amount).to.eql(32.9));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ca_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{ca_attendance_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "ca.8 [ERRO] cobranca duplicada na rota de teste do mesmo atendimento → 409 ASAAS_CHARGE_EXISTS",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "pm.test(\"codigo\", () => pm.expect(pm.response.json().code).to.eql(\"ASAAS_CHARGE_EXISTS\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/asaas/sandbox/charges",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"amount\":32.90,\"billing_type\":\"PIX\",\"attendance_id\":\"{{ca_attendance_id}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cp.1 admin: cupom de R$ 5,00 COM taxa (campanha de desconto)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test(\"base com taxa\", () => pm.expect(b.benefit_base).to.eql(\"WITH_FEE\"));",
+         "pm.environment.set(\"cupom_id\", b.id);",
+         "pm.environment.set(\"cupom_code\", b.code);"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.variables.set(\"starts_at\", new Date(Date.now() - 3600e3).toISOString());",
+         "pm.variables.set(\"ends_at\", new Date(Date.now() + 7*86400e3).toISOString());",
+         "pm.variables.set(\"stamp\", String(Date.now()));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Newman Asaas com taxa\",\"code\":\"NEWMANCOM{{stamp}}\",\"type\":\"DISCOUNT\",\"visibility\":\"PRIVATE\",\"audience\":\"CLIENT\",\"value_amount\":5.00,\"benefit_base\":\"WITH_FEE\",\"starts_at\":\"{{starts_at}}\",\"ends_at\":\"{{ends_at}}\",\"max_redemptions\":5}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cp.2 admin: cupom de 10% SEM taxa (so criado e conferido; o corte do exemplo usa o de R$ 5,00)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test(\"base sem taxa\", () => pm.expect(b.benefit_base).to.eql(\"WITHOUT_FEE\"));",
+         "pm.environment.set(\"cupom_sem_id\", b.id);"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.variables.set(\"starts_at\", new Date(Date.now() - 3600e3).toISOString());",
+         "pm.variables.set(\"ends_at\", new Date(Date.now() + 7*86400e3).toISOString());",
+         "pm.variables.set(\"stamp\", String(Date.now()));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Newman Asaas sem taxa\",\"code\":\"NEWMANSEM{{stamp}}\",\"type\":\"DISCOUNT\",\"visibility\":\"PRIVATE\",\"audience\":\"CLIENT\",\"value_percent\":10.00,\"benefit_base\":\"WITHOUT_FEE\",\"starts_at\":\"{{starts_at}}\",\"ends_at\":\"{{ends_at}}\",\"max_redemptions\":5}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.1 cliente B, com cupom: cadastro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"id\", () => pm.environment.set(\"cb_id\", pm.response.json().id));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"cb_email\", \"asaas_cb_\" + Date.now() + \"@vupth.test\");",
+         "pm.environment.set(\"cb_pass\", \"Senha@123\");"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cb_email}}\",\"password\":\"{{cb_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.2 cliente B, com cupom: login",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.environment.set(\"cb_token\", pm.response.json().tokens.access_token);",
+         "pm.environment.set(\"cb_refresh\", pm.response.json().tokens.refresh_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cb_email}}\",\"password\":\"{{cb_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.3 cliente B, com cupom: completa o perfil",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"200 ou 204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cb_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/general-infos",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\":\"Asaas\",\"last_name\":\"Clienteb,comcupom\",\"phone\":\"11999990003\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.3b cliente B: ativa o cupom",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cb_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/campaigns/redeem",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"code\":\"{{cupom_code}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.4 cliente B: entra na fila",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.environment.set(\"cb_attendance_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cb_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ow_id}}\",\"establishmentId\":\"{{estab_id}}\",\"serviceItemIds\":[\"{{service_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\",\"coupon_campaign_id\":\"{{cupom_id}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.5 cliente B: o dono inicia o corte",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cb_attendance_id}}/start",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.6 cliente B: o dono finaliza SEM receber (o pagamento sai pelo Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cb_attendance_id}}/finish",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":false}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cb.7 cliente B: abre o pagamento (nasce a cobranca Pix do Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"conectado: o pagamento vem do Asaas em SANDBOX, com o Pix\", () => { pm.expect(b.gateway, \"gateway ausente: a cobranca nao foi criada\").to.be.an(\"object\"); pm.expect(b.gateway.provider).to.eql(\"ASAAS\"); pm.expect(b.gateway.mode).to.eql(\"SANDBOX\"); pm.expect(b.gateway.pix_copy_paste).to.be.a(\"string\").and.not.empty; });",
+         "pm.test(\"ainda pendente (so o webhook quita)\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
+         "pm.test(\"valor cobrado 27.9 (preco - cupom + multa)\", () => pm.expect(b.amount).to.eql(27.9));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cb_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cb_attendance_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "bn.1 admin: campanha de link (bonificacao R$ 2,00, 3 vagas, teto R$ 10,00, para qualquer papel)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test(\"link de bonificacao com vagas\", () => { pm.expect(b.type).to.eql(\"REFERRAL_BONUS\"); pm.expect(b.max_redemptions).to.eql(3); });",
+         "pm.environment.set(\"link_id\", b.id);"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.variables.set(\"starts_at\", new Date(Date.now() - 3600e3).toISOString());",
+         "pm.variables.set(\"ends_at\", new Date(Date.now() + 7*86400e3).toISOString());",
+         "pm.variables.set(\"stamp\", String(Date.now()));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\":\"Newman Asaas link\",\"type\":\"REFERRAL_BONUS\",\"visibility\":\"PUBLIC\",\"value_amount\":2.00,\"referral_professional_percent\":60,\"referral_owner_percent\":40,\"referral_scope\":\"ANY_PROFESSIONAL\",\"payout_period\":\"MONTHLY\",\"payout_day\":5,\"max_redemptions\":3,\"max_total_cost\":10.00,\"starts_at\":\"{{starts_at}}\",\"ends_at\":\"{{ends_at}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "bn.2 dono: participa da campanha de link",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/campaigns/{{link_id}}/join",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "bn.3 dono: pega o codigo do link",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.environment.set(\"ref_code\", pm.response.json().code);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/referrals/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.1 cliente C, indicado pelo link: cadastro",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.test(\"id\", () => pm.environment.set(\"cc_id\", pm.response.json().id));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"cc_email\", \"asaas_cc_\" + Date.now() + \"@vupth.test\");",
+         "pm.environment.set(\"cc_pass\", \"Senha@123\");"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cc_email}}\",\"password\":\"{{cc_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.2 cliente C, indicado pelo link: login",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.environment.set(\"cc_token\", pm.response.json().tokens.access_token);",
+         "pm.environment.set(\"cc_refresh\", pm.response.json().tokens.refresh_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cc_email}}\",\"password\":\"{{cc_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.3 cliente C, indicado pelo link: completa o perfil",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"200 ou 204\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cc_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/general-infos",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\":\"Asaas\",\"last_name\":\"Clientec,indicadopelolink\",\"phone\":\"11999990003\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.3b cliente C: chega pelo link (claim com a campanha)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"campanha do link\", () => pm.expect(pm.response.json().campaign_id).to.eql(pm.environment.get(\"link_id\")));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cc_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/referrals/claim",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"code\":\"{{ref_code}}\",\"campaign_id\":\"{{link_id}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.4 cliente C: entra na fila",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.environment.set(\"cc_attendance_id\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cc_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{ow_id}}\",\"establishmentId\":\"{{estab_id}}\",\"serviceItemIds\":[\"{{service_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.5 cliente C: o dono inicia o corte",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cc_attendance_id}}/start",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.6 cliente C: o dono finaliza SEM receber (o pagamento sai pelo Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cc_attendance_id}}/finish",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"payment_received\":false}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cc.7 cliente C: abre o pagamento (nasce a cobranca Pix do Asaas)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"conectado: o pagamento vem do Asaas em SANDBOX, com o Pix\", () => { pm.expect(b.gateway, \"gateway ausente: a cobranca nao foi criada\").to.be.an(\"object\"); pm.expect(b.gateway.provider).to.eql(\"ASAAS\"); pm.expect(b.gateway.mode).to.eql(\"SANDBOX\"); pm.expect(b.gateway.pix_copy_paste).to.be.a(\"string\").and.not.empty; });",
+         "pm.test(\"ainda pendente (so o webhook quita)\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
+         "pm.test(\"valor cobrado 32.9 (preco - cupom + multa)\", () => pm.expect(b.amount).to.eql(32.9));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cc_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cc_attendance_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "bn.4 a bonificacao do corte do indicado aparece travada para o dono (R$ 2,00 ate o Andre liberar)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"2,00 esperando liberacao\", () => pm.expect(pm.response.json().pending_release).to.be.at.least(2));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ow_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/referrals/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "limpeza: encerrar a cupom com taxa",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.variables.set(\"cid\", pm.environment.get(\"cupom_id\") || \"00000000-0000-0000-0000-000000000000\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"encerrada (200) ou ja nao existe\", () => pm.expect([200,404]).to.include(pm.response.code));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns/{{cid}}/end",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "limpeza: encerrar a cupom sem taxa",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.variables.set(\"cid\", pm.environment.get(\"cupom_sem_id\") || \"00000000-0000-0000-0000-000000000000\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"encerrada (200) ou ja nao existe\", () => pm.expect([200,404]).to.include(pm.response.code));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns/{{cid}}/end",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "limpeza: encerrar a campanha de link",
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.variables.set(\"cid\", pm.environment.get(\"link_id\") || \"00000000-0000-0000-0000-000000000000\");"
+        ]
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"encerrada (200) ou ja nao existe\", () => pm.expect([200,404]).to.include(pm.response.code));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns/{{cid}}/end",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "fim: o que fazer agora",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "console.log(\"PAGUE AS 3 COBRANCAS PIX DE ATENDIMENTO (e as avulsas, se quiser) NO PAINEL DO ASAAS SANDBOX: simule o pagamento, espere o aviso (webhook) e rode: bash asaas-sandbox.sh verificar\");",
+         "pm.test(\"montagem pronta\", () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/health/readiness",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
+   "name": "2 verificar",
+   "item": [
+    {
+     "name": "V0 token do ADMIN e staging acordado",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"ADMIN_TOKEN fornecido\", () => pm.expect(pm.variables.get(\"ADMIN_TOKEN\")).to.be.a(\"string\").and.not.empty);",
+         "pm.test(\"a montagem rodou antes (arquivo de estado .asaas-state.json)\", () => pm.expect(pm.environment.get(\"ca_attendance_id\"), \"rode primeiro: bash asaas-sandbox.sh\").to.be.a(\"string\"));",
+         "pm.test(\"staging acordado\", () => pm.expect(pm.response.json().status).to.eql(\"UP\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/actuator/health/readiness",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V1 relatorio do sandbox: lista, cupom, bonificacao, profissional e diferenca em centavos",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"DEC-119: bonus deixou de ser nao medido\", () => pm.expect(b.not_measured).to.be.an(\"array\").that.is.empty);",
+         "{",
+         "const line = (b.payments || []).find(p => p.attendance_id === pm.environment.get(\"ca_attendance_id\"));",
+         "pm.test(\"cliente A (sem cupom): o aviso do Asaas chegou (RECEIVED/CONFIRMED); se nao, simule o pagamento no painel do sandbox e espere o webhook\", () => { pm.expect(line, \"sem linha no relatorio\").to.be.an(\"object\"); pm.expect([\"RECEIVED\",\"CONFIRMED\",\"RECEIVED_IN_CASH\"]).to.include(line.status); });",
+         "if (line) {",
+         "  pm.test(\"cliente A (sem cupom): preco de lista nao muda (R$ 32,90)\", () => pm.expect(line.list_price).to.eql(32.9));",
+         "  pm.test(\"cliente A (sem cupom): o profissional recebe exatamente o que estipulou (R$ 30,00)\", () => pm.expect(line.professional_planned).to.eql(30));",
+         "  pm.test(\"cliente A (sem cupom): desconto do cupom no relatorio = 0\", () => pm.expect(line.coupon_discount).to.eql(0));",
+         "  pm.test(\"cliente A (sem cupom): difference_cents = 0 (cobrado = corte - cupom + multa, centavo a centavo)\", () => pm.expect(line.difference_cents).to.eql(0));",
+         "  pm.test(\"cliente A (sem cupom): o cliente pagou 32.9\", () => pm.expect(line.client_paid).to.eql(32.9));",
+         "  pm.test(\"cliente A (sem cupom): partes somam o total (profissional + app + taxa real do Asaas = pago)\", () => pm.expect(Math.round((line.professional_planned + line.app_net + line.asaas_fee_real) * 100)).to.eql(Math.round(line.client_paid * 100)));",
+         "  pm.test(\"cliente A (sem cupom): taxa cobrada no preco >= taxa real do Asaas neste meio (a sobra nao e negativa)\", () => pm.expect(line.fee_leftover).to.be.at.least(0));",
+         "}",
+         "}",
+         "{",
+         "const line = (b.payments || []).find(p => p.attendance_id === pm.environment.get(\"cb_attendance_id\"));",
+         "pm.test(\"cliente B (cupom R$ 5,00): o aviso do Asaas chegou (RECEIVED/CONFIRMED); se nao, simule o pagamento no painel do sandbox e espere o webhook\", () => { pm.expect(line, \"sem linha no relatorio\").to.be.an(\"object\"); pm.expect([\"RECEIVED\",\"CONFIRMED\",\"RECEIVED_IN_CASH\"]).to.include(line.status); });",
+         "if (line) {",
+         "  pm.test(\"cliente B (cupom R$ 5,00): preco de lista nao muda (R$ 32,90)\", () => pm.expect(line.list_price).to.eql(32.9));",
+         "  pm.test(\"cliente B (cupom R$ 5,00): o profissional recebe exatamente o que estipulou (R$ 30,00)\", () => pm.expect(line.professional_planned).to.eql(30));",
+         "  pm.test(\"cliente B (cupom R$ 5,00): desconto do cupom no relatorio = 5\", () => pm.expect(line.coupon_discount).to.eql(5));",
+         "  pm.test(\"cliente B (cupom R$ 5,00): difference_cents = 0 (cobrado = corte - cupom + multa, centavo a centavo)\", () => pm.expect(line.difference_cents).to.eql(0));",
+         "  pm.test(\"cliente B (cupom R$ 5,00): o cliente pagou 27.9\", () => pm.expect(line.client_paid).to.eql(27.9));",
+         "  pm.test(\"cliente B (cupom R$ 5,00): partes somam o total (profissional + app + taxa real do Asaas = pago)\", () => pm.expect(Math.round((line.professional_planned + line.app_net + line.asaas_fee_real) * 100)).to.eql(Math.round(line.client_paid * 100)));",
+         "  pm.test(\"cliente B (cupom R$ 5,00): taxa cobrada no preco >= taxa real do Asaas neste meio (a sobra nao e negativa)\", () => pm.expect(line.fee_leftover).to.be.at.least(0));",
+         "}",
+         "}",
+         "{",
+         "const line = (b.payments || []).find(p => p.attendance_id === pm.environment.get(\"cc_attendance_id\"));",
+         "pm.test(\"cliente C (indicado pelo link): o aviso do Asaas chegou (RECEIVED/CONFIRMED); se nao, simule o pagamento no painel do sandbox e espere o webhook\", () => { pm.expect(line, \"sem linha no relatorio\").to.be.an(\"object\"); pm.expect([\"RECEIVED\",\"CONFIRMED\",\"RECEIVED_IN_CASH\"]).to.include(line.status); });",
+         "if (line) {",
+         "  pm.test(\"cliente C (indicado pelo link): preco de lista nao muda (R$ 32,90)\", () => pm.expect(line.list_price).to.eql(32.9));",
+         "  pm.test(\"cliente C (indicado pelo link): o profissional recebe exatamente o que estipulou (R$ 30,00)\", () => pm.expect(line.professional_planned).to.eql(30));",
+         "  pm.test(\"cliente C (indicado pelo link): desconto do cupom no relatorio = 0\", () => pm.expect(line.coupon_discount).to.eql(0));",
+         "  pm.test(\"cliente C (indicado pelo link): difference_cents = 0 (cobrado = corte - cupom + multa, centavo a centavo)\", () => pm.expect(line.difference_cents).to.eql(0));",
+         "  pm.test(\"cliente C (indicado pelo link): o cliente pagou 32.9\", () => pm.expect(line.client_paid).to.eql(32.9));",
+         "  pm.test(\"cliente C (indicado pelo link): partes somam o total (profissional + app + taxa real do Asaas = pago)\", () => pm.expect(Math.round((line.professional_planned + line.app_net + line.asaas_fee_real) * 100)).to.eql(Math.round(line.client_paid * 100)));",
+         "  pm.test(\"cliente C (indicado pelo link): taxa cobrada no preco >= taxa real do Asaas neste meio (a sobra nao e negativa)\", () => pm.expect(line.fee_leftover).to.be.at.least(0));",
+         "}",
+         "}",
+         "const lc = (b.payments || []).find(p => p.attendance_id === pm.environment.get(\"cc_attendance_id\"));",
+         "if (lc) pm.test(\"cliente C: a bonificacao do corte aparece no relatorio (R$ 2,00)\", () => pm.expect(lc.bonus).to.eql(2));"
+        ]
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.request.url.query.add({key:\"from\", value:new Date(Date.now() - 48*3600e3).toISOString()});"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/asaas/sandbox/report",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V2.ca cliente A: o webhook quitou o atendimento (PAID, forma PIX)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"ca_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{ca_email}}\",\"password\":\"{{ca_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V2.cab cliente A: GET pagamento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"PAID pelo webhook\", () => pm.expect(b.status).to.eql(\"PAID\"));",
+         "pm.test(\"forma PIX\", () => pm.expect(b.payment_method).to.eql(\"PIX\"));",
+         "pm.test(\"status do Asaas recebido\", () => pm.expect([\"RECEIVED\",\"CONFIRMED\"]).to.include(b.gateway.status));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ca_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{ca_attendance_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V2.cb cliente B: o webhook quitou o atendimento (PAID, forma PIX)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"cb_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cb_email}}\",\"password\":\"{{cb_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V2.cbb cliente B: GET pagamento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"PAID pelo webhook\", () => pm.expect(b.status).to.eql(\"PAID\"));",
+         "pm.test(\"forma PIX\", () => pm.expect(b.payment_method).to.eql(\"PIX\"));",
+         "pm.test(\"status do Asaas recebido\", () => pm.expect([\"RECEIVED\",\"CONFIRMED\"]).to.include(b.gateway.status));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cb_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cb_attendance_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V2.cc cliente C: o webhook quitou o atendimento (PAID, forma PIX)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.environment.set(\"cc_token\", pm.response.json().tokens.access_token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\":\"{{cc_email}}\",\"password\":\"{{cc_pass}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V2.ccb cliente C: GET pagamento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"PAID pelo webhook\", () => pm.expect(b.status).to.eql(\"PAID\"));",
+         "pm.test(\"forma PIX\", () => pm.expect(b.payment_method).to.eql(\"PIX\"));",
+         "pm.test(\"status do Asaas recebido\", () => pm.expect([\"RECEIVED\",\"CONFIRMED\"]).to.include(b.gateway.status));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{cc_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/attendances/{{cc_attendance_id}}/payment",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "V3 saldo do app DEPOIS: mudou em relacao ao de antes do pagamento",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "const before = parseFloat(pm.environment.get(\"app_balance_before\"));",
+         "pm.test(\"saldo do Asaas lido\", () => pm.expect(b.app_balance).to.be.a(\"number\"));",
+         "pm.test(\"o saldo do app mudou depois dos pagamentos (antes \" + before + \", agora \" + b.app_balance + \")\", () => pm.expect(b.app_balance).to.not.eql(before));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ADMIN_TOKEN}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/finance/app-balance",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  }
+ ],
+ "variable": []
+}

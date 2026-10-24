@@ -53,6 +53,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     private final EstablishmentRepository establishmentRepository;
     private final EstablishmentOpenStatusService openStatusService;
     private final com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrivalService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // ─────────────────────────────────────────────────────────────
     // GUEST
@@ -196,6 +197,40 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse noShowStatus(UUID userId, UUID attendanceId) {
+        Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
+                .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
+        Establishment establishment = attendance.getEstablishment();
+        Professional professional = attendance.getProfessional();
+        assertCanMarkNoShow(userId, establishment, professional);
+        List<Attendance> waiting = attendanceRepository
+                .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId());
+        int wait = lateArrivalService.noShowWaitMinutes();
+        boolean first = !waiting.isEmpty() && waiting.get(0).getId().equals(attendanceId);
+        if (!first) {
+            return new com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse(
+                    attendanceId, false, false, "NOT_FIRST", null, null, wait);
+        }
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        java.time.OffsetDateTime availableAt = lateArrivalService.noShowAvailableAt(attendance, professional, now);
+        long left = Math.max(0, java.time.Duration.between(now, availableAt).getSeconds());
+        boolean can = left == 0
+                && (attendance.getStatus() == AttendanceStatus.SCHEDULED || attendance.getStatus() == AttendanceStatus.LATE);
+        return new com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse(
+                attendanceId, true, can, can ? null : "TOO_EARLY", availableAt, left, wait);
+    }
+
+    private static void assertCanMarkNoShow(UUID userId, Establishment establishment, Professional professional) {
+        boolean isProfessional = professional.getId().equals(userId);
+        boolean isOwner = establishment.getOwner() != null && establishment.getOwner().getId().equals(userId);
+        if (!isProfessional && !isOwner) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException(
+                    "Only the professional of the attendance or the owner of the establishment can mark a no-show.");
+        }
+    }
+
+    @Override
     @Transactional
     public QueueResponse markNoShow(UUID userId, UUID attendanceId) {
         log.info("[Professional] markNoShow — user={} attendance={}", userId, attendanceId);
@@ -229,7 +264,14 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         // DEC-86: nao comparecer e um atraso — troca de lugar com o proximo e soma no contador; no 3o, a multa.
         // Mesmo caminho do /late; a espera de 10 min acima passa da tolerancia de 5, entao o atraso sempre conta.
         log.info("[Professional] markNoShow — attendance={} vira atraso", attendanceId);
-        return markAttendanceLate(professional.getId(), attendanceId);
+        QueueResponse response = markAttendanceLate(professional.getId(), attendanceId);
+        // tres-faltas-pagar-adiantado (DEC-115): o "nao cheguei" conta nas tres ocorrencias, inclusive do cliente isento
+        if (attendance.getClient() != null) {
+            eventPublisher.publishEvent(new com.ospaulos.vupth.domain.client.event.ClientAbsenceEvent(
+                    attendance.getClient().getId(), attendanceId,
+                    com.ospaulos.vupth.domain.client.model.ClientAbsenceType.NO_SHOW));
+        }
+        return response;
     }
 
     @Override

@@ -4,6 +4,7 @@ import com.ospaulos.vupth.api.websocket.dto.QueueNotification;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.model.Attendance;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.shared.Brl;
 import com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher;
 import com.ospaulos.vupth.infrastructure.websocket.QueueWebSocketPublisher;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,7 +29,6 @@ public class PaymentNotifier {
 
     static final String PAYMENT_CLAIMED = "PAYMENT_CLAIMED";
     static final String PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED";
-    private static final Locale PT_BR = Locale.forLanguageTag("pt-BR");
 
     private final AttendanceRepository attendanceRepository;
     private final QueueWebSocketPublisher queuePublisher;
@@ -82,6 +81,6 @@ public class PaymentNotifier {
     }
 
     static String money(BigDecimal amount) {
-        return String.format(PT_BR, "R$ %,.2f", amount == null ? BigDecimal.ZERO : amount);
+        return Brl.of(amount);
     }
 }

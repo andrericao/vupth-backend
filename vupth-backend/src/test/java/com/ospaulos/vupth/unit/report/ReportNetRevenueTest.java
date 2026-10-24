@@ -49,6 +49,8 @@ class ReportNetRevenueTest {
     @Mock EstablishmentRepository establishmentRepository;
     @Mock ProfessionalShiftRepository shiftRepository;
 
+    @Mock com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
+
     @InjectMocks ReportServiceImpl reportService;
 
     private Professional professional;
@@ -95,6 +97,46 @@ class ReportNetRevenueTest {
         assertThat(report.totalRevenue()).isEqualByComparingTo("121.80");
         assertThat(report.netRevenue()).isEqualByComparingTo("80.00");
         assertThat(report.attendancesWithoutSplit()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("PAR-3: recebe e taxas por corte e no periodo; divida por fora real aberta em pending_debt, a simulada a parte")
+    void professionalReport_receivesFeesAndPendingDebt() {
+        Attendance a = finished("32.90", "30.00", "30.00");
+        Attendance b = finished("53.90", "50.00", "50.00");
+        Attendance legacy = finished("35.00", null, null);
+        for (Attendance x : List.of(a, b, legacy)) {
+            org.springframework.test.util.ReflectionTestUtils.setField(x, "id", UUID.randomUUID());
+        }
+        when(professionalRepository.findByIdWithBaseUser(professional.getId())).thenReturn(Optional.of(professional));
+        when(attendanceRepository.findFinishedByProfessionalBetween(eq(professional.getId()), any(), any()))
+                .thenReturn(List.of(a, b, legacy));
+        var open = new com.ospaulos.vupth.domain.debt.model.ProfessionalDebt(professional.getId(), a.getId(), new BigDecimal("2.90"),
+                com.ospaulos.vupth.domain.debt.model.DebtOrigin.PAID_OUTSIDE, false, java.time.OffsetDateTime.now());
+        var simulated = new com.ospaulos.vupth.domain.debt.model.ProfessionalDebt(professional.getId(), b.getId(), new BigDecimal("2.90"),
+                com.ospaulos.vupth.domain.debt.model.DebtOrigin.PAID_OUTSIDE, true, java.time.OffsetDateTime.now());
+        var settled = new com.ospaulos.vupth.domain.debt.model.ProfessionalDebt(professional.getId(), legacy.getId(), new BigDecimal("2.90"),
+                com.ospaulos.vupth.domain.debt.model.DebtOrigin.PAID_OUTSIDE, false, java.time.OffsetDateTime.now());
+        settled.setStatus(com.ospaulos.vupth.domain.debt.model.DebtStatus.SETTLED);
+        when(debtRepository.findByAttendanceIdIn(any())).thenReturn(List.of(open, simulated, settled));
+
+        ProfessionalReportResponse report = reportService.getProfessionalReport(professional.getId(), null, null);
+
+        assertThat(report.receivesTotal()).isEqualByComparingTo("80.00");
+        assertThat(report.feesTotal()).isEqualByComparingTo("6.80");
+        assertThat(report.pendingDebtTotal()).isEqualByComparingTo("2.90");
+        assertThat(report.pendingDebtSimulatedTotal()).isEqualByComparingTo("2.90");
+        assertThat(report.cuts()).hasSize(3);
+        var first = report.cuts().get(0);
+        assertThat(first.attendanceId()).isEqualTo(a.getId());
+        assertThat(first.receives()).isEqualByComparingTo("30.00");
+        assertThat(first.fees()).isEqualByComparingTo("2.90");
+        assertThat(first.pendingDebt()).isEqualByComparingTo("2.90");
+        assertThat(report.cuts().get(1).pendingDebtSimulated()).isEqualByComparingTo("2.90");
+        var legacyCut = report.cuts().get(2);
+        assertThat(legacyCut.receives()).isNull();
+        assertThat(legacyCut.fees()).isNull();
+        assertThat(legacyCut.pendingDebt()).isEqualByComparingTo("0");
     }
 
     @Test

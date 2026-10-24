@@ -50,6 +50,7 @@ public class SecurityConfig {
     private RSAPrivateKey privateKey;
 
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
+    private final JsonBearerEntryPoint jsonBearerEntryPoint;
 
     /**
      * Origens de navegador autorizadas (env {@code CORS_ALLOWED_ORIGINS}, separadas por virgula).
@@ -128,8 +129,12 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/invitations/accept").permitAll()
                         .requestMatchers(HttpMethod.POST, "/support/articles/*/vote").permitAll()
+                        // testes-asaas-sandbox: o aviso do Asaas nao tem login; o controller confere o asaas-access-token
+                        .requestMatchers(HttpMethod.POST, "/webhooks/asaas").permitAll()
+                        // asaas-sandbox-no-fluxo: o estado da conexao (conectado, modo) e publico e sem dado sensivel
+                        .requestMatchers(HttpMethod.GET, "/payment-gateway").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/referrals/me").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/referrals/me").authenticated() // todo papel tem link (DEC-113)
                         .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
@@ -188,9 +193,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/attendances/*/payment/confirm").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/clients/me/pending-payments").hasRole("CLIENT")
                         .requestMatchers("/clients/me/penalties/**").hasRole("CLIENT")
+                        .requestMatchers(HttpMethod.GET, "/clients/me/absences").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
                         // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
                         .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers("/professional/me/price-policy/**").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/professional/me/credits").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/professional/me/debt").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/client-queue/**").hasRole("CLIENT")
 
                         // Troca de posicao na fila por consentimento mutuo (item #42) — cliente<->cliente
@@ -226,6 +235,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-late").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/no-show").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers(HttpMethod.GET, "/attendances/*/no-show-status").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/promote").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/fit-in").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/attendances/*/undo-fit").hasRole("PROFESSIONAL")
@@ -294,6 +304,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
+                                .authenticationEntryPoint(jsonBearerEntryPoint)
                                 .jwt(jwt -> jwt
                                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .sessionManagement(

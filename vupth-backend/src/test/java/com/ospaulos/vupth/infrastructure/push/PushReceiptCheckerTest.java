@@ -100,8 +100,13 @@ class PushReceiptCheckerTest {
                 "morto", new PushReceipt("morto", false, PushTicket.DEVICE_NOT_REGISTERED, "gone"),
                 "outro", new PushReceipt("outro", false, "MessageRateExceeded", "slow down")));
 
+        com.ospaulos.vupth.infrastructure.ops.OpsCounter ops = mock(com.ospaulos.vupth.infrastructure.ops.OpsCounter.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(checker, "opsCounter", ops);
+
         assertThat(checker.checkDueReceipts()).isEqualTo(3);
 
+        // admin-alertas-push-e-5xx: os dois recibos com erro entram no contador do alerta "push recusado"
+        verify(ops).add(com.ospaulos.vupth.infrastructure.ops.OpsCounter.PUSH_REFUSED, 2);
         verify(deviceTokenRepository).deleteByToken(TOKEN_B);
         verify(deviceTokenRepository, never()).deleteByToken(TOKEN_A);
         assertThat(deletedIds()).containsExactlyInAnyOrder("ok", "morto", "outro");

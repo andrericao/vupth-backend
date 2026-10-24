@@ -28,10 +28,19 @@ public class CampaignRedemption {
     @Column(name = "redeemed_at", nullable = false)
     private OffsetDateTime redeemedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "via", length = 10, nullable = false)
+    private RedemptionVia via = RedemptionVia.CUPOM;
+
     public CampaignRedemption(Campaign campaign, UUID userId, OffsetDateTime redeemedAt) {
+        this(campaign, userId, redeemedAt, RedemptionVia.CUPOM);
+    }
+
+    public CampaignRedemption(Campaign campaign, UUID userId, OffsetDateTime redeemedAt, RedemptionVia via) {
         this.id = UUID.randomUUID();
         this.campaign = campaign;
         this.userId = userId;
         this.redeemedAt = redeemedAt;
+        this.via = via;
     }
 }

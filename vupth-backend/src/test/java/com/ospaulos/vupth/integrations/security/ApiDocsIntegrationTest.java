@@ -51,6 +51,16 @@ class ApiDocsIntegrationTest {
         }
 
         @Test
+        @DisplayName("/v3/api-docs declara o esquema Bearer JWT (botao Authorize do Swagger)")
+        void apiDocs_declaraBearer() throws Exception {
+            mvc.perform(get("/v3/api-docs"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.type").value("http"))
+                    .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                    .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.bearerFormat").value("JWT"));
+        }
+
+        @Test
         @DisplayName("/swagger-ui/index.html responde 200")
         void swaggerUi_aberto() throws Exception {
             mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isOk());

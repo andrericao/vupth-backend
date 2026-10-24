@@ -30,10 +30,12 @@ import static org.mockito.Mockito.*;
 class AdminReferralServiceTest {
 
     private final ReferralCreditRepository creditRepository = mock(ReferralCreditRepository.class);
+    private final com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository =
+            mock(com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository.class);
     private final CampaignRepository campaignRepository = mock(CampaignRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final AdminReferralService service =
-            new AdminReferralService(creditRepository, campaignRepository, userRepository);
+            new AdminReferralService(creditRepository, couponCreditRepository, campaignRepository, userRepository);
 
     @Test
     @DisplayName("proximo pagamento: semanal no proximo dia (hoje conta); mensal neste mes ou no proximo; sem regra, nulo")

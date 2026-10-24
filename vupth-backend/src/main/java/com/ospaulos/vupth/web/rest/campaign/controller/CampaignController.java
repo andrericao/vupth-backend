@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * Campanhas (DEC-57/61/64). {@code GET /campaigns/active} e publico (a pagina "Campanhas ativas" do suporte
- * e os apps); aceitar o cupom e ver os seus pede login.
+ * e os apps) e, com login, devolve so as campanhas do publico de quem pede; aceitar o cupom e ver os seus pede login.
  */
 @RestController
 @RequiredArgsConstructor
@@ -25,14 +25,23 @@ public class CampaignController {
     private final CampaignService campaignService;
 
     @GetMapping("/active")
-    public ResponseEntity<List<CampaignResponse>> active() {
-        return ResponseEntity.ok(campaignService.activePublic());
+    public ResponseEntity<List<CampaignResponse>> active(@AuthenticationPrincipal UserDetailsImpl principal) {
+        // campanhas-ativas-para-o-client: com login, so as do publico do usuario; sem login, todas as publicas
+        return ResponseEntity.ok(principal == null
+                ? campaignService.activePublic() : campaignService.activeFor(principal.getUserId()));
     }
 
     @PostMapping("/redeem")
     public ResponseEntity<CampaignResponse> redeem(@RequestBody @Valid RedeemCouponRequest request,
                                                    @AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(campaignService.redeem(principal.getUserId(), request.code()));
+    }
+
+    /** Participar (compartilhe-e-ganhe): adere a uma campanha publica sem cupom. 201; 404, 403, 409 como o {@code redeem}. */
+    @PostMapping("/{id}/join")
+    public ResponseEntity<CampaignResponse> join(@PathVariable java.util.UUID id,
+                                                 @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(campaignService.join(principal.getUserId(), id));
     }
 
     @GetMapping("/me")
