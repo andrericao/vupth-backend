@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Envia push via Expo Push API (backlog #1). Ativo por padrao; desligado nos testes/staging com
@@ -66,31 +65,30 @@ public class ExpoPushSender implements PushSender {
     static final String CLOSING_CATEGORY_ID = "FECHAMENTO";
 
     /**
-     * Categorias do Client (push-categorias-do-client, DEC-43; o Client registrou em 7b5276bf): "Ver minha
-     * vez" leva a fila, "Ver atendimento" leva ao atendimento. Os outros tipos seguem a regra geral (CIENCIA
-     * ou, nos de decisao, nenhuma). O CUT_REQUESTED vai ao Partner e fica com a CIENCIA (S40). O
-     * ATTENDANCE_FINISHED leva o botao "Avaliar" (categoria-avaliar, notificacao-avaliar do Client).
+     * push-com-acoes (BAK-2, 24/10): o pedido de corte leva os botoes Aceitar e Recusar, que o Partner
+     * resolve em segundo plano (PATCH /attendances/cut-requests/{cutRequestId}/accept|refuse). Regra do
+     * Andre: toda notificacao tem botao; as que nao tem acao propria ficam com o OK (CIENCIA).
      */
-    static final Map<String, String> CATEGORY_BY_TYPE = Map.of(
-            "CLOSING_PROMPT", CLOSING_CATEGORY_ID,
-            "QUEUE_NEXT_IN_LINE", "VER_FILA",
-            "ATTENDANCE_PROMOTED", "VER_FILA",
-            "ATTENDANCE_CANCELLED", "VER_ATENDIMENTO",
-            "CUT_ACCEPTED", "VER_ATENDIMENTO",
-            "CUT_REFUSED", "VER_ATENDIMENTO",
-            "CUT_EXPIRED", "VER_ATENDIMENTO",
-            "ATTENDANCE_FINISHED", "AVALIAR",
-            "PAYMENT_PENDING", "PAGAR",
-            "NO_SHOW_REMOVED", "PAGAR_MULTA");
+    static final String CUT_REQUEST_CATEGORY_ID = "ACEITAR_RECUSAR";
 
     /**
-     * As que pedem decisao (aceitar/recusar, fechar ou nao) nao levam a CIENCIA. O CLOSING_PROMPT leva a
-     * FECHAMENTO; as outras seguem sem categoria — o app abre nelas.
-     * O CUT_REQUESTED saiu daqui (S40, 08/10): o Partner trata o pedido de corte como aviso com OK, e o
-     * toque no corpo abre as Solicitacoes de corte, onde ele decide.
+     * Categorias do Client (push-categorias-do-client, DEC-43; o Client registrou em 7b5276bf): "Ver minha
+     * vez" leva a fila, "Ver atendimento" leva ao atendimento. Os outros tipos seguem a regra geral (CIENCIA
+     * ou, nos de decisao, nenhuma). O CUT_REQUESTED vai ao Partner com ACEITAR_RECUSAR (push-com-acoes). O
+     * ATTENDANCE_FINISHED leva o botao "Avaliar" (categoria-avaliar, notificacao-avaliar do Client).
      */
-    static final Set<String> DECISION_TYPES = Set.of(
-            "CLOSING_PROMPT", "SWAP_REQUESTED", "EARLIER_TURN_OFFERED");
+    static final Map<String, String> CATEGORY_BY_TYPE = Map.ofEntries(
+            Map.entry("CLOSING_PROMPT", CLOSING_CATEGORY_ID),
+            Map.entry("CUT_REQUESTED", CUT_REQUEST_CATEGORY_ID),
+            Map.entry("QUEUE_NEXT_IN_LINE", "VER_FILA"),
+            Map.entry("ATTENDANCE_PROMOTED", "VER_FILA"),
+            Map.entry("ATTENDANCE_CANCELLED", "VER_ATENDIMENTO"),
+            Map.entry("CUT_ACCEPTED", "VER_ATENDIMENTO"),
+            Map.entry("CUT_REFUSED", "VER_ATENDIMENTO"),
+            Map.entry("CUT_EXPIRED", "VER_ATENDIMENTO"),
+            Map.entry("ATTENDANCE_FINISHED", "AVALIAR"),
+            Map.entry("PAYMENT_PENDING", "PAGAR"),
+            Map.entry("NO_SHOW_REMOVED", "PAGAR_MULTA"));
 
     /** A Expo aceita ate 1000 ids por consulta de recibos. */
     static final int RECEIPTS_BATCH_SIZE = 1000;
@@ -176,11 +174,8 @@ public class ExpoPushSender implements PushSender {
         if (data == null) {
             return INFO_CATEGORY_ID;
         }
-        String type = String.valueOf(data.get("type")); // Set.of nao aceita contains(null)
-        if (CATEGORY_BY_TYPE.containsKey(type)) {
-            return CATEGORY_BY_TYPE.get(type);
-        }
-        return DECISION_TYPES.contains(type) ? null : INFO_CATEGORY_ID;
+        String type = String.valueOf(data.get("type")); // Map.of nao aceita chave null
+        return CATEGORY_BY_TYPE.getOrDefault(type, INFO_CATEGORY_ID);
     }
 
     private List<PushTicket> sendBatch(List<Map<String, Object>> batch, List<String> batchTokens, String title) {

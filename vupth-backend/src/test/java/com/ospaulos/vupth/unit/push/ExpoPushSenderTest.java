@@ -113,8 +113,8 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Notificacao que pede decisao (troca de posicao) segue sem categoria")
-    void decisionHasNoCategory() throws IOException {
+    @DisplayName("Pedido de troca de posicao sai com o botao OK (toda notificacao tem botao)")
+    void swapRequestCarriesCiencia() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -122,7 +122,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Pedido de troca", "Aceite ou recuse.",
                 Map.of("type", "SWAP_REQUESTED"));
 
-        assertThat(body.get()).doesNotContain("categoryId");
+        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
     }
 
     @Test
@@ -163,8 +163,8 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Oferta de vez antes segue sem categoria (espera o Andre)")
-    void earlierTurnOfferHasNoCategory() throws IOException {
+    @DisplayName("Oferta de vez antes sai com o botao OK (toda notificacao tem botao)")
+    void earlierTurnOfferCarriesCiencia() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -172,11 +172,11 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Vez antes", "Aceite ou recuse.",
                 Map.of("type", "EARLIER_TURN_OFFERED"));
 
-        assertThat(body.get()).doesNotContain("categoryId");
+        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
     }
 
     @Test
-    @DisplayName("Pedido de corte sai com categoryId CIENCIA — o OK aparece com o app fechado (S40)")
+    @DisplayName("Pedido de corte sai com categoryId ACEITAR_RECUSAR (push-com-acoes)")
     void cutRequestCarriesCienciaCategory() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
@@ -185,7 +185,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Novo pedido de corte", "Aceite ou recuse.",
                 Map.of("type", "CUT_REQUESTED"));
 
-        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
+        assertThat(body.get()).contains("\"categoryId\":\"ACEITAR_RECUSAR\"");
     }
 
     @Test

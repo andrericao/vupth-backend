@@ -305,16 +305,24 @@ public class CutRequestServiceImpl implements CutRequestService {
         return cut;
     }
 
+    /** Texto do push do pedido de corte: "[nome] pediu um corte" (push-com-acoes); sem nome, "Um cliente". */
+    static String requestPushBody(String clientName) {
+        String who = clientName == null || clientName.isBlank() ? "Um cliente" : clientName.trim();
+        return who + " pediu um corte. Aceite ou recuse antes de expirar.";
+    }
+
     /** Avisa o profissional (WS pessoal + push) que ha um pedido de corte aguardando decisao. */
     private void notifyProfessional(CutRequest cut) {
         UUID profId = cut.getProfessional().getId(); // == user id (MapsId)
         queuePublisher.notifyClient(profId, QueueNotification.of(
                 "CUT_REQUESTED", null, cut.getEstablishment().getId(),
                 "Um cliente solicitou um corte — aceite ou recuse.").withCutRequestId(cut.getId()));
-        pushPublisher.notifyUser(profId, "Novo pedido de corte",
-                "Um cliente quer ser atendido. Aceite ou recuse antes de expirar.",
+        String clientName = cut.getClient().getFirstName();
+        boolean named = clientName != null && !clientName.isBlank();
+        pushPublisher.notifyUser(profId, "Novo pedido de corte", requestPushBody(clientName),
                 Map.of("type", "CUT_REQUESTED",
                         "cutRequestId", String.valueOf(cut.getId()),
-                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId()),
+                        "clientName", named ? clientName.trim() : ""));
     }
 }

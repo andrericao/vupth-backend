@@ -294,4 +294,12 @@ class CutRequestValidityTest {
             assertThat(cut.getStatus()).isEqualTo(CutRequestStatus.PENDING);
         }
     }
+
+    @Test
+    @DisplayName("Push do pedido de corte diz o nome do cliente; sem nome, 'Um cliente' (push-com-acoes)")
+    void requestPushBodyNamesTheClient() {
+        assertThat(CutRequestServiceImpl.requestPushBody(" Ana ")).startsWith("Ana pediu um corte.");
+        assertThat(CutRequestServiceImpl.requestPushBody(null)).startsWith("Um cliente pediu um corte.");
+        assertThat(CutRequestServiceImpl.requestPushBody("  ")).startsWith("Um cliente pediu um corte.");
+    }
 }
