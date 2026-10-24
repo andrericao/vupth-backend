@@ -28323,6 +28323,35 @@
       }
      },
      "response": []
+    },
+    {
+     "name": "[ERRO] POST /admin/test-tokens sem o papel ADMIN → 403 (token-de-teste-sandbox)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/test-tokens",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
     }
    ]
   },

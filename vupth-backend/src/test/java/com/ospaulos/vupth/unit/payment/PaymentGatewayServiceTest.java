@@ -163,4 +163,30 @@ class PaymentGatewayServiceTest {
         assertThat(payments.onGatewayEvent(a.getId(), "pay_1", "CONFIRMED", true)).as("repetido").isFalse();
         assertThat(payments.onGatewayEvent(UUID.randomUUID(), "pay_1", "RECEIVED", true)).as("atendimento que nao existe").isFalse();
     }
+
+    @Test
+    @DisplayName("rota de teste do ADMIN: atendimento com cobranca nao ganha outra (409 ASAAS_CHARGE_EXISTS); sem cobranca ou inexistente passa; a cobranca fica ligada ao atendimento")
+    void adminChargeIsOnePerAttendance() {
+        AttendanceRepository repo = mock(AttendanceRepository.class);
+        PaymentService payments = new PaymentService(repo, mock(ClientPenaltyEventRepository.class), mock(UserRepository.class));
+        Attendance a = attendance();
+        when(repo.findById(a.getId())).thenReturn(Optional.of(a));
+
+        payments.assertNoGatewayCharge(a.getId()); // ainda sem cobranca
+        payments.assertNoGatewayCharge(UUID.randomUUID()); // atendimento que nao existe: so a referencia, sem erro
+
+        payments.attachGatewayCharge(a.getId(), "pay_7", "SANDBOX", "PENDING", "https://asaas/i/7");
+        assertThat(a.getAsaasPaymentId()).isEqualTo("pay_7");
+        assertThat(a.getAsaasMode()).isEqualTo("SANDBOX");
+        assertThat(a.getAsaasInvoiceUrl()).isEqualTo("https://asaas/i/7");
+        verify(repo).save(a);
+
+        assertThatThrownBy(() -> payments.assertNoGatewayCharge(a.getId())).isInstanceOfSatisfying(AsaasException.class, e -> {
+            assertThat(e.getStatus()).isEqualTo(HttpStatus.CONFLICT);
+            assertThat(e.getCode()).isEqualTo("ASAAS_CHARGE_EXISTS");
+        });
+        // o webhook agora acha esta cobranca e quita o atendimento
+        a.setPaymentStatus(PaymentStatus.PENDING);
+        assertThat(payments.onGatewayEvent(a.getId(), "pay_7", "RECEIVED", true)).isTrue();
+    }
 }

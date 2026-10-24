@@ -218,6 +218,32 @@ public class PaymentService {
         return marked;
     }
 
+    /**
+     * Rota de teste do ADMIN (newman-asaas): o atendimento que ja tem cobranca do Asaas nao ganha outra (409 ASAAS_CHARGE_EXISTS).
+     * So essa rota usa isto; o fluxo normal ja respeita a cobranca guardada. Atendimento que nao existe: nada a conferir.
+     */
+    @Transactional(readOnly = true)
+    public void assertNoGatewayCharge(UUID attendanceId) {
+        attendanceRepository.findById(attendanceId).ifPresent(a -> {
+            if (a.getAsaasPaymentId() != null) {
+                throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                        "ASAAS_CHARGE_EXISTS", "Este atendimento ja tem uma cobranca do Asaas.");
+            }
+        });
+    }
+
+    /** A cobranca criada pela rota de teste fica ligada ao atendimento: o webhook a quita e o relatorio a encontra. */
+    public void attachGatewayCharge(UUID attendanceId, String asaasPaymentId, String mode, String status, String invoiceUrl) {
+        attendanceRepository.findById(attendanceId).ifPresent(a -> {
+            a.setAsaasPaymentId(asaasPaymentId);
+            a.setAsaasMode(mode);
+            a.setAsaasStatus(status);
+            a.setAsaasInvoiceUrl(invoiceUrl);
+            attendanceRepository.save(a);
+            log.info("[Payment] cobranca de teste ligada ao atendimento — attendance={} payment={}", attendanceId, asaasPaymentId);
+        });
+    }
+
     /** O status do pagamento para mostrar (o efetivo), sem checar quem pergunta: so para a resposta do finish. */
     @Transactional(readOnly = true)
     public PaymentStatus statusOf(UUID attendanceId) {
