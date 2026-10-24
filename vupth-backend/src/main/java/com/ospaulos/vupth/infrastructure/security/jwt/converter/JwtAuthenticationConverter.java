@@ -33,7 +33,7 @@ public class JwtAuthenticationConverter implements Converter<Jwt, AbstractAuthen
 
         try{
             boolean testToken = Boolean.TRUE.equals(jwt.getClaim(com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenPolicy.CLAIM));
-            if (testToken && (testTokens == null || !testTokens.usable() || testTokens.revoked(jwt.getId(), jwt.getIssuedAt()))) {
+            if (testToken && (testTokens == null || !testTokens.usable() || testTokens.revoked(jwt.getId(), jwt.getClaim(com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenPolicy.GENERATION_CLAIM) instanceof Number n ? n.longValue() : null))) {
                 // desligado, fora do sandbox (modo real) ou revogado: 401, como se o token nao existisse
                 log.warn("[JWT] token de teste recusado (desligado, modo real ou revogado) jti={}", jwt.getId());
                 throw new DisabledException("Test token refused");

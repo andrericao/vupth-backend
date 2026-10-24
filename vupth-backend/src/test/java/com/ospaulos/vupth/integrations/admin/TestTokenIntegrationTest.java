@@ -40,6 +40,7 @@ class TestTokenIntegrationTest {
         @Autowired ObjectMapper mapper;
         @Autowired UserRepository userRepository;
         @Autowired JwtTokenProvider provider;
+        @Autowired org.springframework.security.oauth2.jwt.JwtEncoder jwtEncoder;
         final Faker faker = new Faker();
 
         BaseUser adminUser;
@@ -55,7 +56,7 @@ class TestTokenIntegrationTest {
         /** Um token de teste montado direto pelo provedor: prova a recusa mesmo sem a rota de emissao. */
         String forgedTestToken() throws Exception {
             adminToken();
-            return "Bearer " + provider.createTestToken(new UserDetailsImpl(adminUser), UUID.randomUUID());
+            return "Bearer " + provider.createTestToken(new UserDetailsImpl(adminUser), UUID.randomUUID(), 0L);
         }
 
         JSONObject issue(String admin) throws Exception {
@@ -118,12 +119,30 @@ class TestTokenIntegrationTest {
         }
 
         @Test
+        @DisplayName("token vencido: 401 com o motivo TOKEN_EXPIRED no corpo (nao fica mais 401 mudo)")
+        void expiredTokenSaysWhy() throws Exception {
+            adminToken();
+            java.time.Instant now = java.time.Instant.now();
+            var claims = org.springframework.security.oauth2.jwt.JwtClaimsSet.builder()
+                    .issuer("vupth-backend").subject(adminUser.getId().toString())
+                    .issuedAt(now.minusSeconds(7200)).expiresAt(now.minusSeconds(3600))
+                    .claim("email", adminUser.getEmail()).claim("roles", "ROLE_ADMIN").build();
+            String expired = jwtEncoder.encode(org.springframework.security.oauth2.jwt.JwtEncoderParameters.from(claims)).getTokenValue();
+            mvc.perform(post("/admin/test-tokens").header("Authorization", "Bearer " + expired))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("TOKEN_EXPIRED"));
+        }
+
+        @Test
         @DisplayName("quem nao e ADMIN nao emite nem revoga (403); sem login, 401")
         void onlyAdmin() throws Exception {
             var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
             mvc.perform(post("/admin/test-tokens").header("Authorization", client.token())).andExpect(status().isForbidden());
             mvc.perform(delete("/admin/test-tokens").header("Authorization", client.token())).andExpect(status().isForbidden());
-            mvc.perform(post("/admin/test-tokens")).andExpect(status().isUnauthorized());
+            mvc.perform(post("/admin/test-tokens")).andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("TOKEN_MISSING"));
+            mvc.perform(post("/admin/test-tokens").header("Authorization", "Bearer token.malformado.xxx"))
+                    .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("TOKEN_INVALID"));
         }
     }
 
@@ -142,7 +161,8 @@ class TestTokenIntegrationTest {
             mvc.perform(post("/admin/test-tokens").header("Authorization", admin))
                     .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("TEST_TOKEN_DISABLED"));
             mvc.perform(get("/admin/finance/app-balance").header("Authorization", forgedTestToken()))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("TEST_TOKEN_REFUSED"));
         }
     }
 

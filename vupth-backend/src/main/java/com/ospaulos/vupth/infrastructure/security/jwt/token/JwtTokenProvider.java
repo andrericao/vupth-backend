@@ -54,7 +54,7 @@ public class JwtTokenProvider {
      * O token de teste (token-de-teste-sandbox): ADMIN, 7 dias, com {@code test=true} e o {@code jti} (para revogar) e o segundo
      * fator no {@code amr} (quem o emite ja o cumpriu no login). O chamador confere {@link TestTokenPolicy#usable()}.
      */
-    public String createTestToken(UserDetailsImpl userDetails, UUID jti) {
+    public String createTestToken(UserDetailsImpl userDetails, UUID jti, long generation) {
         Instant now = Instant.now();
         String roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.joining(","));
         var claims = JwtClaimsSet.builder()
@@ -67,6 +67,7 @@ public class JwtTokenProvider {
                 .claim("roles", roles)
                 .claim("amr", java.util.List.of("pwd", "totp"))
                 .claim(TestTokenPolicy.CLAIM, true)
+                .claim(TestTokenPolicy.GENERATION_CLAIM, generation)
                 .build();
         return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }

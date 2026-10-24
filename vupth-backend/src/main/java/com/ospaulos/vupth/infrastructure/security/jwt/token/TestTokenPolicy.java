@@ -7,7 +7,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,7 +27,9 @@ public class TestTokenPolicy {
     public static final String AUTHORITY = "TEST_TOKEN";
     public static final String CLAIM = "test";
 
-    static final String REVOKED_BEFORE = "test_token.revoked_before";
+    /** A geracao dos tokens de teste: revogar todos soma 1; o token carrega a geracao em que nasceu (sem relogio, sem borda de segundo). */
+    static final String GENERATION = "test_token.generation";
+    public static final String GENERATION_CLAIM = "gen";
     static final String REVOKED_JTIS = "test_token.revoked_jtis";
     /** A configuracao guarda ate 200 letras: cabem os 5 ultimos jti; revogar todos cobre o resto. */
     static final int MAX_JTIS = 5;
@@ -51,10 +52,15 @@ public class TestTokenPolicy {
         return enabled && asaas.sandbox();
     }
 
-    public boolean revoked(String jti, Instant issuedAt) {
-        String before = settings.text(REVOKED_BEFORE);
-        // o iat do JWT e em segundos: quem foi emitido ate o segundo da revogacao cai (a revogacao vence na duvida)
-        if (before != null && issuedAt != null && !issuedAt.isAfter(Instant.parse(before))) {
+    /** A geracao vigente (0 ate alguem revogar todos). */
+    public long generation() {
+        String value = settings.text(GENERATION);
+        return value == null ? 0L : Long.parseLong(value);
+    }
+
+    /** Revogado: o jti esta na lista, ou o token e de uma geracao anterior a atual (revogar todos). */
+    public boolean revoked(String jti, Long tokenGeneration) {
+        if ((tokenGeneration == null ? 0L : tokenGeneration) != generation()) {
             return true;
         }
         String list = settings.text(REVOKED_JTIS);
@@ -62,7 +68,7 @@ public class TestTokenPolicy {
     }
 
     public void revokeAll(UUID by) {
-        settings.setText(REVOKED_BEFORE, Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).toString(), by);
+        settings.setText(GENERATION, Long.toString(generation() + 1), by);
     }
 
     public void revoke(String jti, UUID by) {

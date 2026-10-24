@@ -17,7 +17,7 @@ import java.util.UUID;
 /**
  * token-de-teste-sandbox: o ADMIN ja autenticado (o login do Authorize, com o segundo fator) emite o token de 7 dias que o Andre
  * entrega ao Newman. So com {@code TEST_TOKEN_ENABLED} ligada e o Asaas em sandbox; o token nao e guardado em lugar nenhum e um
- * token de teste nao emite outro (a lista de escopo nao inclui esta rota). Revogacao: um ({@code jti}) ou todos.
+ * token de teste nao emite outro (a lista de escopo nao inclui esta rota). Revogacao: um ({@code jti}) ou todos (uma nova geracao).
  */
 @RestController
 @RequiredArgsConstructor
@@ -38,7 +38,7 @@ public class AdminTestTokenController {
         }
         UUID jti = UUID.randomUUID();
         Instant issuedAt = Instant.now();
-        String token = tokens.createTestToken(admin, jti);
+        String token = tokens.createTestToken(admin, jti, policy.generation());
         return ResponseEntity.status(HttpStatus.CREATED).body(new Issued(token, issuedAt.plus(TestTokenPolicy.TTL),
                 jti.toString(), TestTokenPolicy.TTL.toDays()));
     }

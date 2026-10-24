@@ -7,14 +7,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
-import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,24 +65,25 @@ class TestTokenPolicyTest {
     }
 
     @Test
-    @DisplayName("revogado: pelo jti na lista, ou por ter sido emitido ate o instante da revogacao de todos")
+    @DisplayName("revogado: pelo jti na lista, ou por ser de uma geracao anterior (revogar todos); token sem geracao conta como 0")
     void revoked() {
         TestTokenPolicy p = policy(true, SANDBOX);
-        Instant now = Instant.now();
-        assertThat(p.revoked("a", now)).isFalse();
+        assertThat(p.revoked("a", 0L)).isFalse();
+        assertThat(p.revoked("a", null)).as("sem geracao = 0").isFalse();
 
         when(settings.text("test_token.revoked_jtis")).thenReturn("x,a,y");
-        assertThat(p.revoked("a", now)).isTrue();
-        assertThat(p.revoked("b", now)).isFalse();
+        assertThat(p.revoked("a", 0L)).isTrue();
+        assertThat(p.revoked("b", 0L)).isFalse();
 
-        when(settings.text("test_token.revoked_before")).thenReturn(now.toString());
-        assertThat(p.revoked("b", now.minusSeconds(60))).as("emitido antes da revogacao de todos").isTrue();
-        assertThat(p.revoked("b", now)).as("no mesmo segundo: a revogacao vence").isTrue();
-        assertThat(p.revoked("b", now.plusSeconds(5))).as("emitido depois").isFalse();
+        when(settings.text("test_token.generation")).thenReturn("2");
+        assertThat(p.generation()).isEqualTo(2);
+        assertThat(p.revoked("b", 1L)).as("emitido antes da ultima revogacao de todos").isTrue();
+        assertThat(p.revoked("b", null)).isTrue();
+        assertThat(p.revoked("b", 2L)).as("emitido na geracao vigente").isFalse();
     }
 
     @Test
-    @DisplayName("revogar um acumula na lista (so os 5 ultimos cabem na configuracao); revogar todos grava o instante em segundos")
+    @DisplayName("revogar um acumula na lista (so os 5 ultimos cabem na configuracao); revogar todos soma 1 na geracao")
     void revokeWrites() {
         TestTokenPolicy p = policy(true, SANDBOX);
         UUID admin = UUID.randomUUID();
@@ -95,11 +94,8 @@ class TestTokenPolicyTest {
         verify(settings).setText(eq("test_token.revoked_jtis"), value.capture(), eq(admin));
         assertThat(value.getValue()).isEqualTo("2,3,4,5,6");
 
+        when(settings.text("test_token.generation")).thenReturn("3");
         p.revokeAll(admin);
-        ArgumentCaptor<String> before = ArgumentCaptor.forClass(String.class);
-        verify(settings, times(2)).setText(any(), before.capture(), eq(admin));
-        Instant stored = Instant.parse(before.getAllValues().get(1));
-        assertThat(stored.getNano()).isZero();
-        assertThat(stored).isBeforeOrEqualTo(Instant.now());
+        verify(settings).setText("test_token.generation", "4", admin);
     }
 }

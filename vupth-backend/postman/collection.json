@@ -28259,7 +28259,7 @@
      "response": []
     },
     {
-     "name": "GET /payment-gateway (sem login) → 200 connected=false por padrao (asaas-sandbox-no-fluxo, DEC-119)",
+     "name": "GET /payment-gateway (sem login) → 200 {connected, mode}: o estado vem do ambiente (o staging pode estar conectado) (asaas-sandbox-no-fluxo, DEC-119)",
      "event": [
       {
        "listen": "test",
@@ -28267,7 +28267,9 @@
         "type": "text/javascript",
         "exec": [
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"desconectado\", () => pm.expect(pm.response.json().connected).to.eql(false));"
+         "const b = pm.response.json();",
+         "pm.test(\"connected e booleano (o ambiente decide: desconectado por padrao; o staging pode estar conectado ao sandbox)\", () => pm.expect(b.connected).to.be.a(\"boolean\"));",
+         "pm.test(\"mode so existe com a conexao ligada, e e SANDBOX ou REAL\", () => { if (b.connected) { pm.expect([\"SANDBOX\",\"REAL\"]).to.include(b.mode); } else { pm.expect(b).to.not.have.property(\"mode\"); } });"
         ]
        }
       }

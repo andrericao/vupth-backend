@@ -50,6 +50,7 @@ public class SecurityConfig {
     private RSAPrivateKey privateKey;
 
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
+    private final JsonBearerEntryPoint jsonBearerEntryPoint;
 
     /**
      * Origens de navegador autorizadas (env {@code CORS_ALLOWED_ORIGINS}, separadas por virgula).
@@ -303,6 +304,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
+                                .authenticationEntryPoint(jsonBearerEntryPoint)
                                 .jwt(jwt -> jwt
                                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 .sessionManagement(

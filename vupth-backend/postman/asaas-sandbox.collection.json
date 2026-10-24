@@ -321,15 +321,15 @@
      "response": []
     },
     {
-     "name": "E1 [ERRO] cobranca abaixo do minimo do Asaas (R$ 4,99) → o Asaas recusa: 502 ASAAS_REJECTED",
+     "name": "E1 [ERRO] cobranca abaixo do minimo do Asaas (R$ 4,99) → a rota recusa antes de chamar o Asaas: 422 VALIDATION_ERROR",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 502\", () => pm.response.to.have.status(502));",
-         "pm.test(\"codigo ASAAS_REJECTED\", () => pm.expect(pm.response.json().code).to.eql(\"ASAAS_REJECTED\"));"
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));",
+         "pm.test(\"codigo VALIDATION_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"VALIDATION_ERROR\"));"
         ]
        }
       }
@@ -359,14 +359,15 @@
      "response": []
     },
     {
-     "name": "E2 [ERRO] token malformado → 401",
+     "name": "E2 [ERRO] token malformado → 401 TOKEN_INVALID",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"motivo no corpo: TOKEN_INVALID\", () => pm.expect(pm.response.json().code).to.eql(\"TOKEN_INVALID\"));"
         ]
        }
       },
@@ -396,14 +397,15 @@
      "response": []
     },
     {
-     "name": "E3 [ERRO] sem token → 401",
+     "name": "E3 [ERRO] sem token → 401 TOKEN_MISSING",
      "event": [
       {
        "listen": "test",
        "script": {
         "type": "text/javascript",
         "exec": [
-         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+         "pm.test(\"motivo no corpo: TOKEN_MISSING\", () => pm.expect(pm.response.json().code).to.eql(\"TOKEN_MISSING\"));"
         ]
        }
       }
