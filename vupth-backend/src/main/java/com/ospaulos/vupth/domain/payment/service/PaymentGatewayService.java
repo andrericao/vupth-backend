@@ -95,7 +95,7 @@ public class PaymentGatewayService {
      * a margem do app e a multa) fica na conta do app. So com conta de recebimento no mesmo modo e SEM cupom (o desconto sai do app,
      * DEC-120, e fica para a fatia 2: o valor do profissional pode passar do cobrado). Sem isso, sem divisao: o fluxo de antes.
      */
-    List<AsaasClient.Split> splitsFor(Attendance attendance, BigDecimal charged) {
+    public List<AsaasClient.Split> splitsFor(Attendance attendance, BigDecimal charged) {
         BigDecimal pro = attendance.getProReceives();
         if (pro == null || pro.signum() <= 0 || pro.compareTo(charged) >= 0) {
             return List.of();
