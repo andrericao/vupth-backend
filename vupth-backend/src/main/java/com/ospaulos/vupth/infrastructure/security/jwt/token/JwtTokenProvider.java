@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -47,6 +48,27 @@ public class JwtTokenProvider {
      */
     public String createAdminToken(UserDetailsImpl userDetails){
         return buildToken(userDetails, adminExpirationTime, java.util.List.of("pwd", "totp"));
+    }
+
+    /**
+     * O token de teste (token-de-teste-sandbox): ADMIN, 7 dias, com {@code test=true} e o {@code jti} (para revogar) e o segundo
+     * fator no {@code amr} (quem o emite ja o cumpriu no login). O chamador confere {@link TestTokenPolicy#usable()}.
+     */
+    public String createTestToken(UserDetailsImpl userDetails, UUID jti) {
+        Instant now = Instant.now();
+        String roles = userDetails.getAuthorities().stream().map(GrantedAuthority::getAuthority).collect(Collectors.joining(","));
+        var claims = JwtClaimsSet.builder()
+                .issuer(issuer)
+                .subject(userDetails.getUserId().toString())
+                .issuedAt(now)
+                .expiresAt(now.plus(TestTokenPolicy.TTL))
+                .id(jti.toString())
+                .claim("email", userDetails.getUsername())
+                .claim("roles", roles)
+                .claim("amr", java.util.List.of("pwd", "totp"))
+                .claim(TestTokenPolicy.CLAIM, true)
+                .build();
+        return jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
     }
 
     private String buildToken(UserDetailsImpl user){

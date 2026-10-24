@@ -48,4 +48,13 @@ public class AppSettingService {
     public BigDecimal serviceMinPrice() {
         return decimal(SERVICE_MIN_PRICE, SERVICE_MIN_PRICE_DEFAULT);
     }
+
+    @Transactional(readOnly = true)
+    public String text(String key) {
+        return repository.findById(key).map(AppSetting::getValue).orElse(null);
+    }
+
+    public void setText(String key, String value, UUID by) {
+        repository.save(new AppSetting(key, value, OffsetDateTime.now(), by));
+    }
 }

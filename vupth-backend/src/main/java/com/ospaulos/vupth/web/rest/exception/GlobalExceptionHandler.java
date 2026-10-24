@@ -588,6 +588,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenException.class)
+    public ResponseEntity<ErrorResponse> handleTestToken(
+            com.ospaulos.vupth.infrastructure.security.jwt.token.TestTokenException ex, HttpServletRequest req) {
+        log.warn("[{}] TestToken {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.testrun.exception.TestRunException.class)
     public ResponseEntity<ErrorResponse> handleTestRun(
             com.ospaulos.vupth.domain.testrun.exception.TestRunException ex, HttpServletRequest req) {
