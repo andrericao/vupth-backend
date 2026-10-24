@@ -97,4 +97,8 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
     /** A bonificacao por link que o corte gerou (premio do indicador), liberada ou nao; para o relatorio do Asaas. */
     @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId = :attendanceId")
     BigDecimal sumByAttendance(@Param("attendanceId") UUID attendanceId);
+
+    /** A bonificacao por link gerada por estes atendimentos (para os totais por conta); a lista nao pode ser vazia. */
+    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId IN :attendanceIds")
+    BigDecimal sumByAttendances(@Param("attendanceIds") java.util.Collection<UUID> attendanceIds);
 }

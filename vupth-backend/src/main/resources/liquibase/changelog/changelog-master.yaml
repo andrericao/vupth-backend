@@ -567,3 +567,9 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/058-attendance-asaas-charge.yaml
       relativeToChangeLogFile: true
+
+  # ledger-por-conta: as contas (Asaas, PJ) com a tarifa de Pix e a conta de cada linha do livro do app
+  - include:
+      file: changesets/97-finance/059-finance-account.yaml
+      relativeToChangeLogFile: true
+

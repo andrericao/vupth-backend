@@ -46,12 +46,18 @@ public class AppLedgerService {
         BigDecimal penalty = penalties == null ? ZERO : penalties;
         BigDecimal serviceFee = attendance.getIntermediaryFee() != null
                 ? attendance.getIntermediaryFee() : PriceSplit.intermediaryFor(service);
-        repository.save(new AppLedgerEntry(attendance.getId(), Origin.SERVICE, service, serviceFee,
-                attendance.getPlatformFee(), at));
+        // a conta (ledger-por-conta): a cobranca do Asaas passa pela conta do Asaas; o resto, pela conta PJ do app (o Pix do app)
+        String account = attendance.getAsaasPaymentId() != null ? "ASAAS" : "PJ";
+        AppLedgerEntry serviceEntry = new AppLedgerEntry(attendance.getId(), Origin.SERVICE, service, serviceFee,
+                attendance.getPlatformFee(), at);
+        serviceEntry.setAccountKey(account);
+        repository.save(serviceEntry);
         if (penalty.signum() > 0) {
             BigDecimal extra = PriceSplit.intermediaryFor(service.add(penalty)).subtract(serviceFee).max(ZERO);
-            repository.save(new AppLedgerEntry(attendance.getId(), Origin.PENALTY, penalty, extra,
-                    penalty.subtract(extra), at));
+            AppLedgerEntry penaltyEntry = new AppLedgerEntry(attendance.getId(), Origin.PENALTY, penalty, extra,
+                    penalty.subtract(extra), at);
+            penaltyEntry.setAccountKey(account);
+            repository.save(penaltyEntry);
         }
         log.info("[Ledger] attendance={} corte={} multa={}", attendance.getId(), service, penalty);
     }

@@ -1,0 +1,51 @@
+databaseChangeLog:
+  # ledger-por-conta (24/10): as contas por onde o dinheiro passa (Asaas hoje; uma conta PJ do app, e outras no futuro), cada uma com a
+  # tarifa de Pix configuravel (Asaas R$ 1,99; conta PJ R$ 0,00), e a conta de cada linha do livro do app (as linhas de antes do
+  # gateway ficam na conta PJ: o Pix do app).
+  - changeSet:
+      id: 059-create-finance_account
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists: {tableName: finance_account}
+      changes:
+        - createTable:
+            tableName: finance_account
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: account_key, type: "VARCHAR(20)", constraints: {nullable: false, unique: true}}
+              - column: {name: name, type: "VARCHAR(60)", constraints: {nullable: false}}
+              - column: {name: provider, type: "VARCHAR(30)", constraints: {nullable: false}}
+              - column: {name: pix_fee, type: "NUMERIC(10,2)", constraints: {nullable: false}}
+              - column: {name: active, type: BOOLEAN, defaultValueBoolean: true, constraints: {nullable: false}}
+              - column: {name: created_at, type: "TIMESTAMP WITH TIME ZONE", defaultValueComputed: CURRENT_TIMESTAMP, constraints: {nullable: false}}
+        - insert:
+            tableName: finance_account
+            columns:
+              - column: {name: id, value: "00000000-0000-0000-0000-0000000a5a01"}
+              - column: {name: account_key, value: ASAAS}
+              - column: {name: name, value: Asaas}
+              - column: {name: provider, value: ASAAS}
+              - column: {name: pix_fee, valueNumeric: 1.99}
+        - insert:
+            tableName: finance_account
+            columns:
+              - column: {name: id, value: "00000000-0000-0000-0000-0000000a5a02"}
+              - column: {name: account_key, value: PJ}
+              - column: {name: name, value: "Conta PJ do app"}
+              - column: {name: provider, value: PJ}
+              - column: {name: pix_fee, valueNumeric: 0.00}
+
+  - changeSet:
+      id: 059-app_ledger-account_key
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: app_ledger, columnName: account_key}
+      changes:
+        - addColumn:
+            tableName: app_ledger
+            columns:
+              - column: {name: account_key, type: "VARCHAR(20)", defaultValue: PJ, constraints: {nullable: false}}
