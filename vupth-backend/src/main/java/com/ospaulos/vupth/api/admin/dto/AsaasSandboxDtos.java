@@ -29,6 +29,8 @@ public final class AsaasSandboxDtos {
             @JsonProperty("billing_type") String billingType,
             @JsonProperty("invoice_url") String invoiceUrl,
             @JsonProperty("external_reference") String externalReference,
+            // email-do-cliente-no-asaas: o cliente do Asaas tem e-mail (o e-mail em si nunca e devolvido)
+            @JsonProperty("customer_has_email") boolean customerHasEmail,
             @JsonProperty("next_step") String nextStep) {}
 
     /** Para onde vai cada centavo de uma cobranca. Os campos do app vem do atendimento, os do Asaas, dos avisos. */

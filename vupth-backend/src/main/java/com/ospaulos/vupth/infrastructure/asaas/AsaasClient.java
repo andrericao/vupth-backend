@@ -69,23 +69,51 @@ public class AsaasClient {
         requireEnabled();
     }
 
-    /** O cliente de teste do sandbox: acha o que ja existe ou cria um com o CPF dado (ou o de teste). */
+    /** Quem paga no Asaas: a referencia estavel (uma por pessoa), o nome e o e-mail do cadastro (email-do-cliente-no-asaas). */
+    public record Party(String reference, String name, String email) {
+        static final Party GENERIC = new Party(TEST_CUSTOMER_REF, "VUPTH sandbox", null);
+    }
+
+    /** O cliente do Asaas e se ele tem e-mail (o e-mail em si nunca sai daqui nem vai para o log). */
+    public record Customer(String id, boolean hasEmail) {}
+
+    /** O cliente de teste generico do sandbox (sem e-mail): acha o que ja existe ou cria um com o CPF dado (ou o de teste). */
     public String ensureCustomer(String cpfCnpj) {
+        return ensureCustomer(Party.GENERIC, cpfCnpj).id();
+    }
+
+    /**
+     * O cliente da pessoa (email-do-cliente-no-asaas): acha pela referencia ou cria com o nome, o e-mail do cadastro e o CPF/CNPJ
+     * dado (ou o de teste, no sandbox). O Asaas recusa cartao sem e-mail do titular; por isso, se o cliente ja existe sem e-mail e
+     * ha um e-mail do cadastro, ele e atualizado. Nada do que a pessoa digita e pedido de novo.
+     */
+    public Customer ensureCustomer(Party party, String cpfCnpj) {
         requireKey();
-        JsonNode found = get("/customers?externalReference=" + TEST_CUSTOMER_REF);
+        String email = party.email() == null || party.email().isBlank() ? null : party.email().trim();
+        JsonNode found = get("/customers?externalReference=" + party.reference());
         JsonNode data = found == null ? null : found.get("data");
         if (data != null && data.isArray() && !data.isEmpty() && data.get(0).hasNonNull("id")) {
-            return data.get(0).get("id").asText();
+            JsonNode existing = data.get(0);
+            String id = existing.get("id").asText();
+            boolean has = text(existing, "email") != null;
+            if (email != null && !email.equalsIgnoreCase(text(existing, "email"))) {
+                put("/customers/" + id, Map.of("email", email));
+                has = true;
+            }
+            return new Customer(id, has);
         }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", "VUPTH sandbox");
+        body.put("name", party.name() == null || party.name().isBlank() ? "VUPTH" : party.name().trim());
+        if (email != null) {
+            body.put("email", email);
+        }
         body.put("cpfCnpj", cpfCnpj == null || cpfCnpj.isBlank() ? DEFAULT_TEST_CPF : cpfCnpj.replaceAll("\\D", ""));
-        body.put("externalReference", TEST_CUSTOMER_REF);
+        body.put("externalReference", party.reference());
         JsonNode created = post("/customers", body);
         if (created == null || !created.hasNonNull("id")) {
             throw new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_BAD_RESPONSE", "O Asaas nao devolveu o cliente criado.");
         }
-        return created.get("id").asText();
+        return new Customer(created.get("id").asText(), email != null);
     }
 
     /** Cria a cobranca (vence amanha). {@code billingType}: PIX, BOLETO, CREDIT_CARD ou UNDEFINED. */
@@ -165,11 +193,28 @@ public class AsaasClient {
         }
     }
 
+    private JsonNode put(String path, Object body) {
+        try {
+            return rest.put().uri(properties.baseUrl() + path).header("access_token", properties.apiKey())
+                    .contentType(MediaType.APPLICATION_JSON).body(body).retrieve().body(JsonNode.class);
+        } catch (RestClientException e) {
+            throw failure(e);
+        }
+    }
+
+    private static final java.util.regex.Pattern EMAIL = java.util.regex.Pattern.compile("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+");
+
+    /** Nenhum e-mail vai ao log nem a mensagem de erro (email-do-cliente-no-asaas). */
+    public static String maskEmails(String text) {
+        return text == null ? null : EMAIL.matcher(text).replaceAll("***@***");
+    }
+
     private static AsaasException failure(RestClientException e) {
         if (e instanceof RestClientResponseException response) {
-            log.warn("[Asaas] resposta {} do sandbox: {}", response.getStatusCode(), response.getResponseBodyAsString());
+            String body = maskEmails(response.getResponseBodyAsString());
+            log.warn("[Asaas] resposta {} do sandbox: {}", response.getStatusCode(), body);
             return new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_REJECTED",
-                    "O Asaas recusou o pedido (" + response.getStatusCode().value() + "): " + response.getResponseBodyAsString());
+                    "O Asaas recusou o pedido (" + response.getStatusCode().value() + "): " + body);
         }
         log.warn("[Asaas] sandbox fora do ar: {}", e.getMessage());
         return new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_UNREACHABLE", "Nao consegui falar com o Asaas.");

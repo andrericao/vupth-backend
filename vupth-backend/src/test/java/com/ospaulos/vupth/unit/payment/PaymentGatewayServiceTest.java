@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,12 +52,15 @@ class PaymentGatewayServiceTest {
         a.setId(UUID.randomUUID());
         BaseUser user = new BaseUser();
         user.setId(UUID.randomUUID());
+        user.setEmail("ana.cliente@vupth.test");
+        user.setFirstName("Ana");
+        user.setLastName("Cliente");
         a.setClient(new Client(user));
         return a;
     }
 
     private void asaasAnswers() {
-        when(client.ensureCustomer(null)).thenReturn("cus_1");
+        when(client.ensureCustomer(any(AsaasClient.Party.class), isNull())).thenReturn(new AsaasClient.Customer("cus_1", true));
         when(client.createCharge(eq("cus_1"), any(), eq("PIX"), anyString(), anyString()))
                 .thenReturn(new AsaasClient.Charge("pay_1", "PENDING", new BigDecimal("30.90"), "PIX", "https://asaas/i/1", "ref"));
         when(client.pixQrCode("pay_1")).thenReturn(new AsaasClient.PixQr("000201PIX", "base64img"));
@@ -104,6 +108,12 @@ class PaymentGatewayServiceTest {
         assertThat(a.getAsaasPixImage()).isEqualTo("base64img");
         assertThat(a.getAsaasInvoiceUrl()).isEqualTo("https://asaas/i/1");
         verify(client).createCharge("cus_1", new BigDecimal("30.90"), "PIX", a.getId().toString(), "VUPTH - atendimento");
+        // email-do-cliente-no-asaas: o cliente do Asaas e a pessoa logada, com o e-mail e o nome do cadastro
+        org.mockito.ArgumentCaptor<AsaasClient.Party> party = org.mockito.ArgumentCaptor.forClass(AsaasClient.Party.class);
+        verify(client).ensureCustomer(party.capture(), isNull());
+        assertThat(party.getValue().reference()).isEqualTo("vupth-user-" + a.getClient().getId());
+        assertThat(party.getValue().email()).isEqualTo("ana.cliente@vupth.test");
+        assertThat(party.getValue().name()).isEqualTo("Ana Cliente");
     }
 
     @Test
@@ -129,7 +139,7 @@ class PaymentGatewayServiceTest {
     @Test
     @DisplayName("o Asaas recusa: nao quebra, nao grava nada, fica o fluxo de sempre")
     void asaasFailure() {
-        when(client.ensureCustomer(null)).thenThrow(new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_REJECTED", "recusou"));
+        when(client.ensureCustomer(any(AsaasClient.Party.class), isNull())).thenThrow(new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_REJECTED", "recusou"));
         Attendance a = attendance();
 
         gateway("k", SANDBOX, true).ensureCharge(a, new BigDecimal("30.90"));

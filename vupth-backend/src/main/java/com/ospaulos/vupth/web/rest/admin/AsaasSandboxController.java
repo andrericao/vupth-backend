@@ -37,7 +37,9 @@ public class AsaasSandboxController {
     private final com.ospaulos.vupth.infrastructure.asaas.AsaasProperties properties;
 
     @PostMapping("/charges")
-    public ResponseEntity<ChargeResponse> createCharge(@Valid @RequestBody ChargeRequest request) {
+    public ResponseEntity<ChargeResponse> createCharge(@Valid @RequestBody ChargeRequest request,
+                                                       @org.springframework.security.core.annotation.AuthenticationPrincipal
+                                                       com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl admin) {
         String billing = request.billingType() == null || request.billingType().isBlank()
                 ? "PIX" : request.billingType().trim().toUpperCase(java.util.Locale.ROOT);
         if (!BILLING.contains(billing)) {
@@ -48,15 +50,17 @@ public class AsaasSandboxController {
         if (request.attendanceId() != null) {
             payments.assertNoGatewayCharge(request.attendanceId()); // 409 ASAAS_CHARGE_EXISTS: uma cobranca por atendimento
         }
-        String customer = client.ensureCustomer(request.cpfCnpj());
+        // a cobranca do ADMIN usa o e-mail do proprio admin (o Asaas recusa cartao sem e-mail do titular)
+        AsaasClient.Customer customer = client.ensureCustomer(new AsaasClient.Party("vupth-admin-" + admin.getUserId(),
+                "Admin VUPTH sandbox", admin.getUsername()), request.cpfCnpj());
         String reference = request.attendanceId() == null ? null : request.attendanceId().toString();
-        AsaasClient.Charge charge = client.createCharge(customer, request.amount(), billing, reference,
+        AsaasClient.Charge charge = client.createCharge(customer.id(), request.amount(), billing, reference,
                 "VUPTH sandbox - teste de pagamento");
         if (request.attendanceId() != null) {
             payments.attachGatewayCharge(request.attendanceId(), charge.id(), properties.mode(), charge.status(), charge.invoiceUrl());
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(new ChargeResponse(charge.id(), charge.status(), charge.value(),
-                charge.billingType(), charge.invoiceUrl(), charge.externalReference(),
+                charge.billingType(), charge.invoiceUrl(), charge.externalReference(), customer.hasEmail(),
                 "No painel do sandbox do Asaas, abra a cobranca e simule o pagamento; o aviso chega em /webhooks/asaas "
                         + "e o relatorio (GET /admin/finance/asaas/sandbox/report) mostra para onde foi cada centavo."));
     }

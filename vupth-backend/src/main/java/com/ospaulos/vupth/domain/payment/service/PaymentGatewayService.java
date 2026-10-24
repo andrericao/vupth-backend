@@ -62,8 +62,10 @@ public class PaymentGatewayService {
             return;
         }
         try {
-            String customer = client.ensureCustomer(null);
-            AsaasClient.Charge charge = client.createCharge(customer, amount, "PIX", attendance.getId().toString(),
+            // o cliente do Asaas e a pessoa logada: o e-mail e o nome do cadastro, sem pedir nada (o Asaas exige o e-mail do titular do cartao)
+            AsaasClient.Customer customer = client.ensureCustomer(new AsaasClient.Party(
+                    "vupth-user-" + attendance.getClient().getId(), displayName(attendance), attendance.getClient().getEmail()), null);
+            AsaasClient.Charge charge = client.createCharge(customer.id(), amount, "PIX", attendance.getId().toString(),
                     "VUPTH - atendimento");
             AsaasClient.PixQr qr = client.pixQrCode(charge.id());
             attendance.setAsaasPaymentId(charge.id());
@@ -77,5 +79,12 @@ public class PaymentGatewayService {
         } catch (AsaasException e) {
             log.warn("[Gateway] cobranca nao criada, fica o fluxo de sempre — attendance={}: {}", attendance.getId(), e.getMessage());
         }
+    }
+
+    private static String displayName(Attendance attendance) {
+        String name = attendance.getClient().getFullName();
+        boolean empty = name == null || name.isBlank() || name.contains("null");
+        String email = attendance.getClient().getEmail();
+        return empty ? (email == null ? "Cliente VUPTH" : email.substring(0, Math.max(1, email.indexOf('@') < 0 ? email.length() : email.indexOf('@')))) : name.trim();
     }
 }

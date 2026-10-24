@@ -253,6 +253,66 @@ class AsaasWebhookAndClientTest {
     }
 
     @Test
+    @DisplayName("email-do-cliente-no-asaas: cria o cliente com o e-mail do cadastro; o que existe sem e-mail ganha o e-mail (PUT); com o mesmo e-mail nao mexe")
+    void customerWithEmail() throws Exception {
+        AsaasClient client = client("k");
+        List<String> calls = new ArrayList<>();
+        List<String> bodies = new ArrayList<>();
+        java.util.concurrent.atomic.AtomicInteger gets = new java.util.concurrent.atomic.AtomicInteger();
+        server.createContext("/sandbox/v3/customers", exchange -> {
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath() + (exchange.getRequestURI().getQuery() == null ? "" : "?" + exchange.getRequestURI().getQuery());
+            calls.add(method + " " + path);
+            String sent = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (!sent.isEmpty()) {
+                bodies.add(sent);
+            }
+            if ("GET".equals(method)) {
+                int n = gets.incrementAndGet();
+                reply(exchange, 200, switch (n) {
+                    case 1 -> "{\"data\":[]}";                                              // nao existe
+                    case 2 -> "{\"data\":[{\"id\":\"cus_semmail\"}]}";                       // existe sem e-mail
+                    default -> "{\"data\":[{\"id\":\"cus_comail\",\"email\":\"Ana@vupth.test\"}]}"; // ja tem
+                });
+            } else if ("POST".equals(method)) {
+                reply(exchange, 200, "{\"id\":\"cus_new\"}");
+            } else {
+                reply(exchange, 200, "{\"id\":\"cus_semmail\"}");
+            }
+        });
+        server.start();
+        AsaasClient.Party ana = new AsaasClient.Party("vupth-user-1", "Ana Cliente", "ana@vupth.test");
+
+        AsaasClient.Customer created = client.ensureCustomer(ana, null);
+        assertThat(created.id()).isEqualTo("cus_new");
+        assertThat(created.hasEmail()).isTrue();
+        assertThat(bodies.get(0)).contains("\"email\":\"ana@vupth.test\"").contains("\"name\":\"Ana Cliente\"")
+                .contains("\"externalReference\":\"vupth-user-1\"").contains("\"cpfCnpj\"");
+
+        AsaasClient.Customer updated = client.ensureCustomer(ana, null);
+        assertThat(updated.id()).isEqualTo("cus_semmail");
+        assertThat(updated.hasEmail()).isTrue();
+        assertThat(calls).contains("PUT /sandbox/v3/customers/cus_semmail");
+        assertThat(bodies.get(1)).isEqualTo("{\"email\":\"ana@vupth.test\"}");
+
+        AsaasClient.Customer same = client.ensureCustomer(ana, null);
+        assertThat(same.id()).isEqualTo("cus_comail");
+        assertThat(calls).as("com o mesmo e-mail (sem diferenciar maiuscula) nao ha PUT").doesNotContain("PUT /sandbox/v3/customers/cus_comail");
+
+        // o cliente generico (sem e-mail) segue como era: nao ha e-mail a enviar
+        assertThat(new AsaasClient.Party("x", "y", null).email()).isNull();
+    }
+
+    @Test
+    @DisplayName("email-do-cliente-no-asaas: nenhum e-mail vai ao log nem a mensagem de erro")
+    void emailsAreMasked() {
+        assertThat(AsaasClient.maskEmails("{\"errors\":[{\"description\":\"E-mail ana.cliente+x@vupth.test invalido\"}]}"))
+                .doesNotContain("ana.cliente").doesNotContain("vupth.test").contains("***@***");
+        assertThat(AsaasClient.maskEmails("sem email aqui")).isEqualTo("sem email aqui");
+        assertThat(AsaasClient.maskEmails(null)).isNull();
+    }
+
+    @Test
     @DisplayName("cliente: resposta sem id, erro do Asaas e Asaas fora do ar viram ASAAS_BAD_RESPONSE, ASAAS_REJECTED e ASAAS_UNREACHABLE (502)")
     void clientFailures() throws Exception {
         AsaasClient client = client("k");

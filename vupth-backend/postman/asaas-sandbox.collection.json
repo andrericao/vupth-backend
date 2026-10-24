@@ -250,7 +250,8 @@
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
          "const b = pm.response.json();",
          "pm.test(\"cobranca criada e pendente\", () => { pm.expect(b.payment_id).to.be.a(\"string\"); pm.expect(b.status).to.eql(\"PENDING\"); pm.expect(b.billing_type).to.eql(\"PIX\"); });",
-         "pm.environment.set(\"loose_payment_id\", b.payment_id);"
+         "pm.environment.set(\"loose_payment_id\", b.payment_id);",
+         "pm.test(\"o cliente do Asaas tem e-mail (o do admin; o Asaas recusa cartao sem e-mail do titular)\", () => pm.expect(pm.response.json().customer_has_email).to.eql(true));"
         ]
        }
       }
@@ -291,7 +292,8 @@
          "const b = pm.response.json();",
          "pm.test(\"cobranca de cartao criada e pendente\", () => { pm.expect(b.payment_id).to.be.a(\"string\"); pm.expect(b.billing_type).to.eql(\"CREDIT_CARD\"); });",
          "pm.environment.set(\"card_payment_id\", b.payment_id);",
-         "console.log(\"CARTAO: simule o pagamento da cobranca \" + b.payment_id + \" no painel do Asaas sandbox (debito e credito a vista); o relatorio mostra a taxa real de cada meio.\");"
+         "console.log(\"CARTAO: simule o pagamento da cobranca \" + b.payment_id + \" no painel do Asaas sandbox (debito e credito a vista); o relatorio mostra a taxa real de cada meio.\");",
+         "pm.test(\"o cliente do Asaas tem e-mail (o do admin; o Asaas recusa cartao sem e-mail do titular)\", () => pm.expect(pm.response.json().customer_has_email).to.eql(true));"
         ]
        }
       }
