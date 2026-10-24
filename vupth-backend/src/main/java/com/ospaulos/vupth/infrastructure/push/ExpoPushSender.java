@@ -104,8 +104,7 @@ public class ExpoPushSender implements PushSender {
             Map.entry("ATTENDANCE_FINISHED", "AVALIAR"),
             Map.entry("PAYMENT_PENDING", "PAGAR"),
             Map.entry("PAYMENT_REFUSED", "PAGAR"),
-            Map.entry("PAYMENT_CLAIMED", PAYMENT_CLAIM_CATEGORY_ID),
-            Map.entry("NO_SHOW_REMOVED", "PAGAR_MULTA"));
+            Map.entry("PAYMENT_CLAIMED", PAYMENT_CLAIM_CATEGORY_ID));
 
     /** A Expo aceita ate 1000 ids por consulta de recibos. */
     static final int RECEIPTS_BATCH_SIZE = 1000;

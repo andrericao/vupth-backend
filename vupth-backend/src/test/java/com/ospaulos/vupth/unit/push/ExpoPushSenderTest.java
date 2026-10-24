@@ -152,7 +152,7 @@ class ExpoPushSenderTest {
             "PAYMENT_CLAIMED, CONFIRMAR_RECUSAR",
             "PAYMENT_REFUSED, PAGAR",
             "NO_SHOW_AVAILABLE, CIENCIA",
-            "NO_SHOW_REMOVED, PAGAR_MULTA",
+            "NO_SHOW_REMOVED, CIENCIA",
             "ATTENDANCE_STARTED, CIENCIA"
     })
     @DisplayName("Push do Client sai com a categoria do tipo (push-categorias-do-client, DEC-43)")
