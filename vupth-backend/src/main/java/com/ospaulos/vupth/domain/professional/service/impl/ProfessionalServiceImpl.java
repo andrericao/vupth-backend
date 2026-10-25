@@ -149,8 +149,16 @@ public class ProfessionalServiceImpl implements ProfessionalService {
     @Override
     @Transactional
     public QueueResponse markAttendanceLate(UUID professionalId, UUID attendanceId) {
-        log.info("[Professional] markAttendanceLate — professional={} attendance={}",
-                professionalId, attendanceId);
+        return markLate(professionalId, attendanceId, false);
+    }
+
+    /**
+     * O atraso do cliente. {@code noShow}: veio do "Nao chegou" (nao-chegou-tres-atrasos); a saida da fila no 3o atraso vale so
+     * para ele. O atraso marcado a mao (/late) conta no mesmo contador mas, no 3o, segue indo para o fim da fila (Andre, 26/09).
+     */
+    private QueueResponse markLate(UUID professionalId, UUID attendanceId, boolean noShow) {
+        log.info("[Professional] markAttendanceLate — professional={} attendance={} naoChegou={}",
+                professionalId, attendanceId, noShow);
 
         Attendance attendance = attendanceRepository.findByIdEager(attendanceId)
                 .orElseThrow(() -> new AttendanceNotFoundException(attendanceId));
@@ -178,13 +186,22 @@ public class ProfessionalServiceImpl implements ProfessionalService {
 
         // D4: conta o atraso so depois da tolerancia (soma entre atendimentos; o 3o gera a multa) e avisa.
         // A marcacao em si segue livre (#19): antes da tolerancia o cliente cai de posicao sem contar.
-        int lateNumber = lateArrivalService.registerLate(attendance, professional, java.time.OffsetDateTime.now());
+        int lateNumber = lateArrivalService.registerLate(attendance, professional, java.time.OffsetDateTime.now(), noShow);
 
-        // nao-chegou-tres-atrasos (24/10): no 3o atraso o cliente e multado e SAI da fila (REMOVED, a loja tirando),
-        // em qualquer loja; antes do 3o so troca com o proximo. A multa fica pendente e o contador so zera ao pagar.
         if (lateNumber >= com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY) {
-            attendance.setStatus(AttendanceStatus.REMOVED);
-            attendanceRepository.save(attendance);
+            if (noShow) {
+                // nao-chegou-tres-atrasos (24/10): no 3o "Nao chegou" o cliente e multado e SAI da fila (REMOVED, a loja tirando),
+                // em qualquer loja. A multa fica pendente; o contador zera (a 2a multa so vem apos mais 3 atrasos) e pagar tambem zera.
+                attendance.setStatus(AttendanceStatus.REMOVED);
+                attendanceRepository.save(attendance);
+            } else {
+                // Andre, 26/09: no 3o atraso marcado a mao, logo depois do registro, ele vai para o FIM da fila — pode continuar
+                // ali ou sair (sem nova multa: ja pagou a do 3o). Antes do 3o so troca com o proximo.
+                moveToEnd(attendance, attendanceRepository
+                        .findWaitingQueueByProfessionalAndEstablishment(professional.getId(), establishment.getId()));
+                attendance.setStatus(AttendanceStatus.SCHEDULED);
+                attendanceRepository.save(attendance);
+            }
         }
 
         queueService.updateQueueEstimates(professional);
@@ -260,7 +277,7 @@ public class ProfessionalServiceImpl implements ProfessionalService {
         // DEC-86: nao comparecer e um atraso — troca de lugar com o proximo e soma no contador; no 3o, a multa.
         // Mesmo caminho do /late; a espera de 10 min acima passa da tolerancia de 5, entao o atraso sempre conta.
         log.info("[Professional] markNoShow — attendance={} vira atraso", attendanceId);
-        QueueResponse response = markAttendanceLate(professional.getId(), attendanceId);
+        QueueResponse response = markLate(professional.getId(), attendanceId, true);
         // tres-faltas-pagar-adiantado (DEC-115): o "nao cheguei" conta nas tres ocorrencias, inclusive do cliente isento
         if (attendance.getClient() != null) {
             eventPublisher.publishEvent(new com.ospaulos.vupth.domain.client.event.ClientAbsenceEvent(
@@ -307,6 +324,15 @@ public class ProfessionalServiceImpl implements ProfessionalService {
      * ultimo (ou nao estiver na lista), nada muda — permanece onde esta. A lista vem ordenada por
      * {@code scheduledTime} ASC e inclui SCHEDULED+LATE.
      */
+    /** Leva {@code target} para depois do ultimo da fila de espera (3o atraso marcado a mao — Andre, 26/09). */
+    private void moveToEnd(Attendance target, List<Attendance> waiting) {
+        Attendance last = waiting.isEmpty() ? null : waiting.get(waiting.size() - 1);
+        if (last == null || last.getId().equals(target.getId())) {
+            return; // ja e o ultimo
+        }
+        target.setScheduledTime(last.getScheduledTime().plusMinutes(1));
+    }
+
     private void repositionBehindNext(Attendance target, List<Attendance> waiting) {
         int idx = -1;
         for (int i = 0; i < waiting.size(); i++) {
