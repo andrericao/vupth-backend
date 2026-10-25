@@ -53,6 +53,7 @@ class DeleteEstablishmentIntegrationTest {
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired AttendanceRepository attendanceRepository;
     @Autowired UserRepository userRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired ProfessionalRepository professionalRepository;
 
     private final Faker faker = new Faker();
@@ -144,6 +145,7 @@ class DeleteEstablishmentIntegrationTest {
 
     @AfterAll
     void tearDown() {
+        jdbc.update("DELETE FROM cut_request"); // pedidos de corte de outras classes apontam para attendance
         attendanceRepository.deleteAll();
         userRepository.deleteAll();
     }
