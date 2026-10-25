@@ -94,6 +94,13 @@ public class CutRequest implements Serializable {
     @Column(name = "agenda_requested", nullable = false)
     private boolean agendaRequested;
 
+    /**
+     * O cupom ativado que o cliente escolheu usar neste corte (cupom-no-pedido-de-corte). Aplicado ao atendimento quando o
+     * profissional aceita; {@code null} = sem cupom.
+     */
+    @Column(name = "coupon_campaign_id")
+    private UUID couponCampaignId;
+
     /** Attendance criado no aceite (traceabilidade). Null enquanto PENDING/REFUSED/EXPIRED. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resulting_attendance_id")

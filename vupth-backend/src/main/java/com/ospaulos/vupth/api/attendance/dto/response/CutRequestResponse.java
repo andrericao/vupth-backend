@@ -48,7 +48,11 @@ public record CutRequestResponse(
 
         /** O dia pedido nao estava liberado na agenda (solicitar-agendamento): o Partner mostra o dot e o aceite abre o dia. */
         @JsonProperty("agenda_requested")
-        boolean agendaRequested
+        boolean agendaRequested,
+
+        /** O cupom pedido junto (cupom-no-pedido-de-corte); null = sem cupom. */
+        @JsonProperty("coupon_campaign_id")
+        UUID couponCampaignId
 ) {
     public static CutRequestResponse fromEntity(CutRequest c) {
         return new CutRequestResponse(
@@ -64,7 +68,8 @@ public record CutRequestResponse(
                 c.getCreatedAt(),
                 c.getResultingAttendance() != null ? c.getResultingAttendance().getId() : null,
                 c.getDesiredTime(),
-                c.isAgendaRequested()
+                c.isAgendaRequested(),
+                c.getCouponCampaignId()
         );
     }
 }

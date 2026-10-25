@@ -48,6 +48,27 @@ public class CouponService {
             return;
         }
         UUID clientId = attendance.getClient().getId();
+        Campaign campaign = requireUsable(clientId, couponCampaignId);
+        BigDecimal discount = discountOf(campaign, attendance);
+        if (discount.signum() <= 0) {
+            throw CampaignException.couponNotActive();
+        }
+        attendance.setCouponCampaignId(couponCampaignId);
+        attendance.setDiscount(discount);
+        log.info("[Coupon] aplicado — campaign={} attendance={} desconto R$ {}", couponCampaignId, attendance.getId(), discount);
+    }
+
+    /**
+     * O cupom vale para este cliente agora? Mesmas regras do {@link #apply}, sem gravar nada: o pedido de corte confere ao ser
+     * feito (422 COUPON_NOT_ACTIVE ou 409 de campanha encerrada) para o cliente saber na hora. Nulo = sem cupom, nada a conferir.
+     */
+    public void assertUsable(UUID clientId, UUID couponCampaignId) {
+        if (couponCampaignId != null && clientId != null) {
+            requireUsable(clientId, couponCampaignId);
+        }
+    }
+
+    private Campaign requireUsable(UUID clientId, UUID couponCampaignId) {
         Campaign campaign = campaignRepository.findById(couponCampaignId).orElseThrow(CampaignException::couponNotActive);
         OffsetDateTime now = OffsetDateTime.now();
         boolean valid = campaign.getType() == CampaignType.DISCOUNT
@@ -65,13 +86,7 @@ public class CouponService {
             log.info("[Coupon] cupom fora da lista de ativos — campaign={} client={}", couponCampaignId, clientId);
             throw CampaignException.couponNotActive();
         }
-        BigDecimal discount = discountOf(campaign, attendance);
-        if (discount.signum() <= 0) {
-            throw CampaignException.couponNotActive();
-        }
-        attendance.setCouponCampaignId(couponCampaignId);
-        attendance.setDiscount(discount);
-        log.info("[Coupon] aplicado — campaign={} attendance={} desconto R$ {}", couponCampaignId, attendance.getId(), discount);
+        return campaign;
     }
 
     /** Ja ha um corte do cliente com este cupom que nao foi desfeito? */

@@ -184,6 +184,37 @@ class CouponIntegrationTest {
     }
 
     @Test
+    @DisplayName("cupom-no-pedido-de-corte: o pedido leva o cupom (confere ao pedir: 422 se nao vale) e o aceite aplica o desconto ao corte")
+    void cutRequestCarriesTheCoupon() throws Exception {
+        Shop shop = shop();
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        Campaign c = coupon(new BigDecimal("5.00"), null, BenefitBase.WITH_FEE);
+        String body = "{\"professionalId\":\"" + shop.professionalId() + "\",\"establishmentId\":\"" + shop.establishmentId()
+                + "\",\"serviceItemIds\":[\"" + shop.service() + "\"],\"coupon_campaign_id\":\"" + c.getId() + "\"}";
+
+        // sem ativar: o pedido ja recusa, e nada fica pendente
+        mvc.perform(post("/attendances/cut-requests").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", client.token()).content(body))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("COUPON_NOT_ACTIVE"));
+
+        activate(client.token(), c);
+        JsonNode created = json(mvc.perform(post("/attendances/cut-requests").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", client.token()).content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.coupon_campaign_id").value(c.getId().toString())));
+
+        JsonNode accepted = json(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/attendances/cut-requests/{id}/accept", created.get("id").asText())
+                        .header("Authorization", shop.ownerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACCEPTED")));
+        Attendance a = attendanceRepository.findById(UUID.fromString(accepted.get("resulting_attendance_id").asText())).orElseThrow();
+        assertThat(a.getCouponCampaignId()).isEqualTo(c.getId());
+        assertThat(a.getDiscount()).isEqualByComparingTo("5.00");
+    }
+
+    @Test
     @DisplayName("ao concluir, o desconto vira credito do profissional (uma vez); ele consulta; o painel soma; pago zera o em aberto")
     void creditToProfessional() throws Exception {
         Shop shop = shop();

@@ -582,3 +582,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/061-cut-request-agenda-requested.yaml
       relativeToChangeLogFile: true
+
+  # cupom-no-pedido-de-corte: o cupom escolhido segue no pedido ate o aceite
+  - include:
+      file: changesets/80-attendance/062-cut-request-coupon.yaml
+      relativeToChangeLogFile: true

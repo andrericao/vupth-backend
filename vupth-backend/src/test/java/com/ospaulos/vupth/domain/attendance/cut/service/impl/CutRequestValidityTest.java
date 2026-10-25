@@ -535,6 +535,59 @@ class CutRequestValidityTest {
         }
 
         @Test
+        @DisplayName("cupom-no-pedido-de-corte: o pedido confere o cupom ao ser feito (recusa se nao vale) e o guarda; sem cupom, nao confere")
+        void requestChecksAndKeepsTheCoupon() {
+            com.ospaulos.vupth.domain.campaign.service.CouponService coupons =
+                    mock(com.ospaulos.vupth.domain.campaign.service.CouponService.class);
+            org.springframework.test.util.ReflectionTestUtils.setField(service, "couponService", coupons);
+            UUID coupon = UUID.randomUUID();
+
+            var withCoupon = service.createCutRequest(new com.ospaulos.vupth.api.attendance.dto.request.CutRequestRequest(
+                    profId, establishment.getId(), List.of(item.getId()), desired.plusDays(1), coupon), clientId);
+            assertThat(withCoupon.couponCampaignId()).isEqualTo(coupon);
+            verify(coupons).assertUsable(clientId, coupon);
+
+            service.createCutRequest(request(desired.plusDays(1)), clientId);
+            verify(coupons, org.mockito.Mockito.times(1)).assertUsable(any(), any());
+
+            org.mockito.Mockito.doThrow(com.ospaulos.vupth.domain.campaign.exception.CampaignException.couponNotActive())
+                    .when(coupons).assertUsable(clientId, coupon);
+            assertThatThrownBy(() -> service.createCutRequest(new com.ospaulos.vupth.api.attendance.dto.request.CutRequestRequest(
+                    profId, establishment.getId(), List.of(item.getId()), desired.plusDays(1), coupon), clientId))
+                    .isInstanceOf(com.ospaulos.vupth.domain.campaign.exception.CampaignException.class);
+        }
+
+        @Test
+        @DisplayName("cupom-no-pedido-de-corte: o aceite aplica o cupom ao corte; se ele deixou de valer, aceita assim mesmo e avisa o cliente")
+        void acceptAppliesTheCouponOrWarns() {
+            com.ospaulos.vupth.domain.campaign.service.CouponService coupons =
+                    mock(com.ospaulos.vupth.domain.campaign.service.CouponService.class);
+            org.springframework.test.util.ReflectionTestUtils.setField(service, "couponService", coupons);
+            CutRequest cut = pending();
+            cut.setAgendaRequested(false);
+            UUID coupon = UUID.randomUUID();
+            cut.setCouponCampaignId(coupon);
+            Attendance attendance = mock(Attendance.class);
+            when(attendance.getId()).thenReturn(UUID.randomUUID());
+            when(attendanceService.createIntentionFromCutRequest(any(), any(), any(), any(), any())).thenReturn(attendance);
+
+            service.acceptCutRequest(cutId, profId);
+            verify(coupons).apply(attendance, coupon);
+            assertThat(cut.getStatus()).isEqualTo(CutRequestStatus.ACCEPTED);
+
+            // outro pedido: o cupom nao vale mais no aceite -> o corte sai, o aviso diz que o cupom nao foi aplicado
+            CutRequest second = pending();
+            second.setAgendaRequested(false);
+            second.setCouponCampaignId(coupon);
+            org.mockito.Mockito.doThrow(com.ospaulos.vupth.domain.campaign.exception.CampaignException.couponNotActive())
+                    .when(coupons).apply(attendance, coupon);
+            service.acceptCutRequest(cutId, profId);
+            assertThat(second.getStatus()).isEqualTo(CutRequestStatus.ACCEPTED);
+            verify(pushPublisher).notifyUser(eq(clientId), eq("Pedido de corte aceito"),
+                    org.mockito.ArgumentMatchers.contains("cupom nao pode ser aplicado"), anyMap());
+        }
+
+        @Test
         @DisplayName("scheduleRequestPushBody: com e sem o nome do cliente")
         void scheduleBody() {
             assertThat(CutRequestServiceImpl.scheduleRequestPushBody("Ana", desired)).startsWith("Ana solicitou agendamento para ");

@@ -61,6 +61,10 @@ public class CutRequestServiceImpl implements CutRequestService {
     private final QueueWebSocketPublisher queuePublisher;
     private final PushNotificationPublisher pushPublisher;
 
+    /** O cupom do pedido (cupom-no-pedido-de-corte): conferido ao pedir e aplicado ao aceitar. Opcional (testes de unidade). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.campaign.service.CouponService couponService;
+
     /** Relogio do servico. Os testes de borda do vencimento (pedido-vence-no-horario) trocam por um fixo. */
     private Clock clock = Clock.systemDefaultZone();
 
@@ -108,6 +112,10 @@ public class CutRequestServiceImpl implements CutRequestService {
             }
         }
 
+        // cupom-no-pedido-de-corte: o cupom que o cliente escolheu tem de valer agora (senao 422/409 e ele sabe na hora)
+        if (request.couponCampaignId() != null && couponService != null) {
+            couponService.assertUsable(clientId, request.couponCampaignId());
+        }
         OffsetDateTime now = OffsetDateTime.now(clock);
         // solicitar-agendamento: o dia pedido nao esta liberado na agenda do profissional (fechado para ele ou para a loja)
         boolean agendaRequested = isAgendaClosedOn(professional, request.desiredTime());
@@ -115,6 +123,7 @@ public class CutRequestServiceImpl implements CutRequestService {
                 .findByProfessionalIdAndStatusAndAgendaRequestedTrue(professional.getId(), CutRequestStatus.PENDING).isEmpty();
         CutRequest cut = new CutRequest();
         cut.setAgendaRequested(agendaRequested);
+        cut.setCouponCampaignId(request.couponCampaignId());
         cut.setClient(client);
         cut.setProfessional(professional);
         cut.setEstablishment(establishment);
@@ -175,14 +184,17 @@ public class CutRequestServiceImpl implements CutRequestService {
                 : attendanceService.createScheduledFromCutRequest(
                         cut.getProfessional(), cut.getEstablishment(), cut.getClient(), cut.getServiceItems());
 
+        boolean couponApplied = applyCoupon(cut, attendance);
         cut.setStatus(CutRequestStatus.ACCEPTED);
         cut.setRespondedAt(now);
         cut.setResultingAttendance(attendance);
         CutRequest saved = cutRequestRepository.save(cut);
 
-        String accepted = otherDay
+        String noCoupon = cut.getCouponCampaignId() != null && !couponApplied
+                ? " O cupom nao pode ser aplicado: o corte sai no preco cheio." : "";
+        String accepted = (otherDay
                 ? "Seu pedido de corte foi aceito — voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
-                : "Seu pedido de corte foi aceito — voce entrou na fila.";
+                : "Seu pedido de corte foi aceito — voce entrou na fila.") + noCoupon;
         if (!otherDay) {
             queuePublisher.broadcastQueue(cut.getEstablishment().getId());
         }
@@ -190,8 +202,8 @@ public class CutRequestServiceImpl implements CutRequestService {
                 "CUT_ACCEPTED", attendance.getId(), cut.getEstablishment().getId(), accepted)
                 .withCutRequestId(cut.getId()));
         pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte aceito",
-                otherDay ? "Voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
-                        : "Voce entrou na fila.",
+                (otherDay ? "Voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
+                        : "Voce entrou na fila.") + noCoupon,
                 Map.of("type", "CUT_ACCEPTED",
                         "attendanceId", String.valueOf(attendance.getId()),
                         "attendanceStatus", String.valueOf(attendance.getStatus()),
@@ -319,6 +331,24 @@ public class CutRequestServiceImpl implements CutRequestService {
             throw new CutRequestNotPendingException(cutRequestId, String.valueOf(cut.getStatus()));
         }
         return cut;
+    }
+
+    /**
+     * Aplica ao atendimento o cupom que veio no pedido. O aceite do profissional nao pode falhar porque o cupom deixou de valer
+     * (venceu, foi usado em outro corte): nesse caso o corte sai no preco cheio e o cliente e avisado. Sem cupom, devolve true.
+     */
+    private boolean applyCoupon(CutRequest cut, Attendance attendance) {
+        if (cut.getCouponCampaignId() == null || couponService == null) {
+            return true;
+        }
+        try {
+            couponService.apply(attendance, cut.getCouponCampaignId());
+            return true;
+        } catch (com.ospaulos.vupth.domain.campaign.exception.CampaignException e) {
+            log.warn("[CutRequest] cupom nao aplicado no aceite — id={} campaign={}: {}",
+                    cut.getId(), cut.getCouponCampaignId(), e.getMessage());
+            return false;
+        }
     }
 
     /** O dia do horario pedido esta fechado na agenda do profissional (a dele ou a da loja)? Sem horario pedido, nao. */
