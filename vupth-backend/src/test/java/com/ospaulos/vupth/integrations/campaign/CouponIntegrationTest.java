@@ -53,6 +53,7 @@ class CouponIntegrationTest {
     @Autowired ObjectMapper mapper;
     @Autowired CampaignRepository campaignRepository;
     @Autowired AttendanceRepository attendanceRepository;
+    @Autowired com.ospaulos.vupth.domain.attendance.cut.repository.CutRequestRepository cutRequestRepository;
     @Autowired ProfessionalRepository professionalRepository;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
@@ -212,6 +213,7 @@ class CouponIntegrationTest {
         Attendance a = attendanceRepository.findById(UUID.fromString(accepted.get("resulting_attendance_id").asText())).orElseThrow();
         assertThat(a.getCouponCampaignId()).isEqualTo(c.getId());
         assertThat(a.getDiscount()).isEqualByComparingTo("5.00");
+        cutRequestRepository.deleteAll(); // o pedido aceito aponta para o atendimento e barraria o teardown de outras classes
     }
 
     @Test
