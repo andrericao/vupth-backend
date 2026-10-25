@@ -141,6 +141,17 @@ class CampaignServiceTest {
     }
 
     @Test
+    @DisplayName("profissional e tratado como cliente: so-para-novos olha o historico dele como CLIENTE, nao o tempo de profissional")
+    void professionalWhoNeverWasClientIsNewClient() {
+        campaign.setAudience(null);
+        campaign.setNewClientsOnly(true);
+        when(attendanceRepository.existsByClient_IdAndStatusIn(eq(userId), anyList())).thenReturn(false);
+
+        assertThat(service.redeem(userId, "parceiro10").code()).isEqualTo("PARCEIRO10");
+        verify(attendanceRepository, never()).existsByProfessional_IdAndStatusIn(any(), anyList());
+    }
+
+    @Test
     @DisplayName("ja aceitou -> 409 CAMPAIGN_ALREADY_REDEEMED; sem vaga no prazo -> 409 CAMPAIGN_SOLD_OUT (DEC-124)")
     void alreadyAndFull() {
         when(redemptionRepository.existsByCampaign_IdAndUserId(campaign.getId(), userId)).thenReturn(true);
