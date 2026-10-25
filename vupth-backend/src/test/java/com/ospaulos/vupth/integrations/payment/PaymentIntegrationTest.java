@@ -127,7 +127,12 @@ class PaymentIntegrationTest {
                 .andExpect(jsonPath("$.services_value").value(price))
                 .andExpect(jsonPath("$.penalties_value").value(0.0))
                 .andExpect(jsonPath("$.pix_copy_paste", startsWith("000201")))
+                .andExpect(jsonPath("$.pix_key").value("+5511987654321"))
                 .andExpect(jsonPath("$.key_type").value("PHONE"));
+        // pix-key-no-pagamento: a chave em texto e so do cliente do atendimento
+        mvc.perform(get("/attendances/{id}/payment", firstId).header("Authorization", profToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pix_key").value(nullValue()));
         mvc.perform(get("/attendances/{id}/payment", firstId).header("Authorization", strangerToken))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("PAYMENT_ACCESS_DENIED"));
@@ -150,6 +155,22 @@ class PaymentIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.awaiting_count").value(1))
                 .andExpect(jsonPath("$.items[0].attendance_id").value(firstId));
+
+        // pagamento-manual-e-asaas: o profissional recusa o "Ja paguei" (so ele ou o dono); segue pendente e o cliente pode dizer de novo
+        mvc.perform(post("/attendances/{id}/payment/refuse", firstId).header("Authorization", clientToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/attendances/{id}/payment/refuse", firstId).header("Authorization", profToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.claimed_at").value(nullValue()));
+        mvc.perform(post("/attendances/{id}/payment/refuse", firstId).header("Authorization", profToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PAYMENT_INVALID_STATUS"));
+        mvc.perform(get("/professional/me/pending-payments").header("Authorization", profToken))
+                .andExpect(jsonPath("$.awaiting_count").value(0));
+        mvc.perform(post("/attendances/{id}/payment/claim", firstId).header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AWAITING_CONFIRMATION"));
     }
 
     @Test
@@ -243,6 +264,7 @@ class PaymentIntegrationTest {
         mvc.perform(get("/attendances/{id}/payment", secondId).header("Authorization", clientToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pix_copy_paste").value(nullValue()))
+                .andExpect(jsonPath("$.pix_key").value(nullValue()))
                 .andExpect(jsonPath("$.holder_name").value(nullValue()))
                 .andExpect(jsonPath("$.amount").value(price));
     }

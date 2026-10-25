@@ -86,7 +86,10 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final com.ospaulos.vupth.domain.queue.service.ClientWaitCalculator clientWaitCalculator;
     private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
     private final com.ospaulos.vupth.domain.client.service.FirstAttendanceExemption firstAttendanceExemption;
+    private final com.ospaulos.vupth.domain.testrun.service.TestRunService testRunService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final com.ospaulos.vupth.domain.campaign.service.CouponService couponService;
+    private final com.ospaulos.vupth.domain.client.service.ClientAbsenceService clientAbsenceService;
 
     /**
      * Item #38 — os status que fazem o cliente contar como "ja ocupado" com um profissional: ele
@@ -139,10 +142,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setServiceItems(serviceItems);
         attendance.setStatus(AttendanceStatus.SCHEDULED);
         attendance.setScheduledTime(request.scheduledTime());
+        testRunService.tag(attendance); // teste ativo na loja (DEC-106)
 
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
-        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento (cobra tambem no teste, DEC-108)
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={}", saved.getId(), saved.getTotalValue());
         return saved;
@@ -303,7 +307,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
-                                             OffsetDateTime desiredTime, UUID clientId) {
+                                             OffsetDateTime desiredTime, UUID clientId, UUID couponCampaignId) {
         log.info("[Intention] createIntention — professionalId={} clientId={} desiredTime={}",
                 professionalId, clientId, desiredTime);
 
@@ -340,7 +344,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         // ordenar a agenda e o encaixe da estimativa.
         attendance.setScheduledTime(estimatedStart);
 
+        testRunService.tag(attendance); // teste ativo na loja (DEC-106)
+        // tres-faltas-pagar-adiantado: com tres ocorrencias o agendamento leva a marca de pagamento adiantado; no piloto so marca o contador
+        attendance.setPrepayRequired(!attendance.isTest() && clientAbsenceService.prepayRequired(clientId));
         Attendance saved = attendanceRepository.save(attendance);
+        couponService.apply(saved, couponCampaignId); // cupom ativado (422 COUPON_NOT_ACTIVE se nao valer); desfaz o save na transacao
         initializeLazyAssociations(saved);
         log.info("[Intention] createIntention — created id={} desiredTime={} estimatedStart={} status=INTENTION",
                 saved.getId(), saved.getDesiredTime(), estimatedStart);
@@ -444,13 +452,21 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // agenda-do-profissional: o horario que vale de fato em cada dia (loja ∩ agenda dele), ate o horizonte.
         BusinessHours effective = professional.getEffectiveHours();
+        BusinessHours storeHours = professional.getEstablishment() != null
+                ? professional.getEstablishment().getBusinessHours() : BusinessHours.notConfigured();
+        BusinessHours ownHours = professional.getWorkingHours();
         List<PublicAgendaResponse.Day> days = new java.util.ArrayList<>();
         for (int i = 0; i <= INTENTION_HORIZON_DAYS; i++) {
             java.time.LocalDate date = today.plusDays(i);
             DayHours day = effective.on(date);
+            // agenda-publica-dias-liberados: por que o dia esta fechado (loja que nao abre x agenda que ele nao liberou)
+            DayHours storeDay = storeHours.on(date);
+            DayHours ownDay = ownHours.on(date);
+            boolean storeOpen = storeDay == null || !storeDay.closed();
+            boolean released = ownDay == null || !ownDay.closed();
             days.add(day == null
-                    ? new PublicAgendaResponse.Day(date, false, null, null)
-                    : new PublicAgendaResponse.Day(date, day.closed(), day.opens(), day.closes()));
+                    ? new PublicAgendaResponse.Day(date, false, null, null, storeOpen, released)
+                    : new PublicAgendaResponse.Day(date, day.closed(), day.opens(), day.closes(), storeOpen, released));
         }
         return new PublicAgendaResponse(frameFor(professional), blocks, days);
     }
@@ -737,8 +753,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         // item #40: se veio horario-alvo, entra como INTENCAO (sobrescreve o scheduledTime com o slot)
         applyIntentIfRequested(attendance, professional, establishment, request.targetTime());
 
+        testRunService.tag(attendance); // teste ativo na loja (DEC-106)
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
-        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento (cobra tambem no teste, DEC-108)
+        couponService.apply(saved, request.couponCampaignId()); // cupom ativado (422 COUPON_NOT_ACTIVE se nao valer; a transacao desfaz tudo)
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createAttendance — created id={} totalValue={} intent={} targetTime={}",
                 saved.getId(), saved.getTotalValue(), saved.isIntent(), saved.getTargetTime());
@@ -778,9 +796,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.debug("[Attendance] createGuestAttendance — no service items (anonymous guest)");
         }
 
+        testRunService.tag(attendance); // teste ativo na loja (DEC-106)
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
-        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento (cobra tambem no teste, DEC-108)
         lockMealsAtIngress(saved, professional, establishment);
         log.info("[Attendance] createGuestAttendance — created id={}", saved.getId());
         return saved;
@@ -808,6 +827,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setIsTimerActive(true);
         attendance.setStatus(AttendanceStatus.IN_PROGRESS);
         attendanceRepository.save(attendance);
+        eventPublisher.publishEvent(new com.ospaulos.vupth.domain.attendance.event.AttendanceStartedEvent(attendance.getId()));
 
         String clientName = attendance.getClient() != null
                 ? attendance.getClient().getFirstName()
@@ -896,6 +916,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
+        publishLeftQueue(attendance);
 
         String clientName = attendance.getClient() != null
                 ? attendance.getClient().getFirstName()
@@ -904,6 +925,15 @@ public class AttendanceServiceImpl implements AttendanceService {
                 clientName, attendance.getProfessional().getName());
 
         return AttendanceInQueueResponse.fromEntity(saved);
+    }
+
+    /** tres-faltas-pagar-adiantado (DEC-115): a saida da fila conta nas tres ocorrencias, inclusive do cliente isento. */
+    private void publishLeftQueue(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        if (attendance.getClient() != null) {
+            eventPublisher.publishEvent(new com.ospaulos.vupth.domain.client.event.ClientAbsenceEvent(
+                    attendance.getClient().getId(), attendance.getId(),
+                    com.ospaulos.vupth.domain.client.model.ClientAbsenceType.LEFT_QUEUE));
+        }
     }
 
     /**
@@ -1061,6 +1091,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
         Attendance saved = attendanceRepository.save(attendance);
+        publishLeftQueue(attendance);
 
         log.info("[Attendance] leaveQueue — client='{}' left the queue voluntarily",
                 attendance.getClient().getFirstName());
@@ -1275,9 +1306,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendance.setStatus(AttendanceStatus.SCHEDULED);
         attendance.setScheduledTime(scheduledTime);
 
+        testRunService.tag(attendance); // teste ativo na loja (DEC-106)
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         initializeLazyAssociations(saved);
-        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento
+        clientPenaltyService.chargeOnIngress(saved); // D4: multa pendente vai para este atendimento (cobra tambem no teste, DEC-108)
         lockMealsAtIngress(saved, professional, establishment);
         return saved;
     }

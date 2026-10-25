@@ -39,4 +39,10 @@ public interface CutRequestService {
      * interno — sem endpoint REST. Devolve quantos foram expirados.
      */
     int expireDueCutRequests();
+
+    /**
+     * solicitar-agendamento: o profissional abriu um dia na agenda. Os pedidos PENDING para dia sem agenda liberada
+     * cujo dia agora esta aberto vencem (EXPIRED) e o cliente e avisado para agendar direto. Devolve quantos venceram.
+     */
+    int expireRequestsForOpenedDays(UUID professionalId);
 }

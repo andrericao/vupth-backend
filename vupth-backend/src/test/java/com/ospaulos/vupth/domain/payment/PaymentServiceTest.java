@@ -587,4 +587,93 @@ class PaymentServiceTest {
         assertThat(service.statusOf(awaiting.getId())).isEqualTo(PaymentStatus.AWAITING_CONFIRMATION);
         assertThat(service.statusOf(pending.getId())).isEqualTo(PaymentStatus.PENDING);
     }
+
+    @Test
+    @DisplayName("pagamento-manual-e-asaas: Nao recebi volta o 'Ja paguei' para PENDING; so profissional ou dono; so de AWAITING")
+    void refuseClaim() {
+        Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        awaiting.setPaymentClaimedAt(OffsetDateTime.now());
+        assertThatThrownBy(() -> service.refuse(awaiting.getId(), clientId)).isInstanceOf(PaymentAccessDeniedException.class);
+        assertThatThrownBy(() -> service.refuse(awaiting.getId(), strangerId)).isInstanceOf(PaymentAccessDeniedException.class);
+
+        assertThat(service.refuse(awaiting.getId(), professionalId).status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(awaiting.getPaymentClaimedAt()).isNull();
+        verify(attendanceRepository).save(awaiting);
+        assertThatThrownBy(() -> service.refuse(awaiting.getId(), professionalId)).isInstanceOf(PaymentInvalidStatusException.class);
+
+        Attendance byOwner = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        assertThat(service.refuse(byOwner.getId(), ownerId).status()).isEqualTo(PaymentStatus.PENDING);
+
+        Attendance paid = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        assertThatThrownBy(() -> service.refuse(paid.getId(), professionalId)).isInstanceOf(PaymentInvalidStatusException.class);
+        Attendance cancelled = attendance(AttendanceStatus.CANCELLED, PaymentStatus.PENDING);
+        assertThatThrownBy(() -> service.refuse(cancelled.getId(), professionalId)).isInstanceOf(PaymentNotAvailableException.class);
+    }
+
+    @Test
+    @DisplayName("pagamento-manual-e-asaas: o Recebi manual cancela a cobranca do Asaas (botao e Finalizar); sem cobranca nao chama o Asaas")
+    void manualReceiptCancelsGatewayCharge() {
+        com.ospaulos.vupth.domain.payment.service.PaymentGatewayService gateway =
+                mock(com.ospaulos.vupth.domain.payment.service.PaymentGatewayService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "gateway", gateway);
+
+        Attendance withCharge = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        withCharge.setAsaasPaymentId("pay_1");
+        when(gateway.cancelCharge(withCharge)).thenReturn(true);
+        assertThat(service.confirm(withCharge.getId(), professionalId).status()).isEqualTo(PaymentStatus.PAID);
+        verify(gateway).cancelCharge(withCharge);
+        verify(attendanceRepository, times(2)).save(withCharge); // quitou e gravou o cancelamento
+
+        Attendance onFinish = attendance(AttendanceStatus.IN_PROGRESS, PaymentStatus.PENDING);
+        onFinish.setAsaasPaymentId("pay_2");
+        assertThat(service.confirmOnFinish(onFinish.getId(), professionalId)).isTrue();
+        verify(gateway).cancelCharge(onFinish);
+
+        Attendance noCharge = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        service.confirm(noCharge.getId(), professionalId);
+        verify(gateway, never()).cancelCharge(noCharge);
+    }
+
+    @Test
+    @DisplayName("pagamento-manual-e-asaas: o webhook do Asaas quita mesmo com o 'Ja paguei' esperando, e nao cancela nada")
+    void webhookPaysWhileAwaiting() {
+        com.ospaulos.vupth.domain.payment.service.PaymentGatewayService gateway =
+                mock(com.ospaulos.vupth.domain.payment.service.PaymentGatewayService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "gateway", gateway);
+        Attendance awaiting = attendance(AttendanceStatus.FINISHED, PaymentStatus.AWAITING_CONFIRMATION);
+        awaiting.setAsaasPaymentId("pay_1");
+
+        assertThat(service.onGatewayEvent(awaiting.getId(), "pay_1", "RECEIVED", true)).isTrue();
+        assertThat(awaiting.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+        verify(gateway, never()).cancelCharge(any());
+        // depois de paga a mao, o aviso do Asaas nao quita de novo
+        assertThat(service.onGatewayEvent(awaiting.getId(), "pay_1", "RECEIVED", true)).isFalse();
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: quitar o corte que carregava a multa de atraso zera o contador; multa de outro tipo, nao")
+    void paidLatePenaltyResetsTheLateCounter() {
+        com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrival =
+                mock(com.ospaulos.vupth.domain.client.service.LateArrivalService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "lateArrival", lateArrival);
+
+        Attendance withLate = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent late = mock(com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent.class);
+        when(late.getType()).thenReturn(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
+        when(late.getAmount()).thenReturn(new BigDecimal("5.00"));
+        when(late.getChargedAttendanceId()).thenReturn(withLate.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(late));
+        service.confirm(withLate.getId(), professionalId);
+        verify(lateArrival).resetOnPenaltyPaid(client);
+
+        org.mockito.Mockito.clearInvocations(lateArrival);
+        Attendance withCancel = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent cancel = mock(com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent.class);
+        when(cancel.getType()).thenReturn(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL);
+        when(cancel.getAmount()).thenReturn(new BigDecimal("5.00"));
+        when(cancel.getChargedAttendanceId()).thenReturn(withCancel.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(cancel));
+        service.confirm(withCancel.getId(), professionalId);
+        verify(lateArrival, never()).resetOnPenaltyPaid(any());
+    }
 }

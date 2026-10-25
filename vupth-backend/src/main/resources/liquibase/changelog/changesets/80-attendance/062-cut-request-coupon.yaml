@@ -1,0 +1,15 @@
+databaseChangeLog:
+  # cupom-no-pedido-de-corte (24/10): o pedido de corte (loja fechada ou outro dia) leva o cupom ativado que o cliente escolheu;
+  # ao aceitar, o cupom e aplicado ao atendimento. Antes o pedido descartava o cupom e o corte saia no preco cheio.
+  - changeSet:
+      id: 062-cut-request-coupon
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: cut_request, columnName: coupon_campaign_id}
+      changes:
+        - addColumn:
+            tableName: cut_request
+            columns:
+              - column: {name: coupon_campaign_id, type: UUID}

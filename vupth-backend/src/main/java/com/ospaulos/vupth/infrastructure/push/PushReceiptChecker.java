@@ -61,6 +61,9 @@ public class PushReceiptChecker {
     @Autowired(required = false)
     private ClusterLock clusterLock;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.ops.OpsCounter opsCounter;
+
     private ThreadPoolTaskScheduler taskScheduler;
 
     @Autowired
@@ -166,6 +169,10 @@ public class PushReceiptChecker {
         }
         if (!done.isEmpty()) {
             pendingReceiptRepository.deleteByTicketIdIn(done);
+        }
+        if (opsCounter != null) {
+            // admin-alertas-push-e-5xx: o alerta "push recusado" do painel
+            opsCounter.add(com.ospaulos.vupth.infrastructure.ops.OpsCounter.PUSH_REFUSED, failed);
         }
         log.info("[PUSH] recibos — {} lido(s): {} entregue(s), {} com erro, {} sem recibo em {} h; {} esperando",
                 due.size(), delivered, failed, expired, RECEIPT_TTL_HOURS, due.size() - done.size());

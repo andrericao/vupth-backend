@@ -2,8 +2,10 @@ package com.ospaulos.vupth.web.rest.admin;
 
 import com.ospaulos.vupth.api.admin.dto.AdminAuditRow;
 import com.ospaulos.vupth.api.admin.dto.AdminEstablishmentRow;
+import com.ospaulos.vupth.api.admin.dto.AdminFineRow;
 import com.ospaulos.vupth.api.admin.dto.AdminPage;
 import com.ospaulos.vupth.api.admin.dto.AdminUserRow;
+import com.ospaulos.vupth.domain.admin.service.AdminFineService;
 import com.ospaulos.vupth.domain.admin.service.AdminReadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -25,6 +27,7 @@ import java.time.OffsetDateTime;
 public class AdminReadController {
 
     private final AdminReadService service;
+    private final AdminFineService fineService;
 
     @GetMapping("/users")
     public ResponseEntity<AdminPage<AdminUserRow>> users(
@@ -40,6 +43,17 @@ public class AdminReadController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(service.establishments(q, page, size));
+    }
+
+    /** admin-multas: atraso, falta, saida da fila e pendencia de pagamento (permissao FINANCE), da mais nova para a mais antiga. */
+    @GetMapping("/multas")
+    public ResponseEntity<AdminPage<AdminFineRow>> fines(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean test,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(fineService.list(type, q, test, page, size));
     }
 
     @GetMapping("/audit")

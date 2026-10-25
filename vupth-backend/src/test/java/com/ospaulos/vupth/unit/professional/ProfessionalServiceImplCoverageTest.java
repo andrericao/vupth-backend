@@ -63,6 +63,7 @@ class ProfessionalServiceImplCoverageTest {
     @Mock EstablishmentRepository establishmentRepository;
     @Mock EstablishmentOpenStatusService openStatusService;
     @Mock LateArrivalService lateArrivalService;
+    @Mock org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ProfessionalServiceImpl professionalService;
 
@@ -201,7 +202,7 @@ class ProfessionalServiceImplCoverageTest {
     }
 
     @Nested
-    @DisplayName("markAttendanceLate — 3o atraso")
+    @DisplayName("markAttendanceLate — 3o atraso marcado a mao: vai para o fim da fila")
     class ThirdLate {
 
         @Test
@@ -213,7 +214,7 @@ class ProfessionalServiceImplCoverageTest {
             when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(professionalId, establishmentId))
                     .thenReturn(List.of(attendance))
                     .thenReturn(List.of(attendance, last));
-            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any()))
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any(), eq(false)))
                     .thenReturn(LateArrivalService.LATES_PER_PENALTY);
 
             professionalService.markAttendanceLate(professionalId, attendanceId);
@@ -229,7 +230,7 @@ class ProfessionalServiceImplCoverageTest {
             loadAttendanceAndProfessional();
             when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(professionalId, establishmentId))
                     .thenReturn(List.of(attendance));
-            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any()))
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any(), eq(false)))
                     .thenReturn(LateArrivalService.LATES_PER_PENALTY);
 
             professionalService.markAttendanceLate(professionalId, attendanceId);
@@ -243,12 +244,61 @@ class ProfessionalServiceImplCoverageTest {
         void emptyQueue() {
             OffsetDateTime original = attendance.getScheduledTime();
             loadAttendanceAndProfessional();
-            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any()))
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any(), eq(false)))
                     .thenReturn(LateArrivalService.LATES_PER_PENALTY);
 
             professionalService.markAttendanceLate(professionalId, attendanceId);
 
             assertThat(attendance.getScheduledTime()).isEqualTo(original);
+        }
+
+        @Test
+        @DisplayName("antes do 3o atraso (1o e 2o) continua na fila, como LATE")
+        void beforeThirdStaysInTheQueue() {
+            loadAttendanceAndProfessional();
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any(), eq(false))).thenReturn(2);
+
+            professionalService.markAttendanceLate(professionalId, attendanceId);
+
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.LATE);
+        }
+    }
+
+    @Nested
+    @DisplayName("markNoShow — o 3o 'Nao chegou' multa e tira da fila (nao-chegou-tres-atrasos)")
+    class NoShowThird {
+
+        private void firstInQueueAndAvailable() {
+            loadAttendanceAndProfessional();
+            when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(professionalId, establishmentId))
+                    .thenReturn(List.of(attendance));
+            when(lateArrivalService.noShowAvailableAt(eq(attendance), eq(professional), any()))
+                    .thenReturn(OffsetDateTime.now().minusMinutes(1));
+        }
+
+        @Test
+        @DisplayName("no 3o 'Nao chegou' o atendimento vira REMOVED (a loja tirando) e o evento de falta e publicado")
+        void thirdNoShowRemoves() {
+            firstInQueueAndAvailable();
+            attendance.setClient(new com.ospaulos.vupth.domain.client.model.Client());
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any(), eq(true)))
+                    .thenReturn(LateArrivalService.LATES_PER_PENALTY);
+
+            professionalService.markNoShow(professionalId, attendanceId);
+
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.REMOVED);
+            verify(eventPublisher).publishEvent(any(com.ospaulos.vupth.domain.client.event.ClientAbsenceEvent.class));
+        }
+
+        @Test
+        @DisplayName("no 1o e no 2o 'Nao chegou' ele so cai uma posicao, como atrasado")
+        void earlierNoShowsKeepHim() {
+            firstInQueueAndAvailable();
+            when(lateArrivalService.registerLate(eq(attendance), eq(professional), any(), eq(true))).thenReturn(1);
+
+            professionalService.markNoShow(professionalId, attendanceId);
+
+            assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.LATE);
         }
     }
 

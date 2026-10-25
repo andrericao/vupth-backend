@@ -16,3 +16,7 @@ docs/*
 # LOG DE FALHA DO TESTE (DEC-22 · testar.sh)
 # ==============================
 .logs-teste/
+
+# newman-asaas: o token do ADMIN e o estado da rodada ficam so no PC (nunca no repositorio), em qualquer pasta
+.env.asaas
+.asaas-state.json

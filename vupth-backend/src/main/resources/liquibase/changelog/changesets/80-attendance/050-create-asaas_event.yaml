@@ -1,0 +1,35 @@
+databaseChangeLog:
+  # testes-asaas-sandbox (fatia 1): os avisos (webhooks) que o Asaas manda do sandbox, um por evento, para o relatorio de
+  # "para onde vai cada centavo". So o necessario (sem dado de cliente): evento, cobranca, valores e estado. Idempotente por
+  # event_id (o Asaas reenvia).
+  - changeSet:
+      id: 050-create-asaas_event
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: asaas_event
+      changes:
+        - createTable:
+            tableName: asaas_event
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, primaryKeyName: pk_asaas_event, nullable: false}}
+              - column: {name: event_id, type: VARCHAR(80), constraints: {nullable: false}}
+              - column: {name: event, type: VARCHAR(60), constraints: {nullable: false}}
+              - column: {name: payment_id, type: VARCHAR(60)}
+              - column: {name: external_reference, type: VARCHAR(80)}
+              - column: {name: value, type: "NUMERIC(12,2)"}
+              - column: {name: net_value, type: "NUMERIC(12,2)"}
+              - column: {name: status, type: VARCHAR(40)}
+              - column: {name: billing_type, type: VARCHAR(30)}
+              - column: {name: received_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+        - addUniqueConstraint:
+            tableName: asaas_event
+            columnNames: event_id
+            constraintName: uq_asaas_event_event_id
+        - createIndex:
+            tableName: asaas_event
+            indexName: ix_asaas_event_payment
+            columns:
+              - column: {name: payment_id}

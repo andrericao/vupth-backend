@@ -20,9 +20,24 @@ public record CutRequestRequest(
         // intencao; a resposta devolve desired_time); opcional — ausente = "assim que abrir".
         // No passado -> 422 VALIDATION_ERROR (a validacao padrao do @Valid).
         @Future(message = "desiredTime must be in the future")
-        OffsetDateTime desiredTime
+        OffsetDateTime desiredTime,
+
+        // cupom-no-pedido-de-corte (24/10): o cupom ativado que o cliente escolheu usar neste corte (um so; opcional). Vale quando
+        // o profissional aceita; o pedido ja recusa (422 COUPON_NOT_ACTIVE) se o cupom nao vale agora.
+        @com.fasterxml.jackson.annotation.JsonProperty("coupon_campaign_id")
+        @com.fasterxml.jackson.annotation.JsonAlias("couponCampaignId")
+        UUID couponCampaignId
 ) {
+    /** Canonico explicito: com os construtores de compatibilidade, e este que o Jackson usa. */
+    @com.fasterxml.jackson.annotation.JsonCreator
+    public CutRequestRequest {
+    }
+
+    public CutRequestRequest(UUID professionalId, UUID establishmentId, List<UUID> serviceItemIds, OffsetDateTime desiredTime) {
+        this(professionalId, establishmentId, serviceItemIds, desiredTime, null);
+    }
+
     public CutRequestRequest(UUID professionalId, UUID establishmentId, List<UUID> serviceItemIds) {
-        this(professionalId, establishmentId, serviceItemIds, null);
+        this(professionalId, establishmentId, serviceItemIds, null, null);
     }
 }

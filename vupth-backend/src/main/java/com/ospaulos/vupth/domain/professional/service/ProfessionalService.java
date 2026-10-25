@@ -28,6 +28,9 @@ public interface ProfessionalService {
      */
     public QueueResponse markNoShow(UUID userId, UUID attendanceId);
 
+    /** regra-do-atraso-na-fila-vazia (DEC-101): o NAO CHEGOU ja vale para este atendimento? Quanto falta, pelo relogio do servidor. */
+    public com.ospaulos.vupth.api.attendance.dto.response.NoShowStatusResponse noShowStatus(UUID userId, UUID attendanceId);
+
     /**
      * Desfaz o LATE (item #19): o cliente volta a SCHEDULED, mantendo a posicao atual
      * (a que ele caiu). Usado quando o cliente chega e ainda nao vai ser atendido na hora.

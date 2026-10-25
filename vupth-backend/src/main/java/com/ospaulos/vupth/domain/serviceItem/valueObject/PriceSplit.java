@@ -1,6 +1,7 @@
 package com.ospaulos.vupth.domain.serviceItem.valueObject;
 
 import com.ospaulos.vupth.domain.serviceItem.exception.InvalidPriceSplitException;
+import com.ospaulos.vupth.domain.shared.Brl;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -62,24 +63,24 @@ public record PriceSplit(
         BigDecimal base = money("valor digitado (base_price)", basePrice);
 
         if (price.remainder(BigDecimal.ONE).compareTo(NINETY_CENTS) != 0) {
-            throw new InvalidPriceSplitException("O preco do cliente deve terminar em ,90 (recebido: " + price + ")");
+            throw new InvalidPriceSplitException("O preco do cliente deve terminar em ,90 (recebido: " + Brl.of(price) + ")");
         }
 
         BigDecimal absorbed = base.subtract(pro);
         if (absorbed.signum() < 0) {
             throw new InvalidPriceSplitException(String.format(
-                    "O profissional nao pode receber mais do que o valor digitado (digitado %s, recebe %s)", base, pro));
+                    "O profissional nao pode receber mais do que o valor digitado (digitado %s, recebe %s)", Brl.of(base), Brl.of(pro)));
         }
         if (absorbed.compareTo(cents(base.multiply(FEE_RATE))) > 0) {
             throw new InvalidPriceSplitException(String.format(
-                    "O profissional so pode absorver ate os 6%% do valor digitado (digitado %s, absorve %s)", base, absorbed));
+                    "O profissional so pode absorver ate os 6%% do valor digitado (digitado %s, absorve %s)", Brl.of(base), Brl.of(absorbed)));
         }
 
         BigDecimal expected = clientPriceFor(pro);
         if (price.compareTo(expected) != 0) {
             throw new InvalidPriceSplitException(String.format(
                     "O preco deve ser %s (o menor X,90 em que o profissional recebe %s depois das taxas); recebido %s",
-                    expected, pro, price));
+                    Brl.of(expected), Brl.of(pro), Brl.of(price)));
         }
         return split(price, pro, base, intermediaryFor(price));
     }
@@ -151,7 +152,7 @@ public record PriceSplit(
             throw new InvalidPriceSplitException("O " + field + " deve ser maior que zero");
         }
         if (value.stripTrailingZeros().scale() > CENTS) {
-            throw new InvalidPriceSplitException("O " + field + " tem mais de 2 casas decimais: " + value);
+            throw new InvalidPriceSplitException("O " + field + " tem mais de 2 casas decimais: " + value.toPlainString());
         }
         return value.setScale(CENTS, RoundingMode.UNNECESSARY);
     }

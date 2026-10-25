@@ -196,7 +196,20 @@ class NoShowEscalationIntegrationTest {
         mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NO_SHOW_TOO_EARLY"))
-                .andExpect(jsonPath("$.available_at").isNotEmpty());
+                .andExpect(jsonPath("$.available_at").isNotEmpty())
+                .andExpect(jsonPath("$.seconds_left").isNumber());
+        // regra-do-atraso-na-fila-vazia (DEC-101): o app so mostra o que o servidor diz que falta
+        mvc.perform(get("/attendances/{id}/no-show-status", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.is_first").value(true))
+                .andExpect(jsonPath("$.can_mark_no_show").value(false))
+                .andExpect(jsonPath("$.reason").value("TOO_EARLY"))
+                .andExpect(jsonPath("$.wait_minutes").value(10))
+                .andExpect(jsonPath("$.seconds_left").value(org.hamcrest.Matchers.greaterThan(0)));
+        mvc.perform(get("/attendances/{id}/no-show-status", second.id()).header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.is_first").value(false))
+                .andExpect(jsonPath("$.reason").value("NOT_FIRST"))
+                .andExpect(jsonPath("$.seconds_left").doesNotExist());
         mvc.perform(patch("/attendances/{id}/no-show", second.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NO_SHOW_NOT_FIRST"));
@@ -216,6 +229,10 @@ class NoShowEscalationIntegrationTest {
         jdbc.update("UPDATE attendance SET promised_time = now() - interval '2 hours', "
                 + "scheduled_time = now() - interval '2 hours' WHERE id = ?", UUID.fromString(first.id()));
 
+        mvc.perform(get("/attendances/{id}/no-show-status", first.id()).header("Authorization", ownerProfToken))
+                .andExpect(jsonPath("$.can_mark_no_show").value(true))
+                .andExpect(jsonPath("$.seconds_left").value(0))
+                .andExpect(jsonPath("$.reason").doesNotExist());
         mvc.perform(patch("/attendances/{id}/no-show", first.id()).header("Authorization", ownerProfToken))
                 .andExpect(status().isOk());
 
@@ -231,7 +248,7 @@ class NoShowEscalationIntegrationTest {
 
     @Test
     @Order(12)
-    @DisplayName("falta-vira-atraso (DEC-86): no 3o no-show do mesmo cliente nasce a multa de atraso e ele vai para o fim, ainda na fila")
+    @DisplayName("falta-vira-atraso (DEC-86): no 3o no-show do mesmo cliente nasce a multa de atraso e ele sai da fila (REMOVED)")
     void noShow_thirdTimeCostsPenalty() throws Exception {
         Q only = createWalkin();
         jdbc.update("UPDATE attendance SET promised_time = now() - interval '2 hours', "
@@ -246,9 +263,8 @@ class NoShowEscalationIntegrationTest {
         assertThat(events).hasSize(1);
         assertThat(events.get(0).getType()).isEqualTo(com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL);
         assertThat(events.get(0).getAmount()).isEqualByComparingTo("5.00");
-        assertThat(statusOf(only.id())).isEqualTo(AttendanceStatus.SCHEDULED);
-        assertThat(inWaiting(only.id())).isTrue();
-        cancel(only);
+        assertThat(statusOf(only.id())).isEqualTo(AttendanceStatus.REMOVED);
+        assertThat(inWaiting(only.id())).isFalse();
     }
 
     @Test

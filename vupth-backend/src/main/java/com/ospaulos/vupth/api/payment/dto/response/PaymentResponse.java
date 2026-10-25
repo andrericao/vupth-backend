@@ -29,6 +29,22 @@ public record PaymentResponse(
         @JsonProperty("penalty_pix_copy_paste") String penaltyPixCopyPaste,
         @JsonProperty("penalty_holder_name") String penaltyHolderName,
         // DEC-85: como o profissional disse que recebeu (PIX, CARTAO, DINHEIRO ou NOTA); nulo = nao informado ou ainda nao pago
-        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod
+        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod,
+        // pix-key-no-pagamento: a chave em texto, a MESMA do pix_copy_paste (de quem diz pix_owner); so o cliente a recebe, nulo sem Pix
+        @JsonProperty("pix_key") String pixKey,
+        // asaas-sandbox-no-fluxo (DEC-119): a cobranca Pix do Asaas, quando existe uma para o atendimento; nulo = vale o Pix do
+        // profissional e o "Ja paguei". Cobranca aberta num modo termina nele, mesmo que a conexao mude depois.
+        @JsonProperty("gateway") Gateway gateway
 ) {
+
+    /** A cobranca do Asaas: {@code mode} SANDBOX (pagamento de teste, sem dinheiro real) ou REAL; o webhook atualiza o status. */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public record Gateway(
+            @JsonProperty("provider") String provider,
+            @JsonProperty("mode") String mode,
+            @JsonProperty("status") String status,
+            @JsonProperty("pix_copy_paste") String pixCopyPaste,
+            @JsonProperty("pix_qr_image") String pixQrImage,
+            @JsonProperty("invoice_url") String invoiceUrl) {
+    }
 }

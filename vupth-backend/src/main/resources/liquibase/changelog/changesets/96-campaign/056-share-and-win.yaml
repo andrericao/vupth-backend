@@ -1,0 +1,58 @@
+databaseChangeLog:
+  # compartilhe-e-ganhe-no-backend (DEC-113/115/117): a adesao a campanha de link (Participar ou cupom) e a mesma tabela dos cupons aceitos
+  # (campaign_redemption, com a via); a indicacao guarda a campanha do link; o premio nasce travado (released_at nulo) e so e pago depois
+  # que o Andre libera; a campanha ganha o teto de gasto.
+  - changeSet:
+      id: 056-redemption-via
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: campaign_redemption, columnName: via}
+      changes:
+        - addColumn:
+            tableName: campaign_redemption
+            columns:
+              - column: {name: via, type: "VARCHAR(10)", defaultValue: CUPOM, constraints: {nullable: false}}
+
+  - changeSet:
+      id: 056-referral-campaign
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: referral, columnName: campaign_id}
+      changes:
+        - addColumn:
+            tableName: referral
+            columns:
+              - column: {name: campaign_id, type: UUID}
+
+  - changeSet:
+      id: 056-campaign-max_total_cost
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: campaign, columnName: max_total_cost}
+      changes:
+        - addColumn:
+            tableName: campaign
+            columns:
+              - column: {name: max_total_cost, type: "NUMERIC(10,2)"}
+
+  - changeSet:
+      id: 056-referral_credit-released_at
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: referral_credit, columnName: released_at}
+      changes:
+        - addColumn:
+            tableName: referral_credit
+            columns:
+              - column: {name: released_at, type: TIMESTAMP WITH TIME ZONE}
+        # os creditos que ja existiam foram combinados sem esta trava: ficam liberados
+        - sql:
+            sql: UPDATE referral_credit SET released_at = created_at WHERE released_at IS NULL

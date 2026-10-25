@@ -1,0 +1,43 @@
+databaseChangeLog:
+  # teste-com-varias-lojas (DEC-108, 23/10): um teste com nome cobre varias lojas. A loja entra ao iniciar e pode sair antes do
+  # fim (left_at) sem encerrar as outras; encerrar o teste tira todas. Uma loja so pode estar em um teste ativo (conferido no
+  # servico). Os testes ja criados (uma loja cada) viram uma linha aqui.
+  - changeSet:
+      id: 033-create-test_run_store
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: test_run_store
+      changes:
+        - createTable:
+            tableName: test_run_store
+            columns:
+              - column: {name: test_run_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: establishment_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: joined_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: left_at, type: TIMESTAMP WITH TIME ZONE}
+        - addPrimaryKey:
+            tableName: test_run_store
+            columnNames: test_run_id, establishment_id
+            constraintName: pk_test_run_store
+        - createIndex:
+            tableName: test_run_store
+            indexName: ix_test_run_store_establishment
+            columns:
+              - column: {name: establishment_id}
+              - column: {name: left_at}
+        - sql:
+            sql: >
+              INSERT INTO test_run_store (test_run_id, establishment_id, joined_at, left_at)
+              SELECT id, establishment_id, started_at, ended_at FROM test_run WHERE establishment_id IS NOT NULL
+
+  - changeSet:
+      id: 033-test_run-establishment-nullable
+      author: andrericao
+      changes:
+        - dropNotNullConstraint:
+            tableName: test_run
+            columnName: establishment_id
+            columnDataType: UUID

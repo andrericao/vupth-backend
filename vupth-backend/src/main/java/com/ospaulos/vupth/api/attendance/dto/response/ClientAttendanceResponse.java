@@ -42,7 +42,9 @@ public record ClientAttendanceResponse(
         @com.fasterxml.jackson.annotation.JsonProperty("payment_status")
         com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus,
         @com.fasterxml.jackson.annotation.JsonProperty("not_realized_reason") String notRealizedReason,
-        @com.fasterxml.jackson.annotation.JsonProperty("late_arrival") Boolean lateArrival
+        @com.fasterxml.jackson.annotation.JsonProperty("late_arrival") Boolean lateArrival,
+        // cupom-ativado-em-configuracoes: o desconto do cupom; o totalValue ja vem com ele (o que o cliente paga pelo corte)
+        @com.fasterxml.jackson.annotation.JsonProperty("discount") BigDecimal discount
 ) {
 
     public ClientAttendanceResponse withPenalties(List<PenaltyChargeResponse> charged) {
@@ -52,20 +54,20 @@ public record ClientAttendanceResponse(
         return new ClientAttendanceResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime,
                 startTime, endTime, durationInMinutes, charged, total, rated, paymentStatus, notRealizedReason,
-                lateArrival);
+                lateArrival, discount);
     }
 
     public ClientAttendanceResponse withRated(boolean isRated) {
         return new ClientAttendanceResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime,
                 startTime, endTime, durationInMinutes, penalties, penaltyTotal, isRated, paymentStatus,
-                notRealizedReason, lateArrival);
+                notRealizedReason, lateArrival, discount);
     }
 
     public ClientAttendanceResponse withReason(String reason, boolean late) {
         return new ClientAttendanceResponse(id, clientId, clientName, professionalId, professionalName,
                 establishmentId, establishmentName, establishmentStatus, services, status, totalValue, scheduledTime,
-                startTime, endTime, durationInMinutes, penalties, penaltyTotal, rated, paymentStatus, reason, late);
+                startTime, endTime, durationInMinutes, penalties, penaltyTotal, rated, paymentStatus, reason, late, discount);
     }
 
     public static ClientAttendanceResponse fromEntity(Attendance attendance) {
@@ -87,7 +89,7 @@ public record ClientAttendanceResponse(
                         .map(AttendanceInQueueResponse.ServiceItemSummary::fromEntity)
                         .collect(Collectors.toList()),
                 attendance.getStatus(),
-                attendance.getTotalValue(),
+                attendance.getAmountDue(),
                 attendance.getScheduledTime(),
                 attendance.getStartTime(),
                 attendance.getEndTime(),
@@ -97,7 +99,8 @@ public record ClientAttendanceResponse(
                 null,
                 attendance.getEffectivePaymentStatus(),
                 null,
-                null
+                null,
+                attendance.getDiscount()
         );
     }
 }

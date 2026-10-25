@@ -65,13 +65,13 @@ class PaymentNotifierTest {
     }
 
     @Test
-    @DisplayName("Ja paguei: o profissional recebe push e WS PAYMENT_CLAIMED com o valor, para conferir")
+    @DisplayName("Ja paguei: o profissional recebe push 'Confirmar pagamento' e WS PAYMENT_CLAIMED, com o valor e o nome do cliente")
     void claimedNotifiesProfessional() {
         notifier.claimed(attendance.getId(), new BigDecimal("1045.5"));
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
-        verify(pushPublisher).notifyUser(eq(professionalId), eq("Confira o pagamento"), body.capture(), anyMap());
-        assertThat(body.getValue()).isEqualTo("Ana diz que pagou R$ 1.045,50 na Barbearia Central. Confira se consta na sua conta.");
+        verify(pushPublisher).notifyUser(eq(professionalId), eq("Confirmar pagamento"), body.capture(), anyMap());
+        assertThat(body.getValue()).isEqualTo("Pagamento de R$ 1.045,50 do cliente Ana");
         ArgumentCaptor<QueueNotification> ws = ArgumentCaptor.forClass(QueueNotification.class);
         verify(queuePublisher).notifyClient(eq(professionalId), ws.capture());
         assertThat(ws.getValue().type()).isEqualTo("PAYMENT_CLAIMED");
@@ -83,7 +83,7 @@ class PaymentNotifierTest {
         attendance.setClient(null);
         notifier.claimed(attendance.getId(), null);
 
-        verify(pushPublisher).notifyUser(eq(professionalId), any(), eq("O cliente diz que pagou R$ 0,00 na Barbearia Central. Confira se consta na sua conta."), anyMap());
+        verify(pushPublisher).notifyUser(eq(professionalId), any(), eq("Pagamento de R$ 0,00 do cliente convidado"), anyMap());
     }
 
     @Test
@@ -121,5 +121,23 @@ class PaymentNotifierTest {
 
         when(attendanceRepository.findById(attendance.getId())).thenThrow(new RuntimeException("banco fora"));
         assertThatCode(() -> notifier.claimed(attendance.getId(), BigDecimal.ONE)).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("Nao recebi: o cliente recebe push e WS PAYMENT_REFUSED dizendo que o profissional nao confirmou; convidado nao recebe")
+    void refusedNotifiesClient() {
+        notifier.refused(attendance.getId());
+
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(pushPublisher).notifyUser(eq(clientId), eq("Pagamento não confirmado"), body.capture(), anyMap());
+        assertThat(body.getValue()).startsWith("Beto não confirmou o seu pagamento.").contains("segue pendente");
+        ArgumentCaptor<QueueNotification> ws = ArgumentCaptor.forClass(QueueNotification.class);
+        verify(queuePublisher).notifyClient(eq(clientId), ws.capture());
+        assertThat(ws.getValue().type()).isEqualTo("PAYMENT_REFUSED");
+
+        attendance.setClient(null);
+        clearInvocations(pushPublisher, queuePublisher);
+        notifier.refused(attendance.getId());
+        verifyNoInteractions(pushPublisher, queuePublisher);
     }
 }

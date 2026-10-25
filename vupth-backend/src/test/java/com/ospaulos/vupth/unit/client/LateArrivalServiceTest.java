@@ -41,6 +41,7 @@ class LateArrivalServiceTest {
     @Mock ClientPenaltyEventRepository penaltyEventRepository;
     @Mock PushNotificationPublisher pushPublisher;
     @Mock FirstAttendanceExemption firstAttendanceExemption;
+    @Mock com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
     @InjectMocks LateArrivalService service;
 
     private static final OffsetDateTime NOW = BusinessClock.at(LocalDate.parse("2026-09-25"), LocalTime.parse("15:00"));
@@ -293,13 +294,83 @@ class LateArrivalServiceTest {
             verify(pushPublisher).notifyUser(eq(client.getId()), any(), body.capture(), data.capture());
             assertThat(data.getValue().get("lateCount")).isEqualTo(String.valueOf(count));
             assertThat(data.getValue().get("latesUntilPenalty")).isEqualTo(String.valueOf(3 - count));
+            assertThat(data.getValue().get("removedFromQueue")).isEqualTo("false");
             assertThat(data.getValue().get("movedToEnd")).isEqualTo(String.valueOf(count == 3));
             if (count == 3) {
                 assertThat(body.getValue()).contains("Você foi para o fim da fila");
             } else {
-                assertThat(body.getValue()).contains("No 3º, multa de R$ 5,00");
+                assertThat(body.getValue()).contains("No 3º, multa de R$ 5,00 e você vai para o fim da fila");
             }
         }
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos (opcao A): sem pagar, a 2a multa so vem depois de mais 3 atrasos")
+    void secondFineNeedsThreeMoreLates() {
+        client.setLateCount(2);
+        service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW, true); // 3o: multa, contador a zero
+        assertThat(client.getLateCount()).isZero();
+        verify(penaltyEventRepository, times(1)).save(any(ClientPenaltyEvent.class));
+
+        service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW, true); // 1o do novo ciclo
+        service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW, true); // 2o
+        assertThat(client.getLateCount()).isEqualTo(2);
+        verify(penaltyEventRepository, times(1)).save(any(ClientPenaltyEvent.class));
+
+        service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW, true); // 3o do novo ciclo: 2a multa
+        verify(penaltyEventRepository, times(2)).save(any(ClientPenaltyEvent.class));
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: com duas multas pendentes (DEC-83) o 3o atraso nao gera multa nova, mas o contador zera")
+    void thirdLateAtThePendingLimit() {
+        client.setLateCount(2);
+        when(clientPenaltyService.pendingFor(client.getId()))
+                .thenReturn(List.of(mock(ClientPenaltyEvent.class), mock(ClientPenaltyEvent.class)));
+
+        int n = service.registerLate(attendance(NOW.minusMinutes(30)), professional, NOW, true);
+
+        assertThat(n).isEqualTo(3);
+        assertThat(client.getLateCount()).isZero();
+        verify(penaltyEventRepository, never()).save(any(ClientPenaltyEvent.class));
+        ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+        verify(pushPublisher).notifyUser(eq(client.getId()), any(), body.capture(), any());
+        assertThat(body.getValue()).contains("sem multa nova").contains("saiu da fila");
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: o aviso do 'Nao chegou' diz 'n de 3' e, no 3o, que saiu da fila (removedFromQueue); o atraso a mao nao")
+    void noShowNotificationSaysTheExit() {
+        for (int count = 1; count <= 3; count++) {
+            client.setLateCount(count - 1);
+            clearInvocations(pushPublisher);
+
+            service.registerLate(attendance(NOW.minusMinutes(10)), professional, NOW, true);
+
+            ArgumentCaptor<java.util.Map<String, Object>> data = ArgumentCaptor.forClass(java.util.Map.class);
+            ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+            verify(pushPublisher).notifyUser(eq(client.getId()), any(), body.capture(), data.capture());
+            assertThat(body.getValue()).contains(count + " de 3");
+            assertThat(data.getValue().get("removedFromQueue")).isEqualTo(String.valueOf(count == 3));
+            assertThat(data.getValue().get("movedToEnd")).isEqualTo("false");
+            if (count == 3) {
+                assertThat(body.getValue()).contains("saiu da fila").contains("Pague a multa para zerar a contagem");
+            } else {
+                assertThat(body.getValue()).contains("você sai da fila");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: pagar a multa de atraso zera o contador; sem contador ou sem cliente, nada muda")
+    void paidPenaltyResetsTheCounter() {
+        client.setLateCount(3);
+        service.resetOnPenaltyPaid(client);
+        assertThat(client.getLateCount()).isZero();
+
+        service.resetOnPenaltyPaid(client);
+        service.resetOnPenaltyPaid(null);
+        assertThat(client.getLateCount()).isZero();
     }
 
     @Test

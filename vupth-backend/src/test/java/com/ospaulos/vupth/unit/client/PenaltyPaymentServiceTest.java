@@ -247,4 +247,34 @@ class PenaltyPaymentServiceTest {
         assertThat(response.pixCopyPaste()).isNull();
         assertThat(response.holderName()).isNull();
     }
+
+    @Test
+    @DisplayName("nao-chegou-tres-atrasos: confirmar o pagamento avulso de uma multa de atraso zera o contador; outra multa nao mexe")
+    void confirmingALatePenaltyResetsTheCounter() {
+        UUID admin = UUID.randomUUID();
+        OffsetDateTime now = OffsetDateTime.now();
+        com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrival =
+                mock(com.ospaulos.vupth.domain.client.service.LateArrivalService.class);
+        var service = splitService();
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "lateArrivalService", lateArrival);
+        com.ospaulos.vupth.domain.client.model.Client who = mock(com.ospaulos.vupth.domain.client.model.Client.class);
+
+        UUID client = UUID.randomUUID();
+        PenaltyPayment late = payment(client, PenaltyPayment.Status.PENDING, now.minusHours(2), now.plusHours(22));
+        ClientPenaltyEvent lateEvent = new ClientPenaltyEvent(null, com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL,
+                null, 0, new BigDecimal("5.00"));
+        when(payments.findById(late.getId())).thenReturn(Optional.of(late));
+        when(events.findByPenaltyPaymentId(late.getId())).thenReturn(List.of(lateEvent));
+        when(clients.findById(client)).thenReturn(Optional.of(who));
+        service.confirm(late.getId(), admin);
+        org.mockito.Mockito.verify(lateArrival).resetOnPenaltyPaid(who);
+
+        PenaltyPayment cancel = payment(client, PenaltyPayment.Status.PENDING, now.minusHours(2), now.plusHours(22));
+        ClientPenaltyEvent cancelEvent = new ClientPenaltyEvent(null, com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_CANCEL,
+                null, 0, new BigDecimal("5.00"));
+        when(payments.findById(cancel.getId())).thenReturn(Optional.of(cancel));
+        when(events.findByPenaltyPaymentId(cancel.getId())).thenReturn(List.of(cancelEvent));
+        service.confirm(cancel.getId(), admin);
+        org.mockito.Mockito.verifyNoMoreInteractions(lateArrival);
+    }
 }

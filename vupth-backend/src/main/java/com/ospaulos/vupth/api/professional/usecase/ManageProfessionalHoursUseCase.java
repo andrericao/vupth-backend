@@ -34,6 +34,7 @@ import java.util.function.UnaryOperator;
 public class ManageProfessionalHoursUseCase {
 
     private final ProfessionalRepository repository;
+    private final com.ospaulos.vupth.domain.attendance.cut.service.CutRequestService cutRequestService;
 
     @Transactional(readOnly = true)
     public BusinessHoursResponse get(UUID professionalId) {
@@ -66,6 +67,8 @@ public class ManageProfessionalHoursUseCase {
         requireInsideStore(professional, next);
         professional.applyWorkingHours(next);
         repository.save(professional);
+        // solicitar-agendamento: abriu um dia que alguem tinha pedido sem aceitar -> o pedido vence e o cliente agenda direto
+        cutRequestService.expireRequestsForOpenedDays(professionalId);
         return BusinessHoursResponse.forProfessional(next, professional.getEffectiveHours(), BusinessClock.today());
     }
 

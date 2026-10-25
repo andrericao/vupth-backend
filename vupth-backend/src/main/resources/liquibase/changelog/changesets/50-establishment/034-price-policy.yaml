@@ -1,0 +1,49 @@
+databaseChangeLog:
+  # politica-de-preco-com-ciencia (DEC-100, 23/10): cada publicacao da politica de precos guarda a versao e a data; cada profissional
+  # avisado guarda o dia do aviso, o prazo (7 dias) e o dia da ciencia. Sem a ciencia no prazo, abrir a loja/fila e barrado.
+  - changeSet:
+      id: 034-create-price_policy
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: price_policy
+      changes:
+        - createTable:
+            tableName: price_policy
+            columns:
+              - column: {name: version, type: INTEGER, constraints: {primaryKey: true, primaryKeyName: pk_price_policy, nullable: false}}
+              - column: {name: published_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: summary, type: VARCHAR(2000), constraints: {nullable: false}}
+              - column: {name: published_by, type: UUID}
+              - column: {name: services_updated, type: INTEGER, defaultValueNumeric: 0, constraints: {nullable: false}}
+              - column: {name: professionals_notified, type: INTEGER, defaultValueNumeric: 0, constraints: {nullable: false}}
+
+  - changeSet:
+      id: 034-create-professional_price_ack
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: professional_price_ack
+      changes:
+        - createTable:
+            tableName: professional_price_ack
+            columns:
+              - column: {name: professional_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: policy_version, type: INTEGER, constraints: {nullable: false}}
+              - column: {name: notified_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: deadline_at, type: TIMESTAMP WITH TIME ZONE, constraints: {nullable: false}}
+              - column: {name: acknowledged_at, type: TIMESTAMP WITH TIME ZONE}
+        - addPrimaryKey:
+            tableName: professional_price_ack
+            columnNames: professional_id, policy_version
+            constraintName: pk_professional_price_ack
+        - createIndex:
+            tableName: professional_price_ack
+            indexName: ix_professional_price_ack_open
+            columns:
+              - column: {name: professional_id}
+              - column: {name: acknowledged_at}

@@ -44,6 +44,10 @@ public class ReferralCredit {
     @Column(name = "paid_at")
     private OffsetDateTime paidAt;
 
+    /** O premio nasce travado: so entra no "a pagar" depois que o Andre libera (nulo = travado). */
+    @Column(name = "released_at")
+    private OffsetDateTime releasedAt;
+
     public ReferralCredit(UUID campaignId, UUID attendanceId, UUID clientId, UUID beneficiaryId,
                           ReferralShare share, BigDecimal amount, OffsetDateTime createdAt) {
         this.id = UUID.randomUUID();

@@ -89,6 +89,24 @@ public class Attendance implements Serializable {
     private BigDecimal totalValue;
 
     /**
+     * tres-faltas-pagar-adiantado (DEC-105/115): agendamento de cliente com tres ocorrencias. Agendar segue livre; o cliente mostra
+     * ao profissional que pagou e o profissional confirma o recebimento antes, na hora ou depois. Nunca true em loja de teste.
+     */
+    @Column(name = "prepay_required", nullable = false)
+    private boolean prepayRequired = false;
+
+    /** Cupom ativado usado neste corte (cupom-ativado-em-configuracoes); nulo = sem cupom. */
+    @Column(name = "coupon_campaign_id")
+    private UUID couponCampaignId;
+
+    /**
+     * Desconto do cupom. O {@code totalValue} segue sendo o preco cheio (a divisao soma ele); o cliente paga
+     * {@link #getAmountDue()} e o app repassa o desconto ao profissional.
+     */
+    @Column(name = "discount", nullable = false, precision = 10, scale = 2)
+    private BigDecimal discount = BigDecimal.ZERO;
+
+    /**
      * Divisao do preco CONGELADA na criacao (Receita LIQUIDA): a soma, servico a servico, do que o
      * profissional recebe, dos 4% da empresa de pagamento e da parte do app. As tres somam o
      * {@code totalValue}. Nulas quando algum servico e legado (sem recebe) — meia soma seria um
@@ -218,10 +236,41 @@ public class Attendance implements Serializable {
     @Column(name = "payment_status", length = 30)
     private com.ospaulos.vupth.domain.payment.PaymentStatus paymentStatus;
 
+    /**
+     * Atendimento de teste (DEC-106, piloto): criado com um teste ativo na loja, marcado na criacao e nunca alterado.
+     * Tudo funciona como sempre (o profissional toca "Recebi"), mas fica fora do livro-caixa e do dinheiro real do painel.
+     */
+    @Column(name = "test", nullable = false)
+    private boolean test;
+
+    /** A rodada de teste (test_run) a que este atendimento pertence; nulo fora de teste. */
+    @Column(name = "test_run_id")
+    private UUID testRunId;
+
     /** Como o profissional disse que recebeu (DEC-85): PIX, CARTAO, DINHEIRO ou NOTA. Nulo = nao informado. */
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", length = 10)
     private com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod;
+
+    /** A cobranca Pix do Asaas deste atendimento (asaas-sandbox-no-fluxo, DEC-119); nulo = vale o Pix do profissional. */
+    @Column(name = "asaas_payment_id", length = 60)
+    private String asaasPaymentId;
+
+    /** SANDBOX ou REAL: o modo em que a cobranca nasceu; ela termina nele mesmo que a conexao mude depois. */
+    @Column(name = "asaas_mode", length = 10)
+    private String asaasMode;
+
+    @Column(name = "asaas_status", length = 40)
+    private String asaasStatus;
+
+    @Column(name = "asaas_pix_payload", columnDefinition = "TEXT")
+    private String asaasPixPayload;
+
+    @Column(name = "asaas_pix_image", columnDefinition = "TEXT")
+    private String asaasPixImage;
+
+    @Column(name = "asaas_invoice_url", length = 500)
+    private String asaasInvoiceUrl;
 
     /** Quando o cliente tocou "Ja paguei". */
     @Column(name = "payment_claimed_at")
@@ -379,6 +428,13 @@ public class Attendance implements Serializable {
     @Transient
     public int getEstimatedTotalMinutes() {
         return this.estimatedMinutes != null ? this.estimatedMinutes : 0;
+    }
+
+    /** O que o cliente paga pelo corte: o preco cheio menos o desconto do cupom. */
+    @Transient
+    public BigDecimal getAmountDue() {
+        BigDecimal d = this.discount != null ? this.discount : BigDecimal.ZERO;
+        return getTotalValue().subtract(d).max(BigDecimal.ZERO);
     }
 
     @Transient

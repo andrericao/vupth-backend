@@ -113,8 +113,8 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Notificacao que pede decisao (troca de posicao) segue sem categoria")
-    void decisionHasNoCategory() throws IOException {
+    @DisplayName("Pedido de troca de posicao sai com Trocar/Recusar (push-acoes-por-pergunta)")
+    void swapRequestCarriesSwapActions() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -122,7 +122,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Pedido de troca", "Aceite ou recuse.",
                 Map.of("type", "SWAP_REQUESTED"));
 
-        assertThat(body.get()).doesNotContain("categoryId");
+        assertThat(body.get()).contains("\"categoryId\":\"TROCAR_RECUSAR\"");
     }
 
     @Test
@@ -148,7 +148,11 @@ class ExpoPushSenderTest {
             "CUT_EXPIRED, VER_ATENDIMENTO",
             "ATTENDANCE_FINISHED, AVALIAR",
             "PAYMENT_PENDING, PAGAR",
-            "NO_SHOW_REMOVED, PAGAR_MULTA",
+            "OWNERSHIP_TRANSFER_REQUESTED, ACEITAR_RECUSAR",
+            "PAYMENT_CLAIMED, CONFIRMAR_RECUSAR",
+            "PAYMENT_REFUSED, PAGAR",
+            "NO_SHOW_AVAILABLE, CIENCIA",
+            "NO_SHOW_REMOVED, CIENCIA",
             "ATTENDANCE_STARTED, CIENCIA"
     })
     @DisplayName("Push do Client sai com a categoria do tipo (push-categorias-do-client, DEC-43)")
@@ -163,8 +167,8 @@ class ExpoPushSenderTest {
     }
 
     @Test
-    @DisplayName("Oferta de vez antes segue sem categoria (espera o Andre)")
-    void earlierTurnOfferHasNoCategory() throws IOException {
+    @DisplayName("Oferta de vez antes sai com Aceitar/Manter (push-acoes-por-pergunta)")
+    void earlierTurnOfferCarriesAcceptKeep() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
                 {"data":[{"status":"ok","id":"t-1"}]}""", body);
@@ -172,11 +176,11 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Vez antes", "Aceite ou recuse.",
                 Map.of("type", "EARLIER_TURN_OFFERED"));
 
-        assertThat(body.get()).doesNotContain("categoryId");
+        assertThat(body.get()).contains("\"categoryId\":\"ACEITAR_MANTER\"");
     }
 
     @Test
-    @DisplayName("Pedido de corte sai com categoryId CIENCIA — o OK aparece com o app fechado (S40)")
+    @DisplayName("Pedido de corte sai com categoryId ACEITAR_RECUSAR (push-com-acoes)")
     void cutRequestCarriesCienciaCategory() throws IOException {
         AtomicReference<String> body = new AtomicReference<>();
         var sender = senderReplying(200, """
@@ -185,7 +189,7 @@ class ExpoPushSenderTest {
         sender.send(List.of(TOKEN_A), "Novo pedido de corte", "Aceite ou recuse.",
                 Map.of("type", "CUT_REQUESTED"));
 
-        assertThat(body.get()).contains("\"categoryId\":\"CIENCIA\"");
+        assertThat(body.get()).contains("\"categoryId\":\"ACEITAR_RECUSAR\"");
     }
 
     @Test

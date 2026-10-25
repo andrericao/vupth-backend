@@ -106,7 +106,12 @@ class AdminMetricsIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.payments_stuck_hours").value(1))
                 .andExpect(jsonPath("$.payments_stuck").isArray())
-                .andExpect(jsonPath("$.not_measured[0]").value("push_refused"));
+                .andExpect(jsonPath("$.not_measured").isEmpty())
+                .andExpect(jsonPath("$.push_refused.last_hour").isNumber())
+                .andExpect(jsonPath("$.push_refused.last_24h").isNumber())
+                .andExpect(jsonPath("$.push_refused.by_hour").isArray())
+                .andExpect(jsonPath("$.http_5xx.last_hour").isNumber())
+                .andExpect(jsonPath("$.http_5xx.by_hour").isArray());
         mvc.perform(get("/admin/alerts").param("hours", "0").header("Authorization", owner.token()))
                 .andExpect(jsonPath("$.payments_stuck_hours").value(24));
 

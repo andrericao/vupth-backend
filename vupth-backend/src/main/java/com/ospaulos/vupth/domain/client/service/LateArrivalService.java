@@ -26,8 +26,12 @@ import java.util.stream.Stream;
  * Contador de atrasos (D4 — Andre 18/09 e 25/09).
  *
  * <ul>
- *   <li><b>Soma entre atendimentos</b> e <b>zera quando a multa nasce</b>: o 3o atraso custa R$ 5,00,
- *       cobrado no proximo atendimento como as outras multas.</li>
+ *   <li><b>Soma entre atendimentos</b> e <b>zera quando a multa nasce</b>: o 3o atraso custa R$ 5,00, cobrado no proximo
+ *       atendimento como as outras multas. Sem pagar, a 2a multa so vem depois de mais 3 atrasos, e ha no maximo duas multas
+ *       pendentes (opcao A do Andre, 24/10, nao-chegou-tres-atrasos); pagar a multa de atraso tambem zera o contador.</li>
+ *   <li><b>"Nao chegou"</b> e um atraso, em qualquer loja (o contador e do cliente, nao da loja); no 3o, alem da multa, o
+ *       cliente <b>sai da fila</b>. So o "Nao chegou" tira da fila; o atraso marcado a mao vai para o fim da fila. O contador
+ *       fica separado das outras multas (sair da fila com menos de 1 h da vez etc.), que seguem as regras delas.</li>
  *   <li><b>Tolerancia de 5 min</b> depois do horario comunicado — o mais tarde entre o prometido na
  *       entrada e a chegada da vez (o profissional ficou livre). Marcacao antes disso NAO conta: ninguem
  *       e punido por nao estar la antes do que lhe foi dito, nem pelo atraso em cascata que o sistema
@@ -47,10 +51,13 @@ public class LateArrivalService {
     public static final int LATES_PER_PENALTY = 3;
     static final int TOLERANCE_MINUTES = 5;
     static final BigDecimal LATE_PENALTY = new BigDecimal("5.00");
+    /** DEC-83: no maximo duas multas pendentes; com duas, a multa do 3o atraso nao acumula. */
+    static final int MAX_PENDING_PENALTIES = 2;
 
     private final ClientPenaltyEventRepository penaltyEventRepository;
     private final PushNotificationPublisher pushPublisher;
     private final FirstAttendanceExemption firstAttendanceExemption;
+    private final ClientPenaltyService clientPenaltyService;
 
     /** falta-do-cliente (DEC-86): a espera antes de o profissional poder marcar que o cliente nao compareceu. */
     @org.springframework.beans.factory.annotation.Value("${vupth.penalty.no-show-wait-minutes:10}")
@@ -93,6 +100,11 @@ public class LateArrivalService {
      * Devolve o numero deste atraso (1, 2 ou 3) ou 0 se nao contou.
      */
     public int registerLate(Attendance attendance, Professional professional, OffsetDateTime now) {
+        return registerLate(attendance, professional, now, false);
+    }
+
+    /** {@code noShow}: o atraso veio do "Nao chegou"; muda so o aviso (sai da fila x vai para o fim da fila). */
+    public int registerLate(Attendance attendance, Professional professional, OffsetDateTime now, boolean noShow) {
         Client client = attendance.getClient();
         if (client == null) {
             return 0; // convidado — sem conta, sem contador
@@ -111,18 +123,26 @@ public class LateArrivalService {
         }
         attendance.setCountedLates(attendance.getCountedLates() + 1);
         int count = client.getLateCount() + 1;
+        boolean penalized = false;
         if (count >= LATES_PER_PENALTY) {
-            penaltyEventRepository.save(new ClientPenaltyEvent(
-                    client, PenaltyType.LATE_ARRIVAL, attendance.getId(), 0, LATE_PENALTY));
-            client.setLateCount(0);
-            log.info("[Late] 3o atraso do client={} (attendance={}) -> multa de R$ {}",
-                    client.getId(), attendance.getId(), LATE_PENALTY);
+            // limite de duas multas pendentes (DEC-83): com duas, a multa nova nao acumula
+            boolean atLimit = clientPenaltyService != null
+                    && clientPenaltyService.pendingFor(client.getId()).size() >= MAX_PENDING_PENALTIES;
+            if (!atLimit) {
+                penaltyEventRepository.save(new ClientPenaltyEvent(
+                        client, PenaltyType.LATE_ARRIVAL, attendance.getId(), 0, LATE_PENALTY));
+                penalized = true;
+            }
+            client.setLateCount(0); // a 2a multa so vem depois de mais 3 atrasos
+            count = LATES_PER_PENALTY;
+            log.info("[Late] 3o atraso do client={} (attendance={}) -> {}", client.getId(), attendance.getId(),
+                    penalized ? "multa de R$ " + LATE_PENALTY : "sem multa nova (limite de duas pendentes)");
         } else {
             client.setLateCount(count);
             log.info("[Late] atraso {} de {} do client={} (attendance={})",
                     count, LATES_PER_PENALTY, client.getId(), attendance.getId());
         }
-        notify(client, attendance, count);
+        notify(client, attendance, count, noShow, penalized);
         return count;
     }
 
@@ -152,6 +172,17 @@ public class LateArrivalService {
         log.info("[Late] atrasos desfeitos — client={} lateCount={}", client.getId(), client.getLateCount());
     }
 
+    /**
+     * A multa de atraso foi paga (pagamento avulso confirmado ou corte que a carregava concluido e pago): o contador volta a zero
+     * (nao-chegou-tres-atrasos). Sem contador, nada muda.
+     */
+    public void resetOnPenaltyPaid(Client client) {
+        if (client != null && client.getLateCount() > 0) {
+            client.setLateCount(0);
+            log.info("[Late] multa de atraso paga — contador do client={} zerado", client.getId());
+        }
+    }
+
     /** A partir de quando o profissional (ou o dono) pode marcar que o cliente nao compareceu. */
     public OffsetDateTime noShowAvailableAt(Attendance attendance, Professional professional, OffsetDateTime now) {
         OffsetDateTime communicated = communicatedTime(attendance, professional, now);
@@ -159,17 +190,33 @@ public class LateArrivalService {
         return base.plusMinutes(noShowWaitMinutes);
     }
 
-    private void notify(Client client, Attendance attendance, int count) {
-        // No 3o ele vai para o fim da fila (Andre, 26/09): pode continuar ali ou sair sem nova multa.
-        String body = count >= LATES_PER_PENALTY
-                ? "Este é o seu " + count + "º atraso: multa de R$ 5,00 no seu próximo atendimento. Você foi para o fim "
-                        + "da fila — pode continuar ou sair sem nova multa."
-                : "Este é o seu " + count + "º atraso. No " + LATES_PER_PENALTY + "º, multa de R$ 5,00 e você vai para o fim da fila.";
+    /** A espera (min) depois da hora comunicada para o NAO CHEGOU valer (DEC-101: 10). */
+    public int noShowWaitMinutes() {
+        return noShowWaitMinutes;
+    }
+
+    private void notify(Client client, Attendance attendance, int count, boolean noShow, boolean penalized) {
+        boolean third = count >= LATES_PER_PENALTY;
+        String fine = penalized ? "multa de R$ 5,00" : "sem multa nova (voce ja tem duas pendentes)";
+        String body;
+        if (!third) {
+            body = "Este é o seu " + count + "º atraso (" + count + " de " + LATES_PER_PENALTY + "). No " + LATES_PER_PENALTY
+                    + "º, multa de R$ 5,00" + (noShow ? " e você sai da fila." : " e você vai para o fim da fila.");
+        } else if (noShow) {
+            // nao-chegou-tres-atrasos: o 3o "Nao chegou" multa e tira da fila; pagar a multa zera a contagem
+            body = "Este é o seu " + count + "º atraso (" + count + " de " + LATES_PER_PENALTY + "): " + fine
+                    + " e você saiu da fila. Pague a multa para zerar a contagem.";
+        } else {
+            // atraso marcado a mao: no 3o ele vai para o fim da fila (Andre, 26/09); pode continuar ali ou sair sem nova multa
+            body = "Este é o seu " + count + "º atraso: " + fine + " no seu próximo atendimento. Você foi para o fim "
+                    + "da fila — pode continuar ou sair sem nova multa.";
+        }
         pushPublisher.notifyUser(client.getId(), "Você está atrasado", body, Map.of(
                 "type", "LATE_MARKED",
                 "attendanceId", String.valueOf(attendance.getId()),
                 "lateCount", String.valueOf(count),
                 "latesUntilPenalty", String.valueOf(Math.max(0, LATES_PER_PENALTY - count)),
-                "movedToEnd", String.valueOf(count >= LATES_PER_PENALTY)));
+                "removedFromQueue", String.valueOf(third && noShow),
+                "movedToEnd", String.valueOf(third && !noShow)));
     }
 }

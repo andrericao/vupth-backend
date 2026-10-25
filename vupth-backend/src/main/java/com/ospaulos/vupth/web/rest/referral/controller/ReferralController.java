@@ -30,6 +30,6 @@ public class ReferralController {
     @PostMapping("/claim")
     public ResponseEntity<ReferralClaimResponse> claim(@RequestBody @Valid ReferralClaimRequest request,
                                                        @AuthenticationPrincipal UserDetailsImpl principal) {
-        return ResponseEntity.ok(referralService.claim(principal.getUserId(), request.code()));
+        return ResponseEntity.ok(referralService.claim(principal.getUserId(), request.code(), request.campaignId()));
     }
 }

@@ -34,6 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ospaulos.vupth.domain.establishment.valueObject.DayHours;
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 
 import java.time.Clock;
@@ -59,6 +60,10 @@ public class CutRequestServiceImpl implements CutRequestService {
     private final AttendanceService attendanceService;
     private final QueueWebSocketPublisher queuePublisher;
     private final PushNotificationPublisher pushPublisher;
+
+    /** O cupom do pedido (cupom-no-pedido-de-corte): conferido ao pedir e aplicado ao aceitar. Opcional (testes de unidade). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.campaign.service.CouponService couponService;
 
     /** Relogio do servico. Os testes de borda do vencimento (pedido-vence-no-horario) trocam por um fixo. */
     private Clock clock = Clock.systemDefaultZone();
@@ -107,8 +112,18 @@ public class CutRequestServiceImpl implements CutRequestService {
             }
         }
 
+        // cupom-no-pedido-de-corte: o cupom que o cliente escolheu tem de valer agora (senao 422/409 e ele sabe na hora)
+        if (request.couponCampaignId() != null && couponService != null) {
+            couponService.assertUsable(clientId, request.couponCampaignId());
+        }
         OffsetDateTime now = OffsetDateTime.now(clock);
+        // solicitar-agendamento: o dia pedido nao esta liberado na agenda do profissional (fechado para ele ou para a loja)
+        boolean agendaRequested = isAgendaClosedOn(professional, request.desiredTime());
+        boolean firstAgendaRequest = agendaRequested && cutRequestRepository
+                .findByProfessionalIdAndStatusAndAgendaRequestedTrue(professional.getId(), CutRequestStatus.PENDING).isEmpty();
         CutRequest cut = new CutRequest();
+        cut.setAgendaRequested(agendaRequested);
+        cut.setCouponCampaignId(request.couponCampaignId());
         cut.setClient(client);
         cut.setProfessional(professional);
         cut.setEstablishment(establishment);
@@ -120,6 +135,9 @@ public class CutRequestServiceImpl implements CutRequestService {
         CutRequest saved = cutRequestRepository.save(cut);
 
         notifyProfessional(saved);
+        if (firstAgendaRequest) {
+            notifyAgendaRelease(saved);
+        }
 
         log.info("[CutRequest] create — id={} PENDING expiresAt={}", saved.getId(), saved.getExpiresAt());
         return CutRequestResponse.fromEntity(saved);
@@ -157,20 +175,26 @@ public class CutRequestServiceImpl implements CutRequestService {
         // horario. Para hoje ou sem dia: aceite explicito = autorizacao, nasce um SCHEDULED na cauda
         // (bypassa o gate C1).
         boolean otherDay = isForAnotherDay(cut.getDesiredTime(), now);
+        if (otherDay && cut.isAgendaRequested()) {
+            openAgendaDay(cut); // solicitar-agendamento: aceitar o pedido libera a agenda daquele dia
+        }
         Attendance attendance = otherDay
                 ? attendanceService.createIntentionFromCutRequest(cut.getProfessional(), cut.getEstablishment(),
                         cut.getClient(), cut.getServiceItems(), cut.getDesiredTime())
                 : attendanceService.createScheduledFromCutRequest(
                         cut.getProfessional(), cut.getEstablishment(), cut.getClient(), cut.getServiceItems());
 
+        boolean couponApplied = applyCoupon(cut, attendance);
         cut.setStatus(CutRequestStatus.ACCEPTED);
         cut.setRespondedAt(now);
         cut.setResultingAttendance(attendance);
         CutRequest saved = cutRequestRepository.save(cut);
 
-        String accepted = otherDay
+        String noCoupon = cut.getCouponCampaignId() != null && !couponApplied
+                ? " O cupom nao pode ser aplicado: o corte sai no preco cheio." : "";
+        String accepted = (otherDay
                 ? "Seu pedido de corte foi aceito — voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
-                : "Seu pedido de corte foi aceito — voce entrou na fila.";
+                : "Seu pedido de corte foi aceito — voce entrou na fila.") + noCoupon;
         if (!otherDay) {
             queuePublisher.broadcastQueue(cut.getEstablishment().getId());
         }
@@ -178,12 +202,16 @@ public class CutRequestServiceImpl implements CutRequestService {
                 "CUT_ACCEPTED", attendance.getId(), cut.getEstablishment().getId(), accepted)
                 .withCutRequestId(cut.getId()));
         pushPublisher.notifyUser(cut.getClient().getId(), "Pedido de corte aceito",
-                otherDay ? "Voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
-                        : "Voce entrou na fila.",
+                (otherDay ? "Voce esta agendado para " + formatDay(cut.getDesiredTime()) + "."
+                        : "Voce entrou na fila.") + noCoupon,
                 Map.of("type", "CUT_ACCEPTED",
                         "attendanceId", String.valueOf(attendance.getId()),
                         "attendanceStatus", String.valueOf(attendance.getStatus()),
                         "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+
+        if (otherDay && cut.isAgendaRequested()) {
+            expireRequestsForOpenedDays(professionalId); // os outros pedidos desse dia agora agendam direto
+        }
 
         log.info("[CutRequest] accept — id={} ACCEPTED -> attendance={}", cutRequestId, attendance.getId());
         return CutRequestResponse.fromEntity(saved);
@@ -305,16 +333,133 @@ public class CutRequestServiceImpl implements CutRequestService {
         return cut;
     }
 
+    /**
+     * Aplica ao atendimento o cupom que veio no pedido. O aceite do profissional nao pode falhar porque o cupom deixou de valer
+     * (venceu, foi usado em outro corte): nesse caso o corte sai no preco cheio e o cliente e avisado. Sem cupom, devolve true.
+     */
+    private boolean applyCoupon(CutRequest cut, Attendance attendance) {
+        if (cut.getCouponCampaignId() == null || couponService == null) {
+            return true;
+        }
+        try {
+            couponService.apply(attendance, cut.getCouponCampaignId());
+            return true;
+        } catch (com.ospaulos.vupth.domain.campaign.exception.CampaignException e) {
+            log.warn("[CutRequest] cupom nao aplicado no aceite — id={} campaign={}: {}",
+                    cut.getId(), cut.getCouponCampaignId(), e.getMessage());
+            return false;
+        }
+    }
+
+    /** O dia do horario pedido esta fechado na agenda do profissional (a dele ou a da loja)? Sem horario pedido, nao. */
+    static boolean isAgendaClosedOn(Professional professional, OffsetDateTime desiredTime) {
+        if (desiredTime == null) {
+            return false;
+        }
+        DayHours day = professional.getEffectiveHours().on(BusinessClock.dateAt(desiredTime));
+        return day != null && day.closed();
+    }
+
+    /**
+     * Aceitar o pedido de um dia sem agenda libera aquele dia: o profissional ganha uma excecao de data com o horario da loja
+     * (24 h se a loja nao configurou). Loja fechada naquele dia nao e aberta aqui: a intencao recusa pelo horario da loja.
+     */
+    private void openAgendaDay(CutRequest cut) {
+        Professional professional = cut.getProfessional();
+        java.time.LocalDate date = BusinessClock.dateAt(cut.getDesiredTime());
+        DayHours current = professional.getEffectiveHours().on(date);
+        if (current == null || !current.closed()) {
+            return; // ja aberto
+        }
+        DayHours store = cut.getEstablishment().getBusinessHours().on(date);
+        if (store != null && store.closed()) {
+            return;
+        }
+        DayHours hours = store != null ? store : DayHours.open(java.time.LocalTime.MIDNIGHT, java.time.LocalTime.MIDNIGHT);
+        professional.applyWorkingHours(professional.getWorkingHours().withException(date, hours, BusinessClock.today()));
+        professionalRepository.save(professional);
+        log.info("[CutRequest] agenda aberta pelo aceite — professional={} dia={}", professional.getId(), date);
+    }
+
+    @Override
+    public int expireRequestsForOpenedDays(UUID professionalId) {
+        List<CutRequest> pending = cutRequestRepository
+                .findByProfessionalIdAndStatusAndAgendaRequestedTrue(professionalId, CutRequestStatus.PENDING);
+        if (pending.isEmpty()) {
+            return 0;
+        }
+        Professional professional = pending.get(0).getProfessional();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        int expired = 0;
+        for (CutRequest cut : pending) {
+            if (cut.getDesiredTime() == null || isAgendaClosedOn(professional, cut.getDesiredTime())) {
+                continue;
+            }
+            cut.setStatus(CutRequestStatus.EXPIRED);
+            cut.setRespondedAt(now);
+            cutRequestRepository.save(cut);
+            notifyAgendaOpened(cut);
+            expired++;
+            log.info("[CutRequest] expire — id={} PENDING -> EXPIRED (agenda do dia aberta pelo profissional)", cut.getId());
+        }
+        return expired;
+    }
+
+    /** O aviso da primeira solicitacao sem agenda: libere a agenda (o app leva direto a ela). */
+    private void notifyAgendaRelease(CutRequest cut) {
+        UUID profId = cut.getProfessional().getId();
+        String message = "Um cliente tentou agendar em um dia sem agenda. Libere a agenda da próxima semana.";
+        queuePublisher.notifyClient(profId, QueueNotification.of(
+                "AGENDA_RELEASE_PROMPT", null, cut.getEstablishment().getId(), message).withCutRequestId(cut.getId()));
+        pushPublisher.notifyUser(profId, "Libere a sua agenda", message,
+                Map.of("type", "AGENDA_RELEASE_PROMPT",
+                        "target", "agenda",
+                        "cutRequestId", String.valueOf(cut.getId()),
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+    }
+
+    /** O profissional abriu o dia sem aceitar: o cliente agenda direto; o card sai da tela do profissional. */
+    private void notifyAgendaOpened(CutRequest cut) {
+        String message = "A agenda do dia " + formatDay(cut.getDesiredTime()).substring(0, 5)
+                + " foi aberta. Agende direto, sem esperar resposta.";
+        queuePublisher.notifyClient(cut.getClient().getId(), QueueNotification.of(
+                "AGENDA_OPENED", null, cut.getEstablishment().getId(), message).withCutRequestId(cut.getId()));
+        pushPublisher.notifyUser(cut.getClient().getId(), "Agenda aberta", message,
+                Map.of("type", "AGENDA_OPENED",
+                        "cutRequestId", String.valueOf(cut.getId()),
+                        "professionalId", String.valueOf(cut.getProfessional().getId()),
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+        queuePublisher.notifyClient(cut.getProfessional().getId(), QueueNotification.of(
+                "CUT_EXPIRED", null, cut.getEstablishment().getId(),
+                "Um pedido de agendamento deixou de valer: a agenda do dia foi aberta.").withCutRequestId(cut.getId()));
+    }
+
+    /** Texto do push da solicitacao de agendamento: quem pediu, para quando, e o que o aceite faz. */
+    static String scheduleRequestPushBody(String clientName, OffsetDateTime desiredTime) {
+        String who = clientName == null || clientName.isBlank() ? "Um cliente" : clientName.trim();
+        return who + " solicitou agendamento para " + formatDay(desiredTime) + ". Aceitar abre a agenda desse dia.";
+    }
+
+    /** Texto do push do pedido de corte: "[nome] pediu um corte" (push-com-acoes); sem nome, "Um cliente". */
+    static String requestPushBody(String clientName) {
+        String who = clientName == null || clientName.isBlank() ? "Um cliente" : clientName.trim();
+        return who + " pediu um corte. Aceite ou recuse antes de expirar.";
+    }
+
     /** Avisa o profissional (WS pessoal + push) que ha um pedido de corte aguardando decisao. */
     private void notifyProfessional(CutRequest cut) {
         UUID profId = cut.getProfessional().getId(); // == user id (MapsId)
         queuePublisher.notifyClient(profId, QueueNotification.of(
                 "CUT_REQUESTED", null, cut.getEstablishment().getId(),
                 "Um cliente solicitou um corte — aceite ou recuse.").withCutRequestId(cut.getId()));
-        pushPublisher.notifyUser(profId, "Novo pedido de corte",
-                "Um cliente quer ser atendido. Aceite ou recuse antes de expirar.",
+        String clientName = cut.getClient().getFirstName();
+        boolean named = clientName != null && !clientName.isBlank();
+        boolean scheduling = cut.isAgendaRequested() && isForAnotherDay(cut.getDesiredTime(), OffsetDateTime.now(clock));
+        pushPublisher.notifyUser(profId, scheduling ? "Solicitação de agendamento" : "Novo pedido de corte",
+                scheduling ? scheduleRequestPushBody(clientName, cut.getDesiredTime()) : requestPushBody(clientName),
                 Map.of("type", "CUT_REQUESTED",
                         "cutRequestId", String.valueOf(cut.getId()),
-                        "establishmentId", String.valueOf(cut.getEstablishment().getId())));
+                        "establishmentId", String.valueOf(cut.getEstablishment().getId()),
+                        "clientName", named ? clientName.trim() : ""));
     }
 }

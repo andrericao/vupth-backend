@@ -3,6 +3,7 @@ package com.ospaulos.vupth.domain.campaign.service;
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignRequest;
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignResponse;
 import com.ospaulos.vupth.domain.campaign.exception.CampaignException;
+import com.ospaulos.vupth.domain.campaign.model.BenefitBase;
 import com.ospaulos.vupth.domain.campaign.model.Campaign;
 import com.ospaulos.vupth.domain.campaign.model.CampaignType;
 import com.ospaulos.vupth.domain.campaign.model.CampaignVisibility;
@@ -134,6 +135,19 @@ public class AdminCampaignService {
     private static void validateReferral(AdminCampaignRequest r) {
         boolean any = r.referralProfessionalPercent() != null || r.referralOwnerPercent() != null
                 || r.referralScope() != null || r.payoutPeriod() != null || r.payoutDay() != null;
+        if (r.type() == CampaignType.DISCOUNT) {
+            // cupom-ativado-em-configuracoes: o desconto vira credito do profissional, pago no dia da campanha (periodicidade e dia juntos)
+            if (r.referralProfessionalPercent() != null || r.referralOwnerPercent() != null || r.referralScope() != null) {
+                throw CampaignException.invalid("Divisao e quem conta so valem na campanha de indicacao.");
+            }
+            if ((r.payoutPeriod() == null) != (r.payoutDay() == null)) {
+                throw CampaignException.invalid("O pagamento precisa da periodicidade e do dia, juntos.");
+            }
+            if (r.payoutPeriod() == PayoutPeriod.WEEKLY && r.payoutDay() > 7) {
+                throw CampaignException.invalid("Na semanal, o dia vai de 1 (segunda) a 7 (domingo).");
+            }
+            return;
+        }
         if (r.type() != CampaignType.REFERRAL_BONUS) {
             if (any) {
                 throw CampaignException.invalid("Divisao, quem conta e pagamento so valem na campanha de indicacao.");
@@ -174,6 +188,8 @@ public class AdminCampaignService {
         c.setReferralScope(r.referralScope());
         c.setPayoutPeriod(r.payoutPeriod());
         c.setPayoutDay(r.payoutDay());
+        c.setBenefitBase(r.benefitBase() == null ? BenefitBase.WITH_FEE : r.benefitBase());
+        c.setMaxTotalCost(r.maxTotalCost());
     }
 
     private static String blankToNull(String value) {

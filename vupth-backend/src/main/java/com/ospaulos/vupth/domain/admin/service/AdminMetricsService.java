@@ -1,11 +1,14 @@
 package com.ospaulos.vupth.domain.admin.service;
 
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Alerts;
+import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Counter;
+import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.HourCount;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Finance;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Funnel;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Health;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Money;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Overview;
+import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Pilot;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Referral;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.Series;
 import com.ospaulos.vupth.api.admin.dto.AdminMetricsDtos.SeriesPoint;
@@ -123,7 +126,7 @@ public class AdminMetricsService {
                        coalesce(sum(total_value) FILTER (WHERE payment_status = 'PENDING'),0),
                        coalesce(sum(total_value) FILTER (WHERE payment_status = 'AWAITING_CONFIRMATION'),0),
                        coalesce(sum(total_value) FILTER (WHERE payment_status = 'PAID'),0)
-                  FROM attendance WHERE status = 'FINISHED' AND scheduled_time >= ? AND scheduled_time < ?
+                  FROM attendance WHERE status = 'FINISHED' AND NOT test AND scheduled_time >= ? AND scheduled_time < ?
                 """, (rs, i) -> new Money(rs.getBigDecimal(1), rs.getBigDecimal(2), rs.getBigDecimal(3),
                 rs.getBigDecimal(4), rs.getBigDecimal(5), rs.getBigDecimal(6), rs.getBigDecimal(7),
                 sum("SELECT coalesce(sum(amount),0) FROM client_penalty_event WHERE created_at >= ? AND created_at < ?", f, t),
@@ -144,7 +147,7 @@ public class AdminMetricsService {
         String sql = switch (name) {
             case "signups" -> null;
             case "revenue" -> "SELECT date_trunc('" + unit + "', scheduled_time AT TIME ZONE '" + SAO_PAULO + "') AS at, "
-                    + "coalesce(sum(total_value),0) AS value FROM attendance WHERE status = 'FINISHED' "
+                    + "coalesce(sum(total_value),0) AS value FROM attendance WHERE status = 'FINISHED' AND NOT test "
                     + "AND scheduled_time >= ? AND scheduled_time < ? GROUP BY 1 ORDER BY 1";
             default -> {
                 name = "cuts";
@@ -182,7 +185,7 @@ public class AdminMetricsService {
         Timestamp f = ts(w.from()), t = ts(w.to());
         List<StatusTotal> byStatus = jdbc.query("""
                 SELECT coalesce(payment_status, 'NONE') AS status, count(*) AS n, coalesce(sum(total_value),0) AS amount
-                  FROM attendance WHERE status = 'FINISHED' AND scheduled_time >= ? AND scheduled_time < ?
+                  FROM attendance WHERE status = 'FINISHED' AND NOT test AND scheduled_time >= ? AND scheduled_time < ?
                  GROUP BY 1 ORDER BY 1
                 """, (rs, i) -> new StatusTotal(rs.getString("status"), rs.getLong("n"), rs.getBigDecimal("amount")), f, t);
         Referral referral = jdbc.queryForObject("""
@@ -190,7 +193,12 @@ public class AdminMetricsService {
                        coalesce(sum(amount) FILTER (WHERE paid_at IS NULL),0)
                   FROM referral_credit WHERE created_at >= ? AND created_at < ?
                 """, (rs, i) -> new Referral(rs.getBigDecimal(1), rs.getBigDecimal(2), rs.getBigDecimal(3)), f, t);
-        return new Finance(w, money(w), byStatus, referral);
+        // DEC-106: os atendimentos de teste ficam fora do dinheiro real e aparecem a parte, como simbolicos
+        Pilot pilot = jdbc.queryForObject("""
+                SELECT count(*), coalesce(sum(total_value),0) FROM attendance
+                 WHERE status = 'FINISHED' AND test AND scheduled_time >= ? AND scheduled_time < ?
+                """, (rs, i) -> new Pilot(rs.getLong(1), rs.getBigDecimal(2)), f, t);
+        return new Finance(w, money(w), byStatus, referral, pilot);
     }
 
     // ─── alerts ───
@@ -201,20 +209,34 @@ public class AdminMetricsService {
         Timestamp limit = ts(OffsetDateTime.now(clock).minusHours(h));
         List<StuckPayment> stuck = jdbc.query("""
                 SELECT id, total_value, end_time FROM attendance
-                 WHERE status = 'FINISHED' AND payment_status = 'PENDING' AND end_time < ?
+                 WHERE status = 'FINISHED' AND NOT test AND payment_status = 'PENDING' AND end_time < ?
                  ORDER BY end_time ASC LIMIT 20
                 """, (rs, i) -> new StuckPayment((UUID) rs.getObject("id"), rs.getBigDecimal("total_value"),
                 rs.getTimestamp("end_time").toInstant().atOffset(ZoneOffset.UTC)), limit);
-        BigDecimal stuckAmount = sum("SELECT coalesce(sum(total_value),0) FROM attendance WHERE status = 'FINISHED' "
+        BigDecimal stuckAmount = sum("SELECT coalesce(sum(total_value),0) FROM attendance WHERE status = 'FINISHED' AND NOT test "
                 + "AND payment_status = 'PENDING' AND end_time < ?", limit);
-        long stuckCount = count("SELECT count(*) FROM attendance WHERE status = 'FINISHED' "
+        long stuckCount = count("SELECT count(*) FROM attendance WHERE status = 'FINISHED' AND NOT test "
                 + "AND payment_status = 'PENDING' AND end_time < ?", limit);
         Timestamp old = ts(OffsetDateTime.now(clock).minusDays(35));
         long unpaid = count("SELECT count(*) FROM referral_credit WHERE paid_at IS NULL AND created_at < ?", old);
         BigDecimal unpaidAmount = sum("SELECT coalesce(sum(amount),0) FROM referral_credit WHERE paid_at IS NULL "
                 + "AND created_at < ?", old);
         return new Alerts(h, stuckCount, stuckAmount, stuck, unpaid, unpaidAmount,
-                List.of("push_refused", "http_5xx"));
+                List.of(), counter("PUSH_REFUSED"), counter("HTTP_5XX"));
+    }
+
+    /** admin-alertas-push-e-5xx: o contador por hora das ultimas 24 h (sem dado pessoal). */
+    private Counter counter(String kind) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        OffsetDateTime thisHour = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS);
+        List<HourCount> byHour = jdbc.query("""
+                SELECT hour, n FROM ops_counter WHERE kind = ? AND hour > ? ORDER BY hour ASC
+                """, (rs, i) -> new HourCount(rs.getTimestamp("hour").toInstant().atOffset(ZoneOffset.UTC), rs.getLong("n")),
+                kind, ts(thisHour.minusHours(24)));
+        long lastHour = byHour.stream().filter(c -> c.hour().toInstant().equals(thisHour.toInstant()))
+                .mapToLong(HourCount::count).sum();
+        long last24h = byHour.stream().mapToLong(HourCount::count).sum();
+        return new Counter(lastHour, last24h, byHour);
     }
 
     // ─── apoio ───

@@ -10,7 +10,25 @@
 set -uo pipefail
 
 cd "$(dirname "$0")"
-LOGS=.logs-teste
+
+# dev-quebrada-compilacao (22/10): testa uma COPIA LIMPA do que esta no indice do Git (o que vai no commit), nunca a
+# pasta de trabalho — arquivo novo sem commit (ou fora do indice) faz o teste passar aqui e quebrar o CI.
+# Os logs voltam para a pasta de origem. VUPTH_TESTAR_PASTA=1 testa a pasta como esta.
+if [[ -z "${VUPTH_TESTAR_COPIA:-}" && "${VUPTH_TESTAR_PASTA:-0}" != 1 ]]; then
+  ORIGEM=$(pwd)
+  COPIA=$(mktemp -d /tmp/vupth-copia-limpa.XXXXXX)
+  git checkout-index -a --prefix="$COPIA/" || { echo "nao deu para copiar o indice do Git"; exit 1; }
+  RAIZ=$(git rev-parse --show-prefix)
+  # as chaves JWT nao vao ao Git (o CI as restaura de secrets): so elas entram na copia, nada mais
+  mkdir -p "$COPIA/${RAIZ}src/main/resources/keys"
+  cp src/main/resources/keys/*.key "$COPIA/${RAIZ}src/main/resources/keys/" 2>/dev/null
+  echo "Testando a copia limpa do indice em $COPIA/$RAIZ (arquivos fora do indice nao entram)"
+  VUPTH_TESTAR_COPIA="$ORIGEM" bash "$COPIA/${RAIZ}testar.sh" "$@"
+  rc=$?
+  rm -rf "$COPIA"
+  exit $rc
+fi
+LOGS="${VUPTH_TESTAR_COPIA:-$(pwd)}/.logs-teste"
 mkdir -p "$LOGS"
 
 # fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim (parados e removidos, sem -v:
@@ -42,7 +60,7 @@ falhou() {
     | grep -aE '^\[ERROR\] +[A-Za-z].*(:[0-9]+|Test|FAIL)|Tests run:.*(Failures: [1-9]|Errors: [1-9])|expected|but was|COMPILATION ERROR|cannot find symbol|BUILD FAILURE|assertion|✗|AssertionError' \
     | cut -c1-300 | head -30 > "$resumo"
   echo
-  echo "❌ $1 falhou — log em vupth-backend/$destino (resumo: vupth-backend/$resumo)"
+  echo "❌ $1 falhou — log em $destino (resumo: $resumo)"
   exit 1
 }
 

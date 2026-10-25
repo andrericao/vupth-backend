@@ -17,6 +17,16 @@ public record CreateIntentionRequest(
         @NotNull UUID professionalId,
         @NotEmpty List<UUID> serviceItemIds,
         // must be ISO-8601 string — enforced by JacksonConfig.StrictOffsetDateTimeDeserializer
-        @NotNull OffsetDateTime desiredTime
+        @NotNull OffsetDateTime desiredTime,
+        // cupom-ativado-em-configuracoes: o cupom ativado que o cliente escolheu usar neste corte (um so; opcional)
+        @com.fasterxml.jackson.annotation.JsonProperty("coupon_campaign_id") @com.fasterxml.jackson.annotation.JsonAlias("couponCampaignId")
+        UUID couponCampaignId
 ) {
+    @com.fasterxml.jackson.annotation.JsonCreator
+    public CreateIntentionRequest {
+    }
+
+    public CreateIntentionRequest(UUID professionalId, List<UUID> serviceItemIds, OffsetDateTime desiredTime) {
+        this(professionalId, serviceItemIds, desiredTime, null);
+    }
 }

@@ -131,8 +131,14 @@ public interface AttendanceService {
      * cabe antes do fechamento (409 {@code PROFESSIONAL_AGENDA_FULL} = CHEIO). A resposta traz a
      * estimativa de atendimento considerando as outras intencoes (encaixe cronologico, sem reservar).
      */
-    public IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
-                                             java.time.OffsetDateTime desiredTime, UUID clientId);
+    default IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
+                                              java.time.OffsetDateTime desiredTime, UUID clientId) {
+        return createIntention(professionalId, serviceItemIds, desiredTime, clientId, null);
+    }
+
+    /** Como acima, com o cupom ativado que o cliente escolheu usar neste corte (cupom-ativado-em-configuracoes); nulo = sem cupom. */
+    IntentionResponse createIntention(UUID professionalId, List<UUID> serviceItemIds,
+                                      java.time.OffsetDateTime desiredTime, UUID clientId, UUID couponCampaignId);
 
     /**
      * Backlog #4 (fatia 3) — editar uma intencao. O cliente dono (por JWT) altera o {@code desiredTime}.

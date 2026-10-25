@@ -399,7 +399,10 @@ class ReportIntegrationTest {
     @DisplayName("relatorio-sem-multa: os tres motivos na contagem do dono e na lista, sem valor de multa")
     void notRealizedWithReason() throws Exception {
         // o unico atendimento da loja passa por tres estados; cada um e um motivo
-        var attendance = attendanceRepository.findAll().stream().findFirst().orElseThrow();
+        // so o da loja deste teste: o banco e compartilhado entre as classes e o findFirst() de tudo pegava o de outra loja (teste instavel)
+        var attendance = attendanceRepository.findAll().stream()
+                .filter(a -> a.getEstablishment().getId().toString().equals(establishmentId))
+                .findFirst().orElseThrow();
         var client = clientRepository.findById(attendance.getClient().getId()).orElseThrow();
 
         jdbc.update("UPDATE attendance SET status = 'CANCELLED' WHERE id = ?", attendance.getId());

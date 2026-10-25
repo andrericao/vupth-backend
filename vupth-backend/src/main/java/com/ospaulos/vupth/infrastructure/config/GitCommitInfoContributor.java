@@ -139,6 +139,11 @@ public class GitCommitInfoContributor implements InfoContributor {
         builder.withDetail("app", app);
     }
 
+    /** O commit curto desta build ({@code unknown} sem origem): o release do Sentry (sentry-contexto-e-limpeza). */
+    public String commit() {
+        return shortCommit();
+    }
+
     private String shortCommit() {
         String commit = firstNonBlank(renderGitCommit, railwayGitCommit, bundledCommit);
         if (commit == null) {

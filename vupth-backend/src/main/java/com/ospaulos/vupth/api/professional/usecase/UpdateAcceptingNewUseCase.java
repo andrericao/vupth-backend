@@ -69,6 +69,9 @@ public class UpdateAcceptingNewUseCase {
                          boolean autoOff,
                          List<WaitingClient> waitingClients) {}
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.pricepolicy.service.PricePolicyService pricePolicy;
+
     @Transactional
     public Result execute(UUID userId, boolean value) {
         log.info("[AcceptingNew] execute — user={} value={}", userId, value);
@@ -76,6 +79,10 @@ public class UpdateAcceptingNewUseCase {
         Professional professional = professionalRepository
                 .findByIdWithBaseUserAndEstablishment(userId)
                 .orElseThrow(() -> new ProfessionalNotFoundException(userId));
+
+        if (value && pricePolicy != null) {
+            pricePolicy.assertAcknowledged(userId); // DEC-100: abrir a fila exige a ciencia da politica de precos
+        }
 
         professional.setAcceptingNew(value);
         professionalRepository.save(professional);

@@ -2,7 +2,11 @@ package com.ospaulos.vupth.web.rest.campaign.controller;
 
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignRequest;
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignResponse;
+import com.ospaulos.vupth.api.campaign.dto.AdminCampaignFunnel;
+import com.ospaulos.vupth.domain.campaign.service.AdminCampaignFunnelService;
 import com.ospaulos.vupth.domain.campaign.service.AdminCampaignService;
+import org.springframework.format.annotation.DateTimeFormat;
+import java.time.OffsetDateTime;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +28,7 @@ import java.util.UUID;
 public class AdminCampaignController {
 
     private final AdminCampaignService adminCampaignService;
+    private final AdminCampaignFunnelService funnelService;
 
     @GetMapping
     public ResponseEntity<List<AdminCampaignResponse>> list() {
@@ -34,6 +39,15 @@ public class AdminCampaignController {
     public ResponseEntity<AdminCampaignResponse> create(@RequestBody @Valid AdminCampaignRequest request,
                                                         @AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(adminCampaignService.create(principal.getUserId(), request));
+    }
+
+    /** admin-funil-da-campanha: link aberto (nao medido ainda), conta criada, corte concluido e quem resgatou o cupom. */
+    @GetMapping("/{id}/funnel")
+    public ResponseEntity<AdminCampaignFunnel> funnel(
+            @PathVariable UUID id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ResponseEntity.ok(funnelService.funnel(id, from, to));
     }
 
     @PutMapping("/{id}")

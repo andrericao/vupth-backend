@@ -33,6 +33,9 @@ public class AccessLogPurgeScheduler {
     @Autowired(required = false)
     private ClusterLock clusterLock;
 
+    @Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.sentry.SentryCron sentryCron;
+
     private ThreadPoolTaskScheduler taskScheduler;
 
     public AccessLogPurgeScheduler(AccessLogService accessLogService) {
@@ -66,13 +69,23 @@ public class AccessLogPurgeScheduler {
         log.info("[Access] limpeza — ciclo armado a cada {}", PERIOD);
     }
 
+    /** sentry-monitor-de-cron: a limpeza diaria manda check-in (se o monitor estiver ligado em vupth.sentry.cron-monitors). */
+    private void monitored() {
+        if (sentryCron == null) {
+            accessLogService.purgeExpired();
+            return;
+        }
+        sentryCron.run("access-log-purge", io.sentry.MonitorSchedule.interval(1, io.sentry.MonitorScheduleUnit.DAY), "UTC",
+                120, 30, accessLogService::purgeExpired);
+    }
+
     /** Um ciclo, com a trava entre instancias. Nunca lanca: o timer nao pode morrer. */
     void runCycle() {
         try {
             if (clusterLock == null) {
-                accessLogService.purgeExpired();
+                monitored();
             } else {
-                clusterLock.runExclusive("access-log-purge", accessLogService::purgeExpired);
+                clusterLock.runExclusive("access-log-purge", this::monitored);
             }
         } catch (Exception e) {
             log.warn("[Access] limpeza — falha no ciclo: {}", e.getMessage());

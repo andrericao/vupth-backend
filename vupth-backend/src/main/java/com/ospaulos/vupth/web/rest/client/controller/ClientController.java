@@ -25,6 +25,7 @@ public class ClientController {
     private final GetClientUseCase getClientUseCase;
     private final ClientPenaltyService clientPenaltyService;
     private final PenaltyPaymentService penaltyPaymentService;
+    private final com.ospaulos.vupth.domain.client.service.ClientAbsenceService clientAbsenceService;
 
     @GetMapping("/{id}")
     //@PreAuthorize("hasRole('PROFESSIONAL')")
@@ -47,6 +48,16 @@ public class ClientController {
     public ResponseEntity<PendingPenaltiesResponse> pendingPenalties(
             @AuthenticationPrincipal UserDetailsImpl user) {
         return ResponseEntity.ok(clientPenaltyService.pending(user.getUserId()));
+    }
+
+    /**
+     * tres-faltas-pagar-adiantado (DEC-105/115): as ocorrencias do cliente logado (nao cheguei e saida da fila), o limite (3) e se o
+     * agendamento dele sai com a marca de pagamento adiantado. Entrar na fila no dia nunca e barrado.
+     */
+    @GetMapping("/me/absences")
+    public ResponseEntity<com.ospaulos.vupth.domain.client.service.ClientAbsenceService.Status> absences(
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(clientAbsenceService.statusOf(user.getUserId()));
     }
 
     /**

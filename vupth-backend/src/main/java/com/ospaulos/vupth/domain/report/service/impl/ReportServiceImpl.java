@@ -52,6 +52,7 @@ public class ReportServiceImpl implements ReportService {
     private final EstablishmentRepository establishmentRepository;
     private final ProfessionalRepository professionalRepository;
     private final ProfessionalShiftRepository shiftRepository;
+    private final com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
 
     @Override
     public EstablishmentReportResponse getEstablishmentReport(
@@ -124,6 +125,7 @@ public class ReportServiceImpl implements ReportService {
         List<Attendance> finished = attendanceRepository.findFinishedByProfessionalBetween(
                 professional.getId(), from(dateFrom), to(dateTo));
 
+        Receipts receipts = receipts(finished);
         return new ProfessionalReportResponse(
                 finished.size(),
                 totalRevenue(finished),
@@ -139,7 +141,34 @@ public class ReportServiceImpl implements ReportService {
                 reasons(attendanceRepository.findNotRealizedByProfessionalBetween(
                         professional.getId(), from(dateFrom), to(dateTo))),
                 attendanceRepository.findFinishedLateByProfessionalBetween(
-                        professional.getId(), from(dateFrom), to(dateTo)).size());
+                        professional.getId(), from(dateFrom), to(dateTo)).size(),
+                receipts.receives(), receipts.fees(), receipts.debt(), receipts.simulatedDebt(), receipts.cuts());
+    }
+
+    private record Receipts(BigDecimal receives, BigDecimal fees, BigDecimal debt, BigDecimal simulatedDebt,
+                            List<ProfessionalReportResponse.Cut> cuts) {
+    }
+
+    /** O que entra por corte e no periodo: recebe, taxas e a divida por fora (so a real aberta; a simulada a parte). */
+    private Receipts receipts(List<Attendance> finished) {
+        Map<UUID, List<com.ospaulos.vupth.domain.debt.model.ProfessionalDebt>> debts = finished.isEmpty() ? Map.of()
+                : debtRepository.findByAttendanceIdIn(finished.stream().map(Attendance::getId).toList()).stream()
+                .filter(d -> d.getStatus() == com.ospaulos.vupth.domain.debt.model.DebtStatus.OPEN)
+                .collect(Collectors.groupingBy(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::getAttendanceId));
+        List<ProfessionalReportResponse.Cut> cuts = finished.stream().map(a -> {
+            List<com.ospaulos.vupth.domain.debt.model.ProfessionalDebt> mine = debts.getOrDefault(a.getId(), List.of());
+            BigDecimal real = mine.stream().filter(d -> !d.isSimulated()).map(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal simulated = mine.stream().filter(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::isSimulated)
+                    .map(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal fees = a.getProReceives() == null ? null
+                    : (a.getIntermediaryFee() != null ? a.getIntermediaryFee() : BigDecimal.ZERO)
+                    .add(a.getPlatformFee() != null ? a.getPlatformFee() : BigDecimal.ZERO);
+            return new ProfessionalReportResponse.Cut(a.getId(), a.getEndTime(), a.getTotalValue(), a.getProReceives(), fees, real, simulated);
+        }).toList();
+        return new Receipts(netRevenue(finished), sum(finished, Attendance::getIntermediaryFee).add(sum(finished, Attendance::getPlatformFee)),
+                cuts.stream().map(ProfessionalReportResponse.Cut::pendingDebt).reduce(BigDecimal.ZERO, BigDecimal::add),
+                cuts.stream().map(ProfessionalReportResponse.Cut::pendingDebtSimulated).reduce(BigDecimal.ZERO, BigDecimal::add), cuts);
     }
 
     @Override

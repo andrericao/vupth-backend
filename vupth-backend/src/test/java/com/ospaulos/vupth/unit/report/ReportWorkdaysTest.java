@@ -41,6 +41,8 @@ class ReportWorkdaysTest {
     @Mock EstablishmentRepository establishmentRepository;
     @Mock ProfessionalShiftRepository shiftRepository;
 
+    @Mock com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
+
     @InjectMocks ReportServiceImpl reportService;
 
     private static OffsetDateTime t(String isoLocal) {

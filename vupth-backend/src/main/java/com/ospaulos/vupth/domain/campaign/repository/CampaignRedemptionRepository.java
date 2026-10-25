@@ -14,6 +14,14 @@ public interface CampaignRedemptionRepository extends JpaRepository<CampaignRede
 
     boolean existsByCampaign_IdAndUserId(UUID campaignId, UUID userId);
 
+    /** As campanhas de link em que a pessoa entrou, a adesao mais antiga primeiro (compartilhe-e-ganhe). */
+    @Query("""
+        SELECT r FROM CampaignRedemption r JOIN FETCH r.campaign c
+        WHERE r.userId = :userId AND c.type = com.ospaulos.vupth.domain.campaign.model.CampaignType.REFERRAL_BONUS
+        ORDER BY r.redeemedAt ASC
+        """)
+    List<CampaignRedemption> findReferralParticipations(@Param("userId") UUID userId);
+
     @Query("SELECT r FROM CampaignRedemption r JOIN FETCH r.campaign WHERE r.userId = :userId ORDER BY r.redeemedAt DESC")
     List<CampaignRedemption> findByUserIdWithCampaign(@Param("userId") UUID userId);
 }

@@ -181,7 +181,8 @@ class IntentionPromotionIntegrationTest {
     @DisplayName("findEarliestIntention — devolve a de MENOR desiredTime entre várias")
     void earliestIntention_ordering() throws Exception {
         // Limpa intenções remanescentes dos testes anteriores para isolar a ordenação.
-        attendanceRepository.findIntentionsByProfessional(UUID.fromString(professionalId))
+        // findEarliestIntention olha TODAS as lojas: intencao deixada por outra classe de teste roubaria a cabeca.
+        attendanceRepository.findAll().stream().filter(a -> a.getStatus() == AttendanceStatus.INTENTION)
                 .forEach(a -> { a.setStatus(AttendanceStatus.CANCELLED); attendanceRepository.save(a); });
 
         OwnedIntention later = createIntention(OffsetDateTime.now().plusHours(5));

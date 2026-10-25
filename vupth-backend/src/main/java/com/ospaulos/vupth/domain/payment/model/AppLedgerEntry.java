@@ -47,6 +47,10 @@ public class AppLedgerEntry {
     @Column(name = "app_profit", precision = 10, scale = 2)
     private BigDecimal appProfit;
 
+    /** Por qual conta o dinheiro passou (ledger-por-conta): ASAAS (cobranca do gateway) ou PJ (o Pix do app); as de antes ficam em PJ. */
+    @Column(name = "account_key", nullable = false, length = 20)
+    private String accountKey = "PJ";
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 

@@ -87,6 +87,20 @@ public class CutRequest implements Serializable {
     @Column(name = "desired_time")
     private OffsetDateTime desiredTime;
 
+    /**
+     * solicitar-agendamento (24/10): o dia pedido nao estava liberado na agenda do profissional quando o cliente pediu.
+     * Aceitar abre aquele dia; o pedido vence se o profissional abrir o dia sem aceitar; o Partner mostra o dot.
+     */
+    @Column(name = "agenda_requested", nullable = false)
+    private boolean agendaRequested;
+
+    /**
+     * O cupom ativado que o cliente escolheu usar neste corte (cupom-no-pedido-de-corte). Aplicado ao atendimento quando o
+     * profissional aceita; {@code null} = sem cupom.
+     */
+    @Column(name = "coupon_campaign_id")
+    private UUID couponCampaignId;
+
     /** Attendance criado no aceite (traceabilidade). Null enquanto PENDING/REFUSED/EXPIRED. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "resulting_attendance_id")
