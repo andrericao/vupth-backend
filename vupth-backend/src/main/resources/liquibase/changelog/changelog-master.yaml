@@ -597,3 +597,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/064-attendance-sudden-drop.yaml
       relativeToChangeLogFile: true
+
+  # queda-brusca-da-estimativa (DEC-128): o aviso e a janela sem multa deixam de andar juntos (zona de multa)
+  - include:
+      file: changesets/80-attendance/065-attendance-sudden-drop-zone.yaml
+      relativeToChangeLogFile: true

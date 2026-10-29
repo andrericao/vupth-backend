@@ -51,7 +51,7 @@ public class QueuePushService {
     private void notifySuddenDrops(List<Attendance> waiting, UUID establishmentId) {
         OffsetDateTime now = OffsetDateTime.now();
         for (Attendance a : waiting) {
-            if (a.getClient() == null || a.getSuddenDropAt() == null || a.isSuddenDropNotified() || !a.isSuddenDropWindowOpen(now)) {
+            if (a.getClient() == null || a.getSuddenDropAt() == null || a.isSuddenDropNotified() || !a.isSuddenDropNoticeOpen(now)) {
                 continue;
             }
             OffsetDateTime newTime = a.getScheduledTime();

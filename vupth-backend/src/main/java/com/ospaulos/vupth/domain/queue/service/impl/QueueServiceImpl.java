@@ -241,22 +241,23 @@ public class QueueServiceImpl implements QueueService {
     /**
      * DEC-128 (limiares finais): a estimativa do cliente caiu de uma vez (quem estava a frente saiu, o corte acabou antes), medida pela
      * espera ANTERIOR: {@link Attendance#SUDDEN_DROP_LONG_MINUTES} min se ela era de 1 h ou mais, {@link Attendance#SUDDEN_DROP_SHORT_MINUTES}
-     * se de menos; e a espera NOVA ficou abaixo de 1 h (a zona de multa). Marca o momento, a estimativa antiga e liga o aviso; ate
-     * {@link Attendance#SUDDEN_DROP_MAX} vezes por atendimento e uma por janela de 20 min (sem cadeia de avisos). So conta o cliente
-     * com conta (convidado nao e multado).
+     * se de menos. Espera anterior de 2h30 ou mais: nao avisa. Marca o momento, a estimativa antiga e liga o aviso; a janela de 20 min
+     * sem multa so vale se a espera NOVA ficou abaixo de 1 h (a zona de multa). Ate {@link Attendance#SUDDEN_DROP_MAX} vezes por
+     * atendimento e uma por janela de 20 min (sem cadeia de avisos). So conta o cliente com conta (convidado nao e multado).
      */
     static void registerSuddenDrop(Attendance attendance, OffsetDateTime oldTime, OffsetDateTime newTime, OffsetDateTime now) {
         if (oldTime == null || attendance.getClient() == null || attendance.getSuddenDropCount() >= Attendance.SUDDEN_DROP_MAX
-                || attendance.isSuddenDropWindowOpen(now)) {
+                || attendance.isSuddenDropNoticeOpen(now)) {
             return;
         }
         long previousWait = Math.max(0, Duration.between(now, oldTime).toMinutes());
         long newWait = Math.max(0, Duration.between(now, newTime).toMinutes());
         long needed = previousWait >= Attendance.SUDDEN_DROP_ZONE_MINUTES
                 ? Attendance.SUDDEN_DROP_LONG_MINUTES : Attendance.SUDDEN_DROP_SHORT_MINUTES;
-        if (newWait >= Attendance.SUDDEN_DROP_ZONE_MINUTES || Duration.between(newTime, oldTime).toMinutes() < needed) {
+        if (previousWait >= Attendance.SUDDEN_DROP_NO_NOTICE_FROM_MINUTES || Duration.between(newTime, oldTime).toMinutes() < needed) {
             return;
         }
+        attendance.setSuddenDropInZone(newWait < Attendance.SUDDEN_DROP_ZONE_MINUTES);
         attendance.setSuddenDropAt(now);
         attendance.setSuddenDropFrom(oldTime);
         attendance.setSuddenDropCount(attendance.getSuddenDropCount() + 1);

@@ -70,7 +70,7 @@ public class SuddenDropService {
     @Transactional(readOnly = true)
     public Options needMoreTime(UUID attendanceId, UUID clientId) {
         Attendance attendance = ownAttendance(attendanceId, clientId);
-        if (!attendance.isSuddenDropWindowOpen(OffsetDateTime.now())) {
+        if (!attendance.isSuddenDropNoticeOpen(OffsetDateTime.now())) {
             throw new AttendanceInvalidStatusException("A janela da queda de estimativa ja se encerrou");
         }
         String base = "/attendances/" + attendanceId;
@@ -84,7 +84,7 @@ public class SuddenDropService {
     /** "Passar a vez": propoe a troca com o proximo da fila; ele aceita ou nada muda. */
     public SwapRequestResponse passTurn(UUID attendanceId, UUID clientId) {
         Attendance attendance = ownAttendance(attendanceId, clientId);
-        if (!attendance.isSuddenDropWindowOpen(OffsetDateTime.now())) {
+        if (!attendance.isSuddenDropNoticeOpen(OffsetDateTime.now())) {
             throw new AttendanceInvalidStatusException("A janela da queda de estimativa ja se encerrou");
         }
         List<Attendance> queue = attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(

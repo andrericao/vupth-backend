@@ -60,7 +60,7 @@ public class EarlierTurnService {
             if (waiting.getClient() == null || waiting.getPromisedTime() == null || waiting.isIntent()) {
                 continue;
             }
-            if (waiting.isSuddenDropWindowOpen(now)) {
+            if (waiting.isSuddenDropNoticeOpen(now)) {
                 continue; // DEC-128: a queda brusca tem o aviso proprio (SUDDEN_DROP), que substitui este
             }
             OptionalInt wait = clientWaitCalculator.clientWaitMinutes(waiting, now);

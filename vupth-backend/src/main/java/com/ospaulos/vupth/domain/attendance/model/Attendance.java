@@ -120,6 +120,8 @@ public class Attendance implements Serializable {
     public static final int SUDDEN_DROP_LONG_MINUTES = 30;
     public static final int SUDDEN_DROP_SHORT_MINUTES = 20;
     public static final int SUDDEN_DROP_ZONE_MINUTES = 60;
+    /** Espera anterior de 2h30 ou mais: a queda nao e avisada (Andre, 29/10). */
+    public static final int SUDDEN_DROP_NO_NOTICE_FROM_MINUTES = 150;
     public static final int SUDDEN_DROP_WINDOW_MINUTES = 20;
     public static final int SUDDEN_DROP_MAX = 3;
 
@@ -135,16 +137,27 @@ public class Attendance implements Serializable {
     @Column(name = "sudden_drop_notified", nullable = false)
     private boolean suddenDropNotified = false;
 
+    /** A espera nova ficou abaixo de 1 h: so entao a janela de 20 min sem multa vale (o aviso sai de qualquer jeito). */
+    @Column(name = "sudden_drop_in_zone", nullable = false)
+    private boolean suddenDropInZone = false;
+
     /** Ate quando vale a janela sem multa; nulo se nao ha queda aberta. */
     @Transient
     public OffsetDateTime getSuddenDropWindowUntil() {
         return suddenDropAt == null ? null : suddenDropAt.plusMinutes(SUDDEN_DROP_WINDOW_MINUTES);
     }
 
+    /** Os 20 min da queda ainda correm: o aviso e as opcoes valem. */
     @Transient
-    public boolean isSuddenDropWindowOpen(OffsetDateTime now) {
+    public boolean isSuddenDropNoticeOpen(OffsetDateTime now) {
         OffsetDateTime until = getSuddenDropWindowUntil();
         return until != null && now.isBefore(until);
+    }
+
+    /** Sair ou cancelar nao gera multa: os 20 min correm e a espera nova ficou abaixo de 1 h. */
+    @Transient
+    public boolean isSuddenDropWindowOpen(OffsetDateTime now) {
+        return suddenDropInZone && isSuddenDropNoticeOpen(now);
     }
 
     /** DEC-127: o que o profissional disse ter recebido no Recebi; nulo = o valor com desconto ({@link #getAmountDue()}). */

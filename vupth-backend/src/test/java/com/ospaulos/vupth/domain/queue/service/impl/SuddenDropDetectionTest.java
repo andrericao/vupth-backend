@@ -33,6 +33,7 @@ class SuddenDropDetectionTest {
         assertThat(a.isSuddenDropNotified()).isFalse();
         assertThat(a.isSuddenDropWindowOpen(now.plusMinutes(5))).isTrue();
         assertThat(a.isSuddenDropWindowOpen(now.plusMinutes(21))).isFalse();
+        assertThat(a.isSuddenDropInZone()).isTrue();
     }
 
     @Test
@@ -54,11 +55,26 @@ class SuddenDropDetectionTest {
     }
 
     @Test
-    @DisplayName("espera nova de 1 h ou mais: nao ha multa, entao nao ha janela nem aviso")
-    void newWaitAboveTheZone() {
+    @DisplayName("espera nova de 1 h ou mais: o aviso sai, mas a janela sem multa nao vale (nao ha multa acima de 1 h)")
+    void newWaitAboveTheZoneNoticesWithoutWindow() {
         Attendance a = withClient();
-        QueueServiceImpl.registerSuddenDrop(a, now.plusMinutes(180), now.plusMinutes(90), now);
-        assertThat(a.getSuddenDropAt()).isNull();
+        QueueServiceImpl.registerSuddenDrop(a, now.plusMinutes(140), now.plusMinutes(90), now);
+        assertThat(a.getSuddenDropAt()).isNotNull();
+        assertThat(a.isSuddenDropNoticeOpen(now.plusMinutes(1))).isTrue();
+        assertThat(a.isSuddenDropWindowOpen(now.plusMinutes(1))).isFalse();
+        assertThat(a.isSuddenDropInZone()).isFalse();
+    }
+
+    @Test
+    @DisplayName("espera anterior de 2h30 ou mais: nao avisa; abaixo disso avisa em qualquer queda brusca")
+    void noNoticeFromTwoAndAHalfHours() {
+        Attendance far = withClient();
+        QueueServiceImpl.registerSuddenDrop(far, now.plusMinutes(150), now.plusMinutes(10), now);
+        assertThat(far.getSuddenDropAt()).isNull();
+        Attendance near = withClient();
+        QueueServiceImpl.registerSuddenDrop(near, now.plusMinutes(149), now.plusMinutes(10), now);
+        assertThat(near.getSuddenDropAt()).isNotNull();
+        assertThat(near.isSuddenDropWindowOpen(now.plusMinutes(1))).isTrue();
     }
 
     @Test
