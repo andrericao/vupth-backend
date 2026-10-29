@@ -40,7 +40,12 @@ public record ProfessionalReportResponse(
         @com.fasterxml.jackson.annotation.JsonProperty("fees_total") BigDecimal feesTotal,
         @com.fasterxml.jackson.annotation.JsonProperty("pending_debt_total") BigDecimal pendingDebtTotal,
         @com.fasterxml.jackson.annotation.JsonProperty("pending_debt_simulated_total") BigDecimal pendingDebtSimulatedTotal,
-        List<Cut> cuts
+        List<Cut> cuts,
+        // bonificacao-diferenca-paga-pelo-app (DEC-127): os saldos compensados do periodo. to_receive = o app lhe deve; to_pay = ele deve
+        // ao app; net = to_receive − to_pay. Por corte, o calculo vem em cuts[].breakdown.
+        @com.fasterxml.jackson.annotation.JsonProperty("to_receive_total") BigDecimal toReceiveTotal,
+        @com.fasterxml.jackson.annotation.JsonProperty("to_pay_total") BigDecimal toPayTotal,
+        @com.fasterxml.jackson.annotation.JsonProperty("net_total") BigDecimal netTotal
 ) {
 
     /** Um corte finalizado: {@code receives} e {@code fees} nulos quando o servico e legado (sem divisao congelada). */
@@ -51,6 +56,8 @@ public record ProfessionalReportResponse(
             BigDecimal receives,
             BigDecimal fees,
             @com.fasterxml.jackson.annotation.JsonProperty("pending_debt") BigDecimal pendingDebt,
-            @com.fasterxml.jackson.annotation.JsonProperty("pending_debt_simulated") BigDecimal pendingDebtSimulated) {
+            @com.fasterxml.jackson.annotation.JsonProperty("pending_debt_simulated") BigDecimal pendingDebtSimulated,
+            // DEC-127: valor do corte, do profissional, do cliente e o que o app cobre, com a flag PAGAMENTO COM DESCONTO
+            com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdown) {
     }
 }

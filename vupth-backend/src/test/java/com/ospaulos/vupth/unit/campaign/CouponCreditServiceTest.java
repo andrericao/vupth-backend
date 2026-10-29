@@ -57,6 +57,22 @@ class CouponCreditServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-127: com divisao, o app repassa a diferenca (R$ 30,00 − R$ 22,90 = R$ 7,10), nao o desconto inteiro")
+    void creditsTheDifference() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, "10.00", true, false);
+        a.setTotalValue(new BigDecimal("32.90"));
+        a.setProReceives(new BigDecimal("30.00"));
+        service.credit(a.getId());
+        verify(credits).save(org.mockito.ArgumentMatchers.<CouponCredit>argThat(c -> c.getAmount().compareTo(new BigDecimal("7.10")) == 0));
+
+        Attendance small = attendance(AttendanceStatus.FINISHED, "2.00", true, false);
+        small.setTotalValue(new BigDecimal("32.90"));
+        small.setProReceives(new BigDecimal("30.00"));
+        service.credit(small.getId()); // 30,90 ja cobre os 30,00: a tarifa absorve, nada a repassar
+        verify(credits, org.mockito.Mockito.times(1)).save(any());
+    }
+
+    @Test
     @DisplayName("nao credita: sem concluir, sem cupom, sem desconto, em teste, ja creditado ou atendimento inexistente")
     void doesNotCredit() {
         service.credit(attendance(AttendanceStatus.IN_PROGRESS, "5.00", true, false).getId());

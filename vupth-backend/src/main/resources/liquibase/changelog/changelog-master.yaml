@@ -587,3 +587,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/062-cut-request-coupon.yaml
       relativeToChangeLogFile: true
+
+  # bonificacao-diferenca-paga-pelo-app (DEC-127): cupom conta na partida; Recebi guarda o valor recebido
+  - include:
+      file: changesets/80-attendance/063-attendance-coupon-counted-received.yaml
+      relativeToChangeLogFile: true

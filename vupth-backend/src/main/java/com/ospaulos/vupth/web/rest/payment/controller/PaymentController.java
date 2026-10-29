@@ -70,7 +70,7 @@ public class PaymentController {
                                                    @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("PAYMENT CONTROLLER CONFIRM {} by={}", attendanceId, principal.getUserId());
         PaymentResponse response = paymentService.confirm(attendanceId, principal.getUserId(),
-                body == null ? null : body.method());
+                body == null ? null : body.method(), body == null ? null : body.receivedAmount());
         paymentNotifier.confirmed(attendanceId);
         return ResponseEntity.ok(response);
     }

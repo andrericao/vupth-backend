@@ -33,6 +33,16 @@ class DiscountBreakdownTest {
     }
 
     @Test
+    @DisplayName("received_amount: pagou o com desconto, o app deve R$ 7,10; pagou o cheio, o profissional deve R$ 2,90")
+    void netToProfessional() {
+        DiscountBreakdown discounted = DiscountBreakdown.of(bd("32.90"), bd("30.00"), bd("10.00"), BigDecimal.ZERO);
+        assertThat(discounted.receivedAmount()).isEqualByComparingTo("22.90");
+        assertThat(discounted.netToProfessional()).isEqualByComparingTo("7.10");
+        DiscountBreakdown full = DiscountBreakdown.of(bd("32.90"), bd("30.00"), bd("10.00"), BigDecimal.ZERO, bd("32.90"));
+        assertThat(full.netToProfessional()).isEqualByComparingTo("-2.90");
+    }
+
+    @Test
     @DisplayName("sem desconto: sem flag e sem app_pays")
     void noDiscount() {
         DiscountBreakdown b = DiscountBreakdown.of(bd("32.90"), bd("30.00"), BigDecimal.ZERO, BigDecimal.ZERO);

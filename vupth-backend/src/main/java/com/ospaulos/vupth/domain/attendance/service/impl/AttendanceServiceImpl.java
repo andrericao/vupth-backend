@@ -824,6 +824,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         attendance.setStartTime(OffsetDateTime.now());
+        if (attendance.getCouponCampaignId() != null && attendance.getCouponCountedAt() == null) {
+            attendance.setCouponCountedAt(attendance.getStartTime()); // DEC-127: a promocao conta para o cliente na partida
+        }
         attendance.setIsTimerActive(true);
         attendance.setStatus(AttendanceStatus.IN_PROGRESS);
         attendanceRepository.save(attendance);

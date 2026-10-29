@@ -106,6 +106,14 @@ public class Attendance implements Serializable {
     @Column(name = "discount", nullable = false, precision = 10, scale = 2)
     private BigDecimal discount = BigDecimal.ZERO;
 
+    /** DEC-127: quando o profissional iniciou o corte com promocao; so entao ela conta para o cliente (pedido so reserva). */
+    @Column(name = "coupon_counted_at")
+    private OffsetDateTime couponCountedAt;
+
+    /** DEC-127: o que o profissional disse ter recebido no Recebi; nulo = o valor com desconto ({@link #getAmountDue()}). */
+    @Column(name = "received_amount", precision = 10, scale = 2)
+    private BigDecimal receivedAmount;
+
     /**
      * Divisao do preco CONGELADA na criacao (Receita LIQUIDA): a soma, servico a servico, do que o
      * profissional recebe, dos 4% da empresa de pagamento e da parte do app. As tres somam o

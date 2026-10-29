@@ -15,6 +15,8 @@ public interface CouponCreditRepository extends JpaRepository<CouponCredit, UUID
 
     boolean existsByAttendanceId(UUID attendanceId);
 
+    List<CouponCredit> findByAttendanceIdIn(java.util.Collection<UUID> attendanceIds);
+
     List<CouponCredit> findByBeneficiaryIdOrderByCreatedAtDesc(UUID beneficiaryId);
 
     /** O que falta pagar, por campanha e por pessoa (soma com a bonificacao no painel de pagamentos). */

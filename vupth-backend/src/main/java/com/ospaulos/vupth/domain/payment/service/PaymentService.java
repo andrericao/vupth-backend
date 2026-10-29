@@ -164,6 +164,12 @@ public class PaymentService {
 
     /** "Recebi" com a forma de recebimento (opcional): Pix, cartao, dinheiro ou nota — qualquer uma quita (DEC-85). */
     public PaymentResponse confirm(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
+        return confirm(attendanceId, userId, method, null);
+    }
+
+    /** DEC-127: com o valor que o profissional recebeu (nulo = o valor com desconto). */
+    public PaymentResponse confirm(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method,
+                                   BigDecimal receivedAmount) {
         Attendance attendance = attendance(attendanceId);
         if (!canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja confirmam o pagamento.");
@@ -172,7 +178,7 @@ public class PaymentService {
         if (attendance.getPaymentStatus() == PaymentStatus.PAID) {
             throw new PaymentInvalidStatusException(PaymentStatus.PAID, "confirmar");
         }
-        markPaid(attendance, method);
+        markPaid(attendance, method, receivedAmount);
         cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi — attendance={} by={} forma={}", attendanceId, userId, method);
         return toPayment(attendance, isClient(attendance, userId));
@@ -214,6 +220,11 @@ public class PaymentService {
     }
 
     public boolean confirmOnFinish(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
+        return confirmOnFinish(attendanceId, userId, method, null);
+    }
+
+    public boolean confirmOnFinish(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method,
+                                   BigDecimal receivedAmount) {
         Attendance attendance = attendance(attendanceId);
         if (!canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja confirmam o pagamento.");
@@ -222,7 +233,7 @@ public class PaymentService {
         if (current == null || current == PaymentStatus.PAID) {
             return false;
         }
-        markPaid(attendance, method);
+        markPaid(attendance, method, receivedAmount);
         cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi no Finalizar — attendance={} by={} forma={}", attendanceId, userId, method);
         return true;
@@ -361,6 +372,13 @@ public class PaymentService {
     // ─── apoio ───
 
     private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
+        markPaid(attendance, method, null);
+    }
+
+    private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method, BigDecimal receivedAmount) {
+        if (receivedAmount != null && receivedAmount.signum() >= 0) {
+            attendance.setReceivedAmount(receivedAmount.setScale(2, java.math.RoundingMode.HALF_UP));
+        }
         attendance.setPaymentStatus(PaymentStatus.PAID);
         if (method != null) {
             attendance.setPaymentMethod(method);
@@ -455,7 +473,7 @@ public class PaymentService {
                 hasKey && forClient ? keyOwner.getPixKey() : null,
                 gatewayOf(attendance, forClient),
                 com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(attendance.getTotalValue(), attendance.getProReceives(),
-                        attendance.getDiscount(), realPenalties));
+                        attendance.getDiscount(), realPenalties, attendance.getReceivedAmount()));
     }
 
     /** A cobranca do Asaas deste atendimento (DEC-119): o Pix so vai ao cliente; o profissional ve o modo e o status do webhook. */

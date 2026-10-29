@@ -82,10 +82,12 @@ public class ProfessionalDebtService {
                 || repository.existsByAttendanceId(attendance.getId())) {
             return;
         }
-        // DEC-127: o que o cliente deveria pagar por fora e o valor COM desconto; o desconto e do app (nao do profissional), entao
-        // a divida e o que passa do que o profissional estipulou. Cliente que pagou o cheio ao profissional: ver received_amount
-        // (espera o OK da migracao 063).
-        BigDecimal amount = attendance.getAmountDue().subtract(attendance.getProReceives());
+        // DEC-127: o profissional recebeu received_amount (padrao: o valor com desconto). O desconto e do app: ele repassa
+        // pro_receives − amount_due ao profissional (o credito do cupom), entao o que o profissional deve e o recebido menos
+        // min(pro_receives, amount_due). Pagou 22,90 de 32,90/30,00: 22,90 − 22,90 = 0 (e o app repassa 7,10); pagou o cheio, 32,90:
+        // 32,90 − 22,90 = 10,00, que desfaz o repasse e deixa a diferenca de 2,90 do app.
+        BigDecimal received = attendance.getReceivedAmount() != null ? attendance.getReceivedAmount() : attendance.getAmountDue();
+        BigDecimal amount = received.subtract(attendance.getProReceives().min(attendance.getAmountDue()));
         if (amount.signum() <= 0) {
             return;
         }
