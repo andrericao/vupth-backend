@@ -43,6 +43,16 @@ class DiscountBreakdownTest {
     }
 
     @Test
+    @DisplayName("pelo Asaas: o split de R$ 20,91 e o app repassa R$ 9,09; o split cheio nao deixa nada a repassar")
+    void viaGateway() {
+        DiscountBreakdown b = DiscountBreakdown.of(bd("32.90"), bd("30.00"), bd("10.00"), BigDecimal.ZERO).viaGateway(bd("20.91"));
+        assertThat(b.appPays()).isEqualByComparingTo("9.09");
+        assertThat(b.receivedAmount()).isEqualByComparingTo("20.91");
+        assertThat(b.netToProfessional()).isEqualByComparingTo("9.09");
+        assertThat(DiscountBreakdown.of(bd("32.90"), bd("30.00"), bd("1.00"), BigDecimal.ZERO).viaGateway(bd("30.00")).appPays()).isNull();
+    }
+
+    @Test
     @DisplayName("sem desconto: sem flag e sem app_pays")
     void noDiscount() {
         DiscountBreakdown b = DiscountBreakdown.of(bd("32.90"), bd("30.00"), BigDecimal.ZERO, BigDecimal.ZERO);

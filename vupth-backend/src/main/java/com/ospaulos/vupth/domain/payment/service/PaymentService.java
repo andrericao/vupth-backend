@@ -472,8 +472,14 @@ public class PaymentService {
                 attendance.getPaymentMethod(),
                 hasKey && forClient ? keyOwner.getPixKey() : null,
                 gatewayOf(attendance, forClient),
-                com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(attendance.getTotalValue(), attendance.getProReceives(),
-                        attendance.getDiscount(), realPenalties, attendance.getReceivedAmount()));
+                breakdownOf(attendance, realPenalties));
+    }
+
+    /** DEC-127: a conta do desconto; pelo Asaas o profissional recebe o split e o app repassa o resto (fatia 2 do gateway). */
+    private static com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdownOf(Attendance attendance, BigDecimal penalties) {
+        var base = com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(attendance.getTotalValue(), attendance.getProReceives(),
+                attendance.getDiscount(), penalties, attendance.getReceivedAmount());
+        return base.discounted() && attendance.isViaGateway() ? base.viaGateway(attendance.getAsaasSplitAmount()) : base;
     }
 
     /** A cobranca do Asaas deste atendimento (DEC-119): o Pix so vai ao cliente; o profissional ve o modo e o status do webhook. */

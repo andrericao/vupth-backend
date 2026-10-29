@@ -73,6 +73,18 @@ class CouponCreditServiceTest {
     }
 
     @Test
+    @DisplayName("pelo Asaas (fatia 2): o profissional recebeu o split ja sem a tarifa (R$ 25,91 de R$ 30,00) e o app repassa R$ 4,09")
+    void creditsWhatTheGatewayDidNotDeliver() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, "5.00", true, false);
+        a.setTotalValue(new BigDecimal("32.90"));
+        org.springframework.test.util.ReflectionTestUtils.setField(a, "proReceives", new BigDecimal("30.00"));
+        a.setAsaasPaymentId("pay_1");
+        a.setAsaasSplitAmount(new BigDecimal("25.91"));
+        service.credit(a.getId());
+        verify(credits).save(org.mockito.ArgumentMatchers.<CouponCredit>argThat(c -> c.getAmount().compareTo(new BigDecimal("4.09")) == 0));
+    }
+
+    @Test
     @DisplayName("nao credita: sem concluir, sem cupom, sem desconto, em teste, ja creditado ou atendimento inexistente")
     void doesNotCredit() {
         service.credit(attendance(AttendanceStatus.IN_PROGRESS, "5.00", true, false).getId());

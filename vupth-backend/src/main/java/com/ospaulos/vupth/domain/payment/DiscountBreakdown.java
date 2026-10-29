@@ -53,6 +53,20 @@ public record DiscountBreakdown(
                 service.add(fine), appPays, proReceives == null ? null : received, net);
     }
 
+    /**
+     * Pagamento pelo Asaas com desconto (gateway-de-pagamento, fatia 2): o profissional recebeu o split (ja sem a tarifa do Pix, que o
+     * app paga) e o app repassa o resto, {@code pro_receives − split}; some quando e zero.
+     */
+    public DiscountBreakdown viaGateway(BigDecimal split) {
+        if (proReceives == null || split == null) {
+            return this;
+        }
+        BigDecimal got = scaled(split);
+        BigDecimal rest = proReceives.subtract(got);
+        return new DiscountBreakdown(discounted, listPrice, proReceives, discount, penalties, clientPays,
+                rest.signum() > 0 ? rest : null, got, rest);
+    }
+
     private static BigDecimal scaled(BigDecimal value) {
         return value == null ? ZERO : value.setScale(2, java.math.RoundingMode.HALF_UP);
     }

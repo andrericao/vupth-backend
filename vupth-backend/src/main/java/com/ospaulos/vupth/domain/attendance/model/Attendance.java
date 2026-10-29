@@ -321,6 +321,16 @@ public class Attendance implements Serializable {
     @Column(name = "asaas_status", length = 40)
     private String asaasStatus;
 
+    /** Quanto a cobranca do Asaas manda ao profissional (split, ja sem a tarifa); 0 = sem divisao. Nulo = sem cobranca. */
+    @Column(name = "asaas_split_amount", precision = 10, scale = 2)
+    private BigDecimal asaasSplitAmount;
+
+    /** O pagamento vai (ou foi) pelo Asaas: ha cobranca que nao foi cancelada/apagada. */
+    @Transient
+    public boolean isViaGateway() {
+        return asaasPaymentId != null && asaasSplitAmount != null && !"DELETED".equals(asaasStatus);
+    }
+
     @Column(name = "asaas_pix_payload", columnDefinition = "TEXT")
     private String asaasPixPayload;
 

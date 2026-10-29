@@ -93,7 +93,9 @@ public class CouponCreditService {
         if (a.getProReceives() == null) {
             return a.getDiscount();
         }
-        return a.getProReceives().subtract(a.getAmountDue()).max(BigDecimal.ZERO);
+        // pelo Asaas o profissional recebe o split (ja sem a tarifa, que o app paga): o app repassa o resto (decisao do Andre, 29/10)
+        BigDecimal received = a.isViaGateway() ? a.getAsaasSplitAmount() : a.getAmountDue();
+        return a.getProReceives().subtract(received).max(BigDecimal.ZERO);
     }
 
     /** Ao profissional: o que o app deve a ele pelos descontos e quando e o proximo pagamento. */

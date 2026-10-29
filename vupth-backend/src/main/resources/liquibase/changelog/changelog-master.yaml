@@ -602,3 +602,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/065-attendance-sudden-drop-zone.yaml
       relativeToChangeLogFile: true
+
+  # gateway-de-pagamento fatia 2: quanto o Asaas manda ao profissional na cobranca com desconto
+  - include:
+      file: changesets/80-attendance/066-attendance-asaas-split-amount.yaml
+      relativeToChangeLogFile: true
