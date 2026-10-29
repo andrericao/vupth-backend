@@ -38,14 +38,14 @@ class QueuePushServiceTest {
     private Attendance headOf(Boolean showPosition) {
         Professional professional = mock(Professional.class);
         when(professional.getId()).thenReturn(UUID.randomUUID());
-        when(professional.getShowPosition()).thenReturn(showPosition);
+        org.mockito.Mockito.lenient().when(professional.getShowPosition()).thenReturn(showPosition);
         Client client = mock(Client.class);
-        when(client.getId()).thenReturn(clientId);
+        org.mockito.Mockito.lenient().when(client.getId()).thenReturn(clientId);
         Attendance head = mock(Attendance.class);
-        when(head.getId()).thenReturn(UUID.randomUUID());
+        org.mockito.Mockito.lenient().when(head.getId()).thenReturn(UUID.randomUUID());
         when(head.getProfessional()).thenReturn(professional);
         when(head.getClient()).thenReturn(client);
-        when(head.isNextNotified()).thenReturn(false);
+        org.mockito.Mockito.lenient().when(head.isNextNotified()).thenReturn(false);
         return head;
     }
 
@@ -72,5 +72,40 @@ class QueuePushServiceTest {
         verify(pushPublisher).notifyUser(eq(clientId), anyString(),
                 eq("Fique por perto: seu atendimento está para começar."), anyMap());
         verify(pushPublisher, never()).notifyUser(any(), anyString(), eq("Você é o próximo da fila."), anyMap());
+    }
+
+    @Test
+    @DisplayName("agendamento aceito para daqui a mais de 1 h (outro dia ou mais tarde): sem \"E quase a sua vez\" e sem marcar como avisado")
+    void farScheduled_isNotNotified() {
+        Attendance head = headOf(true);
+        when(head.getScheduledTime()).thenReturn(java.time.OffsetDateTime.now().plusDays(1));
+        when(attendanceRepository.findWaitingQueueByEstablishment(establishmentId)).thenReturn(List.of(head));
+
+        service.notifyNextInLine(establishmentId);
+
+        verify(pushPublisher, never()).notifyUser(any(), anyString(), anyString(), anyMap());
+        verify(head, never()).setNextNotified(true);
+    }
+
+    @Test
+    @DisplayName("horario perto (ate 1 h) ou ja chegado: o aviso sai")
+    void nearScheduled_isNotified() {
+        Attendance head = headOf(true);
+        when(head.getScheduledTime()).thenReturn(java.time.OffsetDateTime.now().plusMinutes(20));
+        when(attendanceRepository.findWaitingQueueByEstablishment(establishmentId)).thenReturn(List.of(head));
+
+        service.notifyNextInLine(establishmentId);
+
+        verify(pushPublisher).notifyUser(eq(clientId), anyString(), eq("Você é o próximo da fila."), anyMap());
+    }
+
+    @Test
+    @DisplayName("isFarAhead: so passa de 1 h e sem horario conta como perto")
+    void isFarAhead() {
+        java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+        org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(null, now)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(now.plusMinutes(60), now)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(now.plusMinutes(61), now)).isTrue();
+        org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(now.minusMinutes(5), now)).isFalse();
     }
 }
