@@ -110,6 +110,39 @@ public class Attendance implements Serializable {
     @Column(name = "coupon_counted_at")
     private OffsetDateTime couponCountedAt;
 
+    /**
+     * DEC-128 (queda brusca): quando a estimativa caiu {@value #SUDDEN_DROP_MINUTES} min ou mais de uma vez, a estimativa antiga, quantas
+     * vezes ja caiu (limite de {@value #SUDDEN_DROP_MAX}) e se o aviso ja saiu. Sair ou cancelar dentro de
+     * {@value #SUDDEN_DROP_WINDOW_MINUTES} min nao gera multa; aceitar o horario novo (ou o "ok") encerra a janela.
+     */
+    public static final int SUDDEN_DROP_MINUTES = 30;
+    public static final int SUDDEN_DROP_WINDOW_MINUTES = 20;
+    public static final int SUDDEN_DROP_MAX = 3;
+
+    @Column(name = "sudden_drop_at")
+    private OffsetDateTime suddenDropAt;
+
+    @Column(name = "sudden_drop_from")
+    private OffsetDateTime suddenDropFrom;
+
+    @Column(name = "sudden_drop_count", nullable = false)
+    private int suddenDropCount = 0;
+
+    @Column(name = "sudden_drop_notified", nullable = false)
+    private boolean suddenDropNotified = false;
+
+    /** Ate quando vale a janela sem multa; nulo se nao ha queda aberta. */
+    @Transient
+    public OffsetDateTime getSuddenDropWindowUntil() {
+        return suddenDropAt == null ? null : suddenDropAt.plusMinutes(SUDDEN_DROP_WINDOW_MINUTES);
+    }
+
+    @Transient
+    public boolean isSuddenDropWindowOpen(OffsetDateTime now) {
+        OffsetDateTime until = getSuddenDropWindowUntil();
+        return until != null && now.isBefore(until);
+    }
+
     /** DEC-127: o que o profissional disse ter recebido no Recebi; nulo = o valor com desconto ({@link #getAmountDue()}). */
     @Column(name = "received_amount", precision = 10, scale = 2)
     private BigDecimal receivedAmount;

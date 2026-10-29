@@ -152,13 +152,16 @@ public class QueueServiceImpl implements QueueService {
                 // finalizado tambem (DEC-104)
                 penaltyExempt || penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
                         com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)
+                        || attendance.isSuddenDropWindowOpen(now) // DEC-128: janela da queda brusca, sem multa de saida
                         ? new java.math.BigDecimal("0.00")
                         : ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), totalWaitingTime),
                 attendance.getClient() != null ? attendance.getClient().getLateCount() : 0,
                 attendance.getClient() != null ? attendance.getClient().getLatesUntilPenalty()
                         : com.ospaulos.vupth.domain.client.service.LateArrivalService.LATES_PER_PENALTY,
                 attendance.getPromisedTime(),
-                penaltyExempt
+                penaltyExempt,
+                attendance.isSuddenDropWindowOpen(now) ? attendance.getSuddenDropWindowUntil() : null,
+                attendance.isSuddenDropWindowOpen(now) ? attendance.getSuddenDropFrom() : null
         );
     }
 
@@ -235,6 +238,24 @@ public class QueueServiceImpl implements QueueService {
                 });
     }
 
+    /**
+     * DEC-128: a estimativa do cliente caiu {@link Attendance#SUDDEN_DROP_MINUTES} min ou mais de uma vez (quem estava a frente saiu, o
+     * corte acabou antes). Marca o momento, a estimativa antiga e liga o aviso; ate {@link Attendance#SUDDEN_DROP_MAX} vezes por
+     * atendimento. Nova queda dentro da janela estende a janela. So conta o cliente com conta (convidado nao e multado).
+     */
+    static void registerSuddenDrop(Attendance attendance, OffsetDateTime oldTime, OffsetDateTime newTime) {
+        if (oldTime == null || attendance.getClient() == null || attendance.getSuddenDropCount() >= Attendance.SUDDEN_DROP_MAX
+                || Duration.between(newTime, oldTime).toMinutes() < Attendance.SUDDEN_DROP_MINUTES) {
+            return;
+        }
+        attendance.setSuddenDropAt(OffsetDateTime.now());
+        attendance.setSuddenDropFrom(oldTime);
+        attendance.setSuddenDropCount(attendance.getSuddenDropCount() + 1);
+        attendance.setSuddenDropNotified(false);
+        log.info("[SuddenDrop] attendance={} estimativa caiu de {} para {} (queda {} de {})", attendance.getId(), oldTime, newTime,
+                attendance.getSuddenDropCount(), Attendance.SUDDEN_DROP_MAX);
+    }
+
     private void updateQueueScheduledTimes(List<Attendance> queuedAttendances, OffsetDateTime startTime) {
 
         if(queuedAttendances.isEmpty()){
@@ -270,6 +291,7 @@ public class QueueServiceImpl implements QueueService {
             }
 
             OffsetDateTime oldTime = attendance.getScheduledTime();
+            registerSuddenDrop(attendance, oldTime, currentTime);
 
             attendance.setScheduledTime(currentTime);
             currentTime = currentTime.plusMinutes(attendance.getEstimatedMinutes());

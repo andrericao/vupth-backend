@@ -592,3 +592,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/063-attendance-coupon-counted-received.yaml
       relativeToChangeLogFile: true
+
+  # queda-brusca-da-estimativa (DEC-128): janela de 20 min sem multa de saida apos a queda
+  - include:
+      file: changesets/80-attendance/064-attendance-sudden-drop.yaml
+      relativeToChangeLogFile: true

@@ -32,5 +32,9 @@ public record ClientInQueueResponse(
          * DEC-104: o cliente sem nenhum atendimento finalizado nao e multado por atraso, falta nem saida da fila;
          * o app mostra "sair sem multa". Com {@code true}, {@code exitPenaltyValue} vem 0.00.
          */
-        boolean penaltyExempt
+        boolean penaltyExempt,
+        /** DEC-128 (queda brusca): ate quando sair/cancelar e de graca apos a estimativa despencar; nulo sem queda aberta. */
+        OffsetDateTime suddenDropWindowUntil,
+        /** A estimativa de antes da queda (o "de" do aviso "sua vez adiantou"); nulo sem queda. */
+        OffsetDateTime suddenDropPreviousTime
 ) {}

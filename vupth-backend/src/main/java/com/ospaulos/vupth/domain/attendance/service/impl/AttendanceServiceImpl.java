@@ -975,6 +975,11 @@ public class AttendanceServiceImpl implements AttendanceService {
             return;
         }
 
+        // DEC-128: dentro dos 20 min da queda brusca da estimativa, sair ou cancelar nao gera multa
+        if (attendance.isSuddenDropWindowOpen(now)) {
+            return;
+        }
+
         java.math.BigDecimal amount = ExitPenaltyRule.exitPenalty(now, attendance.getToleranceUntil(), wait.getAsInt());
         if (amount.signum() == 0) {
             return;
