@@ -48,6 +48,25 @@ public class ClientPenaltyService {
     @org.springframework.beans.factory.annotation.Value("${vupth.penalty.max-pending:2}")
     private int maxPending = 2;
 
+    /**
+     * DEC-85 (17/10, aprovado): na fase de testes (PAYMENT_MODE = TEST_PIX_TOTAL, sem gateway) o limite fica desligado e as multas
+     * acumulam no total do proximo corte; ele liga com o SPLIT_PIX ou com o gateway conectado. Sem estes beans (testes de unidade) vale
+     * o numero configurado.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.payment.service.PaymentGatewayService gateway;
+
+    private int effectiveLimit() {
+        if (maxPending <= 0) {
+            return 0;
+        }
+        boolean testPhase = paymentMode != null && !paymentMode.splitPix() && !(gateway != null && gateway.connected());
+        return testPhase ? 0 : maxPending;
+    }
+
     @Transactional(readOnly = true)
     public PendingPenaltiesResponse pending(UUID clientId) {
         List<PenaltyChargeResponse> penalties = describe(pendingEvents(clientId));
@@ -115,8 +134,12 @@ public class ClientPenaltyService {
     /** O portao de entrar na fila ou agendar: com o limite de multas devidas, 409 {@code PENALTY_LIMIT_REACHED}. */
     @Transactional(readOnly = true)
     public void assertWithinLimit(UUID clientId) {
+        int limit = effectiveLimit();
+        if (limit <= 0) {
+            return;
+        }
         List<ClientPenaltyEvent> due = dueFor(clientId);
-        if (due.size() < maxPending) {
+        if (due.size() < limit) {
             return;
         }
         BigDecimal total = due.stream().map(ClientPenaltyEvent::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -127,7 +150,7 @@ public class ClientPenaltyService {
                 .max(java.util.Comparator.comparing(com.ospaulos.vupth.domain.client.model.PenaltyPayment::getCreatedAt))
                 .map(com.ospaulos.vupth.domain.client.model.PenaltyPayment::getId).orElse(null);
         throw new com.ospaulos.vupth.domain.client.exception.PenaltyLimitException(
-                maxPending, total, describe(due), paymentId);
+                limit, total, describe(due), paymentId);
     }
 
     /** As multas ainda a pagar do cliente, sem as que um pagamento avulso (vigente ou pago) ja cobre. */
