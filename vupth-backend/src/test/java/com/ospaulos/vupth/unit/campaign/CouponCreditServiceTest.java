@@ -61,13 +61,13 @@ class CouponCreditServiceTest {
     void creditsTheDifference() {
         Attendance a = attendance(AttendanceStatus.FINISHED, "10.00", true, false);
         a.setTotalValue(new BigDecimal("32.90"));
-        a.setProReceives(new BigDecimal("30.00"));
+        org.springframework.test.util.ReflectionTestUtils.setField(a, "proReceives", new BigDecimal("30.00"));
         service.credit(a.getId());
         verify(credits).save(org.mockito.ArgumentMatchers.<CouponCredit>argThat(c -> c.getAmount().compareTo(new BigDecimal("7.10")) == 0));
 
         Attendance small = attendance(AttendanceStatus.FINISHED, "2.00", true, false);
         small.setTotalValue(new BigDecimal("32.90"));
-        small.setProReceives(new BigDecimal("30.00"));
+        org.springframework.test.util.ReflectionTestUtils.setField(small, "proReceives", new BigDecimal("30.00"));
         service.credit(small.getId()); // 30,90 ja cobre os 30,00: a tarifa absorve, nada a repassar
         verify(credits, org.mockito.Mockito.times(1)).save(any());
     }
