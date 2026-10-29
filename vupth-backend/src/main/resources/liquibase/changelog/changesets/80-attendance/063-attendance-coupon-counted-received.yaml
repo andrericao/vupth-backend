@@ -14,6 +14,6 @@ databaseChangeLog:
             tableName: attendance
             columns:
               - column: {name: coupon_counted_at, type: TIMESTAMP WITH TIME ZONE}
-              - column: {name: received_amount, type: NUMERIC(10,2)}
+              - column: {name: received_amount, type: "NUMERIC(10,2)"}
         - sql:
             sql: UPDATE attendance SET coupon_counted_at = start_time WHERE coupon_campaign_id IS NOT NULL AND start_time IS NOT NULL
