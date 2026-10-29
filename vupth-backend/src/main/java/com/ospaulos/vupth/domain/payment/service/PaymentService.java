@@ -453,7 +453,9 @@ public class PaymentService {
                 penaltyPix && appPix.configured() ? appPix.holderName() : null,
                 attendance.getPaymentMethod(),
                 hasKey && forClient ? keyOwner.getPixKey() : null,
-                gatewayOf(attendance, forClient));
+                gatewayOf(attendance, forClient),
+                com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(attendance.getTotalValue(), attendance.getProReceives(),
+                        attendance.getDiscount(), realPenalties));
     }
 
     /** A cobranca do Asaas deste atendimento (DEC-119): o Pix so vai ao cliente; o profissional ve o modo e o status do webhook. */

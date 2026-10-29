@@ -34,7 +34,10 @@ public record PaymentResponse(
         @JsonProperty("pix_key") String pixKey,
         // asaas-sandbox-no-fluxo (DEC-119): a cobranca Pix do Asaas, quando existe uma para o atendimento; nulo = vale o Pix do
         // profissional e o "Ja paguei". Cobranca aberta num modo termina nele, mesmo que a conexao mude depois.
-        @JsonProperty("gateway") Gateway gateway
+        @JsonProperty("gateway") Gateway gateway,
+        // bonificacao-diferenca-paga-pelo-app (DEC-127): valor do corte, do profissional, do cliente e o que o app cobre; so o
+        // profissional e o cliente o veem, e app_pays some quando e zero
+        @JsonProperty("breakdown") com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdown
 ) {
 
     /** A cobranca do Asaas: {@code mode} SANDBOX (pagamento de teste, sem dinheiro real) ou REAL; o webhook atualiza o status. */
