@@ -50,6 +50,7 @@ class ReportNetRevenueTest {
     @Mock ProfessionalShiftRepository shiftRepository;
 
     @Mock com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
+    @Mock com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository;
 
     @InjectMocks ReportServiceImpl reportService;
 
