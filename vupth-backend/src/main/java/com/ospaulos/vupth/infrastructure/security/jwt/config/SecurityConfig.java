@@ -125,6 +125,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
                         // campanhas publicas (DEC-64): a pagina "Campanhas ativas" do suporte nao tem login
                         .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
+                        // previa-publica-do-desconto: o link de campanha mostra o preco com cupom antes do cadastro
+                        .requestMatchers(HttpMethod.GET, "/campaigns/*/preview").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/invitations/accept").permitAll()

@@ -96,9 +96,13 @@ public class CouponService {
 
     /** O valor do desconto: o do cupom (fixo ou %) limitado a base da campanha e ao valor do corte. */
     static BigDecimal discountOf(Campaign campaign, Attendance attendance) {
-        BigDecimal total = attendance.getTotalValue();
-        BigDecimal base = campaign.getBenefitBase() == BenefitBase.WITHOUT_FEE && attendance.getProReceives() != null
-                ? attendance.getProReceives() : total;
+        return discountOf(campaign, attendance.getTotalValue(), attendance.getProReceives());
+    }
+
+    /** A mesma conta sobre o preco do servico, sem atendimento (a previa publica do desconto). */
+    public static BigDecimal discountOf(Campaign campaign, BigDecimal total, BigDecimal proReceives) {
+        BigDecimal base = campaign.getBenefitBase() == BenefitBase.WITHOUT_FEE && proReceives != null
+                ? proReceives : total;
         BigDecimal value = campaign.getValueAmount() != null
                 ? campaign.getValueAmount()
                 : base.multiply(campaign.getValuePercent() == null ? BigDecimal.ZERO : campaign.getValuePercent())

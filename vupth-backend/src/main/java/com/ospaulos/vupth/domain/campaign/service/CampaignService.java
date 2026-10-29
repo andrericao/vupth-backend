@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.domain.campaign.service;
 
+import com.ospaulos.vupth.api.campaign.dto.CampaignPreviewResponse;
 import com.ospaulos.vupth.api.campaign.dto.CampaignResponse;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -43,6 +45,7 @@ public class CampaignService {
     private final UserRepository userRepository;
     private final AttendanceRepository attendanceRepository;
     private final CouponService couponService;
+    private final com.ospaulos.vupth.domain.serviceItem.repository.ServiceItemRepository serviceItemRepository;
     private final com.ospaulos.vupth.domain.referral.repository.ReferralRepository referralRepository;
     private final Clock clock = Clock.systemUTC();
 
@@ -125,6 +128,29 @@ public class CampaignService {
         return c.getType() == CampaignType.REFERRAL_BONUS
                 ? referralRepository.countByCampaignIdAndSlotTakenAtIsNotNull(c.getId())
                 : redemptionRepository.countByCampaign_Id(c.getId());
+    }
+
+    /**
+     * previa-publica-do-desconto (BAK-1): o preco do servico com o desconto da campanha, sem login e sem gravar nada. Tudo que
+     * nao for uma campanha de desconto, para cliente, no ar, com vaga, no dia e (se privada) com o codigo do link, devolve o
+     * mesmo 404 — a resposta nao diz se a campanha existe.
+     */
+    @Transactional(readOnly = true)
+    public CampaignPreviewResponse preview(UUID campaignId, UUID serviceItemId, String ref) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        Campaign c = campaignRepository.findById(campaignId).orElseThrow(CampaignException::notFound);
+        boolean open = c.getType() == CampaignType.DISCOUNT && c.isRunning(now) && !soldOut(c)
+                && (c.getAudience() == null || c.getAudience() == CampaignAudience.CLIENT)
+                && (c.getVisibility() == CampaignVisibility.PUBLIC
+                        || (c.getCode() != null && ref != null && c.getCode().equalsIgnoreCase(ref.trim())));
+        if (!open) {
+            throw CampaignException.notFound();
+        }
+        var item = serviceItemRepository.findById(serviceItemId).orElseThrow(CampaignException::notFound);
+        BigDecimal full = item.getClientPrice() != null ? item.getClientPrice() : item.getPrice();
+        BigDecimal discount = CouponService.discountOf(c, full, item.getProReceives());
+        return new CampaignPreviewResponse(full, discount, full.subtract(discount),
+                c.getBenefitBase() == null ? null : c.getBenefitBase().name());
     }
 
     private boolean soldOut(Campaign c) {

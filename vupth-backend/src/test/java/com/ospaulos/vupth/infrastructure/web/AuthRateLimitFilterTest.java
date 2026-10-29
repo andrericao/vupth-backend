@@ -213,4 +213,22 @@ class AuthRateLimitFilterTest {
         run(filter, post("/support/articles/a/b/vote", "2.2.2.2"), passed);
         assertThat(passed).hasValue(4);
     }
+
+    @Test
+    @DisplayName("previa-publica-do-desconto: o GET da previa conta por IP em todas as campanhas juntas; outros GET nao contam")
+    void campaignPreviewIsLimited() throws Exception {
+        AuthRateLimitFilter filter = new AuthRateLimitFilter(true, 2, 60, Clock.fixed(T0, ZoneOffset.UTC));
+        AtomicInteger passed = new AtomicInteger();
+        for (String id : new String[]{"a", "b", "c"}) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/campaigns/" + id + "/preview");
+            request.setRemoteAddr("1.1.1.1");
+            run(filter, request, passed);
+        }
+        assertThat(passed).hasValue(2);
+
+        MockHttpServletRequest active = new MockHttpServletRequest("GET", "/campaigns/active");
+        active.setRemoteAddr("1.1.1.1");
+        run(filter, active, passed);
+        assertThat(passed).hasValue(3);
+    }
 }
