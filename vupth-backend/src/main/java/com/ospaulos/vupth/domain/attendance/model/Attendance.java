@@ -111,11 +111,15 @@ public class Attendance implements Serializable {
     private OffsetDateTime couponCountedAt;
 
     /**
-     * DEC-128 (queda brusca): quando a estimativa caiu {@value #SUDDEN_DROP_MINUTES} min ou mais de uma vez, a estimativa antiga, quantas
-     * vezes ja caiu (limite de {@value #SUDDEN_DROP_MAX}) e se o aviso ja saiu. Sair ou cancelar dentro de
+     * DEC-128 (queda brusca, limiares finais de 29/10): medida pela espera ANTERIOR, a estimativa caiu {@value #SUDDEN_DROP_LONG_MINUTES}
+     * min de uma vez se ela era de {@value #SUDDEN_DROP_ZONE_MINUTES} min ou mais, ou {@value #SUDDEN_DROP_SHORT_MINUTES} min se era de menos.
+     * So conta se a espera NOVA ficou abaixo de {@value #SUDDEN_DROP_ZONE_MINUTES} min (acima disso nao ha multa). Guarda o momento, a
+     * estimativa antiga, quantas vezes ja caiu (limite de {@value #SUDDEN_DROP_MAX}) e se o aviso ja saiu. Sair ou cancelar dentro de
      * {@value #SUDDEN_DROP_WINDOW_MINUTES} min nao gera multa; aceitar o horario novo (ou o "ok") encerra a janela.
      */
-    public static final int SUDDEN_DROP_MINUTES = 30;
+    public static final int SUDDEN_DROP_LONG_MINUTES = 30;
+    public static final int SUDDEN_DROP_SHORT_MINUTES = 20;
+    public static final int SUDDEN_DROP_ZONE_MINUTES = 60;
     public static final int SUDDEN_DROP_WINDOW_MINUTES = 20;
     public static final int SUDDEN_DROP_MAX = 3;
 
