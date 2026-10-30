@@ -87,7 +87,7 @@ banco() {
     echo "Criando o container vupth_postgres_test (postgres:16-alpine, porta 5432) ..."
     if ! docker run -d --name vupth_postgres_test \
         -e POSTGRES_DB=vupth_db_test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=vupth_test \
-        -p 5432:5432 postgres:16-alpine -c max_connections=300 >"$tmp" 2>&1; then
+        --restart no -p 5432:5432 postgres:16-alpine -c max_connections=300 >"$tmp" 2>&1; then
       { echo "banco de teste: nao deu para criar o container vupth_postgres_test (a porta 5432 esta ocupada?)"; cat "$tmp"; } > "$tmp.log"
       falhou mvn "$tmp.log"
     fi
@@ -105,17 +105,36 @@ banco() {
   { echo "banco de teste: vupth_postgres_test nao respondeu em 60 s"; docker logs --tail 50 vupth_postgres_test 2>&1; } > "$tmp"
   falhou mvn "$tmp"
 }
+# Queda do banco no meio (30/10: um conferir-limpeza de fora derrubou o container): em vez de seguir com dezenas
+# de testes de "conexao recusada", a vigia confere o banco a cada 10 s e interrompe o mvn com a mensagem clara.
+banco_vivo() { docker exec vupth_postgres_test pg_isready -h 127.0.0.1 -U postgres -d vupth_db_test >/dev/null 2>&1; }
+caiu() {
+  local tmp
+  tmp=$(mktemp)
+  echo "Postgres de teste caiu (vupth_postgres_test parou de responder durante o $1). Nao e falha de codigo: rode de novo." > "$tmp"
+  falhou "$2" "$tmp"
+}
 banco
 tmp=$(mktemp)
 # clean (10/10): o target/ pode ter classe compilada no meio de uma edicao — mais nova que o fonte, com o
 # codigo velho — e o Maven responde "Nothing to compile" e testa o codigo errado. Sempre do zero.
+queda=$(mktemp)
+( while sleep 10; do
+    banco_vivo || { sleep 3; banco_vivo || { echo caiu > "$queda"; pkill -TERM -f "[m]vn.*clean test|[m]aven.*clean test" ; break; }; }
+  done ) &
+vigia=$!
 mvn clean test "${MVN_ARGS[@]}" 2>&1 | tee "$tmp"
-[[ ${PIPESTATUS[0]} -eq 0 ]] || falhou mvn "$tmp"
+mvn_ok=${PIPESTATUS[0]}
+kill "$vigia" 2>/dev/null
+if [[ -s "$queda" ]]; then rm -f "$queda"; caiu mvn mvn; fi
+rm -f "$queda"
+[[ $mvn_ok -eq 0 ]] || falhou mvn "$tmp"
 rm -f "$tmp"
 passou mvn
 
 (( NEWMAN )) || exit 0
 
+banco_vivo || caiu mvn newman
 # --- 2. newman local: refaz a imagem do backend_dev com o codigo da pasta e espera o readiness ---
 docker compose -f docker-compose.dev.yml up -d --build backend || { echo "❌ docker compose nao subiu o backend_dev"; exit 1; }
 
