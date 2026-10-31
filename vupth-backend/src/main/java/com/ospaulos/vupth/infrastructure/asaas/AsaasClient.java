@@ -209,6 +209,20 @@ public class AsaasClient {
         return body == null || body.get("status") == null ? "REFUNDED" : body.get("status").asText();
     }
 
+    /**
+     * Repasse automatico da bonificacao (DEC-132): transferencia Pix para a chave do beneficiario ({@code POST /transfers}). So no
+     * SANDBOX por ora; devolve o id da transferencia. {@code keyType}: CPF, CNPJ, EMAIL, PHONE ou EVP (a chave aleatoria).
+     */
+    public String transferPix(BigDecimal value, String pixKey, String keyType, String description) {
+        requireEnabled();
+        JsonNode body = post("/transfers", Map.of("value", value, "operationType", "PIX", "pixAddressKey", pixKey,
+                "pixAddressKeyType", keyType, "description", description));
+        if (body == null || body.get("id") == null) {
+            throw new AsaasException(HttpStatus.BAD_GATEWAY, "ASAAS_BAD_RESPONSE", "O Asaas nao devolveu o id da transferencia.");
+        }
+        return body.get("id").asText();
+    }
+
     private void requireKey() {
         if (!properties.keyConfigured()) {
             throw new AsaasException(HttpStatus.SERVICE_UNAVAILABLE, "ASAAS_NOT_CONFIGURED", "Falta a ASAAS_API_KEY.");
