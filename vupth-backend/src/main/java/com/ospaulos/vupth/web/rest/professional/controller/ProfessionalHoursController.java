@@ -46,6 +46,13 @@ public class ProfessionalHoursController {
         return ResponseEntity.ok(useCase.replaceWeek(user.getUserId(), request));
     }
 
+    @PostMapping("/me/hours/open")
+    public ResponseEntity<BusinessHoursResponse> openDays(
+            @RequestBody com.ospaulos.vupth.api.professional.dto.request.OpenDaysRequest request,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(useCase.openDays(user.getUserId(), request));
+    }
+
     @PutMapping("/me/hours/dates/{date}")
     public ResponseEntity<BusinessHoursResponse> putDate(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,

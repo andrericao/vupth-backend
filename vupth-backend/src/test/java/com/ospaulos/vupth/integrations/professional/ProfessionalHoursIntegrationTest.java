@@ -288,6 +288,54 @@ class ProfessionalHoursIntegrationTest {
     }
 
     @Test
+    @Order(46)
+    @DisplayName("POST /professional/me/hours/open: dias soltos com horario, repetir a padrao (semana copiada, dia fechado fica de fora), fora de 31 dias 422, fora da loja 422, tudo ou nada")
+    void openDays() throws Exception {
+        mvc.perform(put("/professional/me/hours/weekly").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken).content(week(OPEN_09_17, CLOSED)))
+                .andExpect(status().isOk());
+        LocalDate monday = nextMonday.plusDays(7);
+
+        mvc.perform(post("/professional/me/hours/open").contentType(MediaType.APPLICATION_JSON).header("Authorization", profToken)
+                        .content("{\"dates\":[{\"date\":\"" + monday.plusDays(5) + "\",\"opens\":\"10:00\",\"closes\":\"13:00\"}]}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/professional/me/hours/open").contentType(MediaType.APPLICATION_JSON).header("Authorization", profToken)
+                        .content("{\"repeat_default\":true,\"from\":\"" + monday + "\",\"to\":\"" + monday.plusDays(6) + "\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/professional/me/agenda").param("from", monday.toString()).param("to", monday.plusDays(6).toString())
+                        .header("Authorization", profToken))
+                .andExpect(jsonPath("$.days[0].opened_by_me").value(true))
+                .andExpect(jsonPath("$.days[0].opens").value("09:00"))
+                .andExpect(jsonPath("$.days[4].opened_by_me").value(true))
+                .andExpect(jsonPath("$.days[5].opens").value("10:00"))
+                .andExpect(jsonPath("$.days[5].closes").value("13:00"))
+                .andExpect(jsonPath("$.days[6].opened_by_me").value(false));
+
+        // fora de 31 dias, vazio, e fora do horario da loja: 4xx e nada gravado (tudo ou nada)
+        mvc.perform(post("/professional/me/hours/open").contentType(MediaType.APPLICATION_JSON).header("Authorization", profToken)
+                        .content("{\"dates\":[{\"date\":\"" + BusinessClock.today().plusDays(40) + "\",\"opens\":\"09:00\",\"closes\":\"12:00\"}]}"))
+                .andExpect(status().is4xxClientError());
+        mvc.perform(post("/professional/me/hours/open").contentType(MediaType.APPLICATION_JSON).header("Authorization", profToken)
+                        .content("{}"))
+                .andExpect(status().is4xxClientError());
+        mvc.perform(post("/professional/me/hours/open").contentType(MediaType.APPLICATION_JSON).header("Authorization", profToken)
+                        .content("{\"dates\":[{\"date\":\"" + monday.plusDays(8) + "\",\"opens\":\"10:00\",\"closes\":\"12:00\"},"
+                                + "{\"date\":\"" + monday.plusDays(9) + "\",\"opens\":\"06:00\",\"closes\":\"12:00\"}]}"))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(get("/professional/me/agenda").param("from", monday.plusDays(8).toString()).param("to", monday.plusDays(8).toString())
+                        .header("Authorization", profToken))
+                .andExpect(jsonPath("$.days[0].opened_by_me").value(false));
+
+        mvc.perform(post("/professional/me/hours/open").contentType(MediaType.APPLICATION_JSON).header("Authorization", clientToken)
+                        .content("{}")).andExpect(status().isForbidden());
+
+        for (int i = 0; i <= 6; i++) {
+            mvc.perform(delete("/professional/me/hours/dates/" + monday.plusDays(i)).header("Authorization", profToken));
+        }
+    }
+
+    @Test
     @Order(50)
     @DisplayName("PUT sem token: 401")
     void noToken_401() throws Exception {
