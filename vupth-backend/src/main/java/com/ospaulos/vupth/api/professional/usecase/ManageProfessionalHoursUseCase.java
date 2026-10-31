@@ -34,6 +34,7 @@ import java.util.function.UnaryOperator;
 public class ManageProfessionalHoursUseCase {
 
     private final ProfessionalRepository repository;
+    private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository attendanceRepository;
     private final com.ospaulos.vupth.domain.attendance.cut.service.CutRequestService cutRequestService;
 
     @Transactional(readOnly = true)
@@ -41,6 +42,45 @@ public class ManageProfessionalHoursUseCase {
         Professional professional = load(professionalId);
         return BusinessHoursResponse.forProfessional(
                 professional.getWorkingHours(), professional.getEffectiveHours(), BusinessClock.today());
+    }
+
+    /** agenda-aberta-semana: os dias de {@code from} a {@code to} (hoje a 30 dias, no maximo 31) ja resolvidos, com os agendamentos. */
+    @Transactional(readOnly = true)
+    public com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse agenda(UUID professionalId, LocalDate from, LocalDate to) {
+        Professional professional = load(professionalId);
+        LocalDate today = BusinessClock.today();
+        LocalDate start = from == null || from.isBefore(today) ? today : from;
+        LocalDate end = to == null ? start.plusDays(30) : to;
+        int max = com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.MAX_DAYS;
+        if (end.isBefore(start)) {
+            end = start;
+        } else if (end.isAfter(start.plusDays(max - 1L))) {
+            end = start.plusDays(max - 1L);
+        }
+        BusinessHours own = professional.getWorkingHours();
+        BusinessHours effective = professional.getEffectiveHours();
+        BusinessHours store = professional.getEstablishment() == null
+                ? BusinessHours.notConfigured() : professional.getEstablishment().getBusinessHours();
+        java.util.Map<LocalDate, java.util.List<com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Appointment>> byDay =
+                new java.util.HashMap<>();
+        attendanceRepository.findIntentionsByProfessional(professionalId).forEach(a -> {
+            java.time.OffsetDateTime when = a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime();
+            if (when != null) {
+                byDay.computeIfAbsent(BusinessClock.dateAt(when), d -> new java.util.ArrayList<>()).add(
+                        new com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Appointment(
+                                a.getId(), when, a.getEstimatedTotalMinutes()));
+            }
+        });
+        java.util.List<com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Day> days = new java.util.ArrayList<>();
+        for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+            DayHours day = effective.isConfigured() ? effective.on(d) : null;
+            boolean storeOpen = !store.isConfigured() || !store.on(d).closed();
+            var appointments = byDay.getOrDefault(d, java.util.List.of());
+            days.add(new com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Day(
+                    d, day != null && day.closed(), day == null ? null : day.opens(), day == null ? null : day.closes(),
+                    storeOpen, own.hasExceptionOn(d), appointments));
+        }
+        return new com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse(days);
     }
 
     @Transactional

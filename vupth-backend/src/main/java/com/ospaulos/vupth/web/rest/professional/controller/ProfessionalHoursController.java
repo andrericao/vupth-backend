@@ -31,6 +31,14 @@ public class ProfessionalHoursController {
         return ResponseEntity.ok(useCase.get(professionalId));
     }
 
+    @GetMapping("/me/agenda")
+    public ResponseEntity<com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse> agenda(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @AuthenticationPrincipal UserDetailsImpl user) {
+        return ResponseEntity.ok(useCase.agenda(user.getUserId(), from, to));
+    }
+
     @PutMapping("/me/hours/weekly")
     public ResponseEntity<BusinessHoursResponse> replaceWeek(
             @RequestBody WeeklyHoursRequest request,

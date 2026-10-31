@@ -250,6 +250,7 @@ public class SecurityConfig {
 
                         // Profissional se afilia/desafilia de um establishment
                         // A agenda e do PROPRIO profissional — o dono nao edita a dos outros (Andre, 05/10)
+                        .requestMatchers(HttpMethod.GET, "/professional/me/agenda").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/professional/me/status").hasRole("PROFESSIONAL")

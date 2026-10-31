@@ -253,6 +253,41 @@ class ProfessionalHoursIntegrationTest {
     }
 
     @Test
+    @Order(45)
+    @DisplayName("GET /professional/me/agenda: dias prontos, o aberto pelo profissional marcado, limite de 31 dias; cliente 403, sem token 401")
+    void meAgenda() throws Exception {
+        LocalDate day = nextMonday;
+        mvc.perform(put("/professional/me/hours/dates/" + day.plusDays(1))
+                        .contentType(MediaType.APPLICATION_JSON).header("Authorization", profToken)
+                        .content("{\"closed\": false, \"opens\": \"10:00\", \"closes\": \"14:00\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/professional/me/agenda").param("from", day.toString()).param("to", day.plusDays(2).toString())
+                        .header("Authorization", profToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days", hasSize(3)))
+                .andExpect(jsonPath("$.days[0].date").value(day.toString()))
+                .andExpect(jsonPath("$.days[0].opened_by_me").value(false))
+                .andExpect(jsonPath("$.days[1].opened_by_me").value(true))
+                .andExpect(jsonPath("$.days[1].opens").value("10:00"))
+                .andExpect(jsonPath("$.days[1].closes").value("14:00"))
+                .andExpect(jsonPath("$.days[1].store_open").value(true))
+                .andExpect(jsonPath("$.days[1].appointments", hasSize(0)));
+
+        mvc.perform(get("/professional/me/agenda").param("from", day.toString()).param("to", day.plusDays(90).toString())
+                        .header("Authorization", profToken))
+                .andExpect(jsonPath("$.days", hasSize(31)));
+        mvc.perform(get("/professional/me/agenda").header("Authorization", profToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.days", hasSize(31)));
+
+        mvc.perform(get("/professional/me/agenda").header("Authorization", clientToken)).andExpect(status().isForbidden());
+        mvc.perform(get("/professional/me/agenda")).andExpect(status().isUnauthorized());
+
+        mvc.perform(delete("/professional/me/hours/dates/" + day.plusDays(1)).header("Authorization", profToken))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     @Order(50)
     @DisplayName("PUT sem token: 401")
     void noToken_401() throws Exception {
