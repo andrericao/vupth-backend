@@ -156,6 +156,32 @@ class CouponIntegrationTest {
     }
 
     @Test
+    @DisplayName("desconto-no-link (DEC-131): o claim so liga ao indicador e NAO ativa cupom; o redeem com o codigo da CAMPANHA ativa e o 1o corte sai com desconto")
+    void inviteeByLinkClaimThenRedeemThenDiscount() throws Exception {
+        Shop shop = shop();
+        var referrer = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var invitee = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        Campaign link = coupon(new BigDecimal("5.00"), null, BenefitBase.WITH_FEE);
+        String referralCode = mapper.readTree(mvc.perform(get("/referrals/me").header("Authorization", referrer.token()))
+                .andReturn().getResponse().getContentAsString()).get("code").asText();
+
+        mvc.perform(post("/referrals/claim").header("Authorization", invitee.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"code\":\"" + referralCode + "\"}")).andExpect(status().isOk());
+        mvc.perform(get("/campaigns/me").header("Authorization", invitee.token()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        enter(shop, invitee, link.getId()).andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("COUPON_NOT_ACTIVE"));
+
+        // o codigo do redeem e o da campanha, nunca o de indicacao
+        mvc.perform(post("/campaigns/redeem").header("Authorization", invitee.token()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"code\":\"" + referralCode + "\"}")).andExpect(status().isNotFound());
+        activate(invitee.token(), link);
+        mvc.perform(get("/campaigns/me").header("Authorization", invitee.token()))
+                .andExpect(jsonPath("$[0].status").value("ACTIVE"));
+        enter(shop, invitee, link.getId()).andExpect(status().isCreated()).andExpect(jsonPath("$.discount").value(5.0));
+    }
+
+    @Test
     @DisplayName("cupom vencido ou usado dentro do mesmo corte: 422; porcentagem sobre o preco e limite no valor do corte")
     void expiredUsedAndCap() throws Exception {
         Shop shop = shop();
