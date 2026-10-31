@@ -586,12 +586,20 @@ class PaymentServiceTest {
         dona.setPixKey("dona@mail.com");
         dona.setPixHolderName("Dona");
 
-        // sem profissional na linha (removido): vale a chave do dono, e nao e "PROFESSIONAL"
+        // sem profissional na linha (removido): ninguem oferece a chave do dono (DEC-129/138), entao nao ha Pix, so o "ja paguei"
         Attendance noProfessional = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
         noProfessional.setProfessional(null);
         PaymentResponse r = service.getPayment(noProfessional.getId(), clientId);
-        assertThat(r.pixOwner()).isEqualTo("OWNER");
-        assertThat(r.pixCopyPaste()).contains("dona@mail.com");
+        assertThat(r.pixOwner()).isNull();
+        assertThat(r.pixCopyPaste()).isNull();
+
+        // com o profissional oferecendo, a chave do dono sai e nao e "PROFESSIONAL"
+        professional.setOffersOwnerPix(true);
+        Attendance offered = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        PaymentResponse viaOwner = service.getPayment(offered.getId(), clientId);
+        assertThat(viaOwner.pixOwner()).isEqualTo("OWNER");
+        assertThat(viaOwner.pixCopyPaste()).contains("dona@mail.com");
+        professional.setOffersOwnerPix(false);
 
         // sem loja: sem dono, sem cidade e sem chave
         Attendance noEstablishment = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
