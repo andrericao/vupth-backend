@@ -40,7 +40,8 @@ class PushNotificationPublisherTest {
         when(tokens.findByUserId(user)).thenReturn(List.of());
         assertThat(publisher.notifyUser(user, "t", "b", Map.of("type", "X"))).as("sem aparelho").isFalse();
 
-        when(tokens.findByUserId(user)).thenReturn(List.of(device("ExponentPushToken[aaaaa]")));
+        var aparelho = device("ExponentPushToken[aaaaa]"); // criado antes: stubbing dentro de outro when() quebra o Mockito
+        when(tokens.findByUserId(user)).thenReturn(List.of(aparelho));
         when(sender.send(anyList(), anyString(), anyString(), anyMap())).thenThrow(new IllegalStateException("expo fora"));
         assertThat(publisher.notifyUser(user, "t", "b", Map.of("type", "X"))).as("envio falhou").isFalse();
 
