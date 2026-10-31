@@ -120,6 +120,16 @@ public class PaymentGatewayService {
         }
     }
 
+    /**
+     * estorno-asaas-casos: estorna a cobranca JA PAGA (total, DEC-137) e devolve se o Asaas aceitou. Cobranca ainda aberta nao se
+     * estorna, se cancela ({@link #cancelCharge}). Falha do Asaas (saldo, prazo) volta como {@link AsaasException} para o ADMIN ver.
+     */
+    public void refundCharge(Attendance attendance) {
+        String status = client.refund(attendance.getAsaasPaymentId());
+        attendance.setAsaasStatus(status == null || status.isBlank() ? "REFUNDED" : status);
+        log.info("[Gateway] cobranca estornada — attendance={} payment={}", attendance.getId(), attendance.getAsaasPaymentId());
+    }
+
     private static String displayName(Attendance attendance) {
         String name = attendance.getClient().getFullName();
         boolean empty = name == null || name.isBlank() || name.contains("null");

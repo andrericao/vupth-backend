@@ -325,6 +325,14 @@ public class Attendance implements Serializable {
     @Column(name = "asaas_split_amount", precision = 10, scale = 2)
     private BigDecimal asaasSplitAmount;
 
+    /** estorno-asaas-casos (DEC-137): quando a cobranca paga foi estornada e por que o atendimento nao houve. */
+    @Column(name = "refunded_at")
+    private OffsetDateTime refundedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_reason", length = 30)
+    private com.ospaulos.vupth.domain.payment.RefundReason refundReason;
+
     /** O pagamento vai (ou foi) pelo Asaas: ha cobranca que nao foi cancelada/apagada. */
     @Transient
     public boolean isViaGateway() {

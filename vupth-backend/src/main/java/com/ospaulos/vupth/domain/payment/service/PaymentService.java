@@ -270,8 +270,24 @@ public class PaymentService {
         if (attendance == null || asaasPaymentId == null || !asaasPaymentId.equals(attendance.getAsaasPaymentId())) {
             return false;
         }
+        String before = attendance.getAsaasStatus();
         if (status != null) {
             attendance.setAsaasStatus(status);
+        }
+        // estorno-asaas-casos (DEC-137, caso 3): o cliente pagou o Pix do Asaas DEPOIS do "Recebi" manual quitar o atendimento. E a mesma
+        // cobranca, entao o pagamento do Asaas e estornado (o manual vale). O primeiro aviso de uma cobranca paga (RECEIVED/CONFIRMED) ja
+        // quitada pelo proprio Asaas nao entra aqui: so quando a cobranca nao estava paga antes.
+        if (paid && attendance.getPaymentStatus() == PaymentStatus.PAID && attendance.getRefundedAt() == null
+                && !gatewayPaid(before) && gateway != null) {
+            attendanceRepository.save(attendance);
+            try {
+                refund(attendance, com.ospaulos.vupth.domain.payment.RefundReason.DOUBLE_PAYMENT);
+                log.warn("[Payment] pagou duas vezes (Asaas depois do manual) — estornado o do Asaas, attendance={}", attendanceId);
+            } catch (RuntimeException e) {
+                log.error("[Payment] pagou duas vezes e o estorno falhou — o ADMIN estorna no Painel, attendance={}: {}",
+                        attendanceId, e.getMessage(), e);
+            }
+            return false;
         }
         boolean marked = false;
         if (paid && attendance.getPaymentStatus() != PaymentStatus.PAID) {
@@ -282,6 +298,56 @@ public class PaymentService {
             attendanceRepository.save(attendance);
         }
         return marked;
+    }
+
+    private static boolean gatewayPaid(String asaasStatus) {
+        return "RECEIVED".equals(asaasStatus) || "CONFIRMED".equals(asaasStatus);
+    }
+
+    /** O resultado do estorno para o Painel. */
+    public record RefundResult(UUID attendanceId, java.time.OffsetDateTime refundedAt,
+                               com.ospaulos.vupth.domain.payment.RefundReason reason, String asaasStatus, int penaltiesReleased) {}
+
+    /**
+     * estorno-asaas-casos (DEC-137, casos 1, 4, 6 e 7): o ADMIN estorna a cobranca JA PAGA do Asaas, so total. O dinheiro volta ao
+     * cliente; o motivo de nao ter havido atendimento fica gravado (o cupom nao volta por ora); a multa que o atendimento carregava
+     * volta a pendente (o cliente segue devendo). Cobranca aberta se cancela, nao se estorna.
+     */
+    public RefundResult refund(UUID attendanceId, com.ospaulos.vupth.domain.payment.RefundReason reason) {
+        Attendance attendance = attendanceRepository.findById(attendanceId)
+                .orElseThrow(() -> new com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException(attendanceId));
+        return refund(attendance, reason);
+    }
+
+    private RefundResult refund(Attendance attendance, com.ospaulos.vupth.domain.payment.RefundReason reason) {
+        if (reason == null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "REFUND_REASON_REQUIRED", "Diga por que o atendimento nao houve.");
+        }
+        if (gateway == null || attendance.getAsaasPaymentId() == null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "REFUND_NOT_VIA_GATEWAY", "Este atendimento nao foi pago pelo Asaas: nao ha o que estornar por aqui.");
+        }
+        if (attendance.getRefundedAt() != null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "ALREADY_REFUNDED", "Este atendimento ja foi estornado.");
+        }
+        if (!gatewayPaid(attendance.getAsaasStatus())) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "CHARGE_NOT_PAID", "A cobranca ainda nao foi paga: ela se cancela, nao se estorna.");
+        }
+        gateway.refundCharge(attendance);
+        attendance.setRefundedAt(java.time.OffsetDateTime.now(clock));
+        attendance.setRefundReason(reason);
+        attendanceRepository.save(attendance);
+        var penalties = penaltyEventRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(java.util.List.of(attendance.getId()));
+        penalties.forEach(p -> p.setChargedAttendanceId(null));
+        if (!penalties.isEmpty()) {
+            penaltyEventRepository.saveAll(penalties);
+        }
+        log.info("[Payment] estorno total — attendance={} motivo={} multas devolvidas a pendente={}",
+                attendance.getId(), reason, penalties.size());
+        return new RefundResult(attendance.getId(), attendance.getRefundedAt(), reason, attendance.getAsaasStatus(), penalties.size());
     }
 
     /**

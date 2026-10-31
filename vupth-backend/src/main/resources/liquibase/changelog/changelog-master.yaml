@@ -612,3 +612,8 @@ databaseChangeLog:
   - include:
       file: changesets/60-professional/067-professional-offers-owner-pix.yaml
       relativeToChangeLogFile: true
+
+  # estorno-asaas-casos (DEC-137): quando foi estornado e por que nao houve atendimento
+  - include:
+      file: changesets/80-attendance/068-attendance-refund.yaml
+      relativeToChangeLogFile: true

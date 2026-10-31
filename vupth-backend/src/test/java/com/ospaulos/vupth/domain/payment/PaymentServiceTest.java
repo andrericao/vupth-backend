@@ -241,6 +241,71 @@ class PaymentServiceTest {
                 .isInstanceOf(com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException.class);
     }
 
+    private com.ospaulos.vupth.domain.payment.service.PaymentGatewayService gatewayMock() {
+        var gateway = mock(com.ospaulos.vupth.domain.payment.service.PaymentGatewayService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "gateway", gateway);
+        return gateway;
+    }
+
+    private Attendance gatewayPaid(String asaasStatus) {
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        a.setAsaasPaymentId("pay_1");
+        a.setAsaasStatus(asaasStatus);
+        return a;
+    }
+
+    @Test
+    @DisplayName("estorno-asaas-casos: estorno total de cobranca paga grava o motivo e devolve a multa a pendente; cobranca aberta, ja estornada ou sem Asaas: 409; sem motivo: 422")
+    void refundRules() {
+        var gateway = gatewayMock();
+        Attendance paid = gatewayPaid("RECEIVED");
+        var penalty = new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent();
+        penalty.setChargedAttendanceId(paid.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(penalty));
+
+        var result = service.refund(paid.getId(), com.ospaulos.vupth.domain.payment.RefundReason.PROFESSIONAL_NO_SHOW);
+
+        verify(gateway).refundCharge(paid);
+        assertThat(paid.getRefundedAt()).isNotNull();
+        assertThat(paid.getRefundReason()).isEqualTo(com.ospaulos.vupth.domain.payment.RefundReason.PROFESSIONAL_NO_SHOW);
+        assertThat(penalty.getChargedAttendanceId()).as("a multa volta a pendente: o cliente segue devendo").isNull();
+        assertThat(result.penaltiesReleased()).isEqualTo(1);
+        assertThatThrownBy(() -> service.refund(paid.getId(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .hasMessageContaining("ja foi estornado");
+
+        Attendance open = gatewayPaid("PENDING");
+        assertThatThrownBy(() -> service.refund(open.getId(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .hasMessageContaining("se cancela");
+        Attendance manual = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        assertThatThrownBy(() -> service.refund(manual.getId(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .hasMessageContaining("nao foi pago pelo Asaas");
+        Attendance another = gatewayPaid("CONFIRMED");
+        assertThatThrownBy(() -> service.refund(another.getId(), null)).hasMessageContaining("por que");
+        verify(gateway, times(1)).refundCharge(any());
+        assertThatThrownBy(() -> service.refund(UUID.randomUUID(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .isInstanceOf(com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("estorno-asaas-casos (caso 3): Pix do Asaas pago DEPOIS do Recebi manual e estornado; aviso repetido de cobranca ja paga pelo Asaas nao estorna")
+    void doublePaymentRefundsOnlyTheSecond() {
+        var gateway = gatewayMock();
+        Attendance manual = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        manual.setAsaasPaymentId("pay_2");
+        manual.setAsaasStatus("DELETED");
+
+        assertThat(service.onGatewayEvent(manual.getId(), "pay_2", "RECEIVED", true)).isFalse();
+        verify(gateway).refundCharge(manual);
+        assertThat(manual.getRefundReason()).isEqualTo(com.ospaulos.vupth.domain.payment.RefundReason.DOUBLE_PAYMENT);
+
+        Attendance viaAsaas = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        viaAsaas.setAsaasPaymentId("pay_3");
+        viaAsaas.setAsaasStatus("PENDING");
+        assertThat(service.onGatewayEvent(viaAsaas.getId(), "pay_3", "RECEIVED", true)).isTrue();
+        assertThat(service.onGatewayEvent(viaAsaas.getId(), "pay_3", "CONFIRMED", true)).isFalse();
+        verify(gateway, times(1)).refundCharge(any());
+    }
+
     @Test
     @DisplayName("GET sem chave: so o valor; cancelado pendente ou antigo da 409; inexistente 404")
     void getPaymentWithoutKey() {

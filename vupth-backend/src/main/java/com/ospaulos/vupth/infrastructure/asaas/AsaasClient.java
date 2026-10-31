@@ -202,6 +202,13 @@ public class AsaasClient {
         delete("/payments/" + paymentId);
     }
 
+    /** Estorno total de uma cobranca paga ({@code POST /payments/{id}/refund}, estorno-asaas-casos); devolve o status novo. */
+    public String refund(String paymentId) {
+        requireKey();
+        JsonNode body = post("/payments/" + paymentId + "/refund", Map.of());
+        return body == null || body.get("status") == null ? "REFUNDED" : body.get("status").asText();
+    }
+
     private void requireKey() {
         if (!properties.keyConfigured()) {
             throw new AsaasException(HttpStatus.SERVICE_UNAVAILABLE, "ASAAS_NOT_CONFIGURED", "Falta a ASAAS_API_KEY.");
