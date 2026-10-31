@@ -53,6 +53,7 @@ public class ReportServiceImpl implements ReportService {
     private final ProfessionalRepository professionalRepository;
     private final ProfessionalShiftRepository shiftRepository;
     private final com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
+    private final com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository;
 
     @Override
     public EstablishmentReportResponse getEstablishmentReport(
@@ -142,11 +143,12 @@ public class ReportServiceImpl implements ReportService {
                         professional.getId(), from(dateFrom), to(dateTo))),
                 attendanceRepository.findFinishedLateByProfessionalBetween(
                         professional.getId(), from(dateFrom), to(dateTo)).size(),
-                receipts.receives(), receipts.fees(), receipts.debt(), receipts.simulatedDebt(), receipts.cuts());
+                receipts.receives(), receipts.fees(), receipts.debt(), receipts.simulatedDebt(), receipts.cuts(),
+                receipts.toReceive(), receipts.toPay(), receipts.toReceive().subtract(receipts.toPay()));
     }
 
     private record Receipts(BigDecimal receives, BigDecimal fees, BigDecimal debt, BigDecimal simulatedDebt,
-                            List<ProfessionalReportResponse.Cut> cuts) {
+                            List<ProfessionalReportResponse.Cut> cuts, BigDecimal toReceive, BigDecimal toPay) {
     }
 
     /** O que entra por corte e no periodo: recebe, taxas e a divida por fora (so a real aberta; a simulada a parte). */
@@ -164,11 +166,20 @@ public class ReportServiceImpl implements ReportService {
             BigDecimal fees = a.getProReceives() == null ? null
                     : (a.getIntermediaryFee() != null ? a.getIntermediaryFee() : BigDecimal.ZERO)
                     .add(a.getPlatformFee() != null ? a.getPlatformFee() : BigDecimal.ZERO);
-            return new ProfessionalReportResponse.Cut(a.getId(), a.getEndTime(), a.getTotalValue(), a.getProReceives(), fees, real, simulated);
+            return new ProfessionalReportResponse.Cut(a.getId(), a.getEndTime(), a.getTotalValue(), a.getProReceives(), fees, real, simulated,
+                    com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(a.getTotalValue(), a.getProReceives(), a.getDiscount(),
+                            BigDecimal.ZERO, a.getReceivedAmount()));
         }).toList();
+        // DEC-127: "a receber" = o repasse do app ainda nao pago (coupon_credit aberto); "a pagar" = a divida real aberta
+        BigDecimal toReceive = finished.isEmpty() ? BigDecimal.ZERO
+                : couponCreditRepository.findByAttendanceIdIn(finished.stream().map(Attendance::getId).toList()).stream()
+                .filter(c -> c.getPaidAt() == null).map(com.ospaulos.vupth.domain.campaign.model.CouponCredit::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal toPay = cuts.stream().map(ProfessionalReportResponse.Cut::pendingDebt).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new Receipts(netRevenue(finished), sum(finished, Attendance::getIntermediaryFee).add(sum(finished, Attendance::getPlatformFee)),
                 cuts.stream().map(ProfessionalReportResponse.Cut::pendingDebt).reduce(BigDecimal.ZERO, BigDecimal::add),
-                cuts.stream().map(ProfessionalReportResponse.Cut::pendingDebtSimulated).reduce(BigDecimal.ZERO, BigDecimal::add), cuts);
+                cuts.stream().map(ProfessionalReportResponse.Cut::pendingDebtSimulated).reduce(BigDecimal.ZERO, BigDecimal::add), cuts,
+                toReceive, toPay);
     }
 
     @Override

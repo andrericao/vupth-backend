@@ -109,6 +109,8 @@ public class SwapOfferServiceImpl implements SwapOfferService {
         offer.setCreatedAt(OffsetDateTime.now());
         offer = swapOfferRepository.save(offer);
 
+        notifyEligible(offer);
+
         log.info("[SwapOffer] create — oferta {} publicada (OPEN, {})", offer.getId(), request.direction());
         return SwapOfferResponse.from(offer);
     }
@@ -173,6 +175,8 @@ public class SwapOfferServiceImpl implements SwapOfferService {
         offer.setStatus(SwapOfferStatus.OPEN);
         offer.setCreatedAt(OffsetDateTime.now());
         offer = swapOfferRepository.save(offer);
+
+        notifyEligible(offer);
 
         log.info("[SwapOffer] create — oferta {} publicada de FORA da fila (OPEN, EARLIER, {} servico(s))",
                 offer.getId(), serviceItems.size());
@@ -442,6 +446,32 @@ public class SwapOfferServiceImpl implements SwapOfferService {
                     .filter(a -> a.getClient() != null && a.getClient().getId().equals(clientId))
                     .findFirst()
                     .orElse(null);
+        }
+    }
+
+    /**
+     * Avisa por WebSocket + push quem PODE aceitar a oferta recem-publicada (mesmo filtro da lista
+     * {@link #listAcceptable}: elegivel por posicao/direcao e com duracao compativel), para o pedido
+     * chegar mesmo com o app fechado. Vale para adiantar (EARLIER) e adiar (LATER).
+     */
+    private void notifyEligible(SwapOffer offer) {
+        UUID establishmentId = offer.getEstablishment().getId();
+        QueueSnapshot queue = snapshot(offer.getProfessional().getId(), establishmentId);
+        UUID requesterId = offer.getRequesterClient() != null ? offer.getRequesterClient().getId() : null;
+        int requesterMinutes = requesterMinutes(offer);
+        String message = offer.getDirection() == SwapOfferDirection.EARLIER
+                ? "Um cliente pediu para passar na sua frente na fila. Veja em Pedidos de troca."
+                : "Um cliente pediu para ficar atras de voce na fila. Veja em Pedidos de troca.";
+
+        for (Attendance a : queue.waiting()) {
+            if (a.getClient() == null || a.getClient().getId().equals(requesterId)) {
+                continue;
+            }
+            if (!isEligible(offer, queue.posByAttendance().get(a.getId()), queue)
+                    || !SwapDurationRule.compatible(requesterMinutes, a.getEstimatedTotalMinutes())) {
+                continue;
+            }
+            notifySwapParty(a.getClient().getId(), a, establishmentId, "SWAP_OFFER_CREATED", message);
         }
     }
 

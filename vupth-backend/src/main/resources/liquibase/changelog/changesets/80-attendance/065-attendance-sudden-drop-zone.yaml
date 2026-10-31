@@ -1,0 +1,17 @@
+databaseChangeLog:
+  # queda-brusca-da-estimativa (DEC-128, 29/10): o aviso sai em qualquer queda brusca de quem esperava menos de 2h30, mas a janela de 20 min
+  # sem multa so vale quando a espera NOVA ficou abaixo de 1 h (a zona de multa). A coluna guarda esse ultimo fato. So acrescenta.
+  - changeSet:
+      id: 065-attendance-sudden-drop-zone
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: sudden_drop_in_zone}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: sudden_drop_in_zone, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}
+        - sql:
+            sql: UPDATE attendance SET sudden_drop_in_zone = TRUE WHERE sudden_drop_at IS NOT NULL

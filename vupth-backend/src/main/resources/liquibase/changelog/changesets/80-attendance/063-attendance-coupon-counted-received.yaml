@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # bonificacao-diferenca-paga-pelo-app (DEC-127, 29/10): o cupom/promocao conta para o cliente quando o profissional INICIA o corte
+  # (coupon_counted_at) e o Recebi guarda o valor que o profissional disse ter recebido (received_amount), base da divida por fora
+  # e do repasse da diferenca. So acrescenta colunas; nada existente muda. Cortes antigos: o inicio que ja tinham.
+  - changeSet:
+      id: 063-attendance-coupon-counted-received
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: received_amount}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: coupon_counted_at, type: TIMESTAMP WITH TIME ZONE}
+              - column: {name: received_amount, type: "NUMERIC(10,2)"}
+        - sql:
+            sql: UPDATE attendance SET coupon_counted_at = start_time WHERE coupon_campaign_id IS NOT NULL AND start_time IS NOT NULL

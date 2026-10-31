@@ -125,6 +125,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
                         // campanhas publicas (DEC-64): a pagina "Campanhas ativas" do suporte nao tem login
                         .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
+                        // previa-publica-do-desconto: o link de campanha mostra o preco com cupom antes do cadastro
+                        .requestMatchers(HttpMethod.GET, "/campaigns/*/preview").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/invitations/accept").permitAll()
@@ -197,6 +199,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
                         // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
                         .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers("/professional/me/owner-pix-offer").hasRole("PROFESSIONAL")
                         .requestMatchers("/professional/me/payment-account").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers("/professional/me/price-policy/**").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/credits").hasAnyRole("PROFESSIONAL", "OWNER")
@@ -248,6 +251,8 @@ public class SecurityConfig {
 
                         // Profissional se afilia/desafilia de um establishment
                         // A agenda e do PROPRIO profissional — o dono nao edita a dos outros (Andre, 05/10)
+                        .requestMatchers(HttpMethod.GET, "/professional/me/agenda").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.POST, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/professional/me/status").hasRole("PROFESSIONAL")

@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -31,8 +33,49 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class QueuePushService {
 
+    /**
+     * sem-quase-sua-vez-apos-aceite-agendado (29/10, CLI-37): quem tem agendamento aceito para daqui a mais de uma hora (outro dia,
+     * ou mais tarde no mesmo dia) e o primeiro da lista de espera, mas nao e "quase a sua vez". O aviso espera chegar perto: a
+     * flag {@code nextNotified} nao e marcada, e ele sai numa mutacao da fila quando o horario estiver a uma hora ou menos.
+     */
+    static final Duration NEAR_WINDOW = Duration.ofHours(1);
+
     private final AttendanceRepository attendanceRepository;
     private final PushNotificationPublisher pushPublisher;
+
+    /**
+     * DEC-128 (queda brusca da estimativa): um push so, no lugar do "sua vez adiantou", com o horario novo; o cliente toca, ve o horario
+     * e responde "ok" ou "preciso de mais tempo" (as 4 opcoes, sem multa na janela de 20 min). Uma vez por queda
+     * ({@code suddenDropNotified}); quem ja nao esta na janela nao recebe. Roda em toda mutacao da fila, qualquer que seja a causa.
+     */
+    private void notifySuddenDrops(List<Attendance> waiting, UUID establishmentId) {
+        OffsetDateTime now = OffsetDateTime.now();
+        for (Attendance a : waiting) {
+            if (a.getClient() == null || a.getSuddenDropAt() == null || a.isSuddenDropNotified() || !a.isSuddenDropNoticeOpen(now)) {
+                continue;
+            }
+            OffsetDateTime newTime = a.getScheduledTime();
+            String hhmm = newTime == null ? "" : newTime.atZoneSameInstant(com.ospaulos.vupth.domain.shared.BusinessClock.zone())
+                    .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+            Map<String, Object> data = new HashMap<>();
+            data.put("type", "SUDDEN_DROP");
+            data.put("attendanceId", a.getId().toString());
+            data.put("establishmentId", establishmentId.toString());
+            data.put("newTime", String.valueOf(newTime));
+            data.put("previousTime", String.valueOf(a.getSuddenDropFrom()));
+            data.put("windowUntil", String.valueOf(a.getSuddenDropWindowUntil()));
+            pushPublisher.notifyUser(a.getClient().getId(), "Sua vez adiantou",
+                    "Sua vez adiantou" + (hhmm.isEmpty() ? "" : " para as " + hhmm) + ". Veja o horário e confirme.", data);
+            a.setSuddenDropNotified(true);
+            attendanceRepository.save(a);
+            log.info("[PUSH] sudden-drop — client={} attendance={} novo={}", a.getClient().getId(), a.getId(), newTime);
+        }
+    }
+
+    /** O horario e daqui a mais de {@link #NEAR_WINDOW}? Sem horario, vale como perto (comportamento de sempre). */
+    static boolean isFarAhead(OffsetDateTime scheduledTime, OffsetDateTime now) {
+        return scheduledTime != null && scheduledTime.isAfter(now.plus(NEAR_WINDOW));
+    }
 
     @Transactional
     public void notifyNextInLine(UUID establishmentId) {
@@ -44,6 +87,7 @@ public class QueuePushService {
         if (waiting.isEmpty()) {
             return;
         }
+        notifySuddenDrops(waiting, establishmentId);
         Set<UUID> handledProfessionals = new HashSet<>();
         for (Attendance head : waiting) {
             UUID professionalId = head.getProfessional() != null ? head.getProfessional().getId() : null;
@@ -52,6 +96,9 @@ public class QueuePushService {
             }
             if (head.getClient() == null || head.isNextNotified()) {
                 continue; // convidado, ou ja avisado nesta vez
+            }
+            if (isFarAhead(head.getScheduledTime(), OffsetDateTime.now())) {
+                continue; // agendamento para depois: "e quase a sua vez" nao faz sentido
             }
 
             UUID clientId = head.getClient().getId();

@@ -55,6 +55,9 @@ public class PaymentService {
     private final com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private final Clock clock = Clock.systemDefaultZone();
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository professionalRepository;
+
     /** O Pix do app, que recebe a multa (DEC-83). Opcional: sem ele (testes de unidade) a multa so mostra o valor. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.infrastructure.config.AppPix appPix;
@@ -120,6 +123,25 @@ public class PaymentService {
         log.info("[Payment] chave Pix apagada — user={}", userId);
     }
 
+    /** pix-so-confirma: o interruptor "oferecer o Pix do dono" do profissional (padrao desligado). */
+    @Transactional(readOnly = true)
+    public boolean ownerPixOffered(UUID professionalId) {
+        return Boolean.TRUE.equals(professional(professionalId).getOffersOwnerPix());
+    }
+
+    public boolean setOwnerPixOffered(UUID professionalId, boolean value) {
+        com.ospaulos.vupth.domain.professional.model.Professional professional = professional(professionalId);
+        professional.setOffersOwnerPix(value);
+        professionalRepository.save(professional);
+        log.info("[Payment] profissional {} {} o Pix do dono", professionalId, value ? "oferece" : "deixou de oferecer");
+        return value;
+    }
+
+    private com.ospaulos.vupth.domain.professional.model.Professional professional(UUID id) {
+        return professionalRepository.findById(id)
+                .orElseThrow(() -> new com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException(id));
+    }
+
     // ─── o pagamento de um atendimento ───
 
     public PaymentResponse getPayment(UUID attendanceId, UUID userId) {
@@ -164,6 +186,12 @@ public class PaymentService {
 
     /** "Recebi" com a forma de recebimento (opcional): Pix, cartao, dinheiro ou nota — qualquer uma quita (DEC-85). */
     public PaymentResponse confirm(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
+        return confirm(attendanceId, userId, method, null);
+    }
+
+    /** DEC-127: com o valor que o profissional recebeu (nulo = o valor com desconto). */
+    public PaymentResponse confirm(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method,
+                                   BigDecimal receivedAmount) {
         Attendance attendance = attendance(attendanceId);
         if (!canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja confirmam o pagamento.");
@@ -172,7 +200,7 @@ public class PaymentService {
         if (attendance.getPaymentStatus() == PaymentStatus.PAID) {
             throw new PaymentInvalidStatusException(PaymentStatus.PAID, "confirmar");
         }
-        markPaid(attendance, method);
+        markPaid(attendance, method, receivedAmount);
         cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi — attendance={} by={} forma={}", attendanceId, userId, method);
         return toPayment(attendance, isClient(attendance, userId));
@@ -214,6 +242,11 @@ public class PaymentService {
     }
 
     public boolean confirmOnFinish(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
+        return confirmOnFinish(attendanceId, userId, method, null);
+    }
+
+    public boolean confirmOnFinish(UUID attendanceId, UUID userId, com.ospaulos.vupth.domain.payment.PaymentMethod method,
+                                   BigDecimal receivedAmount) {
         Attendance attendance = attendance(attendanceId);
         if (!canConfirm(attendance, userId)) {
             throw new PaymentAccessDeniedException("So o profissional do atendimento ou o dono da loja confirmam o pagamento.");
@@ -222,7 +255,7 @@ public class PaymentService {
         if (current == null || current == PaymentStatus.PAID) {
             return false;
         }
-        markPaid(attendance, method);
+        markPaid(attendance, method, receivedAmount);
         cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi no Finalizar — attendance={} by={} forma={}", attendanceId, userId, method);
         return true;
@@ -237,8 +270,24 @@ public class PaymentService {
         if (attendance == null || asaasPaymentId == null || !asaasPaymentId.equals(attendance.getAsaasPaymentId())) {
             return false;
         }
+        String before = attendance.getAsaasStatus();
         if (status != null) {
             attendance.setAsaasStatus(status);
+        }
+        // estorno-asaas-casos (DEC-137, caso 3): o cliente pagou o Pix do Asaas DEPOIS do "Recebi" manual quitar o atendimento. E a mesma
+        // cobranca, entao o pagamento do Asaas e estornado (o manual vale). O primeiro aviso de uma cobranca paga (RECEIVED/CONFIRMED) ja
+        // quitada pelo proprio Asaas nao entra aqui: so quando a cobranca nao estava paga antes.
+        if (paid && attendance.getPaymentStatus() == PaymentStatus.PAID && attendance.getRefundedAt() == null
+                && !gatewayPaid(before) && gateway != null) {
+            attendanceRepository.save(attendance);
+            try {
+                refund(attendance, com.ospaulos.vupth.domain.payment.RefundReason.DOUBLE_PAYMENT);
+                log.warn("[Payment] pagou duas vezes (Asaas depois do manual) — estornado o do Asaas, attendance={}", attendanceId);
+            } catch (RuntimeException e) {
+                log.error("[Payment] pagou duas vezes e o estorno falhou — o ADMIN estorna no Painel, attendance={}: {}",
+                        attendanceId, e.getMessage(), e);
+            }
+            return false;
         }
         boolean marked = false;
         if (paid && attendance.getPaymentStatus() != PaymentStatus.PAID) {
@@ -249,6 +298,56 @@ public class PaymentService {
             attendanceRepository.save(attendance);
         }
         return marked;
+    }
+
+    private static boolean gatewayPaid(String asaasStatus) {
+        return "RECEIVED".equals(asaasStatus) || "CONFIRMED".equals(asaasStatus);
+    }
+
+    /** O resultado do estorno para o Painel. */
+    public record RefundResult(UUID attendanceId, java.time.OffsetDateTime refundedAt,
+                               com.ospaulos.vupth.domain.payment.RefundReason reason, String asaasStatus, int penaltiesReleased) {}
+
+    /**
+     * estorno-asaas-casos (DEC-137, casos 1, 4, 6 e 7): o ADMIN estorna a cobranca JA PAGA do Asaas, so total. O dinheiro volta ao
+     * cliente; o motivo de nao ter havido atendimento fica gravado (o cupom nao volta por ora); a multa que o atendimento carregava
+     * volta a pendente (o cliente segue devendo). Cobranca aberta se cancela, nao se estorna.
+     */
+    public RefundResult refund(UUID attendanceId, com.ospaulos.vupth.domain.payment.RefundReason reason) {
+        Attendance attendance = attendanceRepository.findById(attendanceId)
+                .orElseThrow(() -> new com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException(attendanceId));
+        return refund(attendance, reason);
+    }
+
+    private RefundResult refund(Attendance attendance, com.ospaulos.vupth.domain.payment.RefundReason reason) {
+        if (reason == null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "REFUND_REASON_REQUIRED", "Diga por que o atendimento nao houve.");
+        }
+        if (gateway == null || attendance.getAsaasPaymentId() == null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "REFUND_NOT_VIA_GATEWAY", "Este atendimento nao foi pago pelo Asaas: nao ha o que estornar por aqui.");
+        }
+        if (attendance.getRefundedAt() != null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "ALREADY_REFUNDED", "Este atendimento ja foi estornado.");
+        }
+        if (!gatewayPaid(attendance.getAsaasStatus())) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "CHARGE_NOT_PAID", "A cobranca ainda nao foi paga: ela se cancela, nao se estorna.");
+        }
+        gateway.refundCharge(attendance);
+        attendance.setRefundedAt(java.time.OffsetDateTime.now(clock));
+        attendance.setRefundReason(reason);
+        attendanceRepository.save(attendance);
+        var penalties = penaltyEventRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(java.util.List.of(attendance.getId()));
+        penalties.forEach(p -> p.setChargedAttendanceId(null));
+        if (!penalties.isEmpty()) {
+            penaltyEventRepository.saveAll(penalties);
+        }
+        log.info("[Payment] estorno total — attendance={} motivo={} multas devolvidas a pendente={}",
+                attendance.getId(), reason, penalties.size());
+        return new RefundResult(attendance.getId(), attendance.getRefundedAt(), reason, attendance.getAsaasStatus(), penalties.size());
     }
 
     /**
@@ -361,6 +460,13 @@ public class PaymentService {
     // ─── apoio ───
 
     private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method) {
+        markPaid(attendance, method, null);
+    }
+
+    private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method, BigDecimal receivedAmount) {
+        if (receivedAmount != null && receivedAmount.signum() >= 0) {
+            attendance.setReceivedAmount(receivedAmount.setScale(2, java.math.RoundingMode.HALF_UP));
+        }
         attendance.setPaymentStatus(PaymentStatus.PAID);
         if (method != null) {
             attendance.setPaymentMethod(method);
@@ -453,7 +559,15 @@ public class PaymentService {
                 penaltyPix && appPix.configured() ? appPix.holderName() : null,
                 attendance.getPaymentMethod(),
                 hasKey && forClient ? keyOwner.getPixKey() : null,
-                gatewayOf(attendance, forClient));
+                gatewayOf(attendance, forClient),
+                breakdownOf(attendance, realPenalties));
+    }
+
+    /** DEC-127: a conta do desconto; pelo Asaas o profissional recebe o split e o app repassa o resto (fatia 2 do gateway). */
+    private static com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdownOf(Attendance attendance, BigDecimal penalties) {
+        var base = com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(attendance.getTotalValue(), attendance.getProReceives(),
+                attendance.getDiscount(), penalties, attendance.getReceivedAmount());
+        return base.discounted() && attendance.isViaGateway() ? base.viaGateway(attendance.getAsaasSplitAmount()) : base;
     }
 
     /** A cobranca do Asaas deste atendimento (DEC-119): o Pix so vai ao cliente; o profissional ve o modo e o status do webhook. */
@@ -474,11 +588,17 @@ public class PaymentService {
                 : a.getAmountDue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
-    /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */
+    /**
+     * DEC-65 + DEC-129/138: a chave do profissional que atendeu; sem ela, a do dono da loja <b>so se o profissional oferecer</b>
+     * (interruptor, padrao desligado); senao nenhuma e o cliente so confirma "ja paguei".
+     */
     private static BaseUser pixKeyOwner(Attendance attendance) {
         BaseUser professional = attendance.getProfessional() == null ? null : attendance.getProfessional().getBaseUser();
         if (professional != null && professional.getPixKey() != null) {
             return professional;
+        }
+        if (attendance.getProfessional() == null || !Boolean.TRUE.equals(attendance.getProfessional().getOffersOwnerPix())) {
+            return null;
         }
         BaseUser owner = attendance.getEstablishment() == null || attendance.getEstablishment().getOwner() == null
                 ? null : attendance.getEstablishment().getOwner().getBaseUser();

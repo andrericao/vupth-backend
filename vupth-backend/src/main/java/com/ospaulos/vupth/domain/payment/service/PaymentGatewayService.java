@@ -53,6 +53,20 @@ public class PaymentGatewayService {
      * Garante a cobranca Pix do atendimento quando a conexao esta ligada e ainda nao ha uma. Qualquer falha ou condicao que nao
      * serve (valor abaixo do minimo do Asaas, sem cliente, real sem CPF) cai no fluxo de sempre: nada e criado e nada quebra.
      */
+    /** A tarifa do Pix da conta do Asaas (a que o Painel muda); sem a conta cadastrada, R$ 1,99 (decisao do Andre, 24/10). */
+    static final BigDecimal DEFAULT_PIX_FEE = new BigDecimal("1.99");
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.finance.repository.FinanceAccountRepository financeAccounts;
+
+    private BigDecimal pixFee() {
+        if (financeAccounts == null) {
+            return DEFAULT_PIX_FEE;
+        }
+        return financeAccounts.findByKey(com.ospaulos.vupth.domain.finance.model.FinanceAccount.ASAAS)
+                .map(com.ospaulos.vupth.domain.finance.model.FinanceAccount::getPixFee).orElse(DEFAULT_PIX_FEE);
+    }
+
     public void ensureCharge(Attendance attendance, BigDecimal amount) {
         if (attendance.getAsaasPaymentId() != null || !connected() || attendance.getClient() == null
                 || amount == null || amount.compareTo(MIN_CHARGE) < 0) {
@@ -67,8 +81,10 @@ public class PaymentGatewayService {
             // o cliente do Asaas e a pessoa logada: o e-mail e o nome do cadastro, sem pedir nada (o Asaas exige o e-mail do titular do cartao)
             AsaasClient.Customer customer = client.ensureCustomer(new AsaasClient.Party(
                     "vupth-user-" + attendance.getClient().getId(), displayName(attendance), attendance.getClient().getEmail()), null);
+            List<AsaasClient.Split> splits = splitsFor(attendance, amount);
             AsaasClient.Charge charge = client.createCharge(customer.id(), amount, "PIX", attendance.getId().toString(),
-                    "VUPTH - atendimento", splitsFor(attendance, amount));
+                    "VUPTH - atendimento", splits);
+            attendance.setAsaasSplitAmount(splits.stream().map(AsaasClient.Split::fixedValue).reduce(BigDecimal.ZERO, BigDecimal::add));
             AsaasClient.PixQr qr = client.pixQrCode(charge.id());
             attendance.setAsaasPaymentId(charge.id());
             attendance.setAsaasMode(mode());
@@ -104,6 +120,16 @@ public class PaymentGatewayService {
         }
     }
 
+    /**
+     * estorno-asaas-casos: estorna a cobranca JA PAGA (total, DEC-137) e devolve se o Asaas aceitou. Cobranca ainda aberta nao se
+     * estorna, se cancela ({@link #cancelCharge}). Falha do Asaas (saldo, prazo) volta como {@link AsaasException} para o ADMIN ver.
+     */
+    public void refundCharge(Attendance attendance) {
+        String status = client.refund(attendance.getAsaasPaymentId());
+        attendance.setAsaasStatus(status == null || status.isBlank() ? "REFUNDED" : status);
+        log.info("[Gateway] cobranca estornada — attendance={} payment={}", attendance.getId(), attendance.getAsaasPaymentId());
+    }
+
     private static String displayName(Attendance attendance) {
         String name = attendance.getClient().getFullName();
         boolean empty = name == null || name.isBlank() || name.contains("null");
@@ -118,14 +144,22 @@ public class PaymentGatewayService {
      */
     public List<AsaasClient.Split> splitsFor(Attendance attendance, BigDecimal charged) {
         BigDecimal pro = attendance.getProReceives();
-        if (pro == null || pro.signum() <= 0 || pro.compareTo(charged) >= 0) {
+        if (pro == null || pro.signum() <= 0) {
             return List.of();
         }
+        BigDecimal toPro = pro;
         if (attendance.getDiscount() != null && attendance.getDiscount().signum() > 0) {
-            log.info("[Gateway] atendimento com cupom: sem divisao nesta fatia (attendance={})", attendance.getId());
+            // fatia 2 (DEC-127, decisao do Andre 29/10): com desconto o cobrado nao cobre o que o profissional estipulou; o Asaas
+            // entrega o que sobra ja sem a tarifa do Pix, e o app calcula o que ainda deve a ele (pro_receives − split).
+            toPro = pro.min(charged.subtract(pixFee())).setScale(2, java.math.RoundingMode.DOWN);
+            if (toPro.signum() <= 0) {
+                return List.of();
+            }
+        } else if (pro.compareTo(charged) >= 0) {
             return List.of();
         }
+        BigDecimal value = toPro;
         return paymentAccounts.walletFor(attendance.getProfessional().getId(), mode())
-                .map(wallet -> List.of(new AsaasClient.Split(wallet, pro))).orElse(List.of());
+                .map(wallet -> List.of(new AsaasClient.Split(wallet, value))).orElse(List.of());
     }
 }

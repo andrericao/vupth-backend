@@ -83,6 +83,9 @@ public class ExpoPushSender implements PushSender {
     /** pagamento-manual-e-asaas: "diz que pagou" pergunta ao profissional se recebeu: Confirmar / Recusar. */
     static final String PAYMENT_CLAIM_CATEGORY_ID = "CONFIRMAR_RECUSAR";
 
+    /** DEC-128 (queda brusca): o aviso leva os botoes "Ok" e "Preciso de mais tempo"; o Client registra a categoria. */
+    static final String SUDDEN_DROP_CATEGORY_ID = "OK_MAIS_TEMPO";
+
     /**
      * Categorias do Client (push-categorias-do-client, DEC-43; o Client registrou em 7b5276bf): "Ver minha
      * vez" leva a fila, "Ver atendimento" leva ao atendimento. Os outros tipos seguem a regra geral (CIENCIA
@@ -104,7 +107,8 @@ public class ExpoPushSender implements PushSender {
             Map.entry("ATTENDANCE_FINISHED", "AVALIAR"),
             Map.entry("PAYMENT_PENDING", "PAGAR"),
             Map.entry("PAYMENT_REFUSED", "PAGAR"),
-            Map.entry("PAYMENT_CLAIMED", PAYMENT_CLAIM_CATEGORY_ID));
+            Map.entry("PAYMENT_CLAIMED", PAYMENT_CLAIM_CATEGORY_ID),
+            Map.entry("SUDDEN_DROP", SUDDEN_DROP_CATEGORY_ID));
 
     /** A Expo aceita ate 1000 ids por consulta de recibos. */
     static final int RECEIPTS_BATCH_SIZE = 1000;

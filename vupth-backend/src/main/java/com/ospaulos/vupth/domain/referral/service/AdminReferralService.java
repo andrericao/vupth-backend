@@ -42,6 +42,41 @@ public class AdminReferralService {
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
 
+    /** Repasse automatico (DEC-132): pronto, testado e DESLIGADO. So liga com {@code vupth.asaas.payout-auto=true} e so no sandbox. */
+    @org.springframework.beans.factory.annotation.Value("${vupth.asaas.payout-auto:false}")
+    private boolean payoutAuto;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.asaas.AsaasClient asaasClient;
+
+    public record AutoPaid(AdminReferralPaidResponse paid, String transferId, java.math.BigDecimal amount) {}
+
+    /**
+     * repasse-bonificacao-manual (DEC-132): o repasse automatico, por transferencia Pix do Asaas para a chave do beneficiario, de tudo que
+     * esta liberado e a pagar na campanha. Desligado por padrao (409 PAYOUT_AUTO_DISABLED); fora do sandbox tambem nao roda. Depois da
+     * transferencia o pago e registrado como no manual ({@link #markPaid}); o manual segue intacto.
+     */
+    public AutoPaid payAuto(UUID adminId, UUID campaignId, UUID userId) {
+        if (!payoutAuto || asaasClient == null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.CONFLICT,
+                    "PAYOUT_AUTO_DISABLED", "O repasse automatico esta desligado: pague pelo Pix e marque como pago.");
+        }
+        AdminReferralPayoutResponse row = payouts().stream()
+                .filter(p -> campaignId.equals(p.campaignId()) && userId.equals(p.beneficiaryId())).findFirst()
+                .orElseThrow(ReferralException::nothingToPay);
+        BaseUser user = userRepository.findById(userId).orElseThrow(ReferralException::nothingToPay);
+        if (user.getPixKey() == null || user.getPixKeyType() == null) {
+            throw new com.ospaulos.vupth.infrastructure.asaas.AsaasException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY,
+                    "PAYOUT_NO_PIX_KEY", "O beneficiario nao cadastrou a chave Pix.");
+        }
+        String transferId = asaasClient.transferPix(row.amount(), user.getPixKey(),
+                user.getPixKeyType() == com.ospaulos.vupth.domain.payment.PixKeyType.RANDOM ? "EVP" : user.getPixKeyType().name(),
+                "VUPTH bonificacao");
+        log.info("[Referral] admin={} repasse automatico campaign={} user={} valor={} transferencia={}", adminId, campaignId, userId,
+                row.amount(), transferId);
+        return new AutoPaid(markPaid(adminId, campaignId, userId), transferId, row.amount());
+    }
+
     /** O que falta pagar, o pagamento mais proximo primeiro. */
     @Transactional(readOnly = true)
     public List<AdminReferralPayoutResponse> payouts() {

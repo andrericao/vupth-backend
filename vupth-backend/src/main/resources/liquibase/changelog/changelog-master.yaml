@@ -587,3 +587,33 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/062-cut-request-coupon.yaml
       relativeToChangeLogFile: true
+
+  # bonificacao-diferenca-paga-pelo-app (DEC-127): cupom conta na partida; Recebi guarda o valor recebido
+  - include:
+      file: changesets/80-attendance/063-attendance-coupon-counted-received.yaml
+      relativeToChangeLogFile: true
+
+  # queda-brusca-da-estimativa (DEC-128): janela de 20 min sem multa de saida apos a queda
+  - include:
+      file: changesets/80-attendance/064-attendance-sudden-drop.yaml
+      relativeToChangeLogFile: true
+
+  # queda-brusca-da-estimativa (DEC-128): o aviso e a janela sem multa deixam de andar juntos (zona de multa)
+  - include:
+      file: changesets/80-attendance/065-attendance-sudden-drop-zone.yaml
+      relativeToChangeLogFile: true
+
+  # gateway-de-pagamento fatia 2: quanto o Asaas manda ao profissional na cobranca com desconto
+  - include:
+      file: changesets/80-attendance/066-attendance-asaas-split-amount.yaml
+      relativeToChangeLogFile: true
+
+  # pix-so-confirma (DEC-129/138): interruptor "oferecer o Pix do dono", padrao desligado
+  - include:
+      file: changesets/60-professional/067-professional-offers-owner-pix.yaml
+      relativeToChangeLogFile: true
+
+  # estorno-asaas-casos (DEC-137): quando foi estornado e por que nao houve atendimento
+  - include:
+      file: changesets/80-attendance/068-attendance-refund.yaml
+      relativeToChangeLogFile: true

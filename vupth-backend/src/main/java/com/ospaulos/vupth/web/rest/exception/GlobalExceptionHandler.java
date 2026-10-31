@@ -574,6 +574,27 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Account is locked", "ACCOUNT_LOCKED");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.client.exception.PenaltyLimitException.class)
+    public ResponseEntity<PenaltyLimitErrorResponse> handlePenaltyLimit(
+            com.ospaulos.vupth.domain.client.exception.PenaltyLimitException ex, HttpServletRequest req) {
+        log.warn("[409] PenaltyLimit | {} {} | multas={}", req.getMethod(), req.getRequestURI(), ex.getPenalties().size());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new PenaltyLimitErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), "PENALTY_LIMIT_REACHED", OffsetDateTime.now(),
+                ex.getLimit(), ex.getTotal(), ex.getPenalties(), ex.getPaymentId()));
+    }
+
+    /** 409 do limite de multas: o limite, o total, cada multa e o pagamento avulso vigente (para reabrir o Pix). */
+    public record PenaltyLimitErrorResponse(
+            int status,
+            String message,
+            String code,
+            OffsetDateTime timestamp,
+            int limit,
+            java.math.BigDecimal total,
+            java.util.List<com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse> penalties,
+            @com.fasterxml.jackson.annotation.JsonProperty("payment_id") java.util.UUID paymentId) {
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.client.exception.PenaltyPaymentException.class)
     public ResponseEntity<ErrorResponse> handlePenaltyPayment(
             com.ospaulos.vupth.domain.client.exception.PenaltyPaymentException ex, HttpServletRequest req) {

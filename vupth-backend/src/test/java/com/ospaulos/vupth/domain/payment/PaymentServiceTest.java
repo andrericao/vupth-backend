@@ -197,7 +197,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("DEC-65: profissional sem chave -> o Pix sai na chave do dono (pix_owner OWNER); com a dele, vale a dele")
+    @DisplayName("DEC-65/129: profissional sem chave -> a chave do dono so sai se ele oferecer (pix_owner OWNER); com a dele, vale a dele")
     void ownerKeyIsTheAlternative() {
         BaseUser dona = establishment.getOwner().getBaseUser();
         dona.setPixKeyType(PixKeyType.EMAIL);
@@ -205,6 +205,12 @@ class PaymentServiceTest {
         dona.setPixHolderName("Dona");
         Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
 
+        PaymentResponse notOffered = service.getPayment(a.getId(), clientId);
+        assertThat(notOffered.pixCopyPaste()).as("padrao desligado: nenhum Pix, so o ja paguei").isNull();
+        assertThat(notOffered.pixKey()).isNull();
+        assertThat(notOffered.pixOwner()).isNull();
+
+        professional.setOffersOwnerPix(true);
         PaymentResponse r = service.getPayment(a.getId(), clientId);
         assertThat(r.pixCopyPaste()).contains("dona@mail.com");
         assertThat(r.holderName()).isEqualTo("Dona");
@@ -214,6 +220,90 @@ class PaymentServiceTest {
         PaymentResponse own = service.getPayment(a.getId(), clientId);
         assertThat(own.pixCopyPaste()).contains("beto@mail.com");
         assertThat(own.pixOwner()).isEqualTo("PROFESSIONAL");
+    }
+
+    @Test
+    @DisplayName("pix-so-confirma: o interruptor do Pix do dono nasce desligado, liga e desliga; profissional inexistente 404")
+    void ownerPixSwitch() {
+        var repo = mock(com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "professionalRepository", repo);
+        when(repo.findById(professionalId)).thenReturn(Optional.of(professional));
+
+        assertThat(service.ownerPixOffered(professionalId)).isFalse();
+        assertThat(service.setOwnerPixOffered(professionalId, true)).isTrue();
+        assertThat(service.ownerPixOffered(professionalId)).isTrue();
+        assertThat(service.setOwnerPixOffered(professionalId, false)).isFalse();
+        verify(repo, times(2)).save(professional);
+
+        UUID missing = UUID.randomUUID();
+        when(repo.findById(missing)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.ownerPixOffered(missing))
+                .isInstanceOf(com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException.class);
+    }
+
+    private com.ospaulos.vupth.domain.payment.service.PaymentGatewayService gatewayMock() {
+        var gateway = mock(com.ospaulos.vupth.domain.payment.service.PaymentGatewayService.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "gateway", gateway);
+        return gateway;
+    }
+
+    private Attendance gatewayPaid(String asaasStatus) {
+        Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        a.setAsaasPaymentId("pay_1");
+        a.setAsaasStatus(asaasStatus);
+        return a;
+    }
+
+    @Test
+    @DisplayName("estorno-asaas-casos: estorno total de cobranca paga grava o motivo e devolve a multa a pendente; cobranca aberta, ja estornada ou sem Asaas: 409; sem motivo: 422")
+    void refundRules() {
+        var gateway = gatewayMock();
+        Attendance paid = gatewayPaid("RECEIVED");
+        var penalty = new com.ospaulos.vupth.domain.client.model.ClientPenaltyEvent();
+        penalty.setChargedAttendanceId(paid.getId());
+        when(penaltyRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(any())).thenReturn(List.of(penalty));
+
+        var result = service.refund(paid.getId(), com.ospaulos.vupth.domain.payment.RefundReason.PROFESSIONAL_NO_SHOW);
+
+        verify(gateway).refundCharge(paid);
+        assertThat(paid.getRefundedAt()).isNotNull();
+        assertThat(paid.getRefundReason()).isEqualTo(com.ospaulos.vupth.domain.payment.RefundReason.PROFESSIONAL_NO_SHOW);
+        assertThat(penalty.getChargedAttendanceId()).as("a multa volta a pendente: o cliente segue devendo").isNull();
+        assertThat(result.penaltiesReleased()).isEqualTo(1);
+        assertThatThrownBy(() -> service.refund(paid.getId(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .hasMessageContaining("ja foi estornado");
+
+        Attendance open = gatewayPaid("PENDING");
+        assertThatThrownBy(() -> service.refund(open.getId(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .hasMessageContaining("se cancela");
+        Attendance manual = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        assertThatThrownBy(() -> service.refund(manual.getId(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .hasMessageContaining("nao foi pago pelo Asaas");
+        Attendance another = gatewayPaid("CONFIRMED");
+        assertThatThrownBy(() -> service.refund(another.getId(), null)).hasMessageContaining("por que");
+        verify(gateway, times(1)).refundCharge(any());
+        assertThatThrownBy(() -> service.refund(UUID.randomUUID(), com.ospaulos.vupth.domain.payment.RefundReason.DISPUTED))
+                .isInstanceOf(com.ospaulos.vupth.domain.attendance.exception.AttendanceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("estorno-asaas-casos (caso 3): Pix do Asaas pago DEPOIS do Recebi manual e estornado; aviso repetido de cobranca ja paga pelo Asaas nao estorna")
+    void doublePaymentRefundsOnlyTheSecond() {
+        var gateway = gatewayMock();
+        Attendance manual = attendance(AttendanceStatus.FINISHED, PaymentStatus.PAID);
+        manual.setAsaasPaymentId("pay_2");
+        manual.setAsaasStatus("DELETED");
+
+        assertThat(service.onGatewayEvent(manual.getId(), "pay_2", "RECEIVED", true)).isFalse();
+        verify(gateway).refundCharge(manual);
+        assertThat(manual.getRefundReason()).isEqualTo(com.ospaulos.vupth.domain.payment.RefundReason.DOUBLE_PAYMENT);
+
+        Attendance viaAsaas = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        viaAsaas.setAsaasPaymentId("pay_3");
+        viaAsaas.setAsaasStatus("PENDING");
+        assertThat(service.onGatewayEvent(viaAsaas.getId(), "pay_3", "RECEIVED", true)).isTrue();
+        assertThat(service.onGatewayEvent(viaAsaas.getId(), "pay_3", "CONFIRMED", true)).isFalse();
+        verify(gateway, times(1)).refundCharge(any());
     }
 
     @Test
@@ -496,12 +586,20 @@ class PaymentServiceTest {
         dona.setPixKey("dona@mail.com");
         dona.setPixHolderName("Dona");
 
-        // sem profissional na linha (removido): vale a chave do dono, e nao e "PROFESSIONAL"
+        // sem profissional na linha (removido): ninguem oferece a chave do dono (DEC-129/138), entao nao ha Pix, so o "ja paguei"
         Attendance noProfessional = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
         noProfessional.setProfessional(null);
         PaymentResponse r = service.getPayment(noProfessional.getId(), clientId);
-        assertThat(r.pixOwner()).isEqualTo("OWNER");
-        assertThat(r.pixCopyPaste()).contains("dona@mail.com");
+        assertThat(r.pixOwner()).isNull();
+        assertThat(r.pixCopyPaste()).isNull();
+
+        // com o profissional oferecendo, a chave do dono sai e nao e "PROFESSIONAL"
+        professional.setOffersOwnerPix(true);
+        Attendance offered = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
+        PaymentResponse viaOwner = service.getPayment(offered.getId(), clientId);
+        assertThat(viaOwner.pixOwner()).isEqualTo("OWNER");
+        assertThat(viaOwner.pixCopyPaste()).contains("dona@mail.com");
+        professional.setOffersOwnerPix(false);
 
         // sem loja: sem dono, sem cidade e sem chave
         Attendance noEstablishment = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);

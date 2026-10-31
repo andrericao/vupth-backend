@@ -65,6 +65,13 @@ public class Professional extends AbstractAggregateRoot<Professional> {
     @Column(name = "accepting_new", nullable = false)
     private Boolean acceptingNew = true;
 
+    /**
+     * pix-so-confirma (DEC-129/138): o profissional escolhe oferecer a chave Pix do dono quando nao tem a propria. Padrao
+     * desligado: sem chave propria e sem o interruptor, o pagamento nao mostra Pix e o cliente so confirma "ja paguei".
+     */
+    @Column(name = "offers_owner_pix", nullable = false)
+    private Boolean offersOwnerPix = false;
+
     /** Fila ou so agenda (D9, por profissional). So troca antes do primeiro cliente na fila do dia. */
     @Enumerated(EnumType.STRING)
     @Column(name = "operation_mode", nullable = false, length = 20)

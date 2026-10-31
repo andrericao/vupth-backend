@@ -34,6 +34,7 @@ import java.util.function.UnaryOperator;
 public class ManageProfessionalHoursUseCase {
 
     private final ProfessionalRepository repository;
+    private final com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository attendanceRepository;
     private final com.ospaulos.vupth.domain.attendance.cut.service.CutRequestService cutRequestService;
 
     @Transactional(readOnly = true)
@@ -43,10 +44,99 @@ public class ManageProfessionalHoursUseCase {
                 professional.getWorkingHours(), professional.getEffectiveHours(), BusinessClock.today());
     }
 
+    /** agenda-aberta-semana: os dias de {@code from} a {@code to} (hoje a 30 dias, no maximo 31) ja resolvidos, com os agendamentos. */
+    @Transactional(readOnly = true)
+    public com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse agenda(UUID professionalId, LocalDate from, LocalDate to) {
+        Professional professional = load(professionalId);
+        LocalDate today = BusinessClock.today();
+        LocalDate start = from == null || from.isBefore(today) ? today : from;
+        LocalDate end = to == null ? start.plusDays(30) : to;
+        int max = com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.MAX_DAYS;
+        if (end.isBefore(start)) {
+            end = start;
+        } else if (end.isAfter(start.plusDays(max - 1L))) {
+            end = start.plusDays(max - 1L);
+        }
+        BusinessHours own = professional.getWorkingHours();
+        BusinessHours effective = professional.getEffectiveHours();
+        BusinessHours store = professional.getEstablishment() == null
+                ? BusinessHours.notConfigured() : professional.getEstablishment().getBusinessHours();
+        java.util.Map<LocalDate, java.util.List<com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Appointment>> byDay =
+                new java.util.HashMap<>();
+        attendanceRepository.findIntentionsByProfessional(professionalId).forEach(a -> {
+            java.time.OffsetDateTime when = a.getScheduledTime() != null ? a.getScheduledTime() : a.getDesiredTime();
+            if (when != null) {
+                byDay.computeIfAbsent(BusinessClock.dateAt(when), d -> new java.util.ArrayList<>()).add(
+                        new com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Appointment(
+                                a.getId(), when, a.getEstimatedTotalMinutes()));
+            }
+        });
+        java.util.List<com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Day> days = new java.util.ArrayList<>();
+        for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1)) {
+            DayHours day = effective.isConfigured() ? effective.on(d) : null;
+            boolean storeOpen = !store.isConfigured() || !store.on(d).closed();
+            var appointments = byDay.getOrDefault(d, java.util.List.of());
+            days.add(new com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.Day(
+                    d, day != null && day.closed(), day == null ? null : day.opens(), day == null ? null : day.closes(),
+                    storeOpen, own.hasExceptionOn(d), appointments));
+        }
+        return new com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse(days);
+    }
+
     @Transactional
     public BusinessHoursResponse replaceWeek(UUID professionalId, WeeklyHoursRequest request) {
         log.info("[ProfessionalHours] replaceWeek — professional={}", professionalId);
         return change(professionalId, hours -> hours.withWeek(request.toWeek()));
+    }
+
+    /**
+     * agenda-aberta-semana: abre varios dias de uma vez (ate 31, de hoje em diante). {@code dates}: cada dia com o horario dele;
+     * {@code repeat_default}: a semana dele copiada de {@code from} a {@code to} (o dia fechado na semana nao abre). Tudo ou nada:
+     * um dia fora do horario da loja derruba o lote (422).
+     */
+    @Transactional
+    public BusinessHoursResponse openDays(UUID professionalId, com.ospaulos.vupth.api.professional.dto.request.OpenDaysRequest request) {
+        log.info("[ProfessionalHours] openDays — professional={}", professionalId);
+        LocalDate today = BusinessClock.today();
+        int max = com.ospaulos.vupth.api.professional.dto.response.ProfessionalAgendaResponse.MAX_DAYS;
+        java.util.Map<LocalDate, DayHours> toOpen = new java.util.TreeMap<>();
+        if (request != null && request.dates() != null) {
+            for (var d : request.dates()) {
+                if (d == null || d.date() == null) {
+                    throw new com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException("Cada dia precisa da data");
+                }
+                toOpen.put(d.date(), new DayHours(false, d.opens(), d.closes()));
+            }
+        }
+        boolean repeat = request != null && Boolean.TRUE.equals(request.repeatDefault());
+        if (repeat) {
+            if (request.from() == null || request.to() == null || request.to().isBefore(request.from())) {
+                throw new com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException("Repetir a padrao precisa de from e to");
+            }
+            BusinessHours weekly = load(professionalId).getWorkingHours();
+            for (LocalDate d = request.from(); !d.isAfter(request.to()); d = d.plusDays(1)) {
+                if (d.isBefore(today) || d.isAfter(today.plusDays(max - 1L))) {
+                    throw new com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException("So da para abrir os proximos " + max + " dias");
+                }
+                DayHours standard = weekly.onWeekday(d.getDayOfWeek());
+                if (!standard.closed()) {
+                    toOpen.putIfAbsent(d, standard);
+                }
+            }
+        }
+        if (toOpen.isEmpty()) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException("Nenhum dia para abrir");
+        }
+        if (toOpen.keySet().stream().anyMatch(d -> d.isBefore(today) || d.isAfter(today.plusDays(max - 1L)))) {
+            throw new com.ospaulos.vupth.domain.establishment.exception.InvalidBusinessHoursException("So da para abrir os proximos " + max + " dias");
+        }
+        return change(professionalId, hours -> {
+            BusinessHours next = hours;
+            for (var e : toOpen.entrySet()) {
+                next = next.withException(e.getKey(), e.getValue(), today);
+            }
+            return next;
+        });
     }
 
     @Transactional

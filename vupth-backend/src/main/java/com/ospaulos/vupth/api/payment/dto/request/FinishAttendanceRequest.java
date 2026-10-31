@@ -9,7 +9,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record FinishAttendanceRequest(
         @JsonProperty("payment_received") Boolean paymentReceived,
         // DEC-85: como recebeu (PIX, CARTAO, DINHEIRO ou NOTA); opcional, so vale com payment_received = true
-        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod
+        @JsonProperty("payment_method") com.ospaulos.vupth.domain.payment.PaymentMethod paymentMethod,
+        // DEC-127: o valor recebido, quando difere do valor com desconto; opcional
+        @JsonProperty("received_amount") java.math.BigDecimal receivedAmount
 ) {
     public boolean received() {
         return Boolean.TRUE.equals(paymentReceived);
