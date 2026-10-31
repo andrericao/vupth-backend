@@ -607,3 +607,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/066-attendance-asaas-split-amount.yaml
       relativeToChangeLogFile: true
+
+  # pix-so-confirma (DEC-129/138): interruptor "oferecer o Pix do dono", padrao desligado
+  - include:
+      file: changesets/60-professional/067-professional-offers-owner-pix.yaml
+      relativeToChangeLogFile: true

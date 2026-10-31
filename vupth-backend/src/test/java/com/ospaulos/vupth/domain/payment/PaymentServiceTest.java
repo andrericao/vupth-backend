@@ -197,7 +197,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("DEC-65: profissional sem chave -> o Pix sai na chave do dono (pix_owner OWNER); com a dele, vale a dele")
+    @DisplayName("DEC-65/129: profissional sem chave -> a chave do dono so sai se ele oferecer (pix_owner OWNER); com a dele, vale a dele")
     void ownerKeyIsTheAlternative() {
         BaseUser dona = establishment.getOwner().getBaseUser();
         dona.setPixKeyType(PixKeyType.EMAIL);
@@ -205,6 +205,12 @@ class PaymentServiceTest {
         dona.setPixHolderName("Dona");
         Attendance a = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
 
+        PaymentResponse notOffered = service.getPayment(a.getId(), clientId);
+        assertThat(notOffered.pixCopyPaste()).as("padrao desligado: nenhum Pix, so o ja paguei").isNull();
+        assertThat(notOffered.pixKey()).isNull();
+        assertThat(notOffered.pixOwner()).isNull();
+
+        professional.setOffersOwnerPix(true);
         PaymentResponse r = service.getPayment(a.getId(), clientId);
         assertThat(r.pixCopyPaste()).contains("dona@mail.com");
         assertThat(r.holderName()).isEqualTo("Dona");
@@ -214,6 +220,25 @@ class PaymentServiceTest {
         PaymentResponse own = service.getPayment(a.getId(), clientId);
         assertThat(own.pixCopyPaste()).contains("beto@mail.com");
         assertThat(own.pixOwner()).isEqualTo("PROFESSIONAL");
+    }
+
+    @Test
+    @DisplayName("pix-so-confirma: o interruptor do Pix do dono nasce desligado, liga e desliga; profissional inexistente 404")
+    void ownerPixSwitch() {
+        var repo = mock(com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository.class);
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "professionalRepository", repo);
+        when(repo.findById(professionalId)).thenReturn(Optional.of(professional));
+
+        assertThat(service.ownerPixOffered(professionalId)).isFalse();
+        assertThat(service.setOwnerPixOffered(professionalId, true)).isTrue();
+        assertThat(service.ownerPixOffered(professionalId)).isTrue();
+        assertThat(service.setOwnerPixOffered(professionalId, false)).isFalse();
+        verify(repo, times(2)).save(professional);
+
+        UUID missing = UUID.randomUUID();
+        when(repo.findById(missing)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.ownerPixOffered(missing))
+                .isInstanceOf(com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException.class);
     }
 
     @Test

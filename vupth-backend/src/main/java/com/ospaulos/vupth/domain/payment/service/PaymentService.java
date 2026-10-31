@@ -55,6 +55,9 @@ public class PaymentService {
     private final com.ospaulos.vupth.domain.user.repository.UserRepository userRepository;
     private final Clock clock = Clock.systemDefaultZone();
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository professionalRepository;
+
     /** O Pix do app, que recebe a multa (DEC-83). Opcional: sem ele (testes de unidade) a multa so mostra o valor. */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.infrastructure.config.AppPix appPix;
@@ -118,6 +121,25 @@ public class PaymentService {
         person.setPixHolderName(null);
         userRepository.save(person);
         log.info("[Payment] chave Pix apagada — user={}", userId);
+    }
+
+    /** pix-so-confirma: o interruptor "oferecer o Pix do dono" do profissional (padrao desligado). */
+    @Transactional(readOnly = true)
+    public boolean ownerPixOffered(UUID professionalId) {
+        return Boolean.TRUE.equals(professional(professionalId).getOffersOwnerPix());
+    }
+
+    public boolean setOwnerPixOffered(UUID professionalId, boolean value) {
+        com.ospaulos.vupth.domain.professional.model.Professional professional = professional(professionalId);
+        professional.setOffersOwnerPix(value);
+        professionalRepository.save(professional);
+        log.info("[Payment] profissional {} {} o Pix do dono", professionalId, value ? "oferece" : "deixou de oferecer");
+        return value;
+    }
+
+    private com.ospaulos.vupth.domain.professional.model.Professional professional(UUID id) {
+        return professionalRepository.findById(id)
+                .orElseThrow(() -> new com.ospaulos.vupth.domain.professional.exception.ProfessionalNotFoundException(id));
     }
 
     // ─── o pagamento de um atendimento ───
@@ -500,11 +522,17 @@ public class PaymentService {
                 : a.getAmountDue().add(penaltiesOf(List.of(attendanceId)).getOrDefault(attendanceId, ZERO));
     }
 
-    /** DEC-65: a chave do profissional que atendeu; sem ela, a do dono da loja; sem as duas, nenhuma. */
+    /**
+     * DEC-65 + DEC-129/138: a chave do profissional que atendeu; sem ela, a do dono da loja <b>so se o profissional oferecer</b>
+     * (interruptor, padrao desligado); senao nenhuma e o cliente so confirma "ja paguei".
+     */
     private static BaseUser pixKeyOwner(Attendance attendance) {
         BaseUser professional = attendance.getProfessional() == null ? null : attendance.getProfessional().getBaseUser();
         if (professional != null && professional.getPixKey() != null) {
             return professional;
+        }
+        if (attendance.getProfessional() == null || !Boolean.TRUE.equals(attendance.getProfessional().getOffersOwnerPix())) {
+            return null;
         }
         BaseUser owner = attendance.getEstablishment() == null || attendance.getEstablishment().getOwner() == null
                 ? null : attendance.getEstablishment().getOwner().getBaseUser();
