@@ -617,3 +617,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/068-attendance-refund.yaml
       relativeToChangeLogFile: true
+
+  # encaixe-diluido (DEC-136 a 141): o pedido de encaixe e a negociacao do adicional
+  - include:
+      file: changesets/80-attendance/069-fit-in-request.yaml
+      relativeToChangeLogFile: true

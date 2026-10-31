@@ -969,6 +969,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.attendance.fitin.exception.FitInException.class)
+    public ResponseEntity<ErrorResponse> handleFitIn(
+            com.ospaulos.vupth.domain.attendance.fitin.exception.FitInException ex, HttpServletRequest req) {
+        log.warn("[{}] FitIn {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.referral.exception.ReferralException.class)
     public ResponseEntity<ErrorResponse> handleReferral(
             com.ospaulos.vupth.domain.referral.exception.ReferralException ex, HttpServletRequest req) {
