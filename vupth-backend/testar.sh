@@ -31,20 +31,18 @@ fi
 LOGS="${VUPTH_TESTAR_COPIA:-$(pwd)}/.logs-teste"
 mkdir -p "$LOGS"
 
-# fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim (parados e removidos, com -v:
-# o volume anonimo vai junto), passando ou falhando —
-# a memoria volta para o emulador e para a proxima equipe da fila. Os que ja estavam de pe antes ficam.
-# Limpeza de volumes e imagem (31/10, pedido do Andre): se o compose do dev nao estava de pe, ele sai com
-# down -v --rmi local (volume nomeado e imagem do projeto da copia limpa). Nunca docker volume prune.
+# fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim (parados e removidos), passando ou
+# falhando — a memoria volta para a proxima equipe. Os que ja estavam de pe antes ficam.
+# Volumes e imagem (31/10, ajuste do Andre): nada novo por rodada. O Postgres de teste usa o volume fixo
+# vupth_pg_teste e o compose da copia limpa usa o projeto fixo vupth-teste (reaproveita imagem, cache e volume).
+# Os conteineres saem sem -v (o volume fixo fica de proposito); nunca docker volume prune.
+export COMPOSE_PROJECT_NAME=vupth-teste
 CONTEINERES=(vupth_postgres_test vupth_postgres_dev vupth_backend_dev)
 JA_DE_PE=$(docker ps --format '{{.Names}}' 2>/dev/null)
 derrubar() {
   for c in "${CONTEINERES[@]}"; do
-    grep -qx "$c" <<<"$JA_DE_PE" || docker rm -f -v "$c" >/dev/null 2>&1
+    grep -qx "$c" <<<"$JA_DE_PE" || docker rm -f "$c" >/dev/null 2>&1
   done
-  if ! grep -qx vupth_postgres_dev <<<"$JA_DE_PE" && ! grep -qx vupth_backend_dev <<<"$JA_DE_PE"; then
-    docker compose -f docker-compose.dev.yml down -v --rmi local >/dev/null 2>&1
-  fi
 }
 trap derrubar EXIT
 trap 'exit 130' INT TERM
@@ -91,6 +89,7 @@ banco() {
   if ! docker inspect vupth_postgres_test >/dev/null 2>&1; then
     echo "Criando o container vupth_postgres_test (postgres:16-alpine, porta 5432) ..."
     if ! docker run -d --name vupth_postgres_test \
+        -v vupth_pg_teste:/var/lib/postgresql/data \
         -e POSTGRES_DB=vupth_db_test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=vupth_test \
         --restart no -p 5432:5432 postgres:16-alpine -c max_connections=300 >"$tmp" 2>&1; then
       { echo "banco de teste: nao deu para criar o container vupth_postgres_test (a porta 5432 esta ocupada?)"; cat "$tmp"; } > "$tmp.log"
