@@ -31,15 +31,20 @@ fi
 LOGS="${VUPTH_TESTAR_COPIA:-$(pwd)}/.logs-teste"
 mkdir -p "$LOGS"
 
-# fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim (parados e removidos, sem -v:
-# os volumes ficam), passando ou falhando —
+# fila-de-testes (DEC-36, 11/10): os conteineres que o script sobe saem no fim (parados e removidos, com -v:
+# o volume anonimo vai junto), passando ou falhando —
 # a memoria volta para o emulador e para a proxima equipe da fila. Os que ja estavam de pe antes ficam.
+# Limpeza de volumes e imagem (31/10, pedido do Andre): se o compose do dev nao estava de pe, ele sai com
+# down -v --rmi local (volume nomeado e imagem do projeto da copia limpa). Nunca docker volume prune.
 CONTEINERES=(vupth_postgres_test vupth_postgres_dev vupth_backend_dev)
 JA_DE_PE=$(docker ps --format '{{.Names}}' 2>/dev/null)
 derrubar() {
   for c in "${CONTEINERES[@]}"; do
-    grep -qx "$c" <<<"$JA_DE_PE" || docker rm -f "$c" >/dev/null 2>&1
+    grep -qx "$c" <<<"$JA_DE_PE" || docker rm -f -v "$c" >/dev/null 2>&1
   done
+  if ! grep -qx vupth_postgres_dev <<<"$JA_DE_PE" && ! grep -qx vupth_backend_dev <<<"$JA_DE_PE"; then
+    docker compose -f docker-compose.dev.yml down -v --rmi local >/dev/null 2>&1
+  fi
 }
 trap derrubar EXIT
 trap 'exit 130' INT TERM
