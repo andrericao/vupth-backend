@@ -35,6 +35,12 @@ class QueuePushServiceTest {
     private final UUID establishmentId = UUID.randomUUID();
     private final UUID clientId = UUID.randomUUID();
 
+    @org.junit.jupiter.api.BeforeEach
+    void pushLeaves() {
+        // por padrao o envio sai (ha aparelho); o teste do "sem aparelho" troca para false
+        org.mockito.Mockito.lenient().when(pushPublisher.notifyUser(any(), anyString(), anyString(), anyMap())).thenReturn(true);
+    }
+
     private Attendance headOf(Boolean showPosition) {
         Professional professional = mock(Professional.class);
         when(professional.getId()).thenReturn(UUID.randomUUID());
@@ -107,5 +113,21 @@ class QueuePushServiceTest {
         org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(now.plusMinutes(60), now)).isFalse();
         org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(now.plusMinutes(61), now)).isTrue();
         org.assertj.core.api.Assertions.assertThat(QueuePushService.isFarAhead(now.minusMinutes(5), now)).isFalse();
+    }
+
+    @Test
+    @DisplayName("push-quase-a-vez-nao-chega: sem aparelho registrado (ou envio falho) o aviso NAO e marcado como feito e sai quando o token chegar")
+    void noDevice_doesNotMarkAsNotified() {
+        Attendance head = headOf(true);
+        when(attendanceRepository.findWaitingQueueByEstablishment(establishmentId)).thenReturn(List.of(head));
+        when(pushPublisher.notifyUser(any(), anyString(), anyString(), anyMap())).thenReturn(false);
+
+        service.notifyNextInLine(establishmentId);
+        verify(head, never()).setNextNotified(true);
+
+        // o token do aparelho chegou: a proxima mutacao da fila entrega e so entao marca
+        when(pushPublisher.notifyUser(any(), anyString(), anyString(), anyMap())).thenReturn(true);
+        service.notifyNextInLine(establishmentId);
+        verify(head).setNextNotified(true);
     }
 }

@@ -110,8 +110,14 @@ public class QueuePushService {
             // Decisao de 05/09: com a posicao escondida pelo profissional, o push nao a revela
             boolean showPosition = !Boolean.FALSE.equals(head.getProfessional().getShowPosition());
             String body = showPosition ? "Você é o próximo da fila." : "Fique por perto: seu atendimento está para começar.";
-            pushPublisher.notifyUser(clientId, "É quase a sua vez!", body, data);
-
+            boolean sent = pushPublisher.notifyUser(clientId, "É quase a sua vez!", body, data);
+            if (!sent) {
+                // push-quase-a-vez-nao-chega (31/10): sem aparelho registrado (o token chega depois do login) ou envio que falhou. Nao
+                // marca: a proxima mutacao da fila tenta de novo, em vez de perder o aviso para sempre.
+                log.info("[PUSH] next-in-line NAO enviado (sem aparelho ou falha) — client={} attendance={}; tenta de novo na proxima mutacao",
+                        clientId, head.getId());
+                continue;
+            }
             head.setNextNotified(true);
             attendanceRepository.save(head);
             log.info("[PUSH] next-in-line — client={} attendance={} estab={}", clientId, head.getId(), establishmentId);
