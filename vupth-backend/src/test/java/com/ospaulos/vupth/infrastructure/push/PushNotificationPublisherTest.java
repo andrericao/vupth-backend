@@ -45,9 +45,11 @@ class PushNotificationPublisherTest {
         when(sender.send(anyList(), anyString(), anyString(), anyMap())).thenThrow(new IllegalStateException("expo fora"));
         assertThat(publisher.notifyUser(user, "t", "b", Map.of("type", "X"))).as("envio falhou").isFalse();
 
-        when(sender.send(anyList(), anyString(), anyString(), anyMap())).thenReturn(List.of(
+        // doReturn: re-stubbar com when(...) chamaria o send() que acabou de ser armado para lancar
+        org.mockito.Mockito.doReturn(List.of(
                 PushTicket.accepted("ExponentPushToken[aaaaa]", "tk1"),
-                new PushTicket("ExponentPushToken[bbbbb]", false, "InvalidCredentials", "Invalid credentials", null)));
+                new PushTicket("ExponentPushToken[bbbbb]", false, "InvalidCredentials", "Invalid credentials", null)))
+                .when(sender).send(anyList(), anyString(), anyString(), anyMap());
         assertThat(publisher.notifyUser(user, "t", "b", Map.of("type", "QUEUE_NEXT_IN_LINE"))).as("a Expo recebeu o lote").isTrue();
     }
 }
