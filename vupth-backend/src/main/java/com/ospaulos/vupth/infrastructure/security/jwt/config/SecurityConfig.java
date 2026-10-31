@@ -69,6 +69,13 @@ public class SecurityConfig {
     private boolean actuatorExposeAll;
 
     /**
+     * estudo-desempenho (DEC-147): o {@code /actuator/metrics} (http.server.requests e hikaricp) so para o ADMIN autenticado. Padrao
+     * desligado; so o perfil staging liga. A producao segue fechada: sem a flag a regra nega e o endpoint nem esta exposto.
+     */
+    @Value("${vupth.actuator.metrics-admin:false}")
+    private boolean actuatorMetricsForAdmin;
+
+    /**
      * Abre o {@code /v3/api-docs} e o Swagger UI (BAK-2 springdoc). {@code true} so em dev e
      * staging; na producao fica {@code false} e a cadeia nega, mesmo que o springdoc esteja ligado.
      */
@@ -103,6 +110,9 @@ public class SecurityConfig {
                         // (hikaricp.connections) e o dimensionamento da JVM — sem token. A regra
                         // por ULTIMO tambem impede que expor `env`/`heapdump`/`loggers` um dia
                         // abra a porta junto.
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**")
+                        .access((authentication, context) -> new AuthorizationDecision(
+                                actuatorExposeAll || (actuatorMetricsForAdmin && isAdmin(authentication.get()))))
                         .requestMatchers("/actuator/**")
                         .access((authentication, context) -> new AuthorizationDecision(actuatorExposeAll))
 
@@ -409,5 +419,10 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    private static boolean isAdmin(org.springframework.security.core.Authentication authentication) {
+        return authentication != null && authentication.isAuthenticated()
+                && authentication.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 }
