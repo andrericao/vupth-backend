@@ -12,7 +12,9 @@ public enum PaymentStatus {
     /** O cliente tocou "Ja paguei": falta o profissional (ou o dono) confirmar. */
     AWAITING_CONFIRMATION,
     /** O profissional ou o dono tocou "Recebi". So aqui as multas do atendimento contam como pagas. */
-    PAID;
+    PAID,
+    /** estorno-asaas-casos (DEC-137): o Asaas devolveu o dinheiro ao cliente (estorno total). Nao deve nada e nao conta como pago. */
+    REFUNDED;
 
     /** Ainda deve. Finalizado e em aberto, entra no dot do Perfil e barra fila, agenda e pedido de corte. */
     public boolean isOpen() {
