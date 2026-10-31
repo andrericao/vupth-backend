@@ -96,6 +96,18 @@ class CampaignPreviewTest {
     }
 
     @Test
+    @DisplayName("o codigo da campanha so sai quando o ref do link e valido: o convidado resgata; sem ref (publica) ou ref errado, nada")
+    void codeOnlyWithValidRef() {
+        campaign.setVisibility(CampaignVisibility.PRIVATE);
+        assertThat(service.preview(campaign.getId(), itemId, "LINK10").code()).isEqualTo("LINK10");
+        assertThat(service.preview(campaign.getId(), itemId, " link10 ").code()).as("devolve o codigo da campanha, nao o digitado").isEqualTo("LINK10");
+        assertNotFound("outro");
+        campaign.setVisibility(CampaignVisibility.PUBLIC);
+        assertThat(service.preview(campaign.getId(), itemId, null).code()).isNull();
+        assertThat(service.preview(campaign.getId(), itemId, "outro").code()).isNull();
+    }
+
+    @Test
     @DisplayName("o mesmo 404 para campanha que nao existe, de outro tipo, desligada, encerrada, esgotada ou so para profissional")
     void everythingElseIsTheSame404() {
         campaign.setType(CampaignType.REFERRAL_BONUS);

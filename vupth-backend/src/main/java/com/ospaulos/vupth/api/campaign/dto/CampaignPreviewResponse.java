@@ -12,5 +12,8 @@ public record CampaignPreviewResponse(
         @JsonProperty("full_price") BigDecimal fullPrice,
         BigDecimal discount,
         @JsonProperty("price_with_coupon") BigDecimal priceWithCoupon,
-        @JsonProperty("benefit_base") String benefitBase) {
+        @JsonProperty("benefit_base") String benefitBase,
+        // desconto-no-link (DEC-131): o codigo da campanha para o convidado resgatar (POST /campaigns/redeem). So sai quando o ref do
+        // link e o proprio codigo; sem ref valido (campanha publica aberta sem link) vem nulo e o JSON omite o campo.
+        @JsonProperty("code") @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL) String code) {
 }

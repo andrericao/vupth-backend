@@ -149,8 +149,9 @@ public class CampaignService {
         var item = serviceItemRepository.findById(serviceItemId).orElseThrow(CampaignException::notFound);
         BigDecimal full = item.getClientPrice() != null ? item.getClientPrice() : item.getPrice();
         BigDecimal discount = CouponService.discountOf(c, full, item.getProReceives());
+        boolean validRef = c.getCode() != null && ref != null && c.getCode().equalsIgnoreCase(ref.trim());
         return new CampaignPreviewResponse(full, discount, full.subtract(discount),
-                c.getBenefitBase() == null ? null : c.getBenefitBase().name());
+                c.getBenefitBase() == null ? null : c.getBenefitBase().name(), validRef ? c.getCode() : null);
     }
 
     private boolean soldOut(Campaign c) {
