@@ -224,8 +224,10 @@ public class FitInRequestService {
         int queueMinutes = pro.getCurrentAttendance().map(c -> c.getRemainingMinutes(now)).orElse(0)
                 + waiting.stream().mapToInt(Attendance::getEstimatedTotalMinutes).sum();
         OffsetDateTime finish = now.plusMinutes(queueMinutes + duration);
-        var today = pro.getEffectiveHours().on(BusinessClock.dateAt(now));
-        LocalTime closes = today.closed() ? null : today.closes();
+        // sem horario configurado (loja e profissional) nao ha fechamento a respeitar: on() devolve nulo
+        var hours = pro.getEffectiveHours();
+        var today = hours.isConfigured() ? hours.on(BusinessClock.dateAt(now)) : null;
+        LocalTime closes = today == null || today.closed() ? null : today.closes();
         boolean passes = closes != null && finish.atZoneSameInstant(BusinessClock.zone()).toLocalTime().isAfter(closes);
         return new Support(ahead, waiting.size() - ahead, duration, slice, ahead > 0 && slice <= UNNOTICED_SLICE_MINUTES,
                 finish, closes, passes);

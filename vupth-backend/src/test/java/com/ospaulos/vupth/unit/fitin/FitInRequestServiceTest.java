@@ -241,5 +241,27 @@ class FitInRequestServiceTest {
         assertThat(s.sliceMinutesPerClient()).isEqualTo(8);
         assertThat(s.absorbedUnnoticed()).isTrue();
         assertThat(s.estimatedFinish()).isEqualTo(now.plusMinutes(6 * 30 + 30));
+        assertThat(s.closesAt()).as("sem horario configurado nao ha fechamento").isNull();
+        assertThat(s.passesClosing()).isFalse();
+    }
+
+    @Test
+    @DisplayName("apoio com horario: passa do fechamento quando o fim estimado e depois do horario de hoje")
+    void supportPassesClosing() {
+        var created = service.create(clientId, command(BigDecimal.TEN));
+        stored(created);
+        item.setEstimatedMinutes(30);
+        professional.applyWorkingHours(com.ospaulos.vupth.domain.establishment.valueObject.BusinessHours.everyDay(
+                new com.ospaulos.vupth.domain.establishment.valueObject.DayHours(false, java.time.LocalTime.of(8, 0), java.time.LocalTime.of(11, 0))));
+        when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(any(), any())).thenReturn(List.of());
+
+        var inTime = service.support(created.id(), professionalId); // 10:00 + 30 min = 10:30, antes das 11:00
+        assertThat(inTime.closesAt()).isEqualTo(java.time.LocalTime.of(11, 0));
+        assertThat(inTime.passesClosing()).isFalse();
+
+        Attendance long1 = mock(Attendance.class);
+        when(long1.getEstimatedTotalMinutes()).thenReturn(60);
+        when(attendanceRepository.findWaitingQueueByProfessionalAndEstablishment(any(), any())).thenReturn(List.of(long1));
+        assertThat(service.support(created.id(), professionalId).passesClosing()).as("10:00 + 60 + 30 = 11:30").isTrue();
     }
 }
