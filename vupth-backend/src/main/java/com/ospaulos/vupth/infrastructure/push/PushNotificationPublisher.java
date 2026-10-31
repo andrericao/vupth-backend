@@ -64,12 +64,34 @@ public class PushNotificationPublisher {
             }
             List<PushTicket> tickets = pushSender.send(tokens, title, body, data);
             log.info("[PUSH] notifyUser user={} title='{}' devices={}", userId, title, tokens.size());
+            logTickets(userId, data, tickets);
             purgeDeadTokens(userId, tickets);
             awaitReceipts(userId, title, tickets);
             return true;
         } catch (Exception e) {
             log.warn("[PUSH] falha ao notificar usuario {}: {}", userId, e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * push-quase-a-vez-nao-chega (31/10): uma linha por ticket da Expo, com o tipo do push, o fim do token, se a Expo aceitou, o id
+     * (o mesmo que o recibo cita depois) e o erro. Com isso o Render responde "saiu e a Expo aceitou?" na hora, sem esperar o recibo
+     * (~15 min). Nada de token inteiro nem de texto do push.
+     */
+    private void logTickets(UUID userId, Map<String, Object> data, List<PushTicket> tickets) {
+        if (tickets == null) {
+            return;
+        }
+        Object type = data == null ? null : data.get("type");
+        for (PushTicket t : tickets) {
+            String token = t.token() == null ? "?" : "***" + t.token().substring(Math.max(0, t.token().length() - 5));
+            if (t.ok()) {
+                log.info("[PUSH] ticket user={} type={} token={} ok id={}", userId, type, token, t.id());
+            } else {
+                log.warn("[PUSH] ticket user={} type={} token={} RECUSADO error={} msg={}", userId, type, token, t.error(),
+                        t.message() == null ? null : (t.message().length() > 120 ? t.message().substring(0, 120) : t.message()));
+            }
         }
     }
 
