@@ -1,0 +1,1215 @@
+{
+ "info": {
+  "name": "VUPTH - fumaca (essencial)",
+  "schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+  "description": "Teste de fumaca do Backend (DEC-157): cadastro e login de dono, profissional e cliente; loja; servico; profissional chega; cliente entra na fila; pagamento manual (Ja paguei, inicia, finaliza, Recebi); limpeza das contas fumaca-*. Sem dinheiro real, sem gateway. Nao prova: dinheiro real no Asaas, push real, e-mail real."
+ },
+ "auth": {
+  "type": "bearer",
+  "bearer": [
+   {
+    "key": "token",
+    "value": "{{owner_token}}",
+    "type": "string"
+   }
+  ]
+ },
+ "event": [
+  {
+   "listen": "prerequest",
+   "script": {
+    "type": "text/javascript",
+    "exec": [
+     "// DEC-157 (teste de fumaca): contas descartaveis com o padrao fumaca-<timestamp>-... (a limpeza so apaga o que for deste padrao).",
+     "// Nunca usa dinheiro real: o pagamento e o Pix manual (claim/confirm) do proprio app, sem gateway.",
+     "const ts = pm.collectionVariables.get('fumaca_ts') || String(Date.now());",
+     "pm.collectionVariables.set('fumaca_ts', ts);",
+     "for (const [k, who] of [['owner_email','owner'],['prof_email','prof'],['client_email','client']]) {",
+     "  if (!pm.collectionVariables.get(k)) pm.collectionVariables.set(k, 'fumaca-' + ts + '-' + who + '@vupth.test');",
+     "  if (!pm.collectionVariables.get(who + '_password')) pm.collectionVariables.set(who + '_password', 'Senha@123');",
+     "}",
+     "// CI (decisao de 05/10): com ci_secret (--env-var no Actions), todo request leva o header X-Vupth-CI// e passa por fora do rate limit de auth do staging/prod. Local: sem ci_secret, nada muda.const ciSecret = pm.variables.get('ci_secret');if (ciSecret) { pm.request.headers.upsert({ key: 'X-Vupth-CI', value: ciSecret }); }"
+    ]
+   }
+  }
+ ],
+ "variable": [
+  {
+   "key": "base_url",
+   "value": "http://localhost:8080"
+  },
+  {
+   "key": "owner_token",
+   "value": ""
+  },
+  {
+   "key": "owner_refresh_token",
+   "value": ""
+  },
+  {
+   "key": "client_token",
+   "value": ""
+  },
+  {
+   "key": "client_refresh_token",
+   "value": ""
+  },
+  {
+   "key": "owner_id",
+   "value": ""
+  },
+  {
+   "key": "client_id",
+   "value": ""
+  },
+  {
+   "key": "prof_professional_id",
+   "value": ""
+  },
+  {
+   "key": "owner_establishment_id",
+   "value": ""
+  },
+  {
+   "key": "service_item_id",
+   "value": ""
+  },
+  {
+   "key": "attendance_id",
+   "value": ""
+  },
+  {
+   "key": "owner_email",
+   "value": ""
+  },
+  {
+   "key": "owner_password",
+   "value": ""
+  },
+  {
+   "key": "client_email",
+   "value": ""
+  },
+  {
+   "key": "client_password",
+   "value": ""
+  },
+  {
+   "key": "prof_email",
+   "value": ""
+  },
+  {
+   "key": "prof_password",
+   "value": ""
+  },
+  {
+   "key": "prof_id",
+   "value": ""
+  },
+  {
+   "key": "prof_token",
+   "value": ""
+  },
+  {
+   "key": "prof_refresh_token",
+   "value": ""
+  },
+  {
+   "key": "attendance_id_pix",
+   "value": ""
+  },
+  {
+   "key": "fumaca_ts",
+   "value": ""
+  }
+ ],
+ "item": [
+  {
+   "name": "essencial",
+   "item": [
+    {
+     "name": "register (owner)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Prof registrado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id presente e é string UUID\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.collectionVariables.set(\"owner_id\", r.id);",
+         "});",
+         "pm.test(\"Schema: email presente\", () => {",
+         "  pm.expect(pm.response.json().email).to.be.a(\"string\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"owner_email\", \"prof_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"owner_password\", \"Senha@123\");"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "login (owner)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - Login prof OK\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: tokens e user presentes\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+         "  pm.collectionVariables.set(\"owner_token\", r.tokens.access_token);",
+         "  pm.collectionVariables.set(\"owner_refresh_token\", r.tokens.refresh_token);",
+         "  pm.collectionVariables.set(\"owner_id\", r.user.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "complete profile (owner)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 ou 204 - Profile atualizado\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+         "});",
+         "pm.test(\"Schema: first_name, last_name e nickname presentes\", () => {",
+         "  if (pm.response.code === 200) {",
+         "    const r = pm.response.json();",
+         "    pm.expect(r).to.have.property(\"first_name\");",
+         "    pm.expect(r).to.have.property(\"last_name\");",
+         "    pm.expect(r.nickname).to.eql(\"Dedeco\");",
+         "  }",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\": \"Prof\", \"last_name\": \"Teste\", \"nickname\": \"Dedeco\", \"phone\": \"11999990001\"}"
+      },
+      "url": "{{base_url}}/profile/general-infos",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "register (prof)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Prof registrado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id presente\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.collectionVariables.set(\"prof_id\", r.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"prof_email\", \"prof_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"prof_password\", \"Senha@123\");"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "login (prof)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - Login prof OK\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: tokens presentes\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+         "  pm.collectionVariables.set(\"prof_token\", r.tokens.access_token);",
+         "  pm.collectionVariables.set(\"prof_refresh_token\", r.tokens.refresh_token);",
+         "  pm.collectionVariables.set(\"prof_id\", r.user.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{prof_email}}\", \"password\": \"{{prof_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "quick create establishment",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Establishment criado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id presente e é UUID\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.collectionVariables.set(\"owner_establishment_id\", r.id);",
+         "});",
+         "pm.test(\"Schema: name presente\", () => {",
+         "  pm.expect(pm.response.json().name).to.be.a(\"string\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\": \"Barbearia Teste {{$timestamp}}\", \"serviceType\": \"BARBER\"}"
+      },
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "register professional (prof)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Profissional criado sem establishment\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id presente\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.collectionVariables.set(\"prof_professional_id\", r.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\": \"Profissional Teste\", \"specialty\": \"Barber\"}"
+      },
+      "url": "{{base_url}}/professional/register",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "owner adds prof to establishment",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Profissional vinculado ao establishment\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\": \"{{prof_professional_id}}\"}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/professionals",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "add service item",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Service item criado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id, customName, price, client_price, uses_platform_pricing\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.expect(r).to.have.property(\"customName\");",
+         "  pm.expect(r).to.have.property(\"price\");",
+         "  pm.expect(r.client_price).to.eql(52.90);",
+         "  pm.expect(r.uses_platform_pricing).to.eql(true);",
+         "  pm.collectionVariables.set(\"service_item_id\", r.id);",
+         "  pm.collectionVariables.set(\"owner_service_item_id\", r.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte Degradê\",\"price\":35.00,\"estimatedMinutes\":30,\"client_price\":52.90,\"uses_platform_pricing\":true}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "setup: o profissional CHEGA (WORKING) — sem expediente nao ha fila (20/09)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "// 20/09: quem nao marcou \"trabalhando\" nao recebe fila. O profissional do fluxo principal",
+         "// (criado em \"03 - professional\", com servico proprio em \"04\") nasce OFF, e daqui para baixo",
+         "// sao ~20 entradas na fila dele — pastas 07, 08c/d/e/f/g/h/i, 08b, 09 e 08k. Uma chegada so",
+         "// cobre todas; sem ela, a primeira ja devolve 409 PROFESSIONAL_NOT_ACCEPTING_NEW.",
+         "//",
+         "// ⚠️ A loja JA esta OPEN aqui (pasta 04). Como a derivacao so grava a abertura real na",
+         "// TRANSICAO para aberta, esta chegada nao reescreve o horario do dia — e por isso as refeicoes",
+         "// em horario fixo da pasta 12 continuam cabendo no expediente.",
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"work_status WORKING\", () => pm.expect(pm.response.json().work_status).to.equal(\"WORKING\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/status",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"status\":\"WORKING\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "register (client)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Cliente registrado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id presente\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.collectionVariables.set(\"client_id\", r.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"client_email\", \"client_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"client_password\", \"Senha@123\");"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{client_email}}\", \"password\": \"{{client_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "login (client)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - Login client OK\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: tokens presentes\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.tokens).to.have.property(\"access_token\");",
+         "  pm.collectionVariables.set(\"client_token\", r.tokens.access_token);",
+         "  pm.collectionVariables.set(\"client_refresh_token\", r.tokens.refresh_token);",
+         "  pm.collectionVariables.set(\"client_id\", r.user.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{client_email}}\", \"password\": \"{{client_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "complete profile (client)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 ou 204 - Profile atualizado\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"first_name\": \"Cliente\", \"last_name\": \"Teste\", \"phone\": \"11999990002\"}"
+      },
+      "url": "{{base_url}}/profile/general-infos",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{client_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "PUT chave Pix (telefone) -> 200 normalizada",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"chave em +55DDDNUMERO\", () => pm.expect(pm.response.json().key).to.eql(\"+5511987654321\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/professional/me/pix",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "professional",
+        "me",
+        "pix"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"key_type\":\"PHONE\",\"key\":\"(11) 98765-4321\",\"holder_name\":\"Beto\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "create walk-in -> 201 com payment_status PENDING",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "pm.test(\"o pagamento nasce PENDING\", () => pm.expect(pm.response.json().payment_status).to.eql(\"PENDING\"));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_pix\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "GET pagamento (cliente) -> 200 com o copia-e-cola",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"PENDING\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
+         "pm.test(\"valor = servicos + multas\", () => pm.expect(Number(b.amount)).to.eql(Number(b.services_value) + Number(b.penalties_value)));",
+         "pm.test(\"BR Code\", () => pm.expect(b.pix_copy_paste).to.match(/^000201/));",
+         "pm.test(\"pix_key em texto (pix-key-no-pagamento)\", () => pm.expect(b.pix_key).to.be.a(\"string\").and.not.empty);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Ja paguei ainda na fila (cliente) -> 200 AWAITING_CONFIRMATION",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"AWAITING_CONFIRMATION\", () => pm.expect(pm.response.json().status).to.eql(\"AWAITING_CONFIRMATION\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/claim",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "claim"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "start (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "start"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "finish sem o Sim do modal (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/finish",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "finish"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "Recebi (prof) -> 200 PAID",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"PAID\", () => pm.expect(pm.response.json().status).to.eql(\"PAID\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_pix}}/payment/confirm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_pix}}",
+        "payment",
+        "confirm"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "pendencia do cliente -> count 0",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"count 0\", () => pm.expect(pm.response.json().count).to.eql(0));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/clients/me/pending-payments",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "clients",
+        "me",
+        "pending-payments"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "deletar owner",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup OK\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{owner_password}}\"}"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "deletar prof",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup prof OK\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{prof_password}}\"}"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "deletar client",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Cleanup client OK\", () => {",
+         "  pm.expect(pm.response.code).to.be.oneOf([200, 204, 404, 409]);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{client_password}}\"}"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -4,6 +4,7 @@
 #   bash testar.sh                      # suite inteira + newman
 #   bash testar.sh -Dtest='*Establishment*'   # so as classes que casam + newman
 #   bash testar.sh --sem-newman [...]   # so o mvn test
+#   bash testar.sh --so-essencial       # so o teste de fumaca (DEC-157): sobe o backend e roda postman/essencial.collection.json
 #
 # Falhou: o log vai para .logs-teste/<AAAA-MM-DD_HHMMSS>_<mvn|newman>_FALHA.txt — o hook do vupth-docs
 # le essa pasta e acorda a sessao do Backend. Verde: apaga as falhas antigas do mesmo tipo.
@@ -48,9 +49,12 @@ trap derrubar EXIT
 trap 'exit 130' INT TERM
 
 NEWMAN=1
+ESSENCIAL=0
 MVN_ARGS=()
 for a in "$@"; do
-  if [[ "$a" == "--sem-newman" ]]; then NEWMAN=0; else MVN_ARGS+=("$a"); fi
+  if [[ "$a" == "--sem-newman" ]]; then NEWMAN=0
+  elif [[ "$a" == "--so-essencial" ]]; then ESSENCIAL=1   # so a fumaca (DEC-157): sem mvn, sem a colecao completa
+  else MVN_ARGS+=("$a"); fi
 done
 
 # Grava a falha do tipo $1 a partir do log temporario $2.
@@ -73,6 +77,7 @@ passou() {
   echo "✅ $1 verde"
 }
 
+if (( ! ESSENCIAL )); then
 # --- 1. mvn test (o banco de teste e o container vupth_postgres_test, na 5432) ---
 # testar-sem-banco (10/10): o container pode nao existir no PC (so o vupth_postgres_dev, na 5433). Sem ele,
 # o mvn caia em "Connection to localhost:5432 refused" e o log parecia falha de codigo. Agora o script cria o
@@ -136,6 +141,8 @@ rm -f "$queda"
 rm -f "$tmp"
 passou mvn
 
+fi
+
 (( NEWMAN )) || exit 0
 
 banco_vivo || caiu mvn newman
@@ -160,6 +167,26 @@ if ! command -v newman >/dev/null 2>&1; then
   export PATH="$HOME/.nvm/versions/node/v22.23.1/bin:$PATH"
 fi
 
+# --- 3. teste de fumaca (DEC-157): o portao. Cadastro, loja, fila, pagamento manual e limpeza das contas fumaca-*.
+# Sem dinheiro real e sem gateway. Teto de 5 min (reprova); verde vale por commit (.logs-teste/fumaca_<commit>.ok).
+# Falhou: nada mais roda (a regressao completa abaixo nao comeca).
+commit=$(git rev-parse --short HEAD 2>/dev/null || echo sem-commit)
+mkdir -p .logs-teste
+tmp=$(mktemp)
+timeout 300 newman run postman/essencial.collection.json --env-var "base_url=http://localhost:8080" --reporters cli 2>&1 | tee "$tmp"
+fumaca_ok=${PIPESTATUS[0]}
+if [[ $fumaca_ok -eq 0 ]]; then
+  : > ".logs-teste/fumaca_${commit}.ok"
+  echo "✅ fumaca verde no commit $commit"
+else
+  echo "⛔ fumaca reprovou no commit $commit — a regressao nao roda"
+  falhou newman "$tmp"
+fi
+rm -f "$tmp"
+(( ESSENCIAL )) && { passou newman; exit 0; }
+
+# --- 4. regressao: a colecao completa. Recusa rodar sem a fumaca verde deste commit.
+[[ -e ".logs-teste/fumaca_${commit}.ok" ]] || { echo "⛔ sem fumaca verde neste commit — regressao recusada"; exit 1; }
 tmp=$(mktemp)
 newman run postman/collection.json --env-var "base_url=http://localhost:8080" --reporters cli 2>&1 | tee "$tmp"
 [[ ${PIPESTATUS[0]} -eq 0 ]] || falhou newman "$tmp"
