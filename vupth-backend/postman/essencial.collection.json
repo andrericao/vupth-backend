@@ -421,6 +421,149 @@
      }
     },
     {
+     "name": "owner quick-create professional (solo shop)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Owner agora também é profissional\", () => pm.response.to.have.status(201));",
+         "pm.test(\"Schema: id presente\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\": \"Owner Profissional\", \"specialty\": \"Manager\", \"establishmentId\": \"{{owner_establishment_id}}\"}"
+      },
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "refresh token (OWNER + PROFESSIONAL role)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - Refresh OK\", () => pm.response.to.have.status(200));",
+         "pm.test(\"Schema: access_token presente\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r).to.have.property(\"access_token\");",
+         "  // GUARD: só atualiza prof_token se o novo valor for um JWT válido",
+         "  const newToken = r.access_token;",
+         "  if (newToken && typeof newToken === \"string\" && newToken.length > 20) {",
+         "    pm.collectionVariables.set(\"owner_token\", newToken);",
+         "    pm.collectionVariables.set(\"owner_refresh_token\", r.refresh_token);",
+         "    console.log(\"[refresh] owner_token atualizado OK\");",
+         "  } else {",
+         "    console.warn(\"[refresh] token inválido ou vazio — prof_token NÃO sobrescrito. Valor:\", newToken);",
+         "  }",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"refresh_token\": \"{{owner_refresh_token}}\"}"
+      },
+      "url": "{{base_url}}/auth/refresh",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
+     }
+    },
+    {
+     "name": "horario por dia (#2): PUT semana 24h (dono)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// 24h de proposito: as pastas seguintes precisam da loja aberta a qualquer hora.",
+         "pm.test('Status 200', () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test('semana na ordem, segunda primeiro', () => pm.expect(b.weekly[0].day).to.eql('MONDAY'));",
+         "pm.test('os 7 dias 00:00-00:00 (24h)', () => b.weekly.forEach(d => { pm.expect(d.closed).to.eql(false); pm.expect(d.opens).to.eql('00:00'); }));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\": [{\"day\": \"MONDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"TUESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"WEDNESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"THURSDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"FRIDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SATURDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SUNDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}]}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/hours/weekly",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{owner_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
      "name": "register professional (prof)",
      "event": [
       {
@@ -560,6 +703,110 @@
         "type": "string"
        }
       ]
+     }
+    },
+    {
+     "name": "add service item (prof) — BUG8 c: prof agenda com item PROPRIO",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201 - Service item do prof criado\", () => pm.response.to.have.status(201));",
+         "pm.test(\"BUG8 (c): service_item_id passa a ser do PROPRIO prof (agendar prof exige item dele)\", () => {",
+         "  const r = pm.response.json();",
+         "  pm.expect(r.id).to.be.a(\"string\");",
+         "  pm.collectionVariables.set(\"service_item_id\", r.id);",
+         "  pm.collectionVariables.set(\"prof_service_item_id\", r.id);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"serviceItemType\":\"CORTE_MAQUINA\",\"customName\":\"Corte do Profissional\",\"price\":30.00,\"estimatedMinutes\":30,\"client_price\":45.00,\"uses_platform_pricing\":true}"
+      },
+      "url": "{{base_url}}/establishment/{{owner_establishment_id}}/service-items",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "bearer",
+      "bearer": [
+       {
+        "key": "token",
+        "value": "{{prof_token}}",
+        "type": "string"
+       }
+      ]
+     }
+    },
+    {
+     "name": "update open status → OPEN (gate #31, com serviço)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - abre apos ter profissional com servico (gate #31)\", () => pm.response.to.have.status(200));",
+         "pm.test(\"open_status OPEN\", () => pm.expect(pm.response.json().open_status).to.eql('OPEN'));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"openStatus\":\"OPEN\"}"
+      },
+      "url": {
+       "raw": "{{base_url}}/establishment/{{owner_establishment_id}}/open-status",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "establishment",
+        "{{owner_establishment_id}}",
+        "open-status"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "auth": {
+      "type": "noauth"
      }
     },
     {
