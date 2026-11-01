@@ -104,6 +104,11 @@ jobs:
           GEOCODING_PROVIDER: none
           RATE_LIMIT_CI_SECRET: restore-test
         run: |
+          # restore-test-chave-de-dados: o perfil staging exige DATA_ENCRYPTION_KEY (S4). Chave DESCARTAVEL, so deste job: a de
+          # producao nunca vai ao GitHub. Limite: as colunas ja cifradas em producao (chave Pix e titular) NAO decifram com ela;
+          # o Newman cria os proprios dados (cifrados com esta chave), entao nao as le. Se um caso passar a ler dado restaurado
+          # cifrado, ele falha de proposito (DataCipher) e o limite vira pedido ao orquestrador, nao a chave real no GitHub.
+          export DATA_ENCRYPTION_KEY="$(openssl rand -base64 32)"
           mvn -q -B package -DskipTests
           nohup java -jar target/*.jar > backend.log 2>&1 &
           for _ in $(seq 1 60); do

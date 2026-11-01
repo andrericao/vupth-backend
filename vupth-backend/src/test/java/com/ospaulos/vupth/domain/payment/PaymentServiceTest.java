@@ -267,6 +267,8 @@ class PaymentServiceTest {
 
         verify(gateway).refundCharge(paid);
         assertThat(paid.getRefundedAt()).isNotNull();
+        assertThat(paid.getPaymentStatus()).as("o dinheiro voltou ao cliente").isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(paid.getPaymentStatus().isOpen()).as("estornado nao deve nada").isFalse();
         assertThat(paid.getRefundReason()).isEqualTo(com.ospaulos.vupth.domain.payment.RefundReason.PROFESSIONAL_NO_SHOW);
         assertThat(penalty.getChargedAttendanceId()).as("a multa volta a pendente: o cliente segue devendo").isNull();
         assertThat(result.penaltiesReleased()).isEqualTo(1);
@@ -297,6 +299,7 @@ class PaymentServiceTest {
         assertThat(service.onGatewayEvent(manual.getId(), "pay_2", "RECEIVED", true)).isFalse();
         verify(gateway).refundCharge(manual);
         assertThat(manual.getRefundReason()).isEqualTo(com.ospaulos.vupth.domain.payment.RefundReason.DOUBLE_PAYMENT);
+        assertThat(manual.getPaymentStatus()).as("pagamento duplo: o Recebi manual vale, segue PAID").isEqualTo(PaymentStatus.PAID);
 
         Attendance viaAsaas = attendance(AttendanceStatus.FINISHED, PaymentStatus.PENDING);
         viaAsaas.setAsaasPaymentId("pay_3");

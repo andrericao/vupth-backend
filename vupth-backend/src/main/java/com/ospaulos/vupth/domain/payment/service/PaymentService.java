@@ -290,7 +290,7 @@ public class PaymentService {
             return false;
         }
         boolean marked = false;
-        if (paid && attendance.getPaymentStatus() != PaymentStatus.PAID) {
+        if (paid && attendance.getPaymentStatus() != PaymentStatus.PAID && attendance.getPaymentStatus() != PaymentStatus.REFUNDED) {
             markPaid(attendance, com.ospaulos.vupth.domain.payment.PaymentMethod.PIX);
             marked = true;
             log.info("[Payment] Pix recebido pelo Asaas — attendance={} payment={}", attendanceId, asaasPaymentId);
@@ -339,6 +339,11 @@ public class PaymentService {
         gateway.refundCharge(attendance);
         attendance.setRefundedAt(java.time.OffsetDateTime.now(clock));
         attendance.setRefundReason(reason);
+        if (reason != com.ospaulos.vupth.domain.payment.RefundReason.DOUBLE_PAYMENT) {
+            // o dinheiro voltou ao cliente: o pagamento do atendimento vira REFUNDED. No pagamento duplo o "Recebi" manual vale, e o
+            // atendimento segue PAID (so o segundo pagamento, o do Asaas, foi devolvido)
+            attendance.setPaymentStatus(PaymentStatus.REFUNDED);
+        }
         attendanceRepository.save(attendance);
         var penalties = penaltyEventRepository.findByChargedAttendanceIdInOrderByCreatedAtAsc(java.util.List.of(attendance.getId()));
         penalties.forEach(p -> p.setChargedAttendanceId(null));
