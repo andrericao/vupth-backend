@@ -24,7 +24,8 @@ if [[ -z "${VUPTH_TESTAR_COPIA:-}" && "${VUPTH_TESTAR_PASTA:-0}" != 1 ]]; then
   mkdir -p "$COPIA/${RAIZ}src/main/resources/keys"
   cp src/main/resources/keys/*.key "$COPIA/${RAIZ}src/main/resources/keys/" 2>/dev/null
   echo "Testando a copia limpa do indice em $COPIA/$RAIZ (arquivos fora do indice nao entram)"
-  VUPTH_TESTAR_COPIA="$ORIGEM" bash "$COPIA/${RAIZ}testar.sh" "$@"
+  # o hash do commit vem da pasta de origem (a copia nao e um repositorio): a marca da fumaca e por commit
+  VUPTH_TESTAR_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo sem-commit) VUPTH_TESTAR_COPIA="$ORIGEM" bash "$COPIA/${RAIZ}testar.sh" "$@"
   rc=$?
   rm -rf "$COPIA"
   exit $rc
@@ -170,13 +171,12 @@ fi
 # --- 3. teste de fumaca (DEC-157): o portao. Cadastro, loja, fila, pagamento manual e limpeza das contas fumaca-*.
 # Sem dinheiro real e sem gateway. Teto de 5 min (reprova); verde vale por commit (.logs-teste/fumaca_<commit>.ok).
 # Falhou: nada mais roda (a regressao completa abaixo nao comeca).
-commit=$(git rev-parse --short HEAD 2>/dev/null || echo sem-commit)
-mkdir -p .logs-teste
+commit="${VUPTH_TESTAR_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo sem-commit)}"
 tmp=$(mktemp)
 timeout 300 newman run postman/essencial.collection.json --env-var "base_url=http://localhost:8080" --reporters cli 2>&1 | tee "$tmp"
 fumaca_ok=${PIPESTATUS[0]}
 if [[ $fumaca_ok -eq 0 ]]; then
-  : > ".logs-teste/fumaca_${commit}.ok"
+  : > "$LOGS/fumaca_${commit}.ok"
   echo "✅ fumaca verde no commit $commit"
 else
   echo "⛔ fumaca reprovou no commit $commit — a regressao nao roda"
@@ -186,7 +186,7 @@ rm -f "$tmp"
 (( ESSENCIAL )) && { passou newman; exit 0; }
 
 # --- 4. regressao: a colecao completa. Recusa rodar sem a fumaca verde deste commit.
-[[ -e ".logs-teste/fumaca_${commit}.ok" ]] || { echo "⛔ sem fumaca verde neste commit — regressao recusada"; exit 1; }
+[[ -e "$LOGS/fumaca_${commit}.ok" ]] || { echo "⛔ sem fumaca verde neste commit — regressao recusada"; exit 1; }
 tmp=$(mktemp)
 newman run postman/collection.json --env-var "base_url=http://localhost:8080" --reporters cli 2>&1 | tee "$tmp"
 [[ ${PIPESTATUS[0]} -eq 0 ]] || falhou newman "$tmp"

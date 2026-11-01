@@ -166,6 +166,18 @@ jobs:
           echo "Timeout: commit $EXPECTED_COMMIT nao foi deployado em 15 min"
           exit 1
 
+      # Teste de fumaca no staging (DEC-157 b): a jornada minima com contas fumaca-* descartaveis, sem dinheiro real. Como aviso
+      # (continue-on-error) ate aparecer verde uma vez no staging: o staging pode ter o Asaas conectado e o pagamento mudar de forma,
+      # e um falso vermelho aqui nao pode derrubar (rollback) um deploy bom. Depois da 1a rodada verde, tirar o continue-on-error.
+      - name: Fumaca (HOMOLOG)
+        continue-on-error: true
+        working-directory: vupth-backend
+        run: |
+          newman run postman/essencial.collection.json \
+            --env-var "base_url=$HOMOLOG_URL" \
+            --env-var "ci_secret=${{ secrets.VUPTH_CI_SECRET }}" \
+            --reporters cli
+
       - name: Run Postman (HOMOLOG)
         working-directory: vupth-backend
         run: |
