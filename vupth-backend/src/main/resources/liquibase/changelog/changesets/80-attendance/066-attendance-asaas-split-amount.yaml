@@ -1,0 +1,15 @@
+databaseChangeLog:
+  # gateway-de-pagamento, fatia 2 (DEC-127/128, 29/10): com desconto o Asaas entrega ao profissional o valor ja sem a tarifa; o atendimento
+  # guarda quanto foi no split (asaas_split_amount) e o app calcula o que ainda deve a ele (pro_receives - split). So acrescenta.
+  - changeSet:
+      id: 066-attendance-asaas-split-amount
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: asaas_split_amount}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: asaas_split_amount, type: "NUMERIC(10,2)"}

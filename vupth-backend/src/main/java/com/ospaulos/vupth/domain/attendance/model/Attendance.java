@@ -106,6 +106,64 @@ public class Attendance implements Serializable {
     @Column(name = "discount", nullable = false, precision = 10, scale = 2)
     private BigDecimal discount = BigDecimal.ZERO;
 
+    /** DEC-127: quando o profissional iniciou o corte com promocao; so entao ela conta para o cliente (pedido so reserva). */
+    @Column(name = "coupon_counted_at")
+    private OffsetDateTime couponCountedAt;
+
+    /**
+     * DEC-128 (queda brusca, limiares finais de 29/10): medida pela espera ANTERIOR, a estimativa caiu {@value #SUDDEN_DROP_LONG_MINUTES}
+     * min de uma vez se ela era de {@value #SUDDEN_DROP_ZONE_MINUTES} min ou mais, ou {@value #SUDDEN_DROP_SHORT_MINUTES} min se era de menos.
+     * So conta se a espera NOVA ficou abaixo de {@value #SUDDEN_DROP_ZONE_MINUTES} min (acima disso nao ha multa). Guarda o momento, a
+     * estimativa antiga, quantas vezes ja caiu (limite de {@value #SUDDEN_DROP_MAX}) e se o aviso ja saiu. Sair ou cancelar dentro de
+     * {@value #SUDDEN_DROP_WINDOW_MINUTES} min nao gera multa; aceitar o horario novo (ou o "ok") encerra a janela.
+     */
+    public static final int SUDDEN_DROP_LONG_MINUTES = 30;
+    public static final int SUDDEN_DROP_SHORT_MINUTES = 20;
+    public static final int SUDDEN_DROP_ZONE_MINUTES = 60;
+    /** Espera anterior de 2h30 ou mais: a queda nao e avisada (Andre, 29/10). */
+    public static final int SUDDEN_DROP_NO_NOTICE_FROM_MINUTES = 150;
+    public static final int SUDDEN_DROP_WINDOW_MINUTES = 20;
+    public static final int SUDDEN_DROP_MAX = 3;
+
+    @Column(name = "sudden_drop_at")
+    private OffsetDateTime suddenDropAt;
+
+    @Column(name = "sudden_drop_from")
+    private OffsetDateTime suddenDropFrom;
+
+    @Column(name = "sudden_drop_count", nullable = false)
+    private int suddenDropCount = 0;
+
+    @Column(name = "sudden_drop_notified", nullable = false)
+    private boolean suddenDropNotified = false;
+
+    /** A espera nova ficou abaixo de 1 h: so entao a janela de 20 min sem multa vale (o aviso sai de qualquer jeito). */
+    @Column(name = "sudden_drop_in_zone", nullable = false)
+    private boolean suddenDropInZone = false;
+
+    /** Ate quando vale a janela sem multa; nulo se nao ha queda aberta. */
+    @Transient
+    public OffsetDateTime getSuddenDropWindowUntil() {
+        return suddenDropAt == null ? null : suddenDropAt.plusMinutes(SUDDEN_DROP_WINDOW_MINUTES);
+    }
+
+    /** Os 20 min da queda ainda correm: o aviso e as opcoes valem. */
+    @Transient
+    public boolean isSuddenDropNoticeOpen(OffsetDateTime now) {
+        OffsetDateTime until = getSuddenDropWindowUntil();
+        return until != null && now.isBefore(until);
+    }
+
+    /** Sair ou cancelar nao gera multa: os 20 min correm e a espera nova ficou abaixo de 1 h. */
+    @Transient
+    public boolean isSuddenDropWindowOpen(OffsetDateTime now) {
+        return suddenDropInZone && isSuddenDropNoticeOpen(now);
+    }
+
+    /** DEC-127: o que o profissional disse ter recebido no Recebi; nulo = o valor com desconto ({@link #getAmountDue()}). */
+    @Column(name = "received_amount", precision = 10, scale = 2)
+    private BigDecimal receivedAmount;
+
     /**
      * Divisao do preco CONGELADA na criacao (Receita LIQUIDA): a soma, servico a servico, do que o
      * profissional recebe, dos 4% da empresa de pagamento e da parte do app. As tres somam o
@@ -262,6 +320,24 @@ public class Attendance implements Serializable {
 
     @Column(name = "asaas_status", length = 40)
     private String asaasStatus;
+
+    /** Quanto a cobranca do Asaas manda ao profissional (split, ja sem a tarifa); 0 = sem divisao. Nulo = sem cobranca. */
+    @Column(name = "asaas_split_amount", precision = 10, scale = 2)
+    private BigDecimal asaasSplitAmount;
+
+    /** estorno-asaas-casos (DEC-137): quando a cobranca paga foi estornada e por que o atendimento nao houve. */
+    @Column(name = "refunded_at")
+    private OffsetDateTime refundedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "refund_reason", length = 30)
+    private com.ospaulos.vupth.domain.payment.RefundReason refundReason;
+
+    /** O pagamento vai (ou foi) pelo Asaas: ha cobranca que nao foi cancelada/apagada. */
+    @Transient
+    public boolean isViaGateway() {
+        return asaasPaymentId != null && asaasSplitAmount != null && !"DELETED".equals(asaasStatus);
+    }
 
     @Column(name = "asaas_pix_payload", columnDefinition = "TEXT")
     private String asaasPixPayload;

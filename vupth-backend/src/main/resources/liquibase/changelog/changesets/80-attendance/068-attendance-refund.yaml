@@ -1,0 +1,16 @@
+databaseChangeLog:
+  # estorno-asaas-casos (DEC-133/137, 31/10): estorno total de uma cobranca do Asaas ja paga. O atendimento guarda quando foi estornado e
+  # o motivo de nao ter havido atendimento (para o Andre decidir depois se o cupom volta, caso 4). So acrescenta.
+  - changeSet:
+      id: 068-attendance-refund
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: refunded_at}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: refunded_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: refund_reason, type: "VARCHAR(30)"}

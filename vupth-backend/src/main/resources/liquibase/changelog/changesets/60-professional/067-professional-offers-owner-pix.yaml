@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # pix-so-confirma (DEC-129/138, 31/10): a chave Pix do dono so aparece no pagamento se o PROFISSIONAL escolher oferece-la.
+  # Interruptor por profissional, padrao desligado. So acrescenta.
+  - changeSet:
+      id: 067-professional-offers-owner-pix
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: professional
+                columnName: offers_owner_pix
+      changes:
+        - addColumn:
+            tableName: professional
+            columns:
+              - column:
+                  name: offers_owner_pix
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

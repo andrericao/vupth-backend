@@ -74,10 +74,28 @@ public class CouponCreditService {
                 || creditRepository.existsByAttendanceId(attendanceId)) {
             return;
         }
+        BigDecimal amount = repass(a);
+        if (amount.signum() <= 0) {
+            return; // a tarifa do app absorve o desconto: nada a repassar
+        }
         creditRepository.save(new CouponCredit(a.getCouponCampaignId(), a.getId(), a.getProfessional().getId(),
-                a.getDiscount(), OffsetDateTime.now()));
+                amount, OffsetDateTime.now()));
         log.info("[Coupon] credito — campaign={} attendance={} para={} R$ {}",
-                a.getCouponCampaignId(), a.getId(), a.getProfessional().getId(), a.getDiscount());
+                a.getCouponCampaignId(), a.getId(), a.getProfessional().getId(), amount);
+    }
+
+    /**
+     * DEC-127: o app repassa a diferenca entre o que o profissional estipulou e o que o cliente paga com desconto
+     * (R$ 30,00 − R$ 22,90 = R$ 7,10), nao o desconto inteiro: os R$ 2,90 de tarifa e margem sao do app. Servico legado
+     * (sem divisao): o desconto inteiro, como antes.
+     */
+    static BigDecimal repass(Attendance a) {
+        if (a.getProReceives() == null) {
+            return a.getDiscount();
+        }
+        // pelo Asaas o profissional recebe o split (ja sem a tarifa, que o app paga): o app repassa o resto (decisao do Andre, 29/10)
+        BigDecimal received = a.isViaGateway() ? a.getAsaasSplitAmount() : a.getAmountDue();
+        return a.getProReceives().subtract(received).max(BigDecimal.ZERO);
     }
 
     /** Ao profissional: o que o app deve a ele pelos descontos e quando e o proximo pagamento. */

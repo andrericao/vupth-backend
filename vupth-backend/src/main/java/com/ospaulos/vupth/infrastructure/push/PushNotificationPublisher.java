@@ -43,10 +43,14 @@ public class PushNotificationPublisher {
     private final PushSender pushSender;
     private final PendingPushReceiptRepository pendingReceiptRepository;
 
-    /** Notifica todos os devices do usuario. */
-    public void notifyUser(UUID userId, String title, String body, Map<String, Object> data) {
+    /**
+     * Notifica todos os devices do usuario. Devolve se o envio saiu: {@code false} sem usuario, sem aparelho registrado ou se o envio
+     * falhou. Quem marca "ja avisado" (ex.: o "e quase a sua vez") so deve marcar com {@code true}; senao o aviso se perde para sempre
+     * quando o token do aparelho chega depois da vez. Quem ignora o retorno segue como antes.
+     */
+    public boolean notifyUser(UUID userId, String title, String body, Map<String, Object> data) {
         if (userId == null) {
-            return;
+            return false;
         }
         try {
             List<String> tokens = deviceTokenRepository.findByUserId(userId).stream()
@@ -56,14 +60,38 @@ public class PushNotificationPublisher {
                 // S43 (push-conta-errada): sem esta linha, "nao chegou" e "nao havia aparelho" ficavam
                 // iguais no log — o e-mail saia e o push sumia em silencio.
                 log.info("[PUSH] notifyUser user={} title='{}' devices=0 — nenhum aparelho registrado", userId, title);
-                return;
+                return false;
             }
             List<PushTicket> tickets = pushSender.send(tokens, title, body, data);
             log.info("[PUSH] notifyUser user={} title='{}' devices={}", userId, title, tokens.size());
+            logTickets(userId, data, tickets);
             purgeDeadTokens(userId, tickets);
             awaitReceipts(userId, title, tickets);
+            return true;
         } catch (Exception e) {
             log.warn("[PUSH] falha ao notificar usuario {}: {}", userId, e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * push-quase-a-vez-nao-chega (31/10): uma linha por ticket da Expo, com o tipo do push, o fim do token, se a Expo aceitou, o id
+     * (o mesmo que o recibo cita depois) e o erro. Com isso o Render responde "saiu e a Expo aceitou?" na hora, sem esperar o recibo
+     * (~15 min). Nada de token inteiro nem de texto do push.
+     */
+    private void logTickets(UUID userId, Map<String, Object> data, List<PushTicket> tickets) {
+        if (tickets == null) {
+            return;
+        }
+        Object type = data == null ? null : data.get("type");
+        for (PushTicket t : tickets) {
+            String token = t.token() == null ? "?" : "***" + t.token().substring(Math.max(0, t.token().length() - 5));
+            if (t.ok()) {
+                log.info("[PUSH] ticket user={} type={} token={} ok id={}", userId, type, token, t.id());
+            } else {
+                log.warn("[PUSH] ticket user={} type={} token={} RECUSADO error={} msg={}", userId, type, token, t.error(),
+                        t.message() == null ? null : (t.message().length() > 120 ? t.message().substring(0, 120) : t.message()));
+            }
         }
     }
 

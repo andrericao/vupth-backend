@@ -36,6 +36,7 @@ public class AttendanceCutRequestController {
     private final CutRequestService cutRequestService;
     private final CutRequestExpiryScheduler expiryScheduler;
     private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
 
     /**
      * POST /attendances/cut-requests — o cliente autenticado (clientId do JWT) solicita um corte.
@@ -54,6 +55,8 @@ public class AttendanceCutRequestController {
 
         // pagamento-pix: com atendimento finalizado sem pagar, nada de pedido de corte (409 PAYMENT_PENDING)
         paymentService.assertNoPendingPayment(principal.getUserId());
+        // limite-de-duas-multas (DEC-83): com 2 multas devidas, so marca depois de quitar (409 PENALTY_LIMIT_REACHED)
+        clientPenaltyService.assertWithinLimit(principal.getUserId());
 
         CutRequestResponse response = cutRequestService.createCutRequest(request, principal.getUserId());
         expiryScheduler.reschedule(); // pos-commit: arma o timer de auto-nega para a nova cabeca (fatia 3)

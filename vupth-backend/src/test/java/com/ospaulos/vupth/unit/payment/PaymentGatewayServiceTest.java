@@ -237,7 +237,12 @@ class PaymentGatewayServiceTest {
         assertThat(g.splitsFor(noAccount, new BigDecimal("32.90"))).isEmpty();
 
         when(paymentAccounts.walletFor(any(), any())).thenReturn(Optional.of("wallet-pro"));
-        assertThat(g.splitsFor(attendanceOf("30.00", "5.00"), new BigDecimal("27.90"))).as("cupom: fatia 2").isEmpty();
+        var withCoupon = g.splitsFor(attendanceOf("30.00", "5.00"), new BigDecimal("27.90"));
+        assertThat(withCoupon).as("cupom (fatia 2): o Asaas entrega o cobrado menos a tarifa de R$ 1,99").hasSize(1);
+        assertThat(withCoupon.get(0).fixedValue()).isEqualByComparingTo("25.91");
+        assertThat(g.splitsFor(attendanceOf("30.00", "5.00"), new BigDecimal("1.50"))).as("cobrado nao paga nem a tarifa").isEmpty();
+        assertThat(g.splitsFor(attendanceOf("30.00", "1.00"), new BigDecimal("32.90")).get(0).fixedValue())
+                .as("desconto pequeno: o profissional recebe o que estipulou").isEqualByComparingTo("30.00");
         assertThat(g.splitsFor(attendanceOf(null, "0.00"), new BigDecimal("32.90"))).as("servico antigo").isEmpty();
         assertThat(g.splitsFor(attendanceOf("32.90", "0.00"), new BigDecimal("32.90"))).as("nada sobraria ao app").isEmpty();
         assertThat(g.splitsFor(attendanceOf("30.00", "0.00"), new BigDecimal("32.90"))).hasSize(1);

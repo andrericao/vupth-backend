@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.web.rest.campaign.controller;
 
+import com.ospaulos.vupth.api.campaign.dto.CampaignPreviewResponse;
 import com.ospaulos.vupth.api.campaign.dto.CampaignResponse;
 import com.ospaulos.vupth.api.campaign.dto.RedeemCouponRequest;
 import com.ospaulos.vupth.domain.campaign.service.CampaignService;
@@ -29,6 +30,14 @@ public class CampaignController {
         // campanhas-ativas-para-o-client: com login, so as do publico do usuario; sem login, todas as publicas
         return ResponseEntity.ok(principal == null
                 ? campaignService.activePublic() : campaignService.activeFor(principal.getUserId()));
+    }
+
+    /** previa-publica-do-desconto (BAK-1): publica, so leitura; 404 igual para qualquer campanha que nao possa aparecer. */
+    @GetMapping("/{id}/preview")
+    public ResponseEntity<CampaignPreviewResponse> preview(@PathVariable java.util.UUID id,
+                                                           @RequestParam("service_item_id") java.util.UUID serviceItemId,
+                                                           @RequestParam(value = "ref", required = false) String ref) {
+        return ResponseEntity.ok(campaignService.preview(id, serviceItemId, ref));
     }
 
     @PostMapping("/redeem")

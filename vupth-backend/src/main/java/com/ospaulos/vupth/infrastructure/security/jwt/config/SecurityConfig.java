@@ -69,6 +69,13 @@ public class SecurityConfig {
     private boolean actuatorExposeAll;
 
     /**
+     * estudo-desempenho (DEC-147): o {@code /actuator/metrics} (http.server.requests e hikaricp) so para o ADMIN autenticado. Padrao
+     * desligado; so o perfil staging liga. A producao segue fechada: sem a flag a regra nega e o endpoint nem esta exposto.
+     */
+    @Value("${vupth.actuator.metrics-admin:false}")
+    private boolean actuatorMetricsForAdmin;
+
+    /**
      * Abre o {@code /v3/api-docs} e o Swagger UI (BAK-2 springdoc). {@code true} so em dev e
      * staging; na producao fica {@code false} e a cadeia nega, mesmo que o springdoc esteja ligado.
      */
@@ -103,6 +110,9 @@ public class SecurityConfig {
                         // (hikaricp.connections) e o dimensionamento da JVM — sem token. A regra
                         // por ULTIMO tambem impede que expor `env`/`heapdump`/`loggers` um dia
                         // abra a porta junto.
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**")
+                        .access((authentication, context) -> new AuthorizationDecision(
+                                actuatorExposeAll || (actuatorMetricsForAdmin && isAdmin(authentication.get()))))
                         .requestMatchers("/actuator/**")
                         .access((authentication, context) -> new AuthorizationDecision(actuatorExposeAll))
 
@@ -125,6 +135,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/auth/account-deletion/*").permitAll()
                         // campanhas publicas (DEC-64): a pagina "Campanhas ativas" do suporte nao tem login
                         .requestMatchers(HttpMethod.GET, "/campaigns/active").permitAll()
+                        // previa-publica-do-desconto: o link de campanha mostra o preco com cupom antes do cadastro
+                        .requestMatchers(HttpMethod.GET, "/campaigns/*/preview").permitAll()
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/invitations/accept").permitAll()
@@ -197,6 +209,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/professional/me/pending-payments").hasRole("PROFESSIONAL")
                         // DEC-65: a chave e da pessoa — o dono tambem cadastra a dele (alternativa a do profissional)
                         .requestMatchers("/professional/me/pix").hasAnyRole("PROFESSIONAL", "OWNER")
+                        .requestMatchers("/professional/me/owner-pix-offer").hasRole("PROFESSIONAL")
                         .requestMatchers("/professional/me/payment-account").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers("/professional/me/price-policy/**").hasAnyRole("PROFESSIONAL", "OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/credits").hasAnyRole("PROFESSIONAL", "OWNER")
@@ -248,6 +261,8 @@ public class SecurityConfig {
 
                         // Profissional se afilia/desafilia de um establishment
                         // A agenda e do PROPRIO profissional — o dono nao edita a dos outros (Andre, 05/10)
+                        .requestMatchers(HttpMethod.GET, "/professional/me/agenda").hasRole("PROFESSIONAL")
+                        .requestMatchers(HttpMethod.POST, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PUT, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.DELETE, "/professional/me/hours/**").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.PATCH, "/professional/me/status").hasRole("PROFESSIONAL")
@@ -404,5 +419,10 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    private static boolean isAdmin(org.springframework.security.core.Authentication authentication) {
+        return authentication != null && authentication.isAuthenticated()
+                && authentication.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 }

@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # queda-brusca-da-estimativa (DEC-128, 29/10): quando a estimativa de um cliente da fila cai 30 min ou mais de uma vez, o atendimento
+  # guarda o momento (sudden_drop_at), a estimativa antiga (sudden_drop_from), quantas vezes (limite de 3) e se o aviso ja saiu.
+  # Dentro de 20 min do momento, sair ou cancelar nao gera multa. So acrescenta colunas.
+  - changeSet:
+      id: 064-attendance-sudden-drop
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists: {tableName: attendance, columnName: sudden_drop_at}
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: sudden_drop_at, type: TIMESTAMP WITH TIME ZONE}
+              - column: {name: sudden_drop_from, type: TIMESTAMP WITH TIME ZONE}
+              - column: {name: sudden_drop_count, type: INTEGER, defaultValueNumeric: 0, constraints: {nullable: false}}
+              - column: {name: sudden_drop_notified, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}

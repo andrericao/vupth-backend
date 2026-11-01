@@ -285,6 +285,41 @@ class SwapOfferInQueueIntegrationTest {
         assertThat(listContains(listAcceptable(a.token()), offer)).as("A (frente) nao ve").isFalse();
     }
 
+    @Test @Order(22)
+    @DisplayName("Publicar EARLIER (adiantar) -> push SWAP_OFFER_CREATED so para quem esta a frente")
+    void create_earlier_pushesThoseAhead() throws Exception {
+        Q a = enqueue(); // idx 0
+        Q b = enqueue(); // idx 1
+        Q c = enqueue(); // idx 2
+        Mockito.clearInvocations(pushPublisher);
+
+        createInQueueId(b.token(), b.id(), SwapOfferDirection.EARLIER);
+
+        assertThat(pushedTypesFor(UUID.fromString(a.clientId()))).as("A (frente) avisado").contains("SWAP_OFFER_CREATED");
+        assertNoPush(c.clientId());
+        assertNoPush(b.clientId());
+    }
+
+    @Test @Order(23)
+    @DisplayName("Publicar LATER (adiar) -> push SWAP_OFFER_CREATED so para quem esta atras")
+    void create_later_pushesThoseBehind() throws Exception {
+        Q a = enqueue(); // idx 0
+        Q b = enqueue(); // idx 1
+        Q c = enqueue(); // idx 2
+        Mockito.clearInvocations(pushPublisher);
+
+        createInQueueId(b.token(), b.id(), SwapOfferDirection.LATER);
+
+        assertThat(pushedTypesFor(UUID.fromString(c.clientId()))).as("C (atras) avisado").contains("SWAP_OFFER_CREATED");
+        assertNoPush(a.clientId());
+        assertNoPush(b.clientId());
+    }
+
+    private void assertNoPush(String clientId) {
+        Mockito.verify(pushPublisher, Mockito.never()).notifyUser(
+                Mockito.eq(UUID.fromString(clientId)), Mockito.anyString(), Mockito.anyString(), Mockito.anyMap());
+    }
+
     // ── Aceitar ───────────────────────────────────────────────────
 
     @Test @Order(30)

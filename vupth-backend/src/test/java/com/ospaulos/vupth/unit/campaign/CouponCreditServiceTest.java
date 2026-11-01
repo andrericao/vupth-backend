@@ -57,6 +57,34 @@ class CouponCreditServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-127: com divisao, o app repassa a diferenca (R$ 30,00 − R$ 22,90 = R$ 7,10), nao o desconto inteiro")
+    void creditsTheDifference() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, "10.00", true, false);
+        a.setTotalValue(new BigDecimal("32.90"));
+        org.springframework.test.util.ReflectionTestUtils.setField(a, "proReceives", new BigDecimal("30.00"));
+        service.credit(a.getId());
+        verify(credits).save(org.mockito.ArgumentMatchers.<CouponCredit>argThat(c -> c.getAmount().compareTo(new BigDecimal("7.10")) == 0));
+
+        Attendance small = attendance(AttendanceStatus.FINISHED, "2.00", true, false);
+        small.setTotalValue(new BigDecimal("32.90"));
+        org.springframework.test.util.ReflectionTestUtils.setField(small, "proReceives", new BigDecimal("30.00"));
+        service.credit(small.getId()); // 30,90 ja cobre os 30,00: a tarifa absorve, nada a repassar
+        verify(credits, org.mockito.Mockito.times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("pelo Asaas (fatia 2): o profissional recebeu o split ja sem a tarifa (R$ 25,91 de R$ 30,00) e o app repassa R$ 4,09")
+    void creditsWhatTheGatewayDidNotDeliver() {
+        Attendance a = attendance(AttendanceStatus.FINISHED, "5.00", true, false);
+        a.setTotalValue(new BigDecimal("32.90"));
+        org.springframework.test.util.ReflectionTestUtils.setField(a, "proReceives", new BigDecimal("30.00"));
+        a.setAsaasPaymentId("pay_1");
+        a.setAsaasSplitAmount(new BigDecimal("25.91"));
+        service.credit(a.getId());
+        verify(credits).save(org.mockito.ArgumentMatchers.<CouponCredit>argThat(c -> c.getAmount().compareTo(new BigDecimal("4.09")) == 0));
+    }
+
+    @Test
     @DisplayName("nao credita: sem concluir, sem cupom, sem desconto, em teste, ja creditado ou atendimento inexistente")
     void doesNotCredit() {
         service.credit(attendance(AttendanceStatus.IN_PROGRESS, "5.00", true, false).getId());

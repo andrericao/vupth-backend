@@ -40,6 +40,22 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getPixKey(principal.getUserId()));
     }
 
+    /** pix-so-confirma (DEC-129/138): o profissional escolhe oferecer a chave Pix do dono; padrao desligado. */
+    @GetMapping("/professional/me/owner-pix-offer")
+    public ResponseEntity<java.util.Map<String, Boolean>> ownerPixOffer(@AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(java.util.Map.of("offers_owner_pix", paymentService.ownerPixOffered(principal.getUserId())));
+    }
+
+    @PutMapping("/professional/me/owner-pix-offer")
+    public ResponseEntity<java.util.Map<String, Boolean>> setOwnerPixOffer(
+            @RequestBody java.util.Map<String, Boolean> body, @AuthenticationPrincipal UserDetailsImpl principal) {
+        Boolean value = body == null ? null : body.get("offers_owner_pix");
+        if (value == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(java.util.Map.of("offers_owner_pix", paymentService.setOwnerPixOffered(principal.getUserId(), value)));
+    }
+
     @DeleteMapping("/professional/me/pix")
     public ResponseEntity<Void> deletePixKey(@AuthenticationPrincipal UserDetailsImpl principal) {
         paymentService.deletePixKey(principal.getUserId());
@@ -70,7 +86,7 @@ public class PaymentController {
                                                    @AuthenticationPrincipal UserDetailsImpl principal) {
         log.info("PAYMENT CONTROLLER CONFIRM {} by={}", attendanceId, principal.getUserId());
         PaymentResponse response = paymentService.confirm(attendanceId, principal.getUserId(),
-                body == null ? null : body.method());
+                body == null ? null : body.method(), body == null ? null : body.receivedAmount());
         paymentNotifier.confirmed(attendanceId);
         return ResponseEntity.ok(response);
     }

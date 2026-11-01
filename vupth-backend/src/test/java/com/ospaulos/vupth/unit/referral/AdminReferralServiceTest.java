@@ -116,4 +116,45 @@ class AdminReferralServiceTest {
                 .isInstanceOfSatisfying(ReferralException.class,
                         e -> assertThat(e.getCode()).isEqualTo("REFERRAL_NOTHING_TO_PAY"));
     }
+    @Test
+    @DisplayName("repasse automatico (DEC-132): desligado por padrao 409 e nada transferido; ligado, transfere pelo Pix do Asaas e registra o pago como no manual; sem chave Pix 422")
+    void payAuto() {
+        UUID campaignId = UUID.randomUUID();
+        UUID beneficiary = UUID.randomUUID();
+        Campaign c = new Campaign();
+        c.setId(campaignId);
+        c.setName("Indique");
+        when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(c));
+        BaseUser user = new BaseUser();
+        user.setId(beneficiary);
+        user.setFirstName("Beto");
+        user.setPixKeyType(PixKeyType.RANDOM);
+        user.setPixKey("123e4567-e89b-12d3-a456-426614174000");
+        when(userRepository.findById(beneficiary)).thenReturn(Optional.of(user));
+        when(creditRepository.findUnpaidPayouts())
+                .thenReturn(List.of(new ReferralPayoutRow(campaignId, beneficiary, new BigDecimal("12.50"), 2)));
+        when(couponCreditRepository.findUnpaidPayouts()).thenReturn(List.of());
+        when(creditRepository.markPaid(eq(campaignId), eq(beneficiary), any())).thenReturn(2);
+        when(couponCreditRepository.markPaid(eq(campaignId), eq(beneficiary), any())).thenReturn(0);
+        var client = mock(com.ospaulos.vupth.infrastructure.asaas.AsaasClient.class);
+        when(client.transferPix(any(), any(), any(), any())).thenReturn("tra_1");
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "asaasClient", client);
+
+        assertThatThrownBy(() -> service.payAuto(UUID.randomUUID(), campaignId, beneficiary))
+                .hasMessageContaining("desligado");
+        verify(client, never()).transferPix(any(), any(), any(), any());
+        verify(creditRepository, never()).markPaid(any(), any(), any());
+
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "payoutAuto", true);
+        var paid = service.payAuto(UUID.randomUUID(), campaignId, beneficiary);
+        assertThat(paid.transferId()).isEqualTo("tra_1");
+        assertThat(paid.amount()).isEqualByComparingTo("12.50");
+        assertThat(paid.paid().paidCredits()).isEqualTo(2);
+        verify(client).transferPix(eq(new BigDecimal("12.50")), eq("123e4567-e89b-12d3-a456-426614174000"), eq("EVP"), any());
+
+        user.setPixKey(null);
+        assertThatThrownBy(() -> service.payAuto(UUID.randomUUID(), campaignId, beneficiary)).hasMessageContaining("chave Pix");
+        assertThatThrownBy(() -> service.payAuto(UUID.randomUUID(), campaignId, UUID.randomUUID()))
+                .isInstanceOf(ReferralException.class);
+    }
 }

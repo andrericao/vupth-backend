@@ -40,7 +40,9 @@ public class AttendanceController {
     private final SwapOfferService swapOfferService;
     private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
     private final com.ospaulos.vupth.domain.attendance.service.EarlierTurnService earlierTurnService;
+    private final com.ospaulos.vupth.domain.attendance.service.SuddenDropService suddenDropService;
     private final com.ospaulos.vupth.domain.payment.service.PaymentService paymentService;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
     private final com.ospaulos.vupth.domain.payment.service.PaymentNotifier paymentNotifier;
     private final com.ospaulos.vupth.domain.attendance.service.NoShowHintService noShowHintService;
 
@@ -132,6 +134,8 @@ public class AttendanceController {
 
         // pagamento-pix: com atendimento finalizado sem pagar, nada de fila nova (409 PAYMENT_PENDING)
         paymentService.assertNoPendingPayment(principal.getUserId());
+        // limite-de-duas-multas (DEC-83): com 2 multas devidas, so marca depois de quitar (409 PENALTY_LIMIT_REACHED)
+        clientPenaltyService.assertWithinLimit(principal.getUserId());
 
         // clientId comes from the token, not the body — body value is ignored
         AttendanceRequest secureRequest = new AttendanceRequest(
@@ -523,7 +527,7 @@ public class AttendanceController {
         // pagamento-pix (adendo 1): o "Sim" do modal termina e marca pago na mesma chamada
         boolean paidNow = finishRequest != null && finishRequest.received()
                 && paymentService.confirmOnFinish(attendanceId, principal.getUserId(),
-                finishRequest.paymentMethod());
+                finishRequest.paymentMethod(), finishRequest.receivedAmount());
         // finish-com-payment-status (S47): a fila volta com o pagamento de quem acabou de terminar
         response = response.withPaymentStatus(paymentService.statusOf(attendanceId));
 
@@ -609,6 +613,29 @@ public class AttendanceController {
             @AuthenticationPrincipal UserDetailsImpl principal) {
         java.time.OffsetDateTime promisedTime = earlierTurnService.acceptEarlierTurn(attendanceId, principal.getUserId());
         return ResponseEntity.ok(java.util.Map.of("attendanceId", attendanceId, "promisedTime", promisedTime));
+    }
+
+    /** DEC-128 "ok" do aviso de queda brusca: aceita o horario novo e encerra a janela sem multa. */
+    @PostMapping("/{attendanceId}/sudden-drop/ack")
+    public ResponseEntity<java.util.Map<String, Object>> suddenDropAck(@PathVariable UUID attendanceId,
+                                                                       @AuthenticationPrincipal UserDetailsImpl principal) {
+        java.time.OffsetDateTime promised = suddenDropService.acknowledge(attendanceId, principal.getUserId());
+        return ResponseEntity.ok(java.util.Map.of("attendanceId", attendanceId, "promisedTime", promised));
+    }
+
+    /** DEC-128 "preciso de mais tempo": as 4 opcoes (trocar, passar a vez, sair, ir para o final) e ate quando valem sem multa. */
+    @PostMapping("/{attendanceId}/sudden-drop/need-time")
+    public ResponseEntity<com.ospaulos.vupth.domain.attendance.service.SuddenDropService.Options> suddenDropNeedTime(
+            @PathVariable UUID attendanceId, @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(suddenDropService.needMoreTime(attendanceId, principal.getUserId()));
+    }
+
+    /** DEC-128 "passar a vez": propoe a troca com o proximo da fila; sem o aceite dele, nada muda. */
+    @PostMapping("/{attendanceId}/sudden-drop/pass-turn")
+    public ResponseEntity<com.ospaulos.vupth.api.queue.swap.dto.response.SwapRequestResponse> suddenDropPassTurn(
+            @PathVariable UUID attendanceId, @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED)
+                .body(suddenDropService.passTurn(attendanceId, principal.getUserId()));
     }
 
     /** Best-effort: o aviso nunca quebra a saida de quem desistiu. */

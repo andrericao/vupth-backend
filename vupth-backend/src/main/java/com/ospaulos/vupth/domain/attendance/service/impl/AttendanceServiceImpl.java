@@ -77,6 +77,20 @@ import java.util.stream.Collectors;
 public class AttendanceServiceImpl implements AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
+
+    /** estorno-asaas-casos (DEC-137, caso 2): sem o gateway (testes de unidade) nada a cancelar. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.payment.service.PaymentGatewayService paymentGateway;
+
+    /**
+     * Atendimento cancelado/retirado com cobranca do Asaas ainda aberta: a cobranca some (nao ha o que pagar). Best-effort: cobranca ja
+     * paga o Asaas recusa e nada quebra (o ADMIN estorna pelo Painel); sem cobranca, nada a fazer.
+     */
+    private void releaseOpenCharge(com.ospaulos.vupth.domain.attendance.model.Attendance attendance) {
+        if (paymentGateway != null && attendance.getAsaasPaymentId() != null && attendance.getRefundedAt() == null) {
+            paymentGateway.cancelCharge(attendance);
+        }
+    }
     private final ServiceItemRepository serviceItemRepository;
     private final ProfessionalRepository professionalRepository;
     private final ClientRepository clientRepository;
@@ -407,6 +421,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // INTENTION vive fora da fila viva — cancelar nao mexe em fila/broadcast (auto-limpante: a
         // futura re-busca da promocao simplesmente nao encontra mais este id).
         attendance.setStatus(AttendanceStatus.CANCELLED);
+        releaseOpenCharge(attendance);
         attendanceRepository.save(attendance);
         log.info("[Intention] cancelIntention — cancelled id={}", attendanceId);
     }
@@ -824,6 +839,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         attendance.setStartTime(OffsetDateTime.now());
+        if (attendance.getCouponCampaignId() != null && attendance.getCouponCountedAt() == null) {
+            attendance.setCouponCountedAt(attendance.getStartTime()); // DEC-127: a promocao conta para o cliente na partida
+        }
         attendance.setIsTimerActive(true);
         attendance.setStatus(AttendanceStatus.IN_PROGRESS);
         attendanceRepository.save(attendance);
@@ -915,6 +933,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         registerExitPenaltyIfApplicable(attendance, acknowledgedPenalty);
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
+        releaseOpenCharge(attendance);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
         publishLeftQueue(attendance);
 
@@ -969,6 +988,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Andre, 26/09: quem levou a multa do 3o atraso foi para o fim da fila e pode sair sem nova multa.
         if (penaltyEventRepository.existsByAttendanceIdAndType(attendance.getId(),
                 com.ospaulos.vupth.domain.client.model.PenaltyType.LATE_ARRIVAL)) {
+            return;
+        }
+
+        // DEC-128: dentro dos 20 min da queda brusca da estimativa, sair ou cancelar nao gera multa
+        if (attendance.isSuddenDropWindowOpen(now)) {
             return;
         }
 
@@ -1059,6 +1083,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Attendance] cancelAttendance(entity) — attendanceId={}", attendance.getId());
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
+        releaseOpenCharge(attendance);
         com.ospaulos.vupth.domain.attendance.model.Attendance saved = attendanceRepository.save(attendance);
 
         String clientName = attendance.getClient() != null
@@ -1090,6 +1115,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         registerExitPenaltyIfApplicable(attendance, acknowledgedPenalty);
 
         attendance.setStatus(AttendanceStatus.CANCELLED);
+        releaseOpenCharge(attendance);
         Attendance saved = attendanceRepository.save(attendance);
         publishLeftQueue(attendance);
 

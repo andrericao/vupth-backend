@@ -49,4 +49,17 @@ public class AdminReferralController {
                                                              @AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.ok(adminReferralService.markPaid(principal.getUserId(), campaignId, userId));
     }
+
+    public record AutoPaidResponse(@com.fasterxml.jackson.annotation.JsonProperty("paid_credits") int paidCredits,
+                                   @com.fasterxml.jackson.annotation.JsonProperty("paid_at") java.time.OffsetDateTime paidAt,
+                                   @com.fasterxml.jackson.annotation.JsonProperty("amount") java.math.BigDecimal amount,
+                                   @com.fasterxml.jackson.annotation.JsonProperty("transfer_id") String transferId) {}
+
+    /** Repasse automatico pelo Asaas (DEC-132): pronto e DESLIGADO por padrao (409 PAYOUT_AUTO_DISABLED); o manual acima segue. */
+    @PostMapping("/payouts/{campaignId}/{userId}/pay-auto")
+    public ResponseEntity<AutoPaidResponse> payAuto(@PathVariable UUID campaignId, @PathVariable UUID userId,
+                                                    @AuthenticationPrincipal UserDetailsImpl principal) {
+        var r = adminReferralService.payAuto(principal.getUserId(), campaignId, userId);
+        return ResponseEntity.ok(new AutoPaidResponse(r.paid().paidCredits(), r.paid().paidAt(), r.amount(), r.transferId()));
+    }
 }

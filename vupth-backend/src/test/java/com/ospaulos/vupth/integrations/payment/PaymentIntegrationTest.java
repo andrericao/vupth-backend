@@ -268,4 +268,25 @@ class PaymentIntegrationTest {
                 .andExpect(jsonPath("$.holder_name").value(nullValue()))
                 .andExpect(jsonPath("$.amount").value(price));
     }
+    @Test
+    @Order(8)
+    @DisplayName("pix-so-confirma: o interruptor do Pix do dono nasce desligado, liga e desliga; sem corpo 400; cliente 403; sem token 401")
+    void ownerPixOfferSwitch() throws Exception {
+        mvc.perform(get("/professional/me/owner-pix-offer").header("Authorization", profToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.offers_owner_pix").value(false));
+        mvc.perform(put("/professional/me/owner-pix-offer").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken).content("{\"offers_owner_pix\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.offers_owner_pix").value(true));
+        mvc.perform(get("/professional/me/owner-pix-offer").header("Authorization", profToken))
+                .andExpect(jsonPath("$.offers_owner_pix").value(true));
+        mvc.perform(put("/professional/me/owner-pix-offer").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken).content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(put("/professional/me/owner-pix-offer").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", profToken).content("{\"offers_owner_pix\":false}"))
+                .andExpect(jsonPath("$.offers_owner_pix").value(false));
+        mvc.perform(get("/professional/me/owner-pix-offer").header("Authorization", clientToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/professional/me/owner-pix-offer")).andExpect(status().isUnauthorized());
+    }
 }

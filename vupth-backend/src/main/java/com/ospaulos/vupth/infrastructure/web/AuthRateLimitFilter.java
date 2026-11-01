@@ -62,6 +62,11 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
             java.util.regex.Pattern.compile("/support/articles/[^/]+/vote");
     private static final String ARTICLE_VOTE_ROUTE = "/support/articles/*/vote";
 
+    /** previa-publica-do-desconto (BAK-1): GET publico por id; o mesmo limite contra varredura, com todas as campanhas numa conta so. */
+    private static final java.util.regex.Pattern CAMPAIGN_PREVIEW =
+            java.util.regex.Pattern.compile("/campaigns/[^/]+/preview");
+    private static final String CAMPAIGN_PREVIEW_ROUTE = "/campaigns/*/preview";
+
     private final boolean enabled;
     private final int maxRequests;
     private final long windowMillis;
@@ -100,7 +105,8 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !enabled || !"POST".equals(request.getMethod()) || limitedRoute(request.getRequestURI()) == null
+        boolean preview = "GET".equals(request.getMethod()) && CAMPAIGN_PREVIEW.matcher(request.getRequestURI()).matches();
+        return !enabled || !(preview || "POST".equals(request.getMethod())) || limitedRoute(request.getRequestURI()) == null
                 || isCi(request);
     }
 
@@ -108,6 +114,9 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static String limitedRoute(String uri) {
         if (LIMITED.contains(uri)) {
             return uri;
+        }
+        if (CAMPAIGN_PREVIEW.matcher(uri).matches()) {
+            return CAMPAIGN_PREVIEW_ROUTE;
         }
         return ARTICLE_VOTE.matcher(uri).matches() ? ARTICLE_VOTE_ROUTE : null;
     }

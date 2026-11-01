@@ -59,6 +59,30 @@ class ProfessionalDebtServiceTest {
     }
 
     @Test
+    @DisplayName("DEC-127: com cupom a divida e o que passa do estipulado, nao o preco cheio (R$ 22,90 - R$ 30,00 = nada; o app repassa)")
+    void discountIsTheAppsNotTheProfessionals() {
+        Attendance discounted = attendance("32.90", "30.00", false);
+        discounted.setDiscount(new BigDecimal("10.00"));
+        service.recordOnReceived(discounted, PaymentMethod.CARTAO);
+        verify(repository, never()).save(any());
+
+        Attendance small = attendance("32.90", "30.00", false);
+        small.setDiscount(new BigDecimal("1.00"));
+        service.recordOnReceived(small, PaymentMethod.CARTAO);
+        verify(repository).save(org.mockito.ArgumentMatchers.<ProfessionalDebt>argThat(d -> d.getAmount().compareTo(new BigDecimal("1.90")) == 0));
+    }
+
+    @Test
+    @DisplayName("DEC-127: cliente com cupom de R$ 10,00 que pagou o cheio (R$ 32,90) ao profissional: a divida desfaz o repasse (R$ 10,00)")
+    void paidFullDespiteDiscount() {
+        Attendance full = attendance("32.90", "30.00", false);
+        full.setDiscount(new BigDecimal("10.00"));
+        full.setReceivedAmount(new BigDecimal("32.90"));
+        service.recordOnReceived(full, PaymentMethod.CARTAO);
+        verify(repository).save(org.mockito.ArgumentMatchers.<ProfessionalDebt>argThat(d -> d.getAmount().compareTo(new BigDecimal("10.00")) == 0));
+    }
+
+    @Test
     @DisplayName("nao grava: Pix, sem forma, teste, servico legado, sem diferenca ou corte ja registrado")
     void doesNotRecord() {
         service.recordOnReceived(attendance("32.90", "30.00", false), PaymentMethod.PIX);
