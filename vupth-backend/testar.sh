@@ -108,7 +108,15 @@ banco() {
   rm -f "$tmp"
   # -h 127.0.0.1: no primeiro boot o servidor provisorio da imagem so escuta no socket; pela TCP so o definitivo responde
   for _ in $(seq 1 30); do
-    docker exec vupth_postgres_test pg_isready -h 127.0.0.1 -U postgres -d vupth_db_test >/dev/null 2>&1 && return 0
+    if docker exec vupth_postgres_test pg_isready -h 127.0.0.1 -U postgres -d vupth_db_test >/dev/null 2>&1; then
+      # lock-velho-do-liquibase (03/11): uma rodada interrompida (TaskStop, Ctrl+C) deixa a trava do Liquibase no volume fixo
+      # e a seguinte cai em "Could not acquire change log lock" (248 erros, nada de codigo). So uma rodada usa este banco por vez
+      # (fila de testes, DEC-125), entao toda trava achada aqui e velha: solta antes do mvn. A tabela ainda nao existe no primeiro boot.
+      docker exec vupth_postgres_test psql -h 127.0.0.1 -U postgres -d vupth_db_test -qtAc \
+        "DO \$\$ BEGIN IF to_regclass('public.databasechangeloglock') IS NOT NULL THEN UPDATE databasechangeloglock SET locked = false, lockgranted = NULL, lockedby = NULL WHERE locked; END IF; END \$\$;" \
+        >/dev/null 2>&1 || true
+      return 0
+    fi
     sleep 2
   done
   tmp=$(mktemp)
