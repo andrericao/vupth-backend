@@ -26,6 +26,10 @@ public class UpdatePasswordUseCase {
     private final UtilsTokens utilsTokens;
     private final UserMapper mapper;
 
+    /** F1: o dono e avisado por e-mail da troca. Opcional nos testes de unidade. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.mail.AccountSecurityNotifier securityNotifier;
+
     @Transactional
     public UserProfileGeneralInfosAndToken executeUpdatePassword(UUID id, PasswordRequest request){
 
@@ -44,6 +48,9 @@ public class UpdatePasswordUseCase {
         repository.save(user);
 
         RefreshTokenResponse tokensResponse = utilsTokens.rotateTokens(user);
+        if (securityNotifier != null) {
+            securityNotifier.passwordChanged(user.getEmail());
+        }
 
         return new UserProfileGeneralInfosAndToken(
                 mapper.toGeneralInfosUserResponse(user),

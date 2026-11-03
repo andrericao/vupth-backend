@@ -156,6 +156,25 @@ class PasswordResetUseCasesTest {
         }
 
         @Test
+        @DisplayName("F1: a senha redefinida derruba as sessoes antigas e avisa o dono por e-mail")
+        void success_revokesSessionsAndNotifies() {
+            var tokens = org.mockito.Mockito.mock(com.ospaulos.vupth.infrastructure.security.jwt.token.RefreshTokenProvider.class);
+            var notifier = org.mockito.Mockito.mock(com.ospaulos.vupth.infrastructure.mail.AccountSecurityNotifier.class);
+            ReflectionTestUtils.setField(resetPasswordUseCase, "refreshTokenProvider", tokens);
+            ReflectionTestUtils.setField(resetPasswordUseCase, "securityNotifier", notifier);
+            PasswordResetCode code = freshCode();
+            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(user));
+            when(resetCodeRepository.findFirstByUserIdOrderByCreatedAtDesc(USER_ID)).thenReturn(Optional.of(code));
+            when(passwordEncoder.matches("123456", code.getCodeHash())).thenReturn(true);
+            when(passwordEncoder.encode("NovaSenha@1")).thenReturn("$2a$hash_novo");
+
+            resetPasswordUseCase.execute(new ResetPasswordRequest(EMAIL, "123456", "NovaSenha@1"));
+
+            verify(tokens).revokeAllUserTokens(USER_ID);
+            verify(notifier).passwordChanged(EMAIL);
+        }
+
+        @Test
         @DisplayName("senha nova acima de 64 caracteres — 422 PASSWORD_TOO_LONG antes do código (nao gasta tentativa)")
         void tooLong_beforeCode() {
             assertThatThrownBy(() ->
