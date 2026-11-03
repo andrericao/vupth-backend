@@ -197,6 +197,9 @@ class EstablishmentIntegrationTest {
                 .andExpect(jsonPath("$.name").exists())
                 .andExpect(jsonPath("$.services").isArray())
                 .andExpect(jsonPath("$.services[0]").value("BARBER"))
+                // loja-so-abre-pelo-app (BAK-8): mesmo pedindo OPEN, a loja nasce FECHADA
+                .andExpect(jsonPath("$.open_status").value("CLOSED"))
+                .andExpect(jsonPath("$.is_open").value(false))
                 .andDo(print());
     }
 

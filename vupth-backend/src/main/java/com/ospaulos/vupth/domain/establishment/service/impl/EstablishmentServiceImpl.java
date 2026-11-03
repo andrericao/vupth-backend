@@ -77,7 +77,9 @@ public class EstablishmentServiceImpl implements EstablishmentService {
         establishment.setUrlImage(request.urlImage());
         establishment.setServiceType(request.serviceType());
         establishment.setStatus(request.status());
-        establishment.setOpenStatus(request.openStatus());
+        // loja-so-abre-pelo-app (BAK-8, DEC-159): a loja nasce FECHADA, o que o request diga. Quem abre e o dono ou
+        // o primeiro profissional, no app (updateOpenStatus / status do profissional) — nada abre no cadastro.
+        establishment.setOpenStatus(OpenStatus.CLOSED);
         establishment.setOwner(owner);
 
         Establishment establishmentCreated = this.establishmentRepository.save(establishment);
