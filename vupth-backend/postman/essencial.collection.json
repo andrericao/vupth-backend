@@ -991,6 +991,249 @@
      }
     },
     {
+     "name": "DEC-168 sem chave Pix: create walk-in -> 201 com payment_status PENDING",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(201));",
+         "pm.test(\"o pagamento nasce PENDING\", () => pm.expect(pm.response.json().payment_status).to.eql(\"PENDING\"));",
+         "if (pm.response.code === 201) pm.collectionVariables.set(\"attendance_id_semchave\", pm.response.json().id);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\":\"{{prof_professional_id}}\",\"establishmentId\":\"{{owner_establishment_id}}\",\"serviceItemIds\":[\"{{service_item_id}}\"],\"scheduledTime\":\"{{$isoTimestamp}}\"}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DEC-168 sem chave Pix: GET pagamento (cliente) -> 200 sem copia-e-cola",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "const b = pm.response.json();",
+         "pm.test(\"PENDING\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
+         "pm.test(\"sem chave: sem copia-e-cola nem titular (o cliente so avisa que pagou)\", () => { pm.expect(b.pix_copy_paste).to.be.null; pm.expect(b.holder_name).to.be.null; });",
+         "pm.test(\"valor = servicos + multas\", () => pm.expect(Number(b.amount)).to.eql(Number(b.services_value) + Number(b.penalties_value)));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_semchave}}/payment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_semchave}}",
+        "payment"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DEC-168 sem chave Pix: Ja paguei ainda na fila (cliente) -> 200 AWAITING_CONFIRMATION",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"AWAITING_CONFIRMATION\", () => pm.expect(pm.response.json().status).to.eql(\"AWAITING_CONFIRMATION\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_semchave}}/payment/claim",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_semchave}}",
+        "payment",
+        "claim"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DEC-168 sem chave Pix: start (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_semchave}}/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_semchave}}",
+        "start"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DEC-168 sem chave Pix: finish sem o Sim do modal (prof) -> 200",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_semchave}}/finish",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_semchave}}",
+        "finish"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DEC-168 sem chave Pix: Recebi (prof) -> 200 PAID (vale a palavra do atendente)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.expect(pm.response.code, pm.response.text()).to.equal(200));",
+         "pm.test(\"PAID\", () => pm.expect(pm.response.json().status).to.eql(\"PAID\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/attendances/{{attendance_id_semchave}}/payment/confirm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "attendances",
+        "{{attendance_id_semchave}}",
+        "payment",
+        "confirm"
+       ]
+      },
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
      "name": "PUT chave Pix (telefone) -> 200 normalizada",
      "event": [
       {
