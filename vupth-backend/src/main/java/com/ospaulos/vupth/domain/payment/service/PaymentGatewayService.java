@@ -76,6 +76,11 @@ public class PaymentGatewayService {
         return java.util.Optional.of(new Notice(openedAt(), changes));
     }
 
+    /** Para o Painel: quando a regra de recebimento muda (ou mudou) — ligado no REAL com o dia gravado; vazio no resto. */
+    public java.util.Optional<java.time.OffsetDateTime> changesAtIfConnected() {
+        return flagOn() ? java.util.Optional.ofNullable(changesAt()) : java.util.Optional.empty();
+    }
+
     /** A ligacao ja vale para o pagamento: ligada e, no REAL, passados os 7 dias do aviso. O sandbox liga na hora (sem dinheiro). */
     public boolean connected() {
         if (!flagOn()) {

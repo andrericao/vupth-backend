@@ -123,4 +123,15 @@ class GatewayTurnaroundTest {
         assertThatCode(() -> live.assertComplete(withCpf)).doesNotThrowAnyException();
         assertThatThrownBy(() -> live.assertComplete(without)).isInstanceOf(AccountIncompleteException.class);
     }
+
+    @Test
+    @DisplayName("o Painel recebe changes_at (conexao REAL + 7 dias); sandbox, desligado ou sem dia: vazio")
+    void changesAtForThePanel() {
+        OffsetDateTime opened = OffsetDateTime.now().minusDays(2);
+        assertThat(gateway(REAL, true, opened.toString()).changesAtIfConnected()).hasValueSatisfying(
+                at -> assertThat(at).isEqualTo(opened.plusDays(7)));
+        assertThat(gateway(REAL, false, opened.toString()).changesAtIfConnected()).isEmpty();
+        assertThat(gateway(SANDBOX, true, opened.toString()).changesAtIfConnected()).isEmpty();
+        assertThat(gateway(REAL, true, null).changesAtIfConnected()).isEmpty();
+    }
 }

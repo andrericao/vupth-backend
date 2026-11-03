@@ -41,7 +41,9 @@ public class PaymentGatewayController {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record AdminState(@JsonProperty("connected") boolean connected, @JsonProperty("mode") String mode,
-                             @JsonProperty("configured") boolean configured) {}
+                             @JsonProperty("configured") boolean configured,
+                             // virada-do-gateway: quando a regra de recebimento muda (REAL ligado + 7 dias); o Painel mostra "vale a partir de"
+                             @JsonProperty("changes_at") java.time.OffsetDateTime changesAt) {}
 
     @GetMapping("/payment-gateway")
     public ResponseEntity<State> state() {
@@ -63,6 +65,7 @@ public class PaymentGatewayController {
     }
 
     private AdminState adminView() {
-        return new AdminState(gateway.connected(), gateway.mode(), properties.keyConfigured());
+        return new AdminState(gateway.connected(), gateway.mode(), properties.keyConfigured(),
+                gateway.changesAtIfConnected().orElse(null));
     }
 }
