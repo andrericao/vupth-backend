@@ -27551,6 +27551,41 @@
      "response": []
     },
     {
+      "name": "[OK] POST /support/contact com o campo-isca website preenchido → 204 sem enviar (contato-do-suporte, DEC-169)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Robo: o campo-isca vem preenchido. Responde 204 como se tivesse enviado, mas nada sai (nao gasta e-mail nem cota).",
+              "// O 429 do teto diario nao entra aqui: exigiria 5 envios reais por rodada; fica no SupportContactQuotaTest.",
+              "pm.test(\"Status 204\", () => pm.response.to.have.status(204));",
+              "pm.test(\"corpo vazio (nunca devolve o destino)\", () => pm.expect(pm.response.text()).to.eql(\"\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"nome\": \"Newman\", \"email\": \"newman@vupth.test\", \"perfil\": \"cliente\", \"categoria\": \"DUVIDA\", \"assunto\": \"Teste\", \"mensagem\": \"Oi\", \"website\": \"http://spam.example\"}"
+        },
+        "url": "{{base_url}}/support/contact",
+        "auth": {
+          "type": "noauth"
+        }
+      },
+      "response": []
+    },
+    {
      "name": "[ERRO] POST /support/articles/{slug}/vote com slug fora do formato → 422 (voto-do-artigo)",
      "event": [
       {
