@@ -56,6 +56,9 @@ public class EstablishmentServiceImpl implements EstablishmentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.domain.pricepolicy.service.PricePolicyService pricePolicy;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.payment.service.AccountCompleteGate accountGate;
+
     private final EstablishmentRepository establishmentRepository;
     private final ObjectMapper mapper;
     private final GetEstablishmentsQueueSummaryUseCase queueSummaryUseCase;
@@ -390,6 +393,10 @@ public class EstablishmentServiceImpl implements EstablishmentService {
             // politica-de-preco-com-ciencia (DEC-100): sem a ciencia no prazo, nao abre
             if (pricePolicy != null) {
                 pricePolicy.assertAcknowledged(requesterId);
+            }
+            // virada-do-gateway (DEC-163/164): com o recebimento pelo app valendo, sem CPF nao abre
+            if (accountGate != null) {
+                accountGate.assertComplete(requesterId);
             }
             // (#31) ao menos um profissional com ao menos um serviço.
             if (!hasProfessionalWithService(establishment)) {

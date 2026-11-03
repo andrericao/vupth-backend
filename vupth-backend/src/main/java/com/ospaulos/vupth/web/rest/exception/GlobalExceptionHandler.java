@@ -1028,6 +1028,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "CPF_INVALID");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.AccountIncompleteException.class)
+    public ResponseEntity<ErrorResponse> handleAccountIncomplete(
+            com.ospaulos.vupth.domain.payment.exception.AccountIncompleteException ex, HttpServletRequest req) {
+        log.warn("[422] AccountIncomplete | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ACCOUNT_INCOMPLETE");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException.class)
     public ResponseEntity<ErrorResponse> handlePixKeyInvalid(
             com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException ex, HttpServletRequest req) {

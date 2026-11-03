@@ -25,7 +25,17 @@ public class PaymentGatewayController {
     private final AsaasProperties properties;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record State(@JsonProperty("connected") boolean connected, @JsonProperty("mode") String mode) {}
+    public record State(@JsonProperty("connected") boolean connected, @JsonProperty("mode") String mode,
+                        @JsonProperty("notice") Notice notice) {
+        public State(boolean connected, String mode) {
+            this(connected, mode, null);
+        }
+    }
+
+    /** virada-do-gateway: o aviso de 7 dias aos profissionais; so existe com o Asaas REAL ligado e o prazo correndo. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Notice(@JsonProperty("opened_at") java.time.OffsetDateTime openedAt,
+                         @JsonProperty("changes_at") java.time.OffsetDateTime changesAt) {}
 
     public record Connection(@NotNull @JsonProperty("connected") Boolean connected) {}
 
@@ -36,7 +46,8 @@ public class PaymentGatewayController {
     @GetMapping("/payment-gateway")
     public ResponseEntity<State> state() {
         boolean connected = gateway.connected();
-        return ResponseEntity.ok(new State(connected, connected ? gateway.mode() : null));
+        var notice = gateway.notice().map(n -> new Notice(n.openedAt(), n.changesAt())).orElse(null);
+        return ResponseEntity.ok(new State(connected, connected ? gateway.mode() : null, notice));
     }
 
     @GetMapping("/admin/settings/asaas-connection")

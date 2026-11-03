@@ -55,6 +55,9 @@ public class UpdateProfessionalStatusUseCase {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.domain.pricepolicy.service.PricePolicyService pricePolicy;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.payment.service.AccountCompleteGate accountGate;
+
     @Transactional
     public ProfessionalQuickCreateResponse execute(UUID userId, UpdateProfessionalStatusRequest request) {
         ProfessionalStatus target = request.status();
@@ -66,6 +69,10 @@ public class UpdateProfessionalStatusUseCase {
 
         if (target.countsAsOpen() && pricePolicy != null) {
             pricePolicy.assertAcknowledged(userId);
+        }
+        // virada-do-gateway (DEC-163/164): com o recebimento pelo app valendo, sem CPF nao entra em expediente
+        if (target.countsAsOpen() && accountGate != null) {
+            accountGate.assertComplete(userId);
         }
 
         if (target.countsAsOpen() && !hasService(professional)) {
