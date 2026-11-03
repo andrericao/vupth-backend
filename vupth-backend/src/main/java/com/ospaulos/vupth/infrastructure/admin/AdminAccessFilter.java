@@ -50,6 +50,13 @@ public class AdminAccessFilter extends OncePerRequestFilter {
     @org.springframework.beans.factory.annotation.Value("${vupth.admin.totp.required:true}")
     private boolean totpRequired = true;
 
+    /**
+     * segundo-fator-opcional-ate-cadastrar (DEC-177): a conta que ja cadastrou o fator SEMPRE prova o codigo, mesmo com
+     * {@code totpRequired=false}; a chave so decide quem ainda nao cadastrou. Opcional nos testes de unidade.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.admin.service.AdminTotpService totpService;
+
     public AdminAccessFilter(AdminPermissionRepository permissions, AdminAuditRepository audits) {
         this.permissions = permissions;
         this.audits = audits;
@@ -71,7 +78,7 @@ public class AdminAccessFilter extends OncePerRequestFilter {
         }
         ContentCachingRequestWrapper wrapped = new ContentCachingRequestWrapper(request, BODY_LIMIT);
         boolean authArea = request.getRequestURI().startsWith("/admin/auth/");
-        if (totpRequired && !authArea && !secondFactorDone()) {
+        if (!authArea && !secondFactorDone() && needsSecondFactor(adminId)) {
             denyTotp(response);
             audit(adminId, wrapped, response.getStatus());
             return;
@@ -97,6 +104,14 @@ public class AdminAccessFilter extends OncePerRequestFilter {
         } finally {
             audit(adminId, wrapped, response.getStatus());
         }
+    }
+
+    /** DEC-177: exigido a todos com a chave ligada; com ela desligada, so a quem ja cadastrou o fator. */
+    boolean needsSecondFactor(UUID adminId) {
+        if (totpRequired) {
+            return true;
+        }
+        return totpService != null && totpService.isEnabled(adminId);
     }
 
     /** O token do painel (com {@code totp} no {@code amr}) vem do passo de verificacao; o do login comum nao o tem. */
