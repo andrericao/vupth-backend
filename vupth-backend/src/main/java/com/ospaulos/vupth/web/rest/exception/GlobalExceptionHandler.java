@@ -638,6 +638,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.feedback.exception.FeedbackLimitException.class)
+    public ResponseEntity<ErrorResponse> handleFeedbackLimit(
+            com.ospaulos.vupth.domain.feedback.exception.FeedbackLimitException ex, HttpServletRequest req) {
+        log.warn("[429] FeedbackLimit | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), "FEEDBACK_LIMIT");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.SupportDailyLimitException.class)
     public ResponseEntity<ErrorResponse> handleSupportDailyLimit(
             com.ospaulos.vupth.domain.support.exception.SupportDailyLimitException ex, HttpServletRequest req) {
