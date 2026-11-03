@@ -7,6 +7,7 @@ import com.ospaulos.vupth.infrastructure.web.ClientAddress;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.ospaulos.vupth.domain.support.service.SupportContactQuota;
 import com.ospaulos.vupth.domain.support.service.SupportContactService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * {@code POST /support/contact} — o formulario do site de suporte (formulario-do-suporte, DEC-59).
- * Publico, sem login; o limite por IP e o do {@code AuthRateLimitFilter} (429). Responde 204 quando a
+ * Publico, sem login; limite por IP do {@code AuthRateLimitFilter} (429) mais o teto do dia por IP e geral
+ * ({@link SupportContactQuota}, 429 SUPPORT_DAILY_LIMIT); o campo-isca {@code website} preenchido responde 204 sem enviar. Responde 204 quando a
  * mensagem saiu, 422 com campo invalido. O site precisa estar em {@code CORS_ALLOWED_ORIGINS}.
  */
 @RestController
@@ -28,13 +30,19 @@ public class SupportController {
 
     private final SupportContactService supportContactService;
     private final ArticleVoteService articleVoteService;
+    private final SupportContactQuota supportContactQuota;
 
     /** O header de onde vem o IP de quem chamou (o mesmo do limite de requisicoes). */
     @Value("${vupth.auth.rate-limit.ip-header:}")
     private String ipHeader;
 
     @PostMapping("/contact")
-    public ResponseEntity<Void> contact(@RequestBody @Valid SupportContactRequest request) {
+    public ResponseEntity<Void> contact(@RequestBody @Valid SupportContactRequest request, HttpServletRequest http) {
+        if (request.website() != null && !request.website().isBlank()) {
+            // campo-isca preenchido = robo: finge sucesso (204) para ele nao ajustar, e nada sai nem gasta cota
+            return ResponseEntity.noContent().build();
+        }
+        supportContactQuota.take(ClientAddress.ip(http, ipHeader));
         supportContactService.forward(request);
         return ResponseEntity.noContent().build();
     }

@@ -638,6 +638,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.SupportDailyLimitException.class)
+    public ResponseEntity<ErrorResponse> handleSupportDailyLimit(
+            com.ospaulos.vupth.domain.support.exception.SupportDailyLimitException ex, HttpServletRequest req) {
+        log.warn("[429] SupportDailyLimit | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), "SUPPORT_DAILY_LIMIT");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException.class)
     public ResponseEntity<ErrorResponse> handleOwnerStoreLimit(
             com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException ex, HttpServletRequest req) {
