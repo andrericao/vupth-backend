@@ -10,12 +10,12 @@ import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** FRAQUEZAS F2 (03/11): o segundo fator do painel e obrigatorio para todo ADMIN na producao e no staging, por padrao. */
-@DisplayName("F2: 2o fator do admin ligado por padrao na producao e no staging")
+/** FRAQUEZAS F2 (03/11): o segundo fator do painel e obrigatorio para todo ADMIN na producao, por padrao (o staging fica opcional ate o Andre cadastrar o dele). */
+@DisplayName("F2: 2o fator do admin ligado por padrao na producao")
 class AdminTotpRequiredConfigTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"application-prod.properties", "application-staging.properties"})
+    @ValueSource(strings = {"application-prod.properties"})
     void totpOnByDefault(String file) throws IOException {
         Properties p = new Properties();
         try (InputStream in = getClass().getResourceAsStream("/config/" + file)) {
