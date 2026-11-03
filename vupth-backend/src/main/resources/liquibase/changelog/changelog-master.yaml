@@ -622,3 +622,8 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/069-fit-in-request.yaml
       relativeToChangeLogFile: true
+
+  # cpf-do-profissional-opcional (DEC-164): CPF opcional, cifrado, na pessoa
+  - include:
+      file: changesets/20-auth/070-user-cpf.yaml
+      relativeToChangeLogFile: true

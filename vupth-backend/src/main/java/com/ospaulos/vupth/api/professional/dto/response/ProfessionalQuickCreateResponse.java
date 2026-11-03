@@ -58,8 +58,27 @@ public record ProfessionalQuickCreateResponse(
         Double ratingAverage,
 
         @JsonProperty("rating_count")
-        Long ratingCount
+        Long ratingCount,
+        // cpf-do-profissional-opcional (DEC-164): CPF MASCARADO (***.456.789-**), so no GET /professional/me; null sem CPF
+        String cpf
 ) {
+    public ProfessionalQuickCreateResponse(
+            UUID id, String name, String specialty, String nickname, UUID establishmentId,
+            String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,
+            Boolean acceptingNew,
+            com.ospaulos.vupth.domain.professional.valueObject.OperationMode operationMode,
+            String message, String contactPhone, Boolean showPosition, String establishmentStatus,
+            Double ratingAverage, Long ratingCount) {
+        this(id, name, specialty, nickname, establishmentId, establishmentName, isAvailable,
+                workStatus, acceptingNew, operationMode, message, contactPhone, showPosition,
+                establishmentStatus, ratingAverage, ratingCount, null);
+    }
+
+    public ProfessionalQuickCreateResponse withCpf(String maskedCpf) {
+        return new ProfessionalQuickCreateResponse(id, name, specialty, nickname, establishmentId, establishmentName,
+                isAvailable, workStatus, acceptingNew, operationMode, message, contactPhone, showPosition,
+                establishmentStatus, ratingAverage, ratingCount, maskedCpf);
+    }
     public ProfessionalQuickCreateResponse(
             UUID id, String name, String specialty, String nickname, UUID establishmentId,
             String establishmentName, Boolean isAvailable, ProfessionalStatus workStatus,

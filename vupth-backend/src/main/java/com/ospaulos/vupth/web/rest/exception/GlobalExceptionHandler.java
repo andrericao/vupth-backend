@@ -997,6 +997,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "PIX_KEY_NOT_SET");
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.user.exception.CpfInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleCpfInvalid(
+            com.ospaulos.vupth.domain.user.exception.CpfInvalidException ex, HttpServletRequest req) {
+        log.warn("[422] CpfInvalid | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "CPF_INVALID");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException.class)
     public ResponseEntity<ErrorResponse> handlePixKeyInvalid(
             com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException ex, HttpServletRequest req) {

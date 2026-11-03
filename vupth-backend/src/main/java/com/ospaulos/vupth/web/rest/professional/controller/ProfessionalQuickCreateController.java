@@ -154,7 +154,7 @@ public class ProfessionalQuickCreateController {
                         : null,
                 professional.getRatingAverage(),
                 professional.getRatingCount()
-        ));
+        ).withCpf(com.ospaulos.vupth.domain.user.Cpf.mask(professional.getBaseUser().getCpf())));
     }
 
     /**

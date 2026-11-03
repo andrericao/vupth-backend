@@ -1,0 +1,18 @@
+databaseChangeLog:
+  # cpf-do-profissional-opcional (BAK-12, DEC-164): CPF opcional do profissional, cifrado (DataCipher, S4). So acrescenta.
+  - changeSet:
+      id: 070-user-cpf
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: base_user
+                columnName: cpf
+      changes:
+        - addColumn:
+            tableName: base_user
+            columns:
+              - column:
+                  name: cpf
+                  type: "VARCHAR(400)"
