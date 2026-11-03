@@ -28,6 +28,7 @@ public class RemoveProfessionalFromEstablishmentUseCase {
     private final ProfessionalRepository professionalRepository;
     private final AttendanceRepository attendanceRepository;
     private final EstablishmentOpenStatusService openStatusService;
+    private final com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
 
     @Transactional
     public void execute(UUID ownerId, UUID establishmentId, UUID professionalId) {
@@ -66,6 +67,13 @@ public class RemoveProfessionalFromEstablishmentUseCase {
         // Saida OFF nao muda a presenca -> nao recalcula (preserva override manual do hibrido).
         if (professional.getWorkStatus() != null && professional.getWorkStatus().countsAsOpen()) {
             openStatusService.deriveFromProfessionals(establishmentId);
+        }
+
+        // DEC-173: ele volta a ficar sem loja e recebe um push
+        if (!ownerId.equals(professionalId)) {
+            pushPublisher.notifyUser(professionalId, "Você saiu da loja",
+                    "O dono removeu você da loja " + establishment.getName() + ". Você pode pedir vínculo em outra.",
+                    java.util.Map.of("type", "PROFESSIONAL_REMOVED_FROM_STORE", "establishmentId", String.valueOf(establishmentId)));
         }
 
         log.info("[RemoveProfessional] professional={} removed from establishment={}",

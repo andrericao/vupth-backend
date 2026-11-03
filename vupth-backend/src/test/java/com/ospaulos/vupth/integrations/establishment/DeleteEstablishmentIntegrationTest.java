@@ -105,7 +105,7 @@ class DeleteEstablishmentIntegrationTest {
     }
 
     @Test
-    @DisplayName("com agendamento vivo -> 409 ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES")
+    @DisplayName("com agendamento para amanha -> 409 ESTABLISHMENT_HAS_FUTURE_BOOKINGS, com a lista; a loja segue ACTIVE")
     void liveIntention_409() throws Exception {
         Store s = store();
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
@@ -113,7 +113,38 @@ class DeleteEstablishmentIntegrationTest {
 
         deleteStore(s.id(), s.owner().token(), s.owner().password())
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HAS_ACTIVE_ATTENDANCES"));
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HAS_FUTURE_BOOKINGS"))
+                .andExpect(jsonPath("$.blockers[0].code").value("ESTABLISHMENT_HAS_FUTURE_BOOKINGS"))
+                .andExpect(jsonPath("$.blockers[0].count").value(1));
+        assertThat(establishmentRepository.findById(UUID.fromString(s.id())).orElseThrow().getStatus())
+                .isEqualTo(EstablishmentStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("com outro profissional vinculado -> 409 ESTABLISHMENT_HAS_PROFESSIONALS com a lista; remover da loja (push) libera apagar; o dono segue profissional sem loja")
+    void otherProfessional_409_thenRemoveThenDelete() throws Exception {
+        Store s = store();
+        var employee = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        TestUserUtils.becomeProfessional(mvc, mapper, faker, employee.token(), s.id(), "Funcionario");
+
+        deleteStore(s.id(), s.owner().token(), s.owner().password())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HAS_PROFESSIONALS"))
+                .andExpect(jsonPath("$.blockers[0].count").value(1))
+                .andExpect(jsonPath("$.blockers[0].items[0].id").value(employee.id()));
+        assertThat(professionalRepository.findByEstablishmentId(UUID.fromString(s.id()))).hasSize(2);
+
+        mvc.perform(delete("/establishment/{id}/professionals/{pid}", s.id(), employee.id())
+                        .header("Authorization", s.owner().token()))
+                .andExpect(status().is2xxSuccessful());
+        assertThat(professionalRepository.findById(UUID.fromString(employee.id())).orElseThrow().getEstablishment()).isNull();
+
+        deleteStore(s.id(), s.owner().token(), s.owner().password()).andExpect(status().isNoContent());
+        assertThat(establishmentRepository.findById(UUID.fromString(s.id())).orElseThrow().getStatus())
+                .isEqualTo(EstablishmentStatus.REMOVED);
+        // o dono continua profissional, agora sem loja; a conta do funcionario segue de pe
+        assertThat(professionalRepository.findById(UUID.fromString(s.owner().id())).orElseThrow().getEstablishment()).isNull();
+        assertThat(professionalRepository.findById(UUID.fromString(employee.id()))).isPresent();
     }
 
     @Test

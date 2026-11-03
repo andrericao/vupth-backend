@@ -389,6 +389,21 @@ class AccountDeletionIntegrationTest {
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         assertThat(refused.getResponse().getContentAsString()).contains("OWNER_MUST_TRANSFER").contains("Apague a loja");
 
+        // excluir-loja-com-profissionais (DEC-173): com outro profissional vinculado a loja nao se apaga (409 com a lista);
+        // o dono o remove da loja (so desfaz o vinculo) e ai apaga
+        mvc.perform(delete("/establishment/{id}", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"current_password\":\"" + ownerPassword + "\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HAS_PROFESSIONALS"));
+        for (var linked : professionalRepository.findByEstablishmentId(UUID.fromString(establishmentId))) {
+            if (!linked.getId().toString().equals(ownerId)) {
+                mvc.perform(delete("/establishment/{id}/professionals/{pid}", establishmentId, linked.getId())
+                                .header("Authorization", ownerToken))
+                        .andExpect(status().is2xxSuccessful());
+            }
+        }
         mvc.perform(delete("/establishment/{id}", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)

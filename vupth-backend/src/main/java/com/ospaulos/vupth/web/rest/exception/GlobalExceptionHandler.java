@@ -908,6 +908,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "INTERVAL_CONFLICT");
     }
 
+    /** 409 do apagar a loja (DEC-173): o codigo do primeiro impedimento e a lista de todos. */
+    public record DeleteBlockedErrorResponse(
+            int status,
+            String message,
+            String code,
+            java.util.List<com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException.Blocker> blockers,
+            OffsetDateTime timestamp) {
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException.class)
+    public ResponseEntity<DeleteBlockedErrorResponse> handleEstablishmentDeleteBlocked(
+            com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentDeleteBlocked | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getCode());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteBlockedErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), ex.getBlockers(), OffsetDateTime.now()));
+    }
+
     @ExceptionHandler(EstablishmentHasActiveAttendancesException.class)
     public ResponseEntity<ErrorResponse> handleEstablishmentHasActiveAttendances(
             EstablishmentHasActiveAttendancesException ex, HttpServletRequest req) {
