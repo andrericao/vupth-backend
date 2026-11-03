@@ -51,6 +51,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
     private final JsonBearerEntryPoint jsonBearerEntryPoint;
+    private final com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth webCookieAuth;
 
     /**
      * Origens de navegador autorizadas (env {@code CORS_ALLOWED_ORIGINS}, separadas por virgula).
@@ -128,6 +129,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/refresh").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/web/refresh", "/auth/web/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/forgot-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/reset-password").permitAll()
                         // exclusao-por-link: a pagina web nao tem login — o link e a senha sao a prova
@@ -321,8 +323,12 @@ public class SecurityConfig {
                 .oauth2ResourceServer(
                         oauth2 -> oauth2
                                 .authenticationEntryPoint(jsonBearerEntryPoint)
+                                .bearerTokenResolver(new com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieBearerTokenResolver(webCookieAuth))
                                 .jwt(jwt -> jwt
                                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
+                // token-web-httponly (DEC-179): CSRF por token duplo so para a web autenticada por cookie; desligado por padrao
+                .addFilterBefore(new com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieCsrfFilter(webCookieAuth),
+                        org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
@@ -369,7 +375,9 @@ public class SecurityConfig {
         api.setAllowedOriginPatterns(patterns);
         api.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         api.setAllowedHeaders(List.of("*"));
-        api.setAllowCredentials(false);
+        // DEC-179: com o token da web em cookie, o navegador so manda o cookie se a API aceitar credenciais (origens continuam
+        // restritas a CORS_ALLOWED_ORIGINS; nunca curinga). Chave desligada: como sempre, sem credenciais.
+        api.setAllowCredentials(webCookieAuth.enabled());
         api.setMaxAge(3600L);
 
         return request -> {
