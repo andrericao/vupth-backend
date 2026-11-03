@@ -1839,9 +1839,15 @@ public class AttendanceServiceImpl implements AttendanceService {
         Set<UUID> rated = attendances.isEmpty() ? Set.of()
                 : attendanceRatingRepository.findRatedAttendanceIds(attendances.stream().map(Attendance::getId).toList());
         return clientWithReasons(attendances.stream()
-                .map(a -> ClientAttendanceResponse.fromEntity(a)
-                        .withPenalties(penalties.getOrDefault(a.getId(), List.of()))
-                        .withRated(rated.contains(a.getId())))
+                .map(a -> {
+                    var charged = penalties.getOrDefault(a.getId(), List.of());
+                    return ClientAttendanceResponse.fromEntity(a)
+                            .withPenalties(charged)
+                            .withRated(rated.contains(a.getId()))
+                            .withComposition(com.ospaulos.vupth.api.report.dto.response.ValueComposition.forClient(a,
+                                    charged.stream().map(com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse::amount)
+                                            .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)));
+                })
                 .collect(Collectors.toList()));
     }
 
