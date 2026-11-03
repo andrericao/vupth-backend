@@ -750,6 +750,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // fila, e conta-la impediria quem tem intencao para sabado de entrar em qualquer fila
         // durante a semana. Por isso a lista nao e a ACTIVE_STATUSES do DeleteAccountUseCase, que
         // inclui INTENTION — la o que se pergunta e outra coisa ("ha compromisso vivo?").
+        professionalRepository.lockById(professional.getId()); // F7: a checagem e a gravacao abaixo viram uma coisa so
         if (attendanceRepository.existsByClient_IdAndProfessional_IdAndStatusIn(
                 client.getId(), professional.getId(), OCCUPIED_STATUSES)) {
             log.warn("[Attendance] createAttendance — cliente={} ja ocupado com profissional={} (duplo ingresso barrado)",

@@ -336,4 +336,30 @@ class DoubleQueueEntryIntegrationTest {
 
         assertThat(r.getResponse().getStatus()).isEqualTo(201);
     }
+
+    /** FRAQUEZAS F7 (03/11): o mesmo cliente toca "entrar" duas vezes ao mesmo tempo; so uma entrada nasce, a outra e 409. */
+    @Test
+    @Order(9)
+    @DisplayName("F7: dois pedidos simultaneos do mesmo cliente — um 201 e um 409, nunca dois atendimentos")
+    void entradaSimultanea_soUmaPassa() throws Exception {
+        var cliente = novoCliente();
+        java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        java.util.List<java.util.concurrent.Future<Integer>> results = new java.util.ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            results.add(pool.submit(() -> {
+                go.await();
+                return entrarNaFila(cliente, ownerProfessionalId, ownerServiceItemIds).getResponse().getStatus();
+            }));
+        }
+        go.countDown();
+        java.util.List<Integer> statuses = new java.util.ArrayList<>();
+        for (var f : results) {
+            statuses.add(f.get(30, java.util.concurrent.TimeUnit.SECONDS));
+        }
+        pool.shutdown();
+        assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+        assertThat(attendanceRepository.existsByClient_IdAndProfessional_IdAndStatusIn(UUID.fromString(cliente.id()),
+                UUID.fromString(ownerProfessionalId), List.of(AttendanceStatus.SCHEDULED))).isTrue();
+    }
 }

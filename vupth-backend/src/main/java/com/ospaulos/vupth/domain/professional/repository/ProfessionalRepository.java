@@ -143,4 +143,12 @@ public interface ProfessionalRepository extends JpaRepository<Professional, UUID
             @Param("nameLike") String nameLike,
             @Param("specialtyLike") String specialtyLike);
 
+
+    /**
+     * FRAQUEZAS F7 (03/11): trava a linha do profissional ate o fim da transacao. A entrada na fila checa "ja esta ocupado com
+     * ele?" e grava; sem a trava, dois toques simultaneos do mesmo cliente passavam os dois pela checagem.
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Professional p WHERE p.id = :id")
+    Optional<Professional> lockById(@Param("id") UUID id);
 }
