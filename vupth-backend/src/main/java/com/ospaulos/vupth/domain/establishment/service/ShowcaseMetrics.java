@@ -23,6 +23,10 @@ public class ShowcaseMetrics {
     private final DistributionSummary capped;
     private final DistributionSummary openedPosition;
 
+    /** O recorde persistido (F13); opcional nos testes de unidade. */
+    @Autowired(required = false)
+    private DeepestShowcasePosition deepest;
+
     public ShowcaseMetrics(@Value("${vupth.showcase.max-items:200}") int maxItems,
                            @Autowired(required = false) MeterRegistry registry) {
         this.maxItems = maxItems;
@@ -53,8 +57,22 @@ public class ShowcaseMetrics {
 
     /** Mede a posicao (1-based) da loja aberta; ignora o que nao faz sentido. */
     public void opened(Integer position) {
-        if (openedPosition != null && position != null && position >= 1 && position <= 100_000) {
+        if (position == null || position < 1 || position > 100_000) {
+            return;
+        }
+        if (openedPosition != null) {
             openedPosition.record(position);
         }
+        if (deepest != null) {
+            deepest.record(position);
+        }
+    }
+
+    /** Para o ADMIN: o que as metricas em memoria mostram desde o ultimo boot. */
+    public record Snapshot(long lists, double maxListSize, double cappedTotal, long opened, double maxOpenedSinceBoot) {}
+
+    public Snapshot snapshot() {
+        return listSize == null ? new Snapshot(0, 0, 0, 0, 0)
+                : new Snapshot(listSize.count(), listSize.max(), capped.totalAmount(), openedPosition.count(), openedPosition.max());
     }
 }

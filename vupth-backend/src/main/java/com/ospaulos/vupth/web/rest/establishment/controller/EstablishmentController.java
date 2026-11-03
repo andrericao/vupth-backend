@@ -208,8 +208,8 @@ public class EstablishmentController {
     public ResponseEntity<EstablishmentResponse> findById(@PathVariable UUID id,
             @RequestParam(name = "list_position", required = false) Integer listPosition) {
         log.info("[Establishment] findById — id={}", id);
-        showcaseMetrics.opened(listPosition); // DEC-176: a posicao da loja na lista, quando o app a envia
         EstablishmentResponse establishment = service.findById(id);
+        showcaseMetrics.opened(listPosition); // DEC-176: a posicao da loja na lista, quando o app a envia (so loja que existe)
         return ResponseEntity.status(HttpStatus.OK).body(establishment);
     }
 
@@ -223,8 +223,8 @@ public class EstablishmentController {
             @PathVariable UUID id,
             @RequestParam(name = "list_position", required = false) Integer listPosition) {
         log.info("[Establishment] findWithQueue — id={}", id);
-        showcaseMetrics.opened(listPosition); // DEC-176
         EstablishmentWithProfessionalsResponse response = getWithQueueUseCase.execute(id);
+        showcaseMetrics.opened(listPosition); // DEC-176 (so loja que existe)
         return ResponseEntity.ok(response);
     }
 
