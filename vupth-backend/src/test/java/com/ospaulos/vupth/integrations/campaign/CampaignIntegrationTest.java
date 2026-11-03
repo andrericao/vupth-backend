@@ -158,4 +158,32 @@ class CampaignIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CAMPAIGN_SOLD_OUT"));
     }
+
+    /** FRAQUEZAS F6 (03/11): quatro clientes pedem a ultima vaga ao mesmo tempo; so um leva, os outros recebem CAMPAIGN_SOLD_OUT. */
+    @Test
+    @DisplayName("F6: corrida na ultima vaga — um 201 e o resto 409, nunca dois cupons numa vaga")
+    void lastSlotRace() throws Exception {
+        Campaign one = campaign(CampaignVisibility.PRIVATE, CampaignAudience.CLIENT, 1);
+        java.util.List<String> tokens = new java.util.ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            tokens.add(TestUserUtils.registerAndLoginUser(mvc, mapper, faker).token());
+        }
+        java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(4);
+        java.util.List<java.util.concurrent.Future<Integer>> results = new java.util.ArrayList<>();
+        for (String token : tokens) {
+            results.add(pool.submit(() -> {
+                go.await();
+                return redeem(token, one.getCode()).andReturn().getResponse().getStatus();
+            }));
+        }
+        go.countDown();
+        java.util.List<Integer> statuses = new java.util.ArrayList<>();
+        for (var f : results) {
+            statuses.add(f.get(30, java.util.concurrent.TimeUnit.SECONDS));
+        }
+        pool.shutdown();
+        org.assertj.core.api.Assertions.assertThat(statuses).filteredOn(st -> st == 201).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(statuses).filteredOn(st -> st == 409).hasSize(3);
+    }
 }
