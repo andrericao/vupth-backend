@@ -51,6 +51,8 @@ class ReportNetRevenueTest {
 
     @Mock com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
     @Mock com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository;
+    @Mock com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
+    @Mock com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
 
     @InjectMocks ReportServiceImpl reportService;
 

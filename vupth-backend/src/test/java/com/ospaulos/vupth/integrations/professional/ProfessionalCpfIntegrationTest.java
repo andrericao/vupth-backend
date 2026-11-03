@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @org.springframework.test.context.TestPropertySource(properties = {
         "vupth.security.data-encryption.key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 })
+@org.junit.jupiter.api.TestInstance(org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS)
 class ProfessionalCpfIntegrationTest {
 
     @Autowired MockMvc mvc;
@@ -93,5 +95,15 @@ class ProfessionalCpfIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/professional/me").header("Authorization", user.token()))
                 .andExpect(jsonPath("$.cpf").doesNotExist());
+    }
+
+    /**
+     * O banco dos testes e um so para a suite inteira, e este teste liga a cifragem com uma chave so dele: sem apagar o CPF
+     * cifrado, a classe seguinte (sem a chave) falha ao ler esses usuarios ("Dado cifrado no banco, mas DATA_ENCRYPTION_KEY
+     * nao esta configurada" — foi o CI vermelho de 03/11). Mesmo cuidado do PersonalDataEncryptionIntegrationTest.
+     */
+    @AfterAll
+    void clearEncryptedCpf() {
+        jdbc.update("UPDATE base_user SET cpf = NULL WHERE cpf IS NOT NULL");
     }
 }
