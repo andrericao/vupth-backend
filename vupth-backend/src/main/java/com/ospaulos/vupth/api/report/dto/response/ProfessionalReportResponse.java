@@ -60,6 +60,9 @@ public record ProfessionalReportResponse(
             // DEC-127: valor do corte, do profissional, do cliente e o que o app cobre, com a flag PAGAMENTO COM DESCONTO
             com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdown,
             // relatorio-explica-valores (DEC-166): servico, taxas, multa, total e para quem vai cada parte; charged=false no modo teste
-            ValueComposition composition) {
+            ValueComposition composition,
+            // pagamento-declarado-contestavel (F4): "declarado" ate o cliente confirmar; contestado = o cliente disse que nao pagou
+            @com.fasterxml.jackson.annotation.JsonProperty("payment_declared") boolean paymentDeclared,
+            @com.fasterxml.jackson.annotation.JsonProperty("payment_contested") boolean paymentContested) {
     }
 }

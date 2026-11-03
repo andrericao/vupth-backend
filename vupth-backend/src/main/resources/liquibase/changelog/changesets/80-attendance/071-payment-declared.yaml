@@ -1,0 +1,21 @@
+databaseChangeLog:
+  # pagamento-declarado-contestavel (BAK-16, F4): quem marcou o "Recebi" (e de qual aparelho), a confirmacao do cliente e a contestacao.
+  # Declarado = PAID marcado por uma pessoa e ainda sem a confirmacao do cliente. So acrescenta.
+  - changeSet:
+      id: 071-payment-declared
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: attendance
+                columnName: payment_marked_by
+      changes:
+        - addColumn:
+            tableName: attendance
+            columns:
+              - column: {name: payment_marked_by, type: UUID}
+              - column: {name: payment_marked_device, type: "VARCHAR(200)"}
+              - column: {name: payment_client_ack_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: payment_contested_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: payment_contest_reason, type: "VARCHAR(300)"}

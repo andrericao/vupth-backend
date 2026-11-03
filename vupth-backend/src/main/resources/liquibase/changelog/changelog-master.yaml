@@ -627,3 +627,8 @@ databaseChangeLog:
   - include:
       file: changesets/20-auth/070-user-cpf.yaml
       relativeToChangeLogFile: true
+
+  # pagamento-declarado-contestavel (BAK-16, F4): quem marcou o Recebi, de qual aparelho, e a confirmacao/contestacao do cliente
+  - include:
+      file: changesets/80-attendance/071-payment-declared.yaml
+      relativeToChangeLogFile: true

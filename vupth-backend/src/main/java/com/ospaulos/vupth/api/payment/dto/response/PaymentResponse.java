@@ -37,7 +37,11 @@ public record PaymentResponse(
         @JsonProperty("gateway") Gateway gateway,
         // bonificacao-diferenca-paga-pelo-app (DEC-127): valor do corte, do profissional, do cliente e o que o app cobre; so o
         // profissional e o cliente o veem, e app_pays some quando e zero
-        @JsonProperty("breakdown") com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdown
+        @JsonProperty("breakdown") com.ospaulos.vupth.domain.payment.DiscountBreakdown breakdown,
+        // pagamento-declarado-contestavel (F4): declared = o profissional marcou "Recebi" e o cliente ainda nao confirmou; contested =
+        // o cliente contestou (pendencia visivel ao ADMIN e ao relatorio). Ambos false no quitado pelo gateway
+        @JsonProperty("declared") boolean declared,
+        @JsonProperty("contested") boolean contested
 ) {
 
     /** A cobranca do Asaas: {@code mode} SANDBOX (pagamento de teste, sem dinheiro real) ou REAL; o webhook atualiza o status. */

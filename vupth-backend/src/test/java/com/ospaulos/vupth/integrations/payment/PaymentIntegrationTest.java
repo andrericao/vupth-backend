@@ -48,6 +48,7 @@ class PaymentIntegrationTest {
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalRepository professionalRepository;
+    @Autowired com.ospaulos.vupth.domain.admin.service.AdminContestedPaymentService contestedPayments;
 
     private final Faker faker = new Faker();
 
@@ -288,5 +289,44 @@ class PaymentIntegrationTest {
         mvc.perform(get("/professional/me/owner-pix-offer").header("Authorization", clientToken))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/professional/me/owner-pix-offer")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Order(100)
+    @DisplayName("F4: o Recebi fica declarado (quem, quando, aparelho); o cliente contesta (pendencia no admin) ou confirma (limpa)")
+    void declaredPaymentIsContestable() throws Exception {
+        // so o cliente do atendimento age; o profissional que marcou nao confirma por ele
+        mvc.perform(post("/attendances/{id}/payment/acknowledge", firstId).header("Authorization", profToken))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(get("/attendances/{id}/payment", firstId).header("Authorization", clientToken))
+                .andExpect(jsonPath("$.status").value("PAID"))
+                .andExpect(jsonPath("$.declared").value(true))
+                .andExpect(jsonPath("$.contested").value(false));
+
+        mvc.perform(post("/attendances/{id}/payment/contest", firstId).contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken).content("{\"reason\":\"Nao paguei nada\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAID"))
+                .andExpect(jsonPath("$.declared").value(true))
+                .andExpect(jsonPath("$.contested").value(true));
+        org.assertj.core.api.Assertions.assertThat(contestedPayments.list(0, 100).items())
+                .anySatisfy(row -> {
+                    org.assertj.core.api.Assertions.assertThat(row.attendanceId().toString()).isEqualTo(firstId);
+                    org.assertj.core.api.Assertions.assertThat(row.reason()).isEqualTo("Nao paguei nada");
+                    org.assertj.core.api.Assertions.assertThat(row.markedBy()).isNotNull();
+                });
+
+        // confirmar depois limpa a contestacao; confirmado, nao contesta mais
+        mvc.perform(post("/attendances/{id}/payment/acknowledge", firstId).header("Authorization", clientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.declared").value(false))
+                .andExpect(jsonPath("$.contested").value(false));
+        mvc.perform(post("/attendances/{id}/payment/contest", firstId).contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken).content("{}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PAYMENT_INVALID_STATUS"));
+        org.assertj.core.api.Assertions.assertThat(contestedPayments.list(0, 100).items())
+                .noneMatch(row -> row.attendanceId().toString().equals(firstId));
     }
 }

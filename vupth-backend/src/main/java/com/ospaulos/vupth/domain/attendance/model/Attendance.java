@@ -357,6 +357,31 @@ public class Attendance implements Serializable {
     private OffsetDateTime paymentConfirmedAt;
 
     /**
+     * pagamento-declarado-contestavel (BAK-16, F4): quem marcou o "Recebi" e de qual aparelho (nulo = quitado pelo gateway),
+     * quando o cliente confirmou e a contestacao dele. Declarado = PAID marcado por uma pessoa e sem a confirmacao do cliente.
+     */
+    @Column(name = "payment_marked_by")
+    private java.util.UUID paymentMarkedBy;
+
+    @Column(name = "payment_marked_device", length = 200)
+    private String paymentMarkedDevice;
+
+    @Column(name = "payment_client_ack_at")
+    private OffsetDateTime paymentClientAckAt;
+
+    @Column(name = "payment_contested_at")
+    private OffsetDateTime paymentContestedAt;
+
+    @Column(name = "payment_contest_reason", length = 300)
+    private String paymentContestReason;
+
+    /** PAID marcado por uma pessoa e o cliente ainda nao confirmou (nem contestou). */
+    public boolean isPaymentDeclared() {
+        return paymentStatus == com.ospaulos.vupth.domain.payment.PaymentStatus.PAID
+                && paymentMarkedBy != null && paymentClientAckAt == null;
+    }
+
+    /**
      * Na criacao o preco e CONGELADO: total e divisao saem dos servicos deste momento. Preco de
      * servico muda; o que foi cobrado naquele dia nao pode mudar junto.
      */

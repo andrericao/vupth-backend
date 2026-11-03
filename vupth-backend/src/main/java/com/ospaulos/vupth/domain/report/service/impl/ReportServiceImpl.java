@@ -176,7 +176,8 @@ public class ReportServiceImpl implements ReportService {
             return new ProfessionalReportResponse.Cut(a.getId(), a.getEndTime(), a.getTotalValue(), a.getProReceives(), fees, real, simulated,
                     com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(a.getTotalValue(), a.getProReceives(), a.getDiscount(),
                             BigDecimal.ZERO, a.getReceivedAmount()),
-                    com.ospaulos.vupth.api.report.dto.response.ValueComposition.forProfessional(a, penalty, paymentMode.splitPix()));
+                    com.ospaulos.vupth.api.report.dto.response.ValueComposition.forProfessional(a, penalty, paymentMode.splitPix()),
+                    a.isPaymentDeclared(), a.getPaymentContestedAt() != null);
         }).toList();
         // DEC-127: "a receber" = o repasse do app ainda nao pago (coupon_credit aberto); "a pagar" = a divida real aberta
         BigDecimal toReceive = finished.isEmpty() ? BigDecimal.ZERO
