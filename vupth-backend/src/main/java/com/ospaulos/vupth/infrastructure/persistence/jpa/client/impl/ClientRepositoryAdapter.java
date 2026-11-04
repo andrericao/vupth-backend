@@ -40,11 +40,6 @@ public class ClientRepositoryAdapter implements ClientRepository {
     }
 
     @Override
-    public Optional<Client> findByPhone(String phone) {
-        return jpaRepository.findByPhone(phone);
-    }
-
-    @Override
     public Optional<Client> findByEmail(String email) {
         return jpaRepository.findByEmail(email);
     }

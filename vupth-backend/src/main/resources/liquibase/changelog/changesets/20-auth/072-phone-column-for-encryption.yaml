@@ -1,0 +1,12 @@
+databaseChangeLog:
+  # DEC-181 (FRAQUEZAS, 4a leva): o telefone da conta passa a ser gravado cifrado (AES-256-GCM, prefixo enc:v1:), como CPF e Pix.
+  # O texto cifrado e maior que o original: a coluna sobe para 400. O que ja existe em texto puro e lido normalmente (sem
+  # prefixo = texto puro) e cifrado na partida pelo PersonalDataEncryptionMigrator, sem perder nenhum telefone.
+  - changeSet:
+      id: 072-phone-column-for-encryption
+      author: andrericao
+      changes:
+        - modifyDataType:
+            tableName: base_user
+            columnName: phone
+            newDataType: VARCHAR(400)

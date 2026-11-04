@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Cifra o que ja estava em texto puro (S4, fase 1: chave Pix e titular). Roda a cada partida e so toca as
+ * Cifra o que ja estava em texto puro (S4, chave Pix, titular e, desde a DEC-181, o telefone). Roda a cada partida e so toca as
  * linhas ainda sem o prefixo {@code enc:v1:}; depois da primeira vez nao sobra nada. Por SQL direto: o
  * Hibernate nao regravaria um valor que ele ve igual. Sem chave configurada, nao faz nada.
  */
@@ -30,7 +30,7 @@ public class PersonalDataEncryptionMigrator {
     public void onBoot() {
         int done = migrate();
         if (done > 0) {
-            log.info("[S4] {} conta(s) com chave Pix/titular cifradas", done);
+            log.info("[S4] {} conta(s) com chave Pix/titular/telefone cifrados", done);
         }
     }
 
@@ -40,14 +40,16 @@ public class PersonalDataEncryptionMigrator {
             return 0;
         }
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT id, pix_key, pix_holder_name FROM base_user
+                SELECT id, pix_key, pix_holder_name, phone FROM base_user
                  WHERE (pix_key IS NOT NULL AND pix_key NOT LIKE 'enc:v1:%')
                     OR (pix_holder_name IS NOT NULL AND pix_holder_name NOT LIKE 'enc:v1:%')
+                    OR (phone IS NOT NULL AND phone NOT LIKE 'enc:v1:%')
                 """);
         for (Map<String, Object> row : rows) {
-            jdbc.update("UPDATE base_user SET pix_key = ?, pix_holder_name = ? WHERE id = ?",
+            jdbc.update("UPDATE base_user SET pix_key = ?, pix_holder_name = ?, phone = ? WHERE id = ?",
                     cipher.encrypt((String) row.get("pix_key")),
                     cipher.encrypt((String) row.get("pix_holder_name")),
+                    cipher.encrypt((String) row.get("phone")),
                     row.get("id"));
         }
         return rows.size();

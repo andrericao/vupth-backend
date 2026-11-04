@@ -65,7 +65,9 @@ public class BaseUser implements Serializable {
     @Column(name = "password", nullable = false, length = 72)
     private String password;
 
-    @Column(name = "phone", length = 20)
+    /** Cifrado no banco (DEC-181, AES-256-GCM, ver {@code DataCipher}); a API segue devolvendo o texto. */
+    @Convert(converter = com.ospaulos.vupth.infrastructure.crypto.EncryptedStringConverter.class)
+    @Column(name = "phone", length = 400)
     private String phone;
 
     @Past

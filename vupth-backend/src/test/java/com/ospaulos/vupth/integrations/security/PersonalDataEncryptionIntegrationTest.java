@@ -22,6 +22,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -78,6 +79,31 @@ class PersonalDataEncryptionIntegrationTest {
         migrator.onBoot();
     }
 
+    @Test
+    @DisplayName("DEC-181: o telefone da conta fica cifrado no banco, o perfil devolve em claro e o que estava em claro e cifrado")
+    void phoneEncryptedAtRestAndMigrated() throws Exception {
+        var user = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        UUID id = UUID.fromString(user.id());
+        mvc.perform(patch("/profile/general-infos").header("Authorization", user.token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phone\":\"11987654321\"}"))
+                .andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("SELECT phone FROM base_user WHERE id = ?", String.class, id))
+                .startsWith("enc:v1:").doesNotContain("987654321");
+        mvc.perform(get("/profile/me").header("Authorization", user.token()))
+                .andExpect(jsonPath("$.phone").value("11987654321"));
+
+        // texto puro de antes da migracao: continua legivel e a partida o cifra, sem perder o telefone
+        jdbc.update("UPDATE base_user SET phone = ? WHERE id = ?", "11900000000", id);
+        mvc.perform(get("/profile/me").header("Authorization", user.token()))
+                .andExpect(jsonPath("$.phone").value("11900000000"));
+        assertThat(migrator.migrate()).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT phone FROM base_user WHERE id = ?", String.class, id))
+                .startsWith("enc:v1:");
+        mvc.perform(get("/profile/me").header("Authorization", user.token()))
+                .andExpect(jsonPath("$.phone").value("11900000000"));
+    }
+
     /**
      * O banco e compartilhado entre as classes e as outras rodam sem a chave: o dado cifrado que sobra aqui quebra o
      * {@code userRepository.deleteAll()} de quem roda depois ("Dado cifrado no banco, mas DATA_ENCRYPTION_KEY nao esta
@@ -85,7 +111,7 @@ class PersonalDataEncryptionIntegrationTest {
      */
     @AfterAll
     void clearEncryptedData() {
-        jdbc.update("UPDATE base_user SET pix_key = NULL, pix_holder_name = NULL"
-                + " WHERE pix_key LIKE 'enc:v1:%' OR pix_holder_name LIKE 'enc:v1:%'");
+        jdbc.update("UPDATE base_user SET pix_key = NULL, pix_holder_name = NULL, phone = NULL"
+                + " WHERE pix_key LIKE 'enc:v1:%' OR pix_holder_name LIKE 'enc:v1:%' OR phone LIKE 'enc:v1:%'");
     }
 }

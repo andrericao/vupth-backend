@@ -19,8 +19,6 @@ public interface ClientRepository {
 
     List<Client> findActiveClients();
 
-    Optional<Client> findByPhone(@Param("phone") String phone);
-
     Optional<Client> findByEmail(@Param("email") String email);
 
     Optional<Client> findByIdWithBaseUser(@Param("id") UUID id);
