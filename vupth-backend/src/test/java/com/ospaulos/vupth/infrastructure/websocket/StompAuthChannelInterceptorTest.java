@@ -120,4 +120,36 @@ class StompAuthChannelInterceptorTest {
         assertThat(interceptor(true).preSend(subscribe, channel)).isSameAs(subscribe);
         verifyNoInteractions(jwtDecoder);
     }
+
+    @Test
+    @DisplayName("modo cookie (DEC-180): sem Authorization, usa o token que o handshake leu do cookie")
+    void cookieTokenFromHandshake() {
+        Jwt jwt = new Jwt("cookie-tok", Instant.now(), Instant.now().plusSeconds(60),
+                java.util.Map.of("alg", "RS256"), java.util.Map.of("sub", "user-web"));
+        when(jwtDecoder.decode("cookie-tok")).thenReturn(jwt);
+        when(converter.convert(jwt)).thenReturn(null);
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setSessionAttributes(new java.util.HashMap<>(
+                java.util.Map.of(WsOriginHandshakeInterceptor.COOKIE_TOKEN, "cookie-tok")));
+        accessor.setLeaveMutable(true);
+
+        Message<?> out = interceptor(true).preSend(
+                MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), channel);
+
+        assertThat(((UsernamePasswordAuthenticationToken) userOf(out)).getName()).isEqualTo("user-web");
+    }
+
+    @Test
+    @DisplayName("sessao sem token de cookie e sem Authorization: anonimo")
+    void emptySessionAttributes() {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setSessionAttributes(new java.util.HashMap<>(java.util.Map.of(WsOriginHandshakeInterceptor.COOKIE_TOKEN, " ")));
+        accessor.setLeaveMutable(true);
+
+        Message<?> out = interceptor(true).preSend(
+                MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()), channel);
+
+        assertThat(userOf(out)).isNull();
+        verifyNoInteractions(jwtDecoder);
+    }
 }

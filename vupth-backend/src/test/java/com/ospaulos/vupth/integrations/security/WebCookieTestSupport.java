@@ -33,6 +33,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** token-web-httponly (DEC-179): o token da web em cookie HttpOnly com CSRF por token duplo, atras da chave; o nativo nao muda. */
 final class WebCookieTestSupport {
 
+    /** A origem da web nos testes (DEC-180): entra na lista do CORS e vai no Origin das escritas por cookie. */
+    static final String WEB = "https://app.vupth.com";
+
     private WebCookieTestSupport() {}
 
     public static Map<String, String> cookies(MvcResult r) {

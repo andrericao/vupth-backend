@@ -40,16 +40,26 @@ public class WebCookieAuth {
     private final boolean enabled;
     private final String sameSite;
     private final String domain;
+    private final String csrfDomain;
     private final long accessSeconds;
 
     public WebCookieAuth(@Value("${vupth.auth.web-cookie.enabled:false}") boolean enabled,
                          @Value("${vupth.auth.web-cookie.same-site:None}") String sameSite,
                          @Value("${vupth.auth.web-cookie.domain:}") String domain,
+                         @Value("${vupth.auth.web-cookie.csrf-domain:}") String csrfDomain,
                          @Value("${vupth.auth.web-cookie.access-max-age-seconds:900}") long accessSeconds) {
         this.enabled = enabled;
         this.sameSite = sameSite;
-        this.domain = domain == null || domain.isBlank() ? null : domain.trim();
+        this.domain = blankToNull(domain);
+        // api-no-dominio (DEC-180): os HttpOnly ficam so no host da API (host-only: nenhum outro subdominio os recebe); o de CSRF
+        // precisa ser legivel pela pagina em app./painel./parceiro.vupth.com, entao vai em .vupth.com. Vazio = o mesmo dos outros.
+        String csrf = blankToNull(csrfDomain);
+        this.csrfDomain = csrf != null ? csrf : this.domain;
         this.accessSeconds = accessSeconds;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     public boolean enabled() {
@@ -66,7 +76,7 @@ public class WebCookieAuth {
         long refreshSeconds = tokens.expiresIn() == null ? 0 : tokens.expiresIn();
         add(response, cookie(ACCESS, tokens.accessToken(), "/", accessSeconds, true));
         add(response, cookie(REFRESH, tokens.refreshToken(), REFRESH_PATH, refreshSeconds, true));
-        add(response, cookie(CSRF, newCsrf(), "/", refreshSeconds, false));
+        add(response, cookie(CSRF, newCsrf(), "/", refreshSeconds, false, csrfDomain));
     }
 
     /**
@@ -81,7 +91,7 @@ public class WebCookieAuth {
     public void clear(HttpServletResponse response) {
         add(response, cookie(ACCESS, "", "/", 0, true));
         add(response, cookie(REFRESH, "", REFRESH_PATH, 0, true));
-        add(response, cookie(CSRF, "", "/", 0, false));
+        add(response, cookie(CSRF, "", "/", 0, false, csrfDomain));
     }
 
     public static Optional<String> read(HttpServletRequest request, String name) {
@@ -104,10 +114,14 @@ public class WebCookieAuth {
     }
 
     private ResponseCookie cookie(String name, String value, String path, long maxAge, boolean httpOnly) {
+        return cookie(name, value, path, maxAge, httpOnly, domain);
+    }
+
+    private ResponseCookie cookie(String name, String value, String path, long maxAge, boolean httpOnly, String cookieDomain) {
         ResponseCookie.ResponseCookieBuilder b = ResponseCookie.from(name, value == null ? "" : value)
                 .path(path).maxAge(Duration.ofSeconds(maxAge)).secure(true).httpOnly(httpOnly).sameSite(sameSite);
-        if (domain != null) {
-            b.domain(domain);
+        if (cookieDomain != null) {
+            b.domain(cookieDomain);
         }
         return b.build();
     }

@@ -37,7 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = VupthApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@TestPropertySource(properties = {"vupth.auth.web-cookie.enabled=true", "vupth.admin.totp.required=true"})
+@TestPropertySource(properties = {"vupth.auth.web-cookie.enabled=true", "vupth.admin.totp.required=true",
+        "vupth.cors.allowed-origin-patterns=" + WebCookieTestSupport.WEB})
 class WebCookieAdminTotpIntegrationTest {
 
     @Autowired MockMvc mvc;
@@ -70,10 +71,10 @@ class WebCookieAdminTotpIntegrationTest {
                 .andExpect(jsonPath("$.code").value("ADMIN_TOTP_REQUIRED"));
 
         String secret = mapper.readTree(mvc.perform(post("/admin/auth/totp/setup").cookie(at, csrf)
-                        .header("X-CSRF-Token", csrf.getValue()))
+                        .header("X-CSRF-Token", csrf.getValue()).header("Origin", WebCookieTestSupport.WEB))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("secret").asText();
         MvcResult confirmed = mvc.perform(post("/admin/auth/totp/confirm").cookie(at, csrf)
-                        .header("X-CSRF-Token", csrf.getValue()).header("X-Auth-Mode", "cookie")
+                        .header("X-CSRF-Token", csrf.getValue()).header("Origin", WebCookieTestSupport.WEB).header("X-Auth-Mode", "cookie")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"" + code(secret) + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.access_token").doesNotExist())

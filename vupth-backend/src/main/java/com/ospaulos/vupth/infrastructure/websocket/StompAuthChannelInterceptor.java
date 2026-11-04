@@ -16,6 +16,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 /**
  * Autentica a sessao STOMP no frame CONNECT lendo o header Authorization.
  *
@@ -60,12 +62,17 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
 
         String authHeader = accessor.getFirstNativeHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String token;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7);
+        } else if (cookieToken(accessor) != null) {
+            // Modo cookie da web (DEC-179/180): o token veio do cookie no handshake, so de origem da lista do CORS.
+            token = cookieToken(accessor);
+        } else {
             log.debug("[WS] CONNECT anonimo (sem token) — apenas topicos publicos");
             return message;
         }
 
-        String token = authHeader.substring(7);
         try {
             Jwt jwt = jwtDecoder.decode(token);
             AbstractAuthenticationToken converted = jwtAuthenticationConverter.convert(jwt);
@@ -84,5 +91,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             log.warn("[WS] CONNECT com token invalido — seguindo anonimo: {}", e.getMessage());
         }
         return message;
+    }
+
+    private static String cookieToken(StompHeaderAccessor accessor) {
+        Map<String, Object> attributes = accessor.getSessionAttributes();
+        Object token = attributes == null ? null : attributes.get(WsOriginHandshakeInterceptor.COOKIE_TOKEN);
+        return token instanceof String s && !s.isBlank() ? s : null;
     }
 }

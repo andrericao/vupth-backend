@@ -52,6 +52,7 @@ public class SecurityConfig {
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
     private final JsonBearerEntryPoint jsonBearerEntryPoint;
     private final com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth webCookieAuth;
+    private final com.ospaulos.vupth.infrastructure.web.AllowedOrigins allowedOrigins;
 
     /**
      * Origens de navegador autorizadas (env {@code CORS_ALLOWED_ORIGINS}, separadas por virgula).
@@ -327,7 +328,7 @@ public class SecurityConfig {
                                 .jwt(jwt -> jwt
                                         .jwtAuthenticationConverter(jwtAuthenticationConverter)))
                 // token-web-httponly (DEC-179): CSRF por token duplo so para a web autenticada por cookie; desligado por padrao
-                .addFilterBefore(new com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieCsrfFilter(webCookieAuth),
+                .addFilterBefore(new com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieCsrfFilter(webCookieAuth, allowedOrigins),
                         org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .sessionManagement(
                         session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

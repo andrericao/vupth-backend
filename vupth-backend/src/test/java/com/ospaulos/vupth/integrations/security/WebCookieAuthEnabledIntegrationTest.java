@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = VupthApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@TestPropertySource(properties = "vupth.auth.web-cookie.enabled=true")
+@TestPropertySource(properties = {"vupth.auth.web-cookie.enabled=true", "vupth.cors.allowed-origin-patterns=" + WebCookieTestSupport.WEB})
 @DisplayName("chave ligada")
 class WebCookieAuthEnabledIntegrationTest {
 
@@ -72,9 +72,16 @@ class WebCookieAuthEnabledIntegrationTest {
         mvc.perform(post("/devices").cookie(at, csrf).header("X-CSRF-Token", "outro")
                         .contentType(MediaType.APPLICATION_JSON).content(WebCookieTestSupport.device()))
                 .andExpect(status().isForbidden());
-        mvc.perform(post("/devices").cookie(at, csrf).header("X-CSRF-Token", csrf.getValue())
+        mvc.perform(post("/devices").cookie(at, csrf).header("X-CSRF-Token", csrf.getValue()).header("Origin", WebCookieTestSupport.WEB)
                         .contentType(MediaType.APPLICATION_JSON).content(WebCookieTestSupport.device()))
                 .andExpect(status().isOk());
+        // S18 (DEC-180): com o token certo, mas sem Origin ou de origem fora da lista: 403
+        mvc.perform(post("/devices").cookie(at, csrf).header("X-CSRF-Token", csrf.getValue())
+                        .contentType(MediaType.APPLICATION_JSON).content(WebCookieTestSupport.device()))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("ORIGIN_INVALID"));
+        mvc.perform(post("/devices").cookie(at, csrf).header("X-CSRF-Token", csrf.getValue()).header("Origin", "https://outro.site")
+                        .contentType(MediaType.APPLICATION_JSON).content(WebCookieTestSupport.device()))
+                .andExpect(status().isForbidden());
         // o nativo (Bearer) escreve sem CSRF, como sempre
         mvc.perform(post("/devices").header("Authorization", user.token())
                 .contentType(MediaType.APPLICATION_JSON).content(WebCookieTestSupport.device())).andExpect(status().isOk());
@@ -82,7 +89,7 @@ class WebCookieAuthEnabledIntegrationTest {
         // refresh da web: pelo cookie, com CSRF; devolve cookies novos
         Cookie rt = new Cookie("vupth_rt", c.get("vupth_rt"));
         mvc.perform(post("/auth/web/refresh").cookie(rt, csrf)).andExpect(status().isForbidden());
-        MvcResult refreshed = mvc.perform(post("/auth/web/refresh").cookie(rt, csrf).header("X-CSRF-Token", csrf.getValue()))
+        MvcResult refreshed = mvc.perform(post("/auth/web/refresh").cookie(rt, csrf).header("X-CSRF-Token", csrf.getValue()).header("Origin", WebCookieTestSupport.WEB))
                 .andExpect(status().isNoContent()).andReturn();
         Map<String, String> c2 = WebCookieTestSupport.cookies(refreshed);
         assertThat(c2.get("vupth_rt")).isNotBlank().isNotEqualTo(c.get("vupth_rt"));
@@ -90,10 +97,10 @@ class WebCookieAuthEnabledIntegrationTest {
         Cookie csrf2 = new Cookie("vupth_csrf", c2.get("vupth_csrf"));
 
         // logout da web: encerra a sessao e apaga os cookies; o refresh depois falha
-        MvcResult out = mvc.perform(post("/auth/web/logout").cookie(rt2, csrf2).header("X-CSRF-Token", csrf2.getValue()))
+        MvcResult out = mvc.perform(post("/auth/web/logout").cookie(rt2, csrf2).header("X-CSRF-Token", csrf2.getValue()).header("Origin", WebCookieTestSupport.WEB))
                 .andExpect(status().isNoContent()).andReturn();
         assertThat(out.getResponse().getHeaders("Set-Cookie")).hasSize(3).allMatch(h -> h.contains("Max-Age=0"));
-        int after = mvc.perform(post("/auth/web/refresh").cookie(rt2, csrf2).header("X-CSRF-Token", csrf2.getValue()))
+        int after = mvc.perform(post("/auth/web/refresh").cookie(rt2, csrf2).header("X-CSRF-Token", csrf2.getValue()).header("Origin", WebCookieTestSupport.WEB))
                 .andReturn().getResponse().getStatus();
         assertThat(after).isIn(401, 403);
 
