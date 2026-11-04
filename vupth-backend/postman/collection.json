@@ -24691,7 +24691,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8422&lng=-43.2764",
       "auth": {
        "type": "noauth"
       }
@@ -24722,7 +24722,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8833&lng=-43.1036",
       "auth": {
        "type": "noauth"
       }
@@ -24803,7 +24803,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764&radiusKm=1",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8422&lng=-43.2764&radiusKm=1",
       "auth": {
        "type": "noauth"
       }
@@ -24828,7 +24828,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036&radiusKm=1",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8833&lng=-43.1036&radiusKm=1",
       "auth": {
        "type": "noauth"
       }
@@ -24952,7 +24952,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8422&lng=-43.2764",
       "auth": {
        "type": "noauth"
       }
