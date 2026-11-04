@@ -50,6 +50,17 @@ public class LateArrivalService {
 
     public static final int LATES_PER_PENALTY = 3;
     static final int TOLERANCE_MINUTES = 5;
+
+    /**
+     * DEC-185 (alinhado): so para o PRIMEIRO agendado do dia do profissional (o de horario agendado mais cedo naquele dia), a
+     * tolerancia e de 10 min e o atraso so pode ser marcado depois de horario + 10 (agendado as 9:00, atrasado so depois das
+     * 9:10). Iniciar antes continua livre. Os demais seguem a regra de sempre (hora comunicada + {@link #TOLERANCE_MINUTES}).
+     */
+    public static final int FIRST_OF_DAY_TOLERANCE_MINUTES = 10;
+
+    /** Estados que nao ocupam o horario agendado (nao contam para "primeiro do dia"). */
+    private static final java.util.Set<AttendanceStatus> NOT_HOLDING_SLOT =
+            java.util.EnumSet.of(AttendanceStatus.CANCELLED, AttendanceStatus.REMOVED);
     static final BigDecimal LATE_PENALTY = new BigDecimal("5.00");
     /** DEC-83: no maximo duas multas pendentes; com duas, a multa do 3o atraso nao acumula. */
     static final int MAX_PENDING_PENALTIES = 2;
@@ -65,6 +76,10 @@ public class LateArrivalService {
 
     /** A marcacao conta para o contador? So depois da tolerancia; sem nada gravado (atendimento antigo), conta. */
     boolean countsAsLate(Attendance attendance, Professional professional, OffsetDateTime now) {
+        OffsetDateTime firstOfDayLateFrom = firstOfDayLateFrom(attendance, professional);
+        if (firstOfDayLateFrom != null && now.isBefore(firstOfDayLateFrom)) {
+            return false;
+        }
         OffsetDateTime communicated = communicatedTime(attendance, professional, now);
         return communicated == null || !now.isBefore(communicated.plusMinutes(TOLERANCE_MINUTES));
     }
@@ -187,7 +202,27 @@ public class LateArrivalService {
     public OffsetDateTime noShowAvailableAt(Attendance attendance, Professional professional, OffsetDateTime now) {
         OffsetDateTime communicated = communicatedTime(attendance, professional, now);
         OffsetDateTime base = communicated != null ? communicated : attendance.getScheduledTime();
-        return base.plusMinutes(noShowWaitMinutes);
+        OffsetDateTime availableAt = base.plusMinutes(noShowWaitMinutes);
+        OffsetDateTime firstOfDayLateFrom = firstOfDayLateFrom(attendance, professional);
+        return firstOfDayLateFrom != null && firstOfDayLateFrom.isAfter(availableAt) ? firstOfDayLateFrom : availableAt;
+    }
+
+    /**
+     * DEC-185: a partir de quando o PRIMEIRO agendado do dia pode ser marcado atrasado (horario agendado + 10 min); nulo para
+     * quem nao tem horario agendado ou nao e o primeiro do dia daquele profissional.
+     */
+    public OffsetDateTime firstOfDayLateFrom(Attendance attendance, Professional professional) {
+        OffsetDateTime desired = attendance.getDesiredTime();
+        if (desired == null || professional == null || professional.getAttendances() == null) {
+            return null;
+        }
+        LocalDate day = BusinessClock.dateAt(desired);
+        boolean someoneEarlier = professional.getAttendances().stream()
+                .filter(a -> a != attendance && (a.getId() == null || !a.getId().equals(attendance.getId())))
+                .filter(a -> a.getDesiredTime() != null && !NOT_HOLDING_SLOT.contains(a.getStatus()))
+                .filter(a -> BusinessClock.dateAt(a.getDesiredTime()).equals(day))
+                .anyMatch(a -> a.getDesiredTime().isBefore(desired));
+        return someoneEarlier ? null : desired.plusMinutes(FIRST_OF_DAY_TOLERANCE_MINUTES);
     }
 
     /** A espera (min) depois da hora comunicada para o NAO CHEGOU valer (DEC-101: 10). */

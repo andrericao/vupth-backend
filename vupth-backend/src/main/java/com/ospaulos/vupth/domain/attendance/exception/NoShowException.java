@@ -27,6 +27,12 @@ public class NoShowException extends RuntimeException {
                 "Ainda e cedo para marcar que o cliente nao compareceu.", availableAt);
     }
 
+    /** DEC-185: o primeiro agendado do dia antes de horario + 10 min — vira {@code 409 LATE_TOO_EARLY} com {@code available_at}. */
+    public static NoShowException lateTooEarly(OffsetDateTime availableAt) {
+        return new NoShowException("LATE_TOO_EARLY",
+                "Primeiro agendado do dia: so e atrasado 10 minutos depois do horario agendado.", availableAt);
+    }
+
     public String getCode() {
         return code;
     }
