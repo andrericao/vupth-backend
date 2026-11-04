@@ -105,5 +105,7 @@ class ProfessionalCpfIntegrationTest {
     @AfterAll
     void clearEncryptedCpf() {
         jdbc.update("UPDATE base_user SET cpf = NULL WHERE cpf IS NOT NULL");
+        // DEC-181: o telefone da conta tambem e cifrado (a chave esta ligada nesta classe)
+        jdbc.update("UPDATE base_user SET phone = NULL WHERE phone LIKE 'enc:v1:%'");
     }
 }

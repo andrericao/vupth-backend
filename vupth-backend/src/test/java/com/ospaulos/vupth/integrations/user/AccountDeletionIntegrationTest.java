@@ -273,14 +273,15 @@ class AccountDeletionIntegrationTest {
 
     @Test
     @Order(20)
-    @DisplayName("DELETE /profile/delete/me — 204 apos sair da fila; base_user anonimizado")
+    @DisplayName("DELETE /profile/delete/me — 200 {still_professional:false} apos sair da fila; base_user anonimizado")
     void delete_clientSuccess() throws Exception {
         mvc.perform(delete("/attendances/" + clientAttendanceId + "/leave-queue")
                         .header("Authorization", client.token()))
                 .andExpect(status().isOk());
 
         MvcResult result = deleteAccount(client.token(), client.password());
-        assertThat(result.getResponse().getStatus()).isEqualTo(204);
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(result.getResponse().getContentAsString()).contains("\"still_professional\":false");
 
         BaseUser deleted = userRepository.findById(UUID.fromString(client.id())).orElseThrow();
         assertThat(deleted.isDeleted()).isTrue();
@@ -411,7 +412,8 @@ class AccountDeletionIntegrationTest {
                 .andExpect(status().isNoContent());
 
         MvcResult result = deleteAccount(ownerToken, ownerPassword);
-        assertThat(result.getResponse().getStatus()).isEqualTo(204);
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(result.getResponse().getContentAsString()).contains("still_professional");
 
         Establishment establishment = establishmentRepository
                 .findById(UUID.fromString(establishmentId)).orElseThrow();
