@@ -69,6 +69,14 @@ public class WebCookieAuth {
         add(response, cookie(CSRF, newCsrf(), "/", refreshSeconds, false));
     }
 
+    /**
+     * Troca so o cookie de acesso (o token do painel, depois do 2o fator, 15 min e sem refresh). O refresh e o CSRF da sessao
+     * seguem os do login: renovar pelo {@code /auth/web/refresh} devolve um token comum, sem o fator, e o painel pede o codigo de novo.
+     */
+    public void writeAccess(HttpServletResponse response, String accessToken, long maxAgeSeconds) {
+        add(response, cookie(ACCESS, accessToken, "/", maxAgeSeconds, true));
+    }
+
     /** Apaga os tres (Max-Age=0), no logout. */
     public void clear(HttpServletResponse response) {
         add(response, cookie(ACCESS, "", "/", 0, true));

@@ -24545,7 +24545,8 @@
        "script": {
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_id\", pm.response.json().id);"
+         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_id\", pm.response.json().id);",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_name\", pm.response.json().name);"
         ],
         "type": "text/javascript"
        }
@@ -24636,7 +24637,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}",
       "auth": {
        "type": "noauth"
       }
@@ -24664,7 +24665,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&radiusKm=1",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&radiusKm=1",
       "auth": {
        "type": "noauth"
       }
@@ -25375,11 +25376,18 @@
        "listen": "test",
        "script": {
         "exec": [
+         "// Com o teto da vitrine (SHOWCASE_MAX_ITEMS) e o banco do Newman acumulando lojas, a loja nova pode passar da 200a posicao.",
+         "// Por isso compara com a listagem sem filtro: city e uf em branco nao podem cortar nada.",
          "const lista = pm.response.json();",
-         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
-         "pm.test(\"a lista veio cheia\", () => pm.expect(lista.length).to.be.above(0));"
+         "pm.test(\"a lista veio cheia\", () => pm.expect(lista.length).to.be.above(0));",
+         "pm.sendRequest({ url: pm.variables.replaceIn(\"{{base_url}}/establishment?includeAll=true\"), method: \"GET\",",
+         "  header: { Authorization: pm.request.headers.get(\"Authorization\") || \"\" } }, (err, res) => {",
+         "  pm.test(\"mesma lista que sem filtro (o branco e ignorado)\", () => {",
+         "    pm.expect(err).to.be.null;",
+         "    pm.expect(lista.length).to.eql(res.json().length);",
+         "  });",
+         "});"
         ],
         "type": "text/javascript"
        }
@@ -30088,6 +30096,10 @@
   },
   {
    "key": "attendance_id_pix2",
+   "value": ""
+  },
+  {
+   "key": "geo_estab_name",
    "value": ""
   }
  ],
