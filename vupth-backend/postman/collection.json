@@ -29430,6 +29430,320 @@
    ]
   },
   {
+   "name": "29 - avisar quando abrir (avisar-quando-abrir, BAK-8, DEC-160)",
+   "item": [
+    {
+     "name": "[ERRO] pedir aviso sem login -> 401",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/open-watches",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"establishment_id\":\"{{owner_establishment_id}}\",\"kind\":\"NOTIFY_OPEN\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "pedir aviso de abertura da loja -> 201",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.collectionVariables.set(\"ow_id\", b.id);",
+         "pm.test(\"shape: id, establishment_id, kind, day, fired_at nulo\", () => {",
+         "  pm.expect(b.id).to.be.a(\"string\");",
+         "  pm.expect(b.establishment_id).to.eql(pm.collectionVariables.get(\"owner_establishment_id\"));",
+         "  pm.expect(b.kind).to.eql(\"NOTIFY_OPEN\");",
+         "  pm.expect(b.day).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+         "  pm.expect(b.fired_at).to.eql(null);",
+         "});"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/open-watches",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"establishment_id\":\"{{owner_establishment_id}}\",\"kind\":\"NOTIFY_OPEN\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "repetir o mesmo pedido -> 200 com o mesmo id",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 (idempotente)\", () => pm.response.to.have.status(200));",
+         "pm.test(\"mesmo id\", () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get(\"ow_id\")));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/open-watches",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"establishment_id\":\"{{owner_establishment_id}}\",\"kind\":\"NOTIFY_OPEN\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] loja inexistente -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code ESTABLISHMENT_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"ESTABLISHMENT_NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/open-watches",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"establishment_id\":\"00000000-0000-0000-0000-000000000000\",\"kind\":\"NOTIFY_OPEN\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] sem kind -> 422",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 422\", () => pm.response.to.have.status(422));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/open-watches",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"establishment_id\":\"{{owner_establishment_id}}\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "listar os de hoje -> contem o pedido",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"o pedido esta na lista\", () => pm.expect(pm.response.json().map(w => w.id)).to.include(pm.collectionVariables.get(\"ow_id\")));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/open-watches/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] cancelar pedido de outro usuario -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));",
+         "pm.test(\"code OPEN_WATCH_NOT_FOUND\", () => pm.expect(pm.response.json().code).to.eql(\"OPEN_WATCH_NOT_FOUND\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{owner_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/open-watches/{{ow_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "cancelar o pedido -> 204",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/open-watches/{{ow_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "listar de novo -> o pedido saiu",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"o pedido saiu\", () => pm.expect(pm.response.json().map(w => w.id)).to.not.include(pm.collectionVariables.get(\"ow_id\")));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/open-watches/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -30105,6 +30419,10 @@
   },
   {
    "key": "geo_estab_name",
+   "value": ""
+  },
+  {
+   "key": "ow_id",
    "value": ""
   }
  ],

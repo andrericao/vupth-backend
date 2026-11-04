@@ -638,6 +638,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.openwatch.exception.OpenWatchException.class)
+    public ResponseEntity<ErrorResponse> handleOpenWatch(
+            com.ospaulos.vupth.domain.openwatch.exception.OpenWatchException ex, HttpServletRequest req) {
+        log.warn("[{}] OpenWatch {} | {} {}", ex.getStatus().value(), ex.getCode(), req.getMethod(), req.getRequestURI());
+        return build(ex.getStatus(), ex.getMessage(), ex.getCode());
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.feedback.exception.FeedbackLimitException.class)
     public ResponseEntity<ErrorResponse> handleFeedbackLimit(
             com.ospaulos.vupth.domain.feedback.exception.FeedbackLimitException ex, HttpServletRequest req) {
