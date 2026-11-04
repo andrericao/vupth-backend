@@ -267,6 +267,30 @@ public class Establishment implements Serializable {
         return getBusinessHours().on(BusinessClock.today());
     }
 
+    /** A proxima abertura do horario publicado (horario-na-listagem). So informacao. */
+    public record NextOpening(java.time.LocalDate date, LocalTime opens) {}
+
+    /**
+     * Proxima abertura a partir de agora, no relogio da loja: hoje se ainda nao passou da hora de abrir,
+     * senao o proximo dia aberto (ate 14 dias). {@code null} sem horario configurado ou sem dia aberto.
+     */
+    public NextOpening nextOpening() {
+        BusinessHours hours = getBusinessHours();
+        if (!hours.isConfigured()) {
+            return null;
+        }
+        java.time.LocalDate today = BusinessClock.today();
+        LocalTime now = BusinessClock.nowTime();
+        for (int i = 0; i < 14; i++) {
+            java.time.LocalDate date = today.plusDays(i);
+            DayHours day = hours.on(date);
+            if (!day.closed() && day.opens() != null && (i > 0 || day.opens().isAfter(now))) {
+                return new NextOpening(date, day.opens());
+            }
+        }
+        return null;
+    }
+
     /** Abertura de hoje — {@code null} se hoje fecha ou a loja nao configurou. */
     public LocalTime todayOpens() {
         DayHours today = todayHours();

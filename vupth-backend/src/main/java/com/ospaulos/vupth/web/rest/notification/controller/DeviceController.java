@@ -52,7 +52,7 @@ public class DeviceController {
 
         log.info("DEVICE CONTROLLER REMOVE — user={}", principal.getUserId());
 
-        deviceTokenService.remove(token);
+        deviceTokenService.remove(token, principal.getUserId());
         return ResponseEntity.noContent().build();
     }
 }

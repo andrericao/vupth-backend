@@ -26,7 +26,7 @@ class SupportContactServiceTest {
     }
 
     private static SupportContactRequest request(String perfil, String assunto) {
-        return new SupportContactRequest("Ana", "ana@exemplo.com", perfil, "RECLAMACAO", assunto, "Nao consigo abrir a fila.");
+        return new SupportContactRequest("Ana", "ana@exemplo.com", perfil, "RECLAMACAO", assunto, "Nao consigo abrir a fila.", null);
     }
 
     @Test
@@ -46,7 +46,7 @@ class SupportContactServiceTest {
     @DisplayName("categoria FEEDBACK (feedback sobre o app): aparece como Feedback no titulo")
     void feedbackCategory() {
         new SupportContactService(emailSender, repository, "suporte@vupth.test").forward(
-                new SupportContactRequest("Ana", "ana@exemplo.com", "cliente", "FEEDBACK", "Gostei", "Sugiro um modo escuro."));
+                new SupportContactRequest("Ana", "ana@exemplo.com", "cliente", "FEEDBACK", "Gostei", "Sugiro um modo escuro.", null));
 
         verify(emailSender).send(anyString(), eq("[VUPTH · Cliente · Feedback] Gostei"), contains("Categoria: Feedback"));
     }

@@ -30,9 +30,69 @@ public class PaymentGatewayService {
     private final AppSettingService settings;
     private final PaymentAccountService paymentAccounts;
 
-    /** Ligada: a chave esta configurada E a flag {@code asaas.connected} esta ligada. */
-    public boolean connected() {
+    /** virada-do-gateway (DEC-163): o dia em que o Painel ligou o Asaas REAL (texto ISO); vazio = sem aviso. */
+    public static final String CONNECTED_AT = "asaas.connected_at";
+    /** O aviso aos profissionais dura 7 dias; a regra de recebimento so muda quando ele acaba. */
+    public static final int NOTICE_DAYS = 7;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private GatewayNoticeNotifier noticeNotifier;
+
+    /** O aviso de 7 dias: aberto em {@code openedAt}, a regra de recebimento muda em {@code changesAt}. */
+    public record Notice(java.time.OffsetDateTime openedAt, java.time.OffsetDateTime changesAt) {}
+
+    private boolean flagOn() {
         return properties.keyConfigured() && settings.flag(AppSettingService.ASAAS_CONNECTED, false);
+    }
+
+    private boolean real() {
+        return "REAL".equals(properties.mode());
+    }
+
+    private java.time.OffsetDateTime openedAt() {
+        String at = settings.text(CONNECTED_AT);
+        if (at == null || at.isBlank()) {
+            return null;
+        }
+        try {
+            return java.time.OffsetDateTime.parse(at);
+        } catch (java.time.format.DateTimeParseException e) {
+            return null;
+        }
+    }
+
+    /** Quando a regra de recebimento muda (a conexao REAL + 7 dias); {@code null} no sandbox ou sem aviso. */
+    private java.time.OffsetDateTime changesAt() {
+        java.time.OffsetDateTime opened = real() ? openedAt() : null;
+        return opened == null ? null : opened.plusDays(NOTICE_DAYS);
+    }
+
+    /** O aviso aberto agora (ligado no REAL e o prazo de 7 dias ainda nao acabou), para o banner dos apps. */
+    public java.util.Optional<Notice> notice() {
+        java.time.OffsetDateTime changes = changesAt();
+        if (!flagOn() || changes == null || !java.time.OffsetDateTime.now().isBefore(changes)) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new Notice(openedAt(), changes));
+    }
+
+    /** Para o Painel: quando a regra de recebimento muda (ou mudou) — ligado no REAL com o dia gravado; vazio no resto. */
+    public java.util.Optional<java.time.OffsetDateTime> changesAtIfConnected() {
+        return flagOn() ? java.util.Optional.ofNullable(changesAt()) : java.util.Optional.empty();
+    }
+
+    /** A ligacao ja vale para o pagamento: ligada e, no REAL, passados os 7 dias do aviso. O sandbox liga na hora (sem dinheiro). */
+    public boolean connected() {
+        if (!flagOn()) {
+            return false;
+        }
+        java.time.OffsetDateTime changes = changesAt();
+        return changes == null || !java.time.OffsetDateTime.now().isBefore(changes);
+    }
+
+    /** Sem CPF o profissional nao abre: so com o Asaas REAL valendo (virada feita). */
+    public boolean cpfRequired() {
+        return real() && connected();
     }
 
     /** SANDBOX ou REAL (pela URL); so quer dizer algo com a conexao ligada. */
@@ -46,7 +106,18 @@ public class PaymentGatewayService {
             throw new AsaasException(org.springframework.http.HttpStatus.UNPROCESSABLE_ENTITY, "ASAAS_NOT_CONFIGURED",
                     "Nao da para ligar: falta a ASAAS_API_KEY.");
         }
+        boolean was = settings.flag(AppSettingService.ASAAS_CONNECTED, false);
         settings.setFlag(AppSettingService.ASAAS_CONNECTED, connected, by);
+        if (!connected) {
+            settings.setText(CONNECTED_AT, "", by);
+        } else if (real() && (!was || openedAt() == null)) {
+            // virada-do-gateway: registra o dia da conexao REAL e abre o aviso de 7 dias (so depois de conectar)
+            java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+            settings.setText(CONNECTED_AT, now.toString(), by);
+            if (noticeNotifier != null) {
+                noticeNotifier.notifyProfessionals(now.plusDays(NOTICE_DAYS));
+            }
+        }
     }
 
     /**

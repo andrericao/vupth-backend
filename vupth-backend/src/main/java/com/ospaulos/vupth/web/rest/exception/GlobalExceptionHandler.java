@@ -638,6 +638,20 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.feedback.exception.FeedbackLimitException.class)
+    public ResponseEntity<ErrorResponse> handleFeedbackLimit(
+            com.ospaulos.vupth.domain.feedback.exception.FeedbackLimitException ex, HttpServletRequest req) {
+        log.warn("[429] FeedbackLimit | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), "FEEDBACK_LIMIT");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.support.exception.SupportDailyLimitException.class)
+    public ResponseEntity<ErrorResponse> handleSupportDailyLimit(
+            com.ospaulos.vupth.domain.support.exception.SupportDailyLimitException ex, HttpServletRequest req) {
+        log.warn("[429] SupportDailyLimit | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), "SUPPORT_DAILY_LIMIT");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException.class)
     public ResponseEntity<ErrorResponse> handleOwnerStoreLimit(
             com.ospaulos.vupth.domain.establishment.exception.OwnerStoreLimitException ex, HttpServletRequest req) {
@@ -894,6 +908,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), "INTERVAL_CONFLICT");
     }
 
+    /** 409 do apagar a loja (DEC-173): o codigo do primeiro impedimento e a lista de todos. */
+    public record DeleteBlockedErrorResponse(
+            int status,
+            String message,
+            String code,
+            java.util.List<com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException.Blocker> blockers,
+            OffsetDateTime timestamp) {
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException.class)
+    public ResponseEntity<DeleteBlockedErrorResponse> handleEstablishmentDeleteBlocked(
+            com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException ex, HttpServletRequest req) {
+        log.warn("[409] EstablishmentDeleteBlocked | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getCode());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteBlockedErrorResponse(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), ex.getCode(), ex.getBlockers(), OffsetDateTime.now()));
+    }
+
     @ExceptionHandler(EstablishmentHasActiveAttendancesException.class)
     public ResponseEntity<ErrorResponse> handleEstablishmentHasActiveAttendances(
             EstablishmentHasActiveAttendancesException ex, HttpServletRequest req) {
@@ -988,6 +1019,20 @@ public class GlobalExceptionHandler {
             com.ospaulos.vupth.domain.payment.exception.PixKeyNotSetException ex, HttpServletRequest req) {
         log.warn("[404] PixKeyNotSet | {} {}", req.getMethod(), req.getRequestURI());
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), "PIX_KEY_NOT_SET");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.user.exception.CpfInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleCpfInvalid(
+            com.ospaulos.vupth.domain.user.exception.CpfInvalidException ex, HttpServletRequest req) {
+        log.warn("[422] CpfInvalid | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "CPF_INVALID");
+    }
+
+    @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.AccountIncompleteException.class)
+    public ResponseEntity<ErrorResponse> handleAccountIncomplete(
+            com.ospaulos.vupth.domain.payment.exception.AccountIncompleteException ex, HttpServletRequest req) {
+        log.warn("[422] AccountIncomplete | {} {}", req.getMethod(), req.getRequestURI());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), "ACCOUNT_INCOMPLETE");
     }
 
     @ExceptionHandler(com.ospaulos.vupth.domain.payment.exception.PixKeyInvalidException.class)

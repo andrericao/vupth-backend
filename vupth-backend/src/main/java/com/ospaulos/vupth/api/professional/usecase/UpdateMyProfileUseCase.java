@@ -57,6 +57,11 @@ public class UpdateMyProfileUseCase {
             professional.setContactPhone(trimmed.isBlank() ? null : trimmed);
         }
 
+        if (request.cpf() != null) {
+            String trimmed = request.cpf().trim();
+            professional.getBaseUser().setCpf(trimmed.isBlank() ? null : com.ospaulos.vupth.domain.user.Cpf.normalize(trimmed));
+        }
+
         if (request.showPosition() != null) {
             professional.setShowPosition(request.showPosition());
         }

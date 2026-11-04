@@ -79,4 +79,16 @@ class SupportContactIntegrationTest {
 
         verifyNoInteractions(emailSender);
     }
+
+    @Test
+    @DisplayName("campo-isca website preenchido: 204 e nada sai")
+    void honeypot() throws Exception {
+        mvc.perform(post("/support/contact").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nome\":\"Bot\",\"email\":\"bot@exemplo.com\",\"perfil\":\"cliente\","
+                                + "\"categoria\":\"DUVIDA\",\"assunto\":\"Oi\",\"mensagem\":\"Oi\","
+                                + "\"website\":\"http://spam.example\"}"))
+                .andExpect(status().isNoContent());
+
+        verifyNoInteractions(emailSender);
+    }
 }

@@ -69,11 +69,7 @@ public class ClientPenaltyService {
 
     @Transactional(readOnly = true)
     public PendingPenaltiesResponse pending(UUID clientId) {
-        List<PenaltyChargeResponse> penalties = describe(pendingEvents(clientId));
-        BigDecimal total = penalties.stream()
-                .map(PenaltyChargeResponse::amount)
-                .reduce(new BigDecimal("0.00"), BigDecimal::add);
-        return new PendingPenaltiesResponse(total, penalties);
+        return PendingPenaltiesResponse.of(describe(pendingEvents(clientId)));
     }
 
     /**
@@ -188,6 +184,20 @@ public class ClientPenaltyService {
                 .toList();
     }
 
+    /**
+     * multas-carregam-na-virada (DEC-175): a multa e do periodo de teste se nasceu antes de o app passar a cobrar. Sem o
+     * app cobrando (modo teste, gateway desligado ou no prazo do aviso), todas sao; cobrando, so as anteriores ao dia em que
+     * a regra mudou (a conexao REAL + 7 dias). Sem dia gravado (sandbox, SPLIT_PIX) nenhuma e.
+     */
+    boolean testPeriod(ClientPenaltyEvent event) {
+        boolean appCharges = (paymentMode != null && paymentMode.splitPix()) || (gateway != null && gateway.connected());
+        if (!appCharges) {
+            return true;
+        }
+        java.time.OffsetDateTime changes = gateway != null ? gateway.changesAtIfConnected().orElse(null) : null;
+        return changes != null && event.getCreatedAt() != null && event.getCreatedAt().isBefore(changes);
+    }
+
     private List<PenaltyChargeResponse> describe(List<ClientPenaltyEvent> events) {
         Set<UUID> originIds = events.stream()
                 .map(ClientPenaltyEvent::getAttendanceId)
@@ -204,7 +214,8 @@ public class ClientPenaltyService {
                     event.getAttendanceId(),
                     origin != null ? origin.getScheduledTime() : event.getCreatedAt(),
                     origin != null && origin.getProfessional() != null ? origin.getProfessional().getName() : null,
-                    origin != null && origin.getEstablishment() != null ? origin.getEstablishment().getName() : null);
+                    origin != null && origin.getEstablishment() != null ? origin.getEstablishment().getName() : null,
+                    testPeriod(event));
         }).toList();
     }
 }

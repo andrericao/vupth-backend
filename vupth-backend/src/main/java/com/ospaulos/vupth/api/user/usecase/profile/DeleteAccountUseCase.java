@@ -86,7 +86,7 @@ public class DeleteAccountUseCase {
     private final com.ospaulos.vupth.domain.user.repository.AccountDeletionLedgerRepository deletionLedgerRepository;
 
     @Transactional
-    public void execute(UUID userId, String currentPassword) {
+    public boolean execute(UUID userId, String currentPassword) {
         log.info("[DeleteAccount] execute — user={}", userId);
 
         BaseUser user = userRepository.findById(userId)
@@ -103,6 +103,9 @@ public class DeleteAccountUseCase {
             throw new com.ospaulos.vupth.domain.establishment.exception.OwnerMustTransferException();
         }
 
+        // DEC-182: calculado ANTES do desmonte (depois a conta e anonimizada e os papeis somem).
+        boolean stillProfessional = stillProfessional(user);
+
         detachOwnedEstablishments(user);
         detachProfessional(user);
         deleteOwnedOnlyData(user);
@@ -116,6 +119,28 @@ public class DeleteAccountUseCase {
                 user.getId(), user.getDeletedAt()));
 
         log.info("[DeleteAccount] user={} anonymized — history preserved for the other parties", userId);
+        return stillProfessional;
+    }
+
+    /**
+     * DEC-182 (PAR-10): a pessoa continua profissional depois de excluir a conta do dono? Sim se tinha perfil de
+     * profissional vinculado a OUTRA loja ou sem loja; nao se era so dono, ou profissional da propria loja que
+     * esta sendo fechada. O app usa para escolher a tela de destino.
+     */
+    private boolean stillProfessional(BaseUser user) {
+        if (!user.hasProfessionalProfile()) {
+            return false;
+        }
+        Professional professional = professionalRepository.findById(user.getId()).orElse(null);
+        if (professional == null) {
+            return false;
+        }
+        Establishment workplace = professional.getEstablishment();
+        if (workplace == null) {
+            return true;
+        }
+        return establishmentRepository.findByOwnerId(user.getId()).stream()
+                .noneMatch(owned -> owned.getId().equals(workplace.getId()));
     }
 
     // ───────────────────────────────────────────

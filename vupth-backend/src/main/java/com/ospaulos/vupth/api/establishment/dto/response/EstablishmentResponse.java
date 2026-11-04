@@ -82,8 +82,18 @@ public record EstablishmentResponse(
         Long ratingCount,
 
         @JsonProperty("rating_best")
-        Double ratingBest
+        Double ratingBest,
+
+        // horario-na-listagem (BAK-19, pedido do Client CLI-24, DEC-159): a proxima abertura do horario
+        // publicado (hoje, se ainda nao passou da hora; senao o proximo dia aberto, ate 14 dias a frente).
+        // So informacao: nao muda a regra de abertura (is_open/open_status). null sem horario configurado.
+        // O horario de HOJE ja vem em opening_time/closing_time (null se hoje fecha).
+        @JsonProperty("next_open")
+        NextOpen nextOpen
 ) {
+    /** A proxima abertura: o dia (da loja) e a hora. */
+    public record NextOpen(java.time.LocalDate date, java.time.LocalTime opens) {}
+
     public static EstablishmentResponse fromEntity(Establishment establishment) {
         return fromEntity(establishment, null, null);
     }
@@ -111,7 +121,8 @@ public record EstablishmentResponse(
                 null,
                 null,
                 null,
-                null
+                null,
+                nextOpenOf(establishment)
         );
     }
 
@@ -124,7 +135,7 @@ public record EstablishmentResponse(
         return new EstablishmentResponse(
                 id, services, name, serviceType, urlImage, ownerId, phone, instagram,
                 openingTime, closingTime, estimatedWaitMinutes, availableProfessionals,
-                openStatus, isOpen, status, address, distanceKm, ratingAverage, ratingCount, ratingBest);
+                openStatus, isOpen, status, address, distanceKm, ratingAverage, ratingCount, ratingBest, nextOpen);
     }
 
     /** Copia com a avaliacao da loja — calculada em lote na listagem publica, depois do mapeamento. */
@@ -132,6 +143,11 @@ public record EstablishmentResponse(
         return new EstablishmentResponse(
                 id, services, name, serviceType, urlImage, ownerId, phone, instagram,
                 openingTime, closingTime, estimatedWaitMinutes, availableProfessionals,
-                openStatus, isOpen, status, address, distanceKm, ratingAverage, ratingCount, ratingBest);
+                openStatus, isOpen, status, address, distanceKm, ratingAverage, ratingCount, ratingBest, nextOpen);
+    }
+
+    private static NextOpen nextOpenOf(Establishment establishment) {
+        var next = establishment.nextOpening();
+        return next == null ? null : new NextOpen(next.date(), next.opens());
     }
 }

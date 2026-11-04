@@ -622,3 +622,18 @@ databaseChangeLog:
   - include:
       file: changesets/80-attendance/069-fit-in-request.yaml
       relativeToChangeLogFile: true
+
+  # cpf-do-profissional-opcional (DEC-164): CPF opcional, cifrado, na pessoa
+  - include:
+      file: changesets/20-auth/070-user-cpf.yaml
+      relativeToChangeLogFile: true
+
+  # pagamento-declarado-contestavel (BAK-16, F4): quem marcou o Recebi, de qual aparelho, e a confirmacao/contestacao do cliente
+  - include:
+      file: changesets/80-attendance/071-payment-declared.yaml
+      relativeToChangeLogFile: true
+
+  # DEC-181: telefone da conta cifrado (coluna maior; o migrador cifra o que ja existe)
+  - include:
+      file: changesets/20-auth/072-phone-column-for-encryption.yaml
+      relativeToChangeLogFile: true

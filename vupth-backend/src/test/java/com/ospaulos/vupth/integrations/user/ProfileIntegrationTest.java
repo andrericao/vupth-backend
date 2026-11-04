@@ -511,7 +511,7 @@ class ProfileIntegrationTest {
 
     @Test
     @Order(50)
-    @DisplayName("DELETE /profile/delete/me — 204 conta apagada (anonimizada)")
+    @DisplayName("DELETE /profile/delete/me — 200 conta apagada (anonimizada)")
     void deleteAccount_success() throws Exception {
         Assumptions.assumeTrue(token != null);
         log.info("[Profile] deleteAccount_success — userId={}", id);
@@ -520,7 +520,7 @@ class ProfileIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", token)
                         .content(mapper.writeValueAsString(new DeleteAccountRequest(this.password))))
-                .andExpect(status().isNoContent())
+                .andExpect(status().isOk())
                 .andDo(print());
 
         log.info("[Profile] deleteAccount_success — account deleted");

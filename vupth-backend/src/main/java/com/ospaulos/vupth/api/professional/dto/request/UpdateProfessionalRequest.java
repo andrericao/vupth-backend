@@ -29,10 +29,23 @@ public record UpdateProfessionalRequest(
         String contactPhone,
 
         @JsonProperty("show_position")
-        Boolean showPosition
+        Boolean showPosition,
 
+        // cpf-do-profissional-opcional (DEC-164): opcional; "" apaga; nunca vai a log
+        @Size(max = 20, message = "CPF must be at most 20 characters")
+        String cpf
 ) {
     public UpdateProfessionalRequest(String name, String specialty) {
-        this(name, specialty, null, null);
+        this(name, specialty, null, null, null);
+    }
+
+    public UpdateProfessionalRequest(String name, String specialty, String contactPhone, Boolean showPosition) {
+        this(name, specialty, contactPhone, showPosition, null);
+    }
+
+    /** Sem o CPF no toString: o record imprime todos os campos, e o CPF nao pode ir a log. */
+    @Override
+    public String toString() {
+        return "UpdateProfessionalRequest[name=" + name + ", specialty=" + specialty + "]";
     }
 }

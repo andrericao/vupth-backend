@@ -114,15 +114,16 @@ public class ProfileController {
      * precisa poder apagar a propria conta).</p>
      */
     @DeleteMapping("/delete/me")
-    public ResponseEntity<Void> deleteAccount(
+    public ResponseEntity<java.util.Map<String, Boolean>> deleteAccount(
             @AuthenticationPrincipal UserDetailsImpl user,
             @RequestBody @Valid DeleteAccountRequest request){
 
         log.info("CONTROLLER PROFILE DELETE /delete/me — userId={}", user.getUserId());
 
-        deleteAccountUseCase.execute(user.getUserId(), request.currentPassword());
+        boolean stillProfessional = deleteAccountUseCase.execute(user.getUserId(), request.currentPassword());
 
-        return ResponseEntity.noContent().build();
+        // DEC-182: 200 com corpo (antes 204) — o app escolhe a tela de destino por still_professional.
+        return ResponseEntity.ok(java.util.Map.of("still_professional", stillProfessional));
     }
 
     /**

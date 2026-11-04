@@ -6,7 +6,7 @@ import com.ospaulos.vupth.api.user.exception.UserNotFoundException;
 import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
 import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentAccessDeniedException;
-import com.ospaulos.vupth.domain.establishment.exception.EstablishmentHasActiveAttendancesException;
+import com.ospaulos.vupth.domain.establishment.exception.EstablishmentDeleteBlockedException;
 import com.ospaulos.vupth.domain.establishment.exception.EstablishmentNotFoundException;
 import com.ospaulos.vupth.domain.establishment.model.Establishment;
 import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
@@ -68,18 +68,11 @@ public class DeleteEstablishmentUseCase {
         if (!passwordEncoder.matches(currentPassword, owner.getPassword())) {
             throw new InvalidCurrentPasswordException();
         }
-        if (attendanceRepository.existsByEstablishment_IdAndStatusIn(establishmentId, LIVE)) {
-            throw new EstablishmentHasActiveAttendancesException(establishmentId);
-        }
+        assertNothingBlocks(establishmentId, ownerId);
 
-        String formerName = establishment.getName();
+        // so o dono pode estar vinculado agora (DEC-173): ele sai da loja e segue como profissional sem loja
         for (Professional professional : professionalRepository.findByEstablishmentId(establishmentId)) {
             leaveEstablishmentUseCase.execute(professional.getId());
-            if (!ownerId.equals(professional.getId())) {
-                pushPublisher.notifyUser(professional.getId(), "Loja removida",
-                        "A loja " + formerName + " foi removida pelo dono. Você saiu dela e pode pedir vínculo em outra.",
-                        Map.of("type", REMOVED_TYPE, "establishmentId", String.valueOf(establishmentId)));
-            }
         }
 
         establishment.setStatus(EstablishmentStatus.REMOVED);
@@ -87,5 +80,47 @@ public class DeleteEstablishmentUseCase {
         establishment.setName(REMOVED_NAME);
         establishmentRepository.save(establishment);
         log.info("[DeleteEstablishment] establishment={} REMOVED", establishmentId);
+    }
+
+    /**
+     * DEC-173: 409 com a lista de tudo que impede, em vez de desvincular os profissionais sozinho. Profissionais alem do dono; fila
+     * ativa (em curso, pausado, atrasado ou na fila de hoje); agendamento futuro (marcado para depois de hoje).
+     */
+    private void assertNothingBlocks(UUID establishmentId, UUID ownerId) {
+        List<EstablishmentDeleteBlockedException.Blocker> blockers = new java.util.ArrayList<>();
+
+        List<EstablishmentDeleteBlockedException.Item> others = professionalRepository.findByEstablishmentId(establishmentId).stream()
+                .filter(p -> !ownerId.equals(p.getId()))
+                .map(p -> new EstablishmentDeleteBlockedException.Item(p.getId(), p.getName()))
+                .toList();
+        if (!others.isEmpty()) {
+            blockers.add(new EstablishmentDeleteBlockedException.Blocker(
+                    EstablishmentDeleteBlockedException.PROFESSIONALS, others.size(), others));
+        }
+
+        java.time.OffsetDateTime endOfToday = com.ospaulos.vupth.domain.shared.BusinessClock.endOfDayExclusive(
+                com.ospaulos.vupth.domain.shared.BusinessClock.today());
+        List<EstablishmentDeleteBlockedException.Item> active = new java.util.ArrayList<>();
+        List<EstablishmentDeleteBlockedException.Item> future = new java.util.ArrayList<>();
+        for (var a : attendanceRepository.findByEstablishment_IdAndStatusIn(establishmentId, LIVE)) {
+            var item = new EstablishmentDeleteBlockedException.Item(a.getId(),
+                    a.getClient() != null ? a.getClient().getFirstName() : a.getGuestName());
+            // INTENTION guarda o horario pretendido em desiredTime; SCHEDULED, em scheduledTime
+            java.time.OffsetDateTime planned = a.getStatus() == AttendanceStatus.INTENTION ? a.getDesiredTime() : a.getScheduledTime();
+            boolean later = (a.getStatus() == AttendanceStatus.SCHEDULED || a.getStatus() == AttendanceStatus.INTENTION)
+                    && planned != null && !planned.isBefore(endOfToday);
+            (later ? future : active).add(item);
+        }
+        if (!active.isEmpty()) {
+            blockers.add(new EstablishmentDeleteBlockedException.Blocker(
+                    EstablishmentDeleteBlockedException.ACTIVE_ATTENDANCES, active.size(), active));
+        }
+        if (!future.isEmpty()) {
+            blockers.add(new EstablishmentDeleteBlockedException.Blocker(
+                    EstablishmentDeleteBlockedException.FUTURE_BOOKINGS, future.size(), future));
+        }
+        if (!blockers.isEmpty()) {
+            throw new EstablishmentDeleteBlockedException(establishmentId, blockers);
+        }
     }
 }

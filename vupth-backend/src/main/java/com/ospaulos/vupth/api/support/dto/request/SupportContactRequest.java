@@ -20,6 +20,8 @@ public record SupportContactRequest(
                 message = "categoria deve ser DUVIDA, SUGESTAO, RECLAMACAO, PROBLEMA, PAGAMENTO, ELOGIO, FEEDBACK ou OUTRO")
         String categoria,
         @NotBlank @Size(max = 120) String assunto,
-        @NotBlank @Size(max = 2000) String mensagem
+        @NotBlank @Size(max = 2000) String mensagem,
+        /** Campo-isca anti-robo: escondido no site; gente nao preenche. Preenchido, responde 204 e nao envia. */
+        @Size(max = 200) String website
 ) {
 }

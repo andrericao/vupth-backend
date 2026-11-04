@@ -54,6 +54,8 @@ public class ReportServiceImpl implements ReportService {
     private final ProfessionalShiftRepository shiftRepository;
     private final com.ospaulos.vupth.domain.debt.repository.ProfessionalDebtRepository debtRepository;
     private final com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository;
+    private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
+    private final com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
 
     @Override
     public EstablishmentReportResponse getEstablishmentReport(
@@ -157,7 +159,12 @@ public class ReportServiceImpl implements ReportService {
                 : debtRepository.findByAttendanceIdIn(finished.stream().map(Attendance::getId).toList()).stream()
                 .filter(d -> d.getStatus() == com.ospaulos.vupth.domain.debt.model.DebtStatus.OPEN)
                 .collect(Collectors.groupingBy(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::getAttendanceId));
+        Map<UUID, List<com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse>> penalties = finished.isEmpty() ? Map.of()
+                : clientPenaltyService.chargedTo(finished.stream().map(Attendance::getId).toList());
         List<ProfessionalReportResponse.Cut> cuts = finished.stream().map(a -> {
+            BigDecimal penalty = penalties.getOrDefault(a.getId(), List.of()).stream()
+                    .map(com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse::amount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             List<com.ospaulos.vupth.domain.debt.model.ProfessionalDebt> mine = debts.getOrDefault(a.getId(), List.of());
             BigDecimal real = mine.stream().filter(d -> !d.isSimulated()).map(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -168,7 +175,9 @@ public class ReportServiceImpl implements ReportService {
                     .add(a.getPlatformFee() != null ? a.getPlatformFee() : BigDecimal.ZERO);
             return new ProfessionalReportResponse.Cut(a.getId(), a.getEndTime(), a.getTotalValue(), a.getProReceives(), fees, real, simulated,
                     com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(a.getTotalValue(), a.getProReceives(), a.getDiscount(),
-                            BigDecimal.ZERO, a.getReceivedAmount()));
+                            BigDecimal.ZERO, a.getReceivedAmount()),
+                    com.ospaulos.vupth.api.report.dto.response.ValueComposition.forProfessional(a, penalty, paymentMode.splitPix()),
+                    a.isPaymentDeclared(), a.getPaymentContestedAt() != null);
         }).toList();
         // DEC-127: "a receber" = o repasse do app ainda nao pago (coupon_credit aberto); "a pagar" = a divida real aberta
         BigDecimal toReceive = finished.isEmpty() ? BigDecimal.ZERO

@@ -13,5 +13,6 @@ public interface DeviceTokenService {
     DeviceToken register(UUID userId, String token, String platform);
 
     /** Remove um device token (logout). No-op se nao existir. */
-    void remove(String token);
+    /** Remove o token so se for de {@code userId} (FRAQUEZAS F3: ninguem desliga o push de outro). Idempotente. */
+    void remove(String token, java.util.UUID userId);
 }

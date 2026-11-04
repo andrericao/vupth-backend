@@ -40,6 +40,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private static final long HEARTBEAT_MS = 10_000;
 
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+    private final WsOriginHandshakeInterceptor wsOriginHandshakeInterceptor;
     private final ObjectMapper objectMapper;
 
     /**
@@ -66,8 +67,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws").setAllowedOriginPatterns("*");
-        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
+        // A origem de verdade e conferida no WsOriginHandshakeInterceptor (S22, DEC-180), contra a lista do CORS.
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").addInterceptors(wsOriginHandshakeInterceptor);
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").addInterceptors(wsOriginHandshakeInterceptor).withSockJS();
     }
 
     /**

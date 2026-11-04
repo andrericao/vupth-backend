@@ -33,8 +33,14 @@ public class DeviceTokenServiceImpl implements DeviceTokenService {
     }
 
     @Override
-    public void remove(String token) {
-        deviceTokenRepository.deleteByToken(token);
-        log.info("[PUSH] device token removido");
+    public void remove(String token, UUID userId) {
+        deviceTokenRepository.findByToken(token).ifPresent(existing -> {
+            if (!java.util.Objects.equals(existing.getUserId(), userId)) {
+                log.warn("[PUSH] remocao de device token de outro usuario ignorada (user={})", userId);
+                return;
+            }
+            deviceTokenRepository.delete(existing);
+            log.info("[PUSH] device token removido");
+        });
     }
 }

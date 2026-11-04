@@ -13,6 +13,16 @@ import java.util.UUID;
 
 public interface EstablishmentRepository extends JpaRepository<Establishment, UUID> {
 
+    /** Lojas gravadas como OPEN sem nenhum profissional em WORKING/ON_BREAK — estado velho (loja-so-abre-pelo-app). */
+    @Query("""
+    SELECT e FROM Establishment e
+    WHERE e.openStatus = com.ospaulos.vupth.domain.establishment.valueObject.OpenStatus.OPEN
+      AND NOT EXISTS (SELECT 1 FROM Professional p WHERE p.establishment = e
+                      AND p.workStatus IN (com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus.WORKING,
+                                           com.ospaulos.vupth.domain.professional.valueObject.ProfessionalStatus.ON_BREAK))
+    """)
+    List<Establishment> findOpenWithNobodyWorking();
+
     @Query("SELECT e FROM Establishment e LEFT JOIN FETCH e.addresses WHERE e.id = :id")
     Optional<Establishment> findByIdWithAddresses(@Param("id") UUID id);
 

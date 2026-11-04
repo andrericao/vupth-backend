@@ -35,7 +35,7 @@ public enum AdminPermission {
             return ESTABLISHMENTS;
         }
         if (path.startsWith("/admin/finance") || path.startsWith("/admin/referrals")
-                || path.startsWith("/admin/penalty-payments") || path.startsWith("/admin/multas")
+                || path.startsWith("/admin/penalty-payments") || path.startsWith("/admin/multas") || path.startsWith("/admin/pagamentos-contestados")
                 || path.startsWith("/admin/debts") || path.startsWith("/admin/settings")) {
             return FINANCE;
         }

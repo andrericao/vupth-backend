@@ -113,6 +113,9 @@ public class CampaignService {
         if (redemptionRepository.existsByCampaign_IdAndUserId(campaign.getId(), userId)) {
             throw CampaignException.alreadyRedeemed();
         }
+        if (campaign.getMaxRedemptions() != null) {
+            campaignRepository.lockById(campaign.getId()); // F6: a ultima vaga vai a um so
+        }
         if (soldOut(campaign)) {
             throw CampaignException.soldOut(); // depois do prazo e de quem ja tem o cupom (DEC-124)
         }

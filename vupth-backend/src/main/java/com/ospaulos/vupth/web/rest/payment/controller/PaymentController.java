@@ -101,6 +101,24 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
+    /** pagamento-declarado-contestavel (F4): o cliente confirma o "Recebi" do profissional. Idempotente. */
+    @PostMapping("/attendances/{attendanceId}/payment/acknowledge")
+    public ResponseEntity<PaymentResponse> acknowledge(@PathVariable UUID attendanceId,
+                                                       @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("PAYMENT CONTROLLER ACKNOWLEDGE {} by client={}", attendanceId, principal.getUserId());
+        return ResponseEntity.ok(paymentService.acknowledge(attendanceId, principal.getUserId()));
+    }
+
+    /** pagamento-declarado-contestavel (F4): o cliente contesta o "Recebi"; abre pendencia visivel ao ADMIN e ao relatorio. */
+    @PostMapping("/attendances/{attendanceId}/payment/contest")
+    public ResponseEntity<PaymentResponse> contest(@PathVariable UUID attendanceId,
+                                                   @RequestBody(required = false)
+                                                   @jakarta.validation.Valid com.ospaulos.vupth.api.payment.dto.request.ContestPaymentRequest body,
+                                                   @AuthenticationPrincipal UserDetailsImpl principal) {
+        log.info("PAYMENT CONTROLLER CONTEST {} by client={}", attendanceId, principal.getUserId());
+        return ResponseEntity.ok(paymentService.contest(attendanceId, principal.getUserId(), body == null ? null : body.reason()));
+    }
+
     @GetMapping("/clients/me/pending-payments")
     public ResponseEntity<PendingPaymentsResponse> pendingOfClient(@AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.ok(paymentService.pendingOfClient(principal.getUserId()));

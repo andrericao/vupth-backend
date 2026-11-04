@@ -200,7 +200,7 @@ public class PaymentService {
         if (attendance.getPaymentStatus() == PaymentStatus.PAID) {
             throw new PaymentInvalidStatusException(PaymentStatus.PAID, "confirmar");
         }
-        markPaid(attendance, method, receivedAmount);
+        markPaid(attendance, method, receivedAmount, userId);
         cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi — attendance={} by={} forma={}", attendanceId, userId, method);
         return toPayment(attendance, isClient(attendance, userId));
@@ -224,6 +224,52 @@ public class PaymentService {
         attendanceRepository.save(attendance);
         log.info("[Payment] Nao recebi — attendance={} by={}", attendanceId, userId);
         return toPayment(attendance, isClient(attendance, userId));
+    }
+
+    /**
+     * pagamento-declarado-contestavel (F4): o cliente confirma que pagou o que o profissional marcou como recebido. Idempotente.
+     * So vale para o PAID marcado por uma pessoa (o quitado pelo gateway nao precisa de confirmacao).
+     */
+    public PaymentResponse acknowledge(UUID attendanceId, UUID userId) {
+        Attendance attendance = declaredOfClient(attendanceId, userId, "confirmar");
+        if (attendance.getPaymentClientAckAt() == null) {
+            attendance.setPaymentClientAckAt(OffsetDateTime.now(clock));
+            attendance.setPaymentContestedAt(null);
+            attendance.setPaymentContestReason(null);
+            attendanceRepository.save(attendance);
+            log.info("[Payment] cliente confirmou o Recebi — attendance={} client={}", attendanceId, userId);
+        }
+        return toPayment(attendance, true);
+    }
+
+    /**
+     * pagamento-declarado-contestavel (F4): o cliente contesta o "Recebi" ("eu nao paguei"). O pagamento segue PAID (o atendimento
+     * nao reabre), mas fica declarado e a contestacao abre uma pendencia visivel ao ADMIN e ao relatorio. Confirmado antes, nao contesta.
+     */
+    public PaymentResponse contest(UUID attendanceId, UUID userId, String reason) {
+        Attendance attendance = declaredOfClient(attendanceId, userId, "contestar");
+        if (attendance.getPaymentClientAckAt() != null) {
+            throw new PaymentInvalidStatusException(attendance.getPaymentStatus(), "contestar um pagamento que o cliente ja confirmou");
+        }
+        attendance.setPaymentContestedAt(OffsetDateTime.now(clock));
+        String trimmed = reason == null ? "" : reason.replaceAll("[\\r\\n]+", " ").trim();
+        attendance.setPaymentContestReason(trimmed.isEmpty() ? null : trimmed.substring(0, Math.min(trimmed.length(), 300)));
+        attendanceRepository.save(attendance);
+        log.warn("[Payment] cliente CONTESTOU o Recebi — attendance={} client={} marcadoPor={}", attendanceId, userId,
+                attendance.getPaymentMarkedBy());
+        return toPayment(attendance, true);
+    }
+
+    private Attendance declaredOfClient(UUID attendanceId, UUID userId, String action) {
+        Attendance attendance = attendance(attendanceId);
+        if (!isClient(attendance, userId)) {
+            throw new PaymentAccessDeniedException("So o cliente do atendimento confirma ou contesta o pagamento.");
+        }
+        assertAvailable(attendance);
+        if (attendance.getPaymentStatus() != PaymentStatus.PAID || attendance.getPaymentMarkedBy() == null) {
+            throw new PaymentInvalidStatusException(attendance.getPaymentStatus(), action);
+        }
+        return attendance;
     }
 
     /** Quitado a mao: cancela a cobranca do Asaas, se houver (uma via anula a outra). */
@@ -255,7 +301,7 @@ public class PaymentService {
         if (current == null || current == PaymentStatus.PAID) {
             return false;
         }
-        markPaid(attendance, method, receivedAmount);
+        markPaid(attendance, method, receivedAmount, userId);
         cancelGatewayCharge(attendance);
         log.info("[Payment] Recebi no Finalizar — attendance={} by={} forma={}", attendanceId, userId, method);
         return true;
@@ -469,6 +515,17 @@ public class PaymentService {
     }
 
     private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method, BigDecimal receivedAmount) {
+        markPaid(attendance, method, receivedAmount, null);
+    }
+
+    /** {@code markedBy}: quem tocou "Recebi" (nulo = quitado pelo gateway, sem pessoa). Grava tambem o aparelho (F4). */
+    private void markPaid(Attendance attendance, com.ospaulos.vupth.domain.payment.PaymentMethod method, BigDecimal receivedAmount,
+                          UUID markedBy) {
+        attendance.setPaymentMarkedBy(markedBy);
+        attendance.setPaymentMarkedDevice(markedBy == null ? null : com.ospaulos.vupth.domain.payment.RequestDevice.current());
+        attendance.setPaymentClientAckAt(null);
+        attendance.setPaymentContestedAt(null);
+        attendance.setPaymentContestReason(null);
         if (receivedAmount != null && receivedAmount.signum() >= 0) {
             attendance.setReceivedAmount(receivedAmount.setScale(2, java.math.RoundingMode.HALF_UP));
         }
@@ -565,7 +622,9 @@ public class PaymentService {
                 attendance.getPaymentMethod(),
                 hasKey && forClient ? keyOwner.getPixKey() : null,
                 gatewayOf(attendance, forClient),
-                breakdownOf(attendance, realPenalties));
+                breakdownOf(attendance, realPenalties),
+                attendance.isPaymentDeclared(),
+                attendance.getPaymentContestedAt() != null);
     }
 
     /** DEC-127: a conta do desconto; pelo Asaas o profissional recebe o split e o app repassa o resto (fatia 2 do gateway). */

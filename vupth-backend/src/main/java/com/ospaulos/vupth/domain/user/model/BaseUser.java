@@ -65,7 +65,9 @@ public class BaseUser implements Serializable {
     @Column(name = "password", nullable = false, length = 72)
     private String password;
 
-    @Column(name = "phone", length = 20)
+    /** Cifrado no banco (DEC-181, AES-256-GCM, ver {@code DataCipher}); a API segue devolvendo o texto. */
+    @Convert(converter = com.ospaulos.vupth.infrastructure.crypto.EncryptedStringConverter.class)
+    @Column(name = "phone", length = 400)
     private String phone;
 
     @Past
@@ -131,6 +133,15 @@ public class BaseUser implements Serializable {
     @Convert(converter = com.ospaulos.vupth.infrastructure.crypto.EncryptedStringConverter.class)
     @Column(name = "pix_holder_name", length = 400)
     private String pixHolderName;
+
+    /**
+     * CPF (so digitos, 11), opcional (cpf-do-profissional-opcional, DEC-164). Cifrado no banco; nunca em log nem em
+     * Sentry; a API so o devolve mascarado, e so ao proprio.
+     */
+    @JsonIgnore
+    @Convert(converter = com.ospaulos.vupth.infrastructure.crypto.EncryptedStringConverter.class)
+    @Column(name = "cpf", length = 400)
+    private String cpf;
 
     @JsonIgnore
     @OneToOne(mappedBy = "baseUser",

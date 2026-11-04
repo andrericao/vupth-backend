@@ -339,6 +339,65 @@
      "response": []
     },
     {
+     "name": "DEC-179 chave desligada: login com X-Auth-Mode cookie -> 200, tokens no corpo, nenhum cookie",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"tokens no corpo (o modo cookie so liga com a chave, DEC-179)\", () => pm.expect(pm.response.json().tokens.access_token).to.be.a(\"string\").and.not.empty);",
+         "pm.test(\"nenhum Set-Cookie\", () => pm.expect(pm.response.headers.has(\"Set-Cookie\")).to.be.false);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "X-Auth-Mode",
+        "value": "cookie"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{owner_email}}\", \"password\": \"{{owner_password}}\"}"
+      },
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
+     "name": "DEC-179 chave desligada: POST /auth/web/refresh -> 404",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 404\", () => pm.response.to.have.status(404));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": "{{base_url}}/auth/web/refresh",
+      "auth": {
+       "type": "noauth"
+      }
+     }
+    },
+    {
      "name": "complete profile (owner)",
      "event": [
       {
@@ -7892,9 +7951,14 @@
          "  const b = pm.response.json();",
          "  pm.expect(b.total, \"total\").to.be.a(\"number\");",
          "  pm.expect(b.penalties, \"penalties\").to.be.an(\"array\");",
+         "  // DEC-175: as multas carregam na virada; o total separa o periodo de teste do cobrado pelo app",
+         "  pm.expect(b.testTotal, \"testTotal\").to.be.a(\"number\");",
+         "  pm.expect(b.appTotal, \"appTotal\").to.be.a(\"number\");",
+         "  pm.expect(Math.abs(b.testTotal + b.appTotal - b.total), \"testTotal + appTotal = total\").to.be.below(0.001);",
          "  b.penalties.forEach(p => {",
          "    pm.expect(p).to.include.keys(\"penaltyId\", \"type\", \"amount\",",
-         "      \"originAttendanceId\", \"originDate\", \"originProfessionalName\", \"originEstablishmentName\");",
+         "      \"originAttendanceId\", \"originDate\", \"originProfessionalName\", \"originEstablishmentName\", \"testPeriod\");",
+         "    pm.expect(p.testPeriod, \"testPeriod\").to.be.a(\"boolean\");",
          "    // DEC-94: o cliente nunca ve a taxa do gateway nem a parte do app",
          "    pm.expect(p).to.not.have.any.keys(\"gatewayFee\", \"appShare\");",
          "  });",
@@ -24481,7 +24545,8 @@
        "script": {
         "exec": [
          "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_id\", pm.response.json().id);"
+         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_id\", pm.response.json().id);",
+         "if(pm.response.code===201) pm.collectionVariables.set(\"geo_estab_name\", pm.response.json().name);"
         ],
         "type": "text/javascript"
        }
@@ -24572,7 +24637,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}",
       "auth": {
        "type": "noauth"
       }
@@ -24600,7 +24665,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&radiusKm=1",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&radiusKm=1",
       "auth": {
        "type": "noauth"
       }
@@ -24626,7 +24691,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8422&lng=-43.2764",
       "auth": {
        "type": "noauth"
       }
@@ -24657,7 +24722,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8833&lng=-43.1036",
       "auth": {
        "type": "noauth"
       }
@@ -24738,7 +24803,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764&radiusKm=1",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8422&lng=-43.2764&radiusKm=1",
       "auth": {
        "type": "noauth"
       }
@@ -24763,7 +24828,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8833&lng=-43.1036&radiusKm=1",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8833&lng=-43.1036&radiusKm=1",
       "auth": {
        "type": "noauth"
       }
@@ -24887,7 +24952,7 @@
      "request": {
       "method": "GET",
       "header": [],
-      "url": "{{base_url}}/establishment?includeAll=true&lat=-22.8422&lng=-43.2764",
+      "url": "{{base_url}}/establishment?includeAll=true&name={{geo_estab_name}}&lat=-22.8422&lng=-43.2764",
       "auth": {
        "type": "noauth"
       }
@@ -25311,11 +25376,18 @@
        "listen": "test",
        "script": {
         "exec": [
+         "// Com o teto da vitrine (SHOWCASE_MAX_ITEMS) e o banco do Newman acumulando lojas, a loja nova pode passar da 200a posicao.",
+         "// Por isso compara com a listagem sem filtro: city e uf em branco nao podem cortar nada.",
          "const lista = pm.response.json();",
-         "const minha = lista.find(e => e.id === pm.collectionVariables.get(\"loc_estab_id\"));",
          "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-         "pm.test(\"a loja aparece\", () => pm.expect(minha).to.exist);",
-         "pm.test(\"a lista veio cheia\", () => pm.expect(lista.length).to.be.above(0));"
+         "pm.test(\"a lista veio cheia\", () => pm.expect(lista.length).to.be.above(0));",
+         "pm.sendRequest({ url: pm.variables.replaceIn(\"{{base_url}}/establishment?includeAll=true\"), method: \"GET\",",
+         "  header: { Authorization: pm.request.headers.get(\"Authorization\") || \"\" } }, (err, res) => {",
+         "  pm.test(\"mesma lista que sem filtro (o branco e ignorado)\", () => {",
+         "    pm.expect(err).to.be.null;",
+         "    pm.expect(lista.length).to.eql(res.json().length);",
+         "  });",
+         "});"
         ],
         "type": "text/javascript"
        }
@@ -26083,13 +26155,14 @@
      "response": []
     },
     {
-     "name": "cliente apaga a conta -> 204",
+     "name": "cliente apaga a conta -> 200 (still_professional)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+         "pm.test(\"Status 200 - DEC-182\", () => pm.response.to.have.status(200));",
+         "pm.test(\"still_professional e booleano no corpo (DEC-182)\", () => pm.expect(pm.response.json().still_professional).to.be.a(\"boolean\"));"
         ],
         "type": "text/javascript"
        }
@@ -26337,13 +26410,14 @@
      "response": []
     },
     {
-     "name": "dono apaga a conta -> 204 (loja sem fila viva)",
+     "name": "dono apaga a conta -> 200 (still_professional) (loja sem fila viva)",
      "event": [
       {
        "listen": "test",
        "script": {
         "exec": [
-         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+         "pm.test(\"Status 200 - DEC-182\", () => pm.response.to.have.status(200));",
+         "pm.test(\"still_professional e booleano no corpo (DEC-182)\", () => pm.expect(pm.response.json().still_professional).to.be.a(\"boolean\"));"
         ],
         "type": "text/javascript"
        }
@@ -27551,6 +27625,41 @@
      "response": []
     },
     {
+     "name": "[OK] POST /support/contact com o campo-isca website preenchido → 204 sem enviar (contato-do-suporte, DEC-169)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "// Robo: o campo-isca vem preenchido. Responde 204 como se tivesse enviado, mas nada sai (nao gasta e-mail nem cota).",
+         "// O 429 do teto diario nao entra aqui: exigiria 5 envios reais por rodada; fica no SupportContactQuotaTest.",
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));",
+         "pm.test(\"corpo vazio (nunca devolve o destino)\", () => pm.expect(pm.response.text()).to.eql(\"\"));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\"nome\": \"Newman\", \"email\": \"newman@vupth.test\", \"perfil\": \"cliente\", \"categoria\": \"DUVIDA\", \"assunto\": \"Teste\", \"mensagem\": \"Oi\", \"website\": \"http://spam.example\"}"
+      },
+      "url": "{{base_url}}/support/contact",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "[ERRO] POST /support/articles/{slug}/vote com slug fora do formato → 422 (voto-do-artigo)",
      "event": [
       {
@@ -28614,6 +28723,713 @@
    ]
   },
   {
+   "name": "28 - exclusao: ciclo completo da loja e da conta (exclusao-no-newman, DEC-166/173)",
+   "item": [
+    {
+     "name": "register (dono) — e-mail do ciclo",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_owner_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "prerequest",
+       "script": {
+        "exec": [
+         "pm.collectionVariables.set(\"ex_owner_email\", \"excl_dono_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"ex_emp_email\", \"excl_func_\" + Date.now() + \"@vupth.test\");",
+         "pm.collectionVariables.set(\"ex_password\", \"Senha@123\");"
+        ],
+        "type": "text/javascript"
+       }
+      },
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.collectionVariables.set(\"ex_owner_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "login (dono)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_owner_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.collectionVariables.set(\"ex_owner_token\", r.tokens.access_token);",
+         "pm.collectionVariables.set(\"ex_owner_refresh\", r.tokens.refresh_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "cria a loja (quick-create)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\": \"Loja Exclusao {{$timestamp}}\", \"serviceType\": \"BARBER\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.collectionVariables.set(\"ex_estab_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono vira profissional da propria loja (loja de um profissional so)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/quick-create",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\": \"Dono Profissional\", \"specialty\": \"Barber\", \"establishmentId\": \"{{ex_estab_id}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "refresh do token (agora com o papel de profissional)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/refresh",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"refresh_token\": \"{{ex_owner_refresh}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.collectionVariables.set(\"ex_owner_token\", pm.response.json().access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "register (funcionario)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_emp_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "login (funcionario)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_emp_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.collectionVariables.set(\"ex_emp_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "funcionario vira profissional (sem loja)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_emp_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"name\": \"Funcionario Exclusao\", \"specialty\": \"Barber\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+         "pm.collectionVariables.set(\"ex_emp_prof_id\", pm.response.json().id);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono vincula o funcionario a loja",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ex_estab_id}}/professionals",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"professionalId\": \"{{ex_emp_prof_id}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] apagar a loja com o funcionario vinculado -> 409 ESTABLISHMENT_HAS_PROFESSIONALS com a lista (DEC-173)",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ex_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 409\", () => pm.response.to.have.status(409));",
+         "const r = pm.response.json();",
+         "pm.test(\"code ESTABLISHMENT_HAS_PROFESSIONALS\", () => pm.expect(r.code).to.eql(\"ESTABLISHMENT_HAS_PROFESSIONALS\"));",
+         "pm.test(\"blockers lista o funcionario\", () => { pm.expect(r.blockers[0].count).to.eql(1); pm.expect(r.blockers[0].items[0].id).to.eql(pm.collectionVariables.get(\"ex_emp_prof_id\")); });"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "dono remove o funcionario da loja (so desfaz o vinculo)",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ex_estab_id}}/professionals/{{ex_emp_prof_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 2xx\", () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "apaga a loja (dono unico) -> 204",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/establishment/{{ex_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "a loja fica REMOVED, 'Loja removida' (o historico continua; nada de dado vivo)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/establishment/id/{{ex_estab_id}}",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "const r = pm.response.json();",
+         "pm.test(\"status REMOVED e nome Loja removida\", () => { pm.expect(r.status).to.eql(\"REMOVED\"); pm.expect(r.name).to.eql(\"Loja removida\"); });",
+         "pm.test(\"fechada\", () => pm.expect(r.open_status).to.eql(\"CLOSED\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "a conta do funcionario segue de pe (so saiu da loja)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_emp_token}}"
+       }
+      ],
+      "url": "{{base_url}}/professional/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"sem loja\", () => pm.expect(pm.response.json().establishment_id).to.be.oneOf([null, undefined]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "apaga a conta do dono -> 200 (still_professional)",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - DEC-182\", () => pm.response.to.have.status(200));",
+         "pm.test(\"still_professional e booleano no corpo (DEC-182)\", () => pm.expect(pm.response.json().still_professional).to.be.a(\"boolean\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "apaga a conta do funcionario -> 200 (still_professional)",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_emp_token}}"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - DEC-182\", () => pm.response.to.have.status(200));",
+         "pm.test(\"still_professional e booleano no corpo (DEC-182)\", () => pm.expect(pm.response.json().still_professional).to.be.a(\"boolean\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "[ERRO] login da conta apagada -> recusado",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_owner_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"recusado (4xx)\", () => pm.expect(pm.response.code).to.be.within(400, 499));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "o mesmo e-mail cadastra de novo -> 201 (e-mail reutilizavel)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/register",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_owner_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 201\", () => pm.response.to.have.status(201));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "login do e-mail reutilizado",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/auth/login",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"email\": \"{{ex_owner_email}}\", \"password\": \"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.collectionVariables.set(\"ex_owner_token\", pm.response.json().tokens.access_token);"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    },
+    {
+     "name": "limpeza: apaga a conta reutilizada -> 200 (still_professional)",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ex_owner_token}}"
+       }
+      ],
+      "url": "{{base_url}}/profile/delete/me",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"current_password\":\"{{ex_password}}\"}"
+      }
+     },
+     "response": [],
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200 - DEC-182\", () => pm.response.to.have.status(200));",
+         "pm.test(\"still_professional e booleano no corpo (DEC-182)\", () => pm.expect(pm.response.json().still_professional).to.be.a(\"boolean\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
    "name": "99 - cleanup",
    "item": [
     {
@@ -29285,6 +30101,10 @@
   },
   {
    "key": "attendance_id_pix2",
+   "value": ""
+  },
+  {
+   "key": "geo_estab_name",
    "value": ""
   }
  ],

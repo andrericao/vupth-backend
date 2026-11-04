@@ -26,6 +26,10 @@ public class UpdateEmailUseCase {
     private final UserRepository repository;
     private final UtilsTokens utilsTokens;
 
+    /** F1: o e-mail antigo e avisado da troca (a porta lateral da conta tomada). Opcional nos testes de unidade. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.mail.AccountSecurityNotifier securityNotifier;
+
     @Transactional
     public UserProfileGeneralInfosAndToken executeUpdateEmail(UUID id, EmailRequest request){
 
@@ -40,10 +44,14 @@ public class UpdateEmailUseCase {
             throw new EmailsAreTheSameException();
         }
 
+        String oldEmail = user.getEmail();
         user.setEmail(request.email());
         repository.save(user);
 
         RefreshTokenResponse tokensResponse = utilsTokens.rotateTokens(user);
+        if (securityNotifier != null) {
+            securityNotifier.emailChanged(oldEmail, user.getEmail());
+        }
 
         log.info("UPDATE E-MAIL USERCASE - " + LogMask.email(user.getEmail()));
 

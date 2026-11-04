@@ -8,6 +8,9 @@ import com.ospaulos.vupth.domain.admin.service.AdminTotpService;
 import com.ospaulos.vupth.infrastructure.mail.EmailSender;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
 import com.ospaulos.vupth.infrastructure.security.jwt.token.JwtTokenProvider;
+import com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +45,7 @@ public class AdminAuthController {
     private final JwtTokenProvider tokens;
     private final EmailSender emailSender;
     private final AdminPermissionRepository permissionRepository;
+    private final WebCookieAuth webCookieAuth;
 
     public record Status(
             @JsonProperty("totp_enabled") boolean totpEnabled,
@@ -77,16 +81,33 @@ public class AdminAuthController {
 
     @PostMapping("/totp/confirm")
     public ResponseEntity<TokenResponse> confirm(@AuthenticationPrincipal UserDetailsImpl user,
-                                                 @RequestBody @Valid AdminTotpRequest request) {
+                                                 @RequestBody @Valid AdminTotpRequest request,
+                                                 HttpServletRequest http,
+                                                 HttpServletResponse httpResponse) {
         List<String> recovery = totp.confirm(user.getUserId(), request.code());
-        return ResponseEntity.ok(issue(user, recovery));
+        return ResponseEntity.ok(toWeb(issue(user, recovery), http, httpResponse));
     }
 
     @PostMapping("/totp/verify")
     public ResponseEntity<TokenResponse> verify(@AuthenticationPrincipal UserDetailsImpl user,
-                                                @RequestBody @Valid AdminTotpRequest request) {
+                                                @RequestBody @Valid AdminTotpRequest request,
+                                                HttpServletRequest http,
+                                                HttpServletResponse httpResponse) {
         totp.verify(user.getUserId(), request.code());
-        return ResponseEntity.ok(issue(user, null));
+        return ResponseEntity.ok(toWeb(issue(user, null), http, httpResponse));
+    }
+
+    /**
+     * token-web-httponly (DEC-179, pedido do Painel): no modo cookie o token do painel vai so no cookie HttpOnly de acesso e sai do
+     * corpo (os codigos de recuperacao continuam no corpo, mostrados uma vez). Chave desligada ou sem pedir: igual a antes.
+     */
+    private TokenResponse toWeb(TokenResponse issued, HttpServletRequest http,
+                                HttpServletResponse httpResponse) {
+        if (!webCookieAuth.wants(http)) {
+            return issued;
+        }
+        webCookieAuth.writeAccess(httpResponse, issued.accessToken(), issued.expiresIn());
+        return new TokenResponse(null, issued.expiresIn(), issued.recoveryCodes());
     }
 
     private TokenResponse issue(UserDetailsImpl user, List<String> recovery) {

@@ -50,6 +50,7 @@ public class AuthController {
     private final AccountDeletionLinkUseCase accountDeletionLinkUseCase;
     private final AccessLogService accessLogService;
     private final AccessOrigin accessOrigin;
+    private final com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth webCookieAuth;
 
     @PostMapping("/register")
     public ResponseEntity<UserRegisterResponse> register(@RequestBody @Valid UserRegisterRequest request) throws JsonProcessingException {
@@ -63,7 +64,8 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<UserProfileGeneralInfosAndToken> login(@RequestBody @Valid LoginRequest request,
-                                                                 HttpServletRequest http){
+                                                                 HttpServletRequest http,
+                                                                 jakarta.servlet.http.HttpServletResponse httpResponse){
 
         log.info("CONTROLLER AUTH 1 - LOGIN() BEGIN");
 
@@ -73,9 +75,41 @@ public class AuthController {
             accessLogService.recordLogin(response.user().id(), accessOrigin.ip(http), accessOrigin.port(http));
         }
 
-        //log.info("Test: " + response.tokens().accessToken());
+        // token-web-httponly (DEC-179): a web pede X-Auth-Mode: cookie e recebe os tokens so em cookie HttpOnly (o corpo sai sem eles)
+        if (webCookieAuth.wants(http) && response.tokens() != null) {
+            webCookieAuth.write(httpResponse, response.tokens());
+            response = new UserProfileGeneralInfosAndToken(response.user(), null, response.deactivated());
+        }
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    /** DEC-179: renova a sessao da web pelo cookie de refresh; devolve so os cookies novos (204). Chave desligada: 404. */
+    @PostMapping("/web/refresh")
+    public ResponseEntity<Void> webRefresh(HttpServletRequest http, jakarta.servlet.http.HttpServletResponse httpResponse) {
+        if (!webCookieAuth.enabled()) {
+            return ResponseEntity.notFound().build();
+        }
+        String refresh = com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth
+                .read(http, com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth.REFRESH)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sem sessao da web."));
+        RefreshTokenResponse tokens = refreshTokenUseCase.execute(new RefreshTokenRequest(refresh));
+        accessLogService.recordRefresh(tokens.refreshToken(), accessOrigin.ip(http), accessOrigin.port(http));
+        webCookieAuth.write(httpResponse, tokens);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** DEC-179: encerra a sessao da web (a do cookie) e apaga os cookies. Idempotente (204). Chave desligada: 404. */
+    @PostMapping("/web/logout")
+    public ResponseEntity<Void> webLogout(HttpServletRequest http, jakarta.servlet.http.HttpServletResponse httpResponse) {
+        if (!webCookieAuth.enabled()) {
+            return ResponseEntity.notFound().build();
+        }
+        com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth
+                .read(http, com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth.REFRESH)
+                .ifPresent(refresh -> logoutUseCase.execute(new LogoutRequest(refresh)));
+        webCookieAuth.clear(httpResponse);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/refresh")

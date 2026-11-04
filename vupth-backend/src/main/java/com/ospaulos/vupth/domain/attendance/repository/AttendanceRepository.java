@@ -381,6 +381,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
 
     boolean existsByEstablishment_IdAndStatusIn(UUID establishmentId, List<AttendanceStatus> statuses);
 
+    /** excluir-loja-com-profissionais (DEC-173): os atendimentos vivos da loja, para dizer o que impede de apagar. */
+    List<Attendance> findByEstablishment_IdAndStatusIn(UUID establishmentId, List<AttendanceStatus> statuses);
+
     /**
      * Item #38 — invariante do duplo ingresso: este cliente ja tem atendimento OCUPADO com este
      * profissional? Chamada no {@code createAttendance}, antes de qualquer escrita.

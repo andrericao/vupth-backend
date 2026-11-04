@@ -29,6 +29,13 @@ public class ResetPasswordUseCase {
     private final PasswordResetCodeRepository resetCodeRepository;
     private final PasswordEncoder passwordEncoder;
 
+    /** F1: a senha redefinida derruba as sessoes antigas (quem tomou a conta perde o refresh). Opcional nos testes de unidade. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.security.jwt.token.RefreshTokenProvider refreshTokenProvider;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.infrastructure.mail.AccountSecurityNotifier securityNotifier;
+
     @Transactional
     public void execute(ResetPasswordRequest request) {
         // A senha nova fora da regra nao gasta tentativa do codigo
@@ -69,6 +76,13 @@ public class ResetPasswordUseCase {
 
         reset.setConsumed(true);
         resetCodeRepository.save(reset);
+
+        if (refreshTokenProvider != null) {
+            refreshTokenProvider.revokeAllUserTokens(user.getId());
+        }
+        if (securityNotifier != null) {
+            securityNotifier.passwordChanged(user.getEmail());
+        }
 
         log.info("[reset-password] senha redefinida com sucesso para o usuário {}", user.getId());
     }

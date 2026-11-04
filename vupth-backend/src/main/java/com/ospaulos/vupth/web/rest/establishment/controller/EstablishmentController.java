@@ -87,6 +87,7 @@ public class EstablishmentController {
     private final QueueWebSocketPublisher                queuePublisher;
     private final com.ospaulos.vupth.api.establishment.usecase.ListEstablishmentProfessionalsUseCase listProfessionalsUseCase;
     private final com.ospaulos.vupth.domain.establishment.service.EstablishmentPhotoService establishmentPhotoService;
+    private final com.ospaulos.vupth.domain.establishment.service.ShowcaseMetrics showcaseMetrics;
 
     @GetMapping("/mine")
     public ResponseEntity<List<EstablishmentResponse>> findMyEstablishments(
@@ -199,13 +200,16 @@ public class EstablishmentController {
         if (pagination != null) {
             return ResponseEntity.ok(EstablishmentPageResponse.of(result, pagination));
         }
-        return ResponseEntity.ok(result);
+        // DEC-176: sem page/size, a lista tem teto (configuracao) e o tamanho devolvido vira metrica
+        return ResponseEntity.ok(showcaseMetrics.cap(result));
     }
 
     @GetMapping("id/{id}")
-    public ResponseEntity<EstablishmentResponse> findById(@PathVariable UUID id) {
+    public ResponseEntity<EstablishmentResponse> findById(@PathVariable UUID id,
+            @RequestParam(name = "list_position", required = false) Integer listPosition) {
         log.info("[Establishment] findById — id={}", id);
         EstablishmentResponse establishment = service.findById(id);
+        showcaseMetrics.opened(listPosition); // DEC-176: a posicao da loja na lista, quando o app a envia (so loja que existe)
         return ResponseEntity.status(HttpStatus.OK).body(establishment);
     }
 
@@ -216,9 +220,11 @@ public class EstablishmentController {
      */
     @GetMapping("id/{id}/professionals-with-queue")
     public ResponseEntity<EstablishmentWithProfessionalsResponse> findWithQueue(
-            @PathVariable UUID id) {
+            @PathVariable UUID id,
+            @RequestParam(name = "list_position", required = false) Integer listPosition) {
         log.info("[Establishment] findWithQueue — id={}", id);
         EstablishmentWithProfessionalsResponse response = getWithQueueUseCase.execute(id);
+        showcaseMetrics.opened(listPosition); // DEC-176 (so loja que existe)
         return ResponseEntity.ok(response);
     }
 

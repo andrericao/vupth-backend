@@ -273,14 +273,15 @@ class AccountDeletionIntegrationTest {
 
     @Test
     @Order(20)
-    @DisplayName("DELETE /profile/delete/me — 204 apos sair da fila; base_user anonimizado")
+    @DisplayName("DELETE /profile/delete/me — 200 {still_professional:false} apos sair da fila; base_user anonimizado")
     void delete_clientSuccess() throws Exception {
         mvc.perform(delete("/attendances/" + clientAttendanceId + "/leave-queue")
                         .header("Authorization", client.token()))
                 .andExpect(status().isOk());
 
         MvcResult result = deleteAccount(client.token(), client.password());
-        assertThat(result.getResponse().getStatus()).isEqualTo(204);
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(result.getResponse().getContentAsString()).contains("\"still_professional\":false");
 
         BaseUser deleted = userRepository.findById(UUID.fromString(client.id())).orElseThrow();
         assertThat(deleted.isDeleted()).isTrue();
@@ -389,6 +390,21 @@ class AccountDeletionIntegrationTest {
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         assertThat(refused.getResponse().getContentAsString()).contains("OWNER_MUST_TRANSFER").contains("Apague a loja");
 
+        // excluir-loja-com-profissionais (DEC-173): com outro profissional vinculado a loja nao se apaga (409 com a lista);
+        // o dono o remove da loja (so desfaz o vinculo) e ai apaga
+        mvc.perform(delete("/establishment/{id}", establishmentId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", ownerToken)
+                        .content("{\"current_password\":\"" + ownerPassword + "\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ESTABLISHMENT_HAS_PROFESSIONALS"));
+        for (var linked : professionalRepository.findByEstablishmentId(UUID.fromString(establishmentId))) {
+            if (!linked.getId().toString().equals(ownerId)) {
+                mvc.perform(delete("/establishment/{id}/professionals/{pid}", establishmentId, linked.getId())
+                                .header("Authorization", ownerToken))
+                        .andExpect(status().is2xxSuccessful());
+            }
+        }
         mvc.perform(delete("/establishment/{id}", establishmentId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", ownerToken)
@@ -396,7 +412,8 @@ class AccountDeletionIntegrationTest {
                 .andExpect(status().isNoContent());
 
         MvcResult result = deleteAccount(ownerToken, ownerPassword);
-        assertThat(result.getResponse().getStatus()).isEqualTo(204);
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(result.getResponse().getContentAsString()).contains("still_professional");
 
         Establishment establishment = establishmentRepository
                 .findById(UUID.fromString(establishmentId)).orElseThrow();

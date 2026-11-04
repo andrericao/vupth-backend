@@ -161,6 +161,26 @@ class PushNotificationIntegrationTest {
                 .isEqualTo(UUID.fromString(nova.id()));
     }
 
+    /** FRAQUEZAS F3 (03/11): com o token de acesso de A, apagar o device token de B nao desliga o push de B (204, nada muda). */
+    @Test
+    @Order(11)
+    @DisplayName("F3: DELETE /devices/{token} de outra conta e ignorado (204, o token continua do dono)")
+    void device_deleteDeOutraConta_ignorado() throws Exception {
+        var dono = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var outro = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        String token = "ExponentPushToken[" + UUID.randomUUID() + "]";
+        registerDevice(dono.token(), token, "android");
+
+        mvc.perform(delete("/devices/{token}", token).header("Authorization", outro.token()))
+                .andExpect(status().isNoContent());
+
+        assertThat(deviceTokenRepository.findByToken(token)).as("o push do dono segue ligado").isPresent();
+
+        mvc.perform(delete("/devices/{token}", token).header("Authorization", dono.token()))
+                .andExpect(status().isNoContent());
+        assertThat(deviceTokenRepository.findByToken(token)).isEmpty();
+    }
+
     @Test
     @Order(11)
     @DisplayName("POST /devices sem token -> 401; token em branco -> 422")

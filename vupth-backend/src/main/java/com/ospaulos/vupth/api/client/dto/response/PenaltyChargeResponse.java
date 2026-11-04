@@ -13,6 +13,8 @@ import java.util.UUID;
  *
  * @param amount       o que o cliente paga (3.00 / 5.00)
  * @param originDate   horario do atendimento que gerou a multa
+ * @param testPeriod   multas-carregam-na-virada (DEC-175): a multa nasceu no periodo de teste (o valor vai ao profissional,
+ *                     no Pix do corte); {@code false} = cobrada pelo app, depois da virada do gateway
  */
 public record PenaltyChargeResponse(
         UUID penaltyId,
@@ -21,5 +23,6 @@ public record PenaltyChargeResponse(
         UUID originAttendanceId,
         OffsetDateTime originDate,
         String originProfessionalName,
-        String originEstablishmentName
+        String originEstablishmentName,
+        boolean testPeriod
 ) {}

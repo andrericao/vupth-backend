@@ -44,6 +44,7 @@ class RemoveProfessionalFromEstablishmentUseCaseTest {
     @Mock EstablishmentRepository establishmentRepository;
     @Mock ProfessionalRepository professionalRepository;
     @Mock AttendanceRepository attendanceRepository;
+    @Mock com.ospaulos.vupth.infrastructure.push.PushNotificationPublisher pushPublisher;
 
     @InjectMocks RemoveProfessionalFromEstablishmentUseCase useCase;
 
@@ -84,6 +85,8 @@ class RemoveProfessionalFromEstablishmentUseCaseTest {
 
             assertThat(professional.getEstablishment()).isNull();
             verify(professionalRepository).save(professional);
+            // DEC-173: ele volta a ficar sem loja e recebe um push
+            verify(pushPublisher).notifyUser(eq(PROF_ID), any(), any(), any());
         }
     }
 

@@ -28,6 +28,15 @@ public class AdminReadController {
 
     private final AdminReadService service;
     private final AdminFineService fineService;
+    private final com.ospaulos.vupth.domain.admin.service.AdminContestedPaymentService contestedPaymentService;
+
+    /** pagamento-declarado-contestavel (F4, permissao FINANCE): o cliente contestou o "Recebi" e ainda nao ha confirmacao. */
+    @GetMapping("/pagamentos-contestados")
+    public ResponseEntity<AdminPage<com.ospaulos.vupth.api.admin.dto.AdminContestedPaymentRow>> contestedPayments(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(contestedPaymentService.list(page, size));
+    }
 
     @GetMapping("/users")
     public ResponseEntity<AdminPage<AdminUserRow>> users(

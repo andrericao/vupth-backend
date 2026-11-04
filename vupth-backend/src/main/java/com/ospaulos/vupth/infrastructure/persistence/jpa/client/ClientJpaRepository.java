@@ -25,9 +25,6 @@ public interface ClientJpaRepository extends JpaRepository<Client, UUID> {
     @Query("SELECT c FROM Client c WHERE c.baseUser.isActive = true")
     List<Client> findActiveClients();
 
-    @Query("SELECT c FROM Client c WHERE c.baseUser.phone = :phone")
-    Optional<Client> findByPhone(@Param("phone") String phone);
-
     @Query("SELECT c FROM Client c WHERE c.baseUser.email = :email")
     Optional<Client> findByEmail(@Param("email") String email);
 

@@ -47,6 +47,11 @@ public class RegisterProfessionalUseCase {
         BaseUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException(userId));
 
+        // cpf-do-profissional-opcional (DEC-164): opcional; digitos que nao fecham = 422 antes de criar qualquer coisa
+        if (request.cpf() != null && !request.cpf().isBlank()) {
+            user.setCpf(com.ospaulos.vupth.domain.user.Cpf.normalize(request.cpf().trim()));
+        }
+
         // 2. Already a professional?
         if (user.hasRole(RoleType.PROFESSIONAL)) {
             throw new UserAlreadyProfessionalException(

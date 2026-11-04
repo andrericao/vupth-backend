@@ -33,4 +33,12 @@ public interface CampaignRepository extends JpaRepository<Campaign, UUID> {
         ORDER BY c.endsAt ASC
         """)
     List<Campaign> findRunningOfType(@Param("type") CampaignType type, @Param("now") OffsetDateTime now);
+
+    /**
+     * FRAQUEZAS F6 (03/11): trava a linha da campanha ate o fim da transacao, para dois aceites simultaneos nao passarem juntos
+     * pela ultima vaga (contar e gravar viram uma coisa so).
+     */
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Campaign c WHERE c.id = :id")
+    Optional<Campaign> lockById(@Param("id") UUID id);
 }

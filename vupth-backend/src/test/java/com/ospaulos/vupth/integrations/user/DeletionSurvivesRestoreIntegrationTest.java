@@ -78,7 +78,7 @@ class DeletionSurvivesRestoreIntegrationTest {
         mvc.perform(delete("/profile/delete/me").contentType(MediaType.APPLICATION_JSON)
                         .header("Authorization", user.token())
                         .content(mapper.writeValueAsString(new DeleteAccountRequest(user.password()))))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk());
 
         String hash = AccountDeletionLedgerEntry.hash(userId);
         AccountDeletionLedgerEntry entry = ledgerRepository.findById(hash).orElseThrow();

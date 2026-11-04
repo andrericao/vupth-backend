@@ -750,6 +750,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // fila, e conta-la impediria quem tem intencao para sabado de entrar em qualquer fila
         // durante a semana. Por isso a lista nao e a ACTIVE_STATUSES do DeleteAccountUseCase, que
         // inclui INTENTION — la o que se pergunta e outra coisa ("ha compromisso vivo?").
+        professionalRepository.lockById(professional.getId()); // F7: a checagem e a gravacao abaixo viram uma coisa so
         if (attendanceRepository.existsByClient_IdAndProfessional_IdAndStatusIn(
                 client.getId(), professional.getId(), OCCUPIED_STATUSES)) {
             log.warn("[Attendance] createAttendance — cliente={} ja ocupado com profissional={} (duplo ingresso barrado)",
@@ -1839,9 +1840,15 @@ public class AttendanceServiceImpl implements AttendanceService {
         Set<UUID> rated = attendances.isEmpty() ? Set.of()
                 : attendanceRatingRepository.findRatedAttendanceIds(attendances.stream().map(Attendance::getId).toList());
         return clientWithReasons(attendances.stream()
-                .map(a -> ClientAttendanceResponse.fromEntity(a)
-                        .withPenalties(penalties.getOrDefault(a.getId(), List.of()))
-                        .withRated(rated.contains(a.getId())))
+                .map(a -> {
+                    var charged = penalties.getOrDefault(a.getId(), List.of());
+                    return ClientAttendanceResponse.fromEntity(a)
+                            .withPenalties(charged)
+                            .withRated(rated.contains(a.getId()))
+                            .withComposition(com.ospaulos.vupth.api.report.dto.response.ValueComposition.forClient(a,
+                                    charged.stream().map(com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse::amount)
+                                            .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)));
+                })
                 .collect(Collectors.toList()));
     }
 
