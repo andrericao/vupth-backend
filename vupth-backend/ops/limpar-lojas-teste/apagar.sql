@@ -50,6 +50,7 @@ DELETE FROM establishment_addresses    WHERE establishment_id IN (SELECT id FROM
 DELETE FROM establishment_weekly_hours WHERE establishment_id IN (SELECT id FROM alvo_est);
 DELETE FROM establishment_date_hours   WHERE establishment_id IN (SELECT id FROM alvo_est);
 DELETE FROM email_invitation           WHERE establishment_id IN (SELECT id FROM alvo_est);
+DELETE FROM test_run_store             WHERE establishment_id IN (SELECT id FROM alvo_est);
 DELETE FROM test_run                   WHERE establishment_id IN (SELECT id FROM alvo_est);
 DELETE FROM establishment WHERE id IN (SELECT id FROM alvo_est);
 

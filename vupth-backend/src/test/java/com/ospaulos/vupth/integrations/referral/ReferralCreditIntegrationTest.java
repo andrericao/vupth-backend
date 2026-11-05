@@ -45,6 +45,7 @@ class ReferralCreditIntegrationTest {
     @Autowired UserRepository userRepository;
     @Autowired EstablishmentRepository establishmentRepository;
     @Autowired ProfessionalRepository professionalRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     private final Faker faker = new Faker();
 
@@ -112,8 +113,10 @@ class ReferralCreditIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
 
+        // o cadastro de teste pode vir sem nome: fixa um nome composto para provar que so o primeiro vai na lista
+        jdbc.update("UPDATE base_user SET first_name = 'Ana Maria' WHERE id = ?", UUID.fromString(client.id()));
         cut(pro.id(), establishmentId, client.id(), client.token(), pro.token(), items);
-        String clientFirst = userRepository.findById(UUID.fromString(client.id())).orElseThrow().getFirstName().trim().split(" ")[0];
+        String clientFirst = "Ana";
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
