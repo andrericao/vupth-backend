@@ -21,10 +21,18 @@ import org.springframework.web.bind.annotation.*;
 public class ReferralController {
 
     private final ReferralService referralService;
+    private final com.ospaulos.vupth.domain.referral.service.ReferralCreditListService referralCreditListService;
 
     @GetMapping("/me")
     public ResponseEntity<ReferralMeResponse> me(@AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.ok(referralService.me(principal.getUserId()));
+    }
+
+    /** premio-em-pendentes: os premios de quem chama, um por linha, com o atendimento que os gerou; sem premio, {@code []}. */
+    @GetMapping("/me/credits")
+    public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.ReferralCreditItemResponse>> credits(
+            @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(referralCreditListService.credits(principal.getUserId()));
     }
 
     @PostMapping("/claim")

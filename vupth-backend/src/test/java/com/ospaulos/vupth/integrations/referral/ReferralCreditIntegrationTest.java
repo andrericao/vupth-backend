@@ -107,7 +107,28 @@ class ReferralCreditIntegrationTest {
         mvc.perform(post("/referrals/claim").header("Authorization", client.token())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"" + code + "\"}")).andExpect(status().isOk());
 
+        // premio-em-pendentes: antes do corte, a lista vem vazia
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
         cut(pro.id(), establishmentId, client.id(), client.token(), pro.token(), items);
+        String clientFirst = userRepository.findById(UUID.fromString(client.id())).orElseThrow().getFirstName().trim().split(" ")[0];
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].attendance_id").isNotEmpty())
+                .andExpect(jsonPath("$[0].campaign_id").value(campaignId))
+                .andExpect(jsonPath("$[0].campaign_name").value("Indique e ganhe"))
+                .andExpect(jsonPath("$[0].amount").value(5.0))
+                .andExpect(jsonPath("$[0].share").value("REFERRER"))
+                .andExpect(jsonPath("$[0].status").value("LOCKED"))
+                .andExpect(jsonPath("$[0].client_name").value(clientFirst))
+                .andExpect(jsonPath("$[0].finished_at").isNotEmpty());
+        // o cliente nao recebeu premio: a lista dele e vazia
+        mvc.perform(get("/referrals/me/credits").header("Authorization", client.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.referred_clients").value(1))
                 .andExpect(jsonPath("$.credited_clients").value(1))
@@ -126,6 +147,10 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.pending_release").value(0))
                 .andExpect(jsonPath("$.to_receive").value(5.0));
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("TO_PAY"))
+                .andExpect(jsonPath("$[0].released_at").isNotEmpty());
 
         // O painel ve o que pagar, paga a mao e marca; o "a receber" zera
         String row = "$[?(@.beneficiary_id == '" + pro.id() + "')]";
@@ -143,6 +168,10 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$.code").value("REFERRAL_NOTHING_TO_PAY"));
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.to_receive").value(0));
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$[0].status").value("PAID"))
+                .andExpect(jsonPath("$[0].paid_at").isNotEmpty());
+        mvc.perform(get("/referrals/me/credits")).andExpect(status().isUnauthorized());
         mvc.perform(get("/admin/referrals/payouts").header("Authorization", pro.token()))
                 .andExpect(status().isForbidden());
     }
