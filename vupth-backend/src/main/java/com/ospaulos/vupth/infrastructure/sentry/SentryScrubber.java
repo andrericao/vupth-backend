@@ -63,7 +63,13 @@ public class SentryScrubber implements SentryOptions.BeforeSendCallback {
         return t instanceof org.springframework.web.bind.MethodArgumentNotValidException
                 || t instanceof ConstraintViolationException
                 || t instanceof HttpMessageNotReadableException
-                || t instanceof BindException;
+                || t instanceof BindException
+                || isClientAbort(t);
+    }
+
+    /** O cliente cancelou antes da resposta (Broken pipe): nao e defeito nosso, so ruido no Sentry. */
+    static boolean isClientAbort(Throwable t) {
+        return t instanceof org.springframework.web.context.request.async.AsyncRequestNotUsableException;
     }
 
     /** Texto livre: tira o que parece segredo ou dado pessoal. */

@@ -77,6 +77,7 @@ class AsaasWebhookAndClientTest {
     @DisplayName("webhook: sem token configurado fica desligado; token errado ou ausente e 403; corpo sem evento e invalido")
     void webhookGuards() throws Exception {
         AsaasEventRepository repo = mock(AsaasEventRepository.class);
+        when(repo.insertIgnoringDuplicate(any())).thenReturn(1);
         JsonNode body = json("{\"id\":\"evt_1\",\"event\":\"PAYMENT_RECEIVED\",\"payment\":{\"id\":\"pay_1\"}}");
 
         assertThat(webhook("", repo).receive("x", body)).isEqualTo(Result.DISABLED);
@@ -84,13 +85,14 @@ class AsaasWebhookAndClientTest {
         assertThat(webhook("segredo", repo).receive(null, body)).isEqualTo(Result.FORBIDDEN);
         assertThat(webhook("segredo", repo).receive("segredo", json("{\"id\":\"evt_2\"}"))).isEqualTo(Result.INVALID);
         assertThat(webhook("segredo", repo).receive("segredo", json("{\"event\":\"  \"}"))).isEqualTo(Result.INVALID);
-        verify(repo, never()).save(any());
+        verify(repo, never()).insertIgnoringDuplicate(any());
     }
 
     @Test
     @DisplayName("webhook: grava o evento com valor, liquido, estado e referencia; o reenvio (mesmo id) e ignorado")
     void webhookRecordsAndIgnoresResend() throws Exception {
         AsaasEventRepository repo = mock(AsaasEventRepository.class);
+        when(repo.insertIgnoringDuplicate(any())).thenReturn(1);
         JsonNode body = json("""
                 {"id":"evt_9","event":"PAYMENT_RECEIVED","dateCreated":"2026-10-18 10:00:00","payment":
                  {"id":"pay_9","value":55.9,"netValue":53.91,"status":"RECEIVED","billingType":"PIX","externalReference":"att-1"}}
@@ -99,7 +101,7 @@ class AsaasWebhookAndClientTest {
         assertThat(webhook("segredo", repo).receive("segredo", body)).isEqualTo(Result.OK);
 
         ArgumentCaptor<AsaasEvent> saved = ArgumentCaptor.forClass(AsaasEvent.class);
-        verify(repo).save(saved.capture());
+        verify(repo).insertIgnoringDuplicate(saved.capture());
         AsaasEvent e = saved.getValue();
         assertThat(e.getEventId()).isEqualTo("evt_9");
         assertThat(e.getEvent()).isEqualTo("PAYMENT_RECEIVED");
@@ -113,13 +115,14 @@ class AsaasWebhookAndClientTest {
 
         when(repo.existsByEventId("evt_9")).thenReturn(true);
         assertThat(webhook("segredo", repo).receive("segredo", body)).isEqualTo(Result.DUPLICATE);
-        verify(repo).save(any());
+        verify(repo).insertIgnoringDuplicate(any());
     }
 
     @Test
     @DisplayName("webhook: sem id usa evento+cobranca+data; sem objeto de cobranca ou com valores que nao sao numero grava so o evento; textos longos sao cortados")
     void webhookFallbacks() throws Exception {
         AsaasEventRepository repo = mock(AsaasEventRepository.class);
+        when(repo.insertIgnoringDuplicate(any())).thenReturn(1);
         var service = webhook("segredo", repo);
 
         assertThat(service.receive("segredo", json("{\"event\":\"PAYMENT_CREATED\",\"dateCreated\":\"d\",\"payment\":{\"id\":\"pay_2\",\"value\":\"x\",\"netValue\":null}}")))
@@ -127,7 +130,7 @@ class AsaasWebhookAndClientTest {
         assertThat(service.receive("segredo", json("{\"event\":\"" + "E".repeat(90) + "\"}"))).isEqualTo(Result.OK);
 
         ArgumentCaptor<AsaasEvent> saved = ArgumentCaptor.forClass(AsaasEvent.class);
-        verify(repo, org.mockito.Mockito.times(2)).save(saved.capture());
+        verify(repo, org.mockito.Mockito.times(2)).insertIgnoringDuplicate(saved.capture());
         AsaasEvent first = saved.getAllValues().get(0);
         assertThat(first.getEventId()).isEqualTo("PAYMENT_CREATED:pay_2:d");
         assertThat(first.getValue()).isNull();
@@ -142,6 +145,7 @@ class AsaasWebhookAndClientTest {
     @DisplayName("DEC-119: PAYMENT_RECEIVED e PAYMENT_CONFIRMED quitam o atendimento da cobranca; os outros avisos so atualizam o status; referencia que nao e atendimento so e registrada")
     void webhookConfirmsAttendance() throws Exception {
         AsaasEventRepository repo = mock(AsaasEventRepository.class);
+        when(repo.insertIgnoringDuplicate(any())).thenReturn(1);
         com.ospaulos.vupth.domain.payment.service.PaymentService payments =
                 mock(com.ospaulos.vupth.domain.payment.service.PaymentService.class);
         AsaasWebhookService service = webhook("segredo", repo);
@@ -406,5 +410,15 @@ class AsaasWebhookAndClientTest {
         AsaasClient noKey = new AsaasClient(new AsaasProperties("", "http://localhost:1/sandbox/v3", ""), RestClient.create());
         assertThatThrownBy(() -> noKey.cancelCharge("pay_1")).isInstanceOfSatisfying(
                 AsaasException.class, e -> assertThat(e.getCode()).isEqualTo("ASAAS_NOT_CONFIGURED"));
+    }
+
+    @Test
+    @DisplayName("webhook: evento repetido que chega junto (corrida) nao explode: o banco ignora o segundo e responde DUPLICATE")
+    void webhookRaceIsDuplicate() throws Exception {
+        AsaasEventRepository repo = mock(AsaasEventRepository.class);
+        when(repo.insertIgnoringDuplicate(any())).thenReturn(0);
+        JsonNode body = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree("{\"id\":\"evt_race\",\"event\":\"PAYMENT_RECEIVED\",\"payment\":{\"id\":\"pay_1\"}}");
+        assertThat(webhook("segredo", repo).receive("segredo", body)).isEqualTo(Result.DUPLICATE);
     }
 }

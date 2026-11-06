@@ -176,6 +176,12 @@ public class ProfessionalServiceImpl implements ProfessionalService {
             throw new AttendanceInvalidStatusException(attendance.getStatus(), AttendanceStatus.SCHEDULED);
         }
 
+        // DEC-185: o primeiro agendado do dia so e atrasado depois de horario + 10 min (iniciar antes continua livre).
+        java.time.OffsetDateTime lateFrom = lateArrivalService.firstOfDayLateFrom(attendance, professional);
+        if (lateFrom != null && java.time.OffsetDateTime.now().isBefore(lateFrom)) {
+            throw com.ospaulos.vupth.domain.attendance.exception.NoShowException.lateTooEarly(lateFrom);
+        }
+
         // Cai uma posicao: reposiciona atras do proximo da fila (empurrando o scheduledTime).
         // A fila ja inclui SCHEDULED+LATE ordenada por scheduledTime. Se ja for o ultimo, so vira LATE.
         List<Attendance> waiting = attendanceRepository

@@ -17,6 +17,9 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
 
     boolean existsByClientId(UUID clientId);
 
+    /** Os premios da pessoa, do mais novo ao mais antigo (a lista do Seu dia, premio-em-pendentes). */
+    List<ReferralCredit> findByBeneficiaryIdOrderByCreatedAtDesc(UUID beneficiaryId);
+
     /** Clientes que ja geraram credito na campanha (o limite de pessoas, "as X primeiras"). */
     @Query("SELECT COUNT(DISTINCT c.clientId) FROM ReferralCredit c WHERE c.campaignId = :campaignId")
     long countClientsByCampaign(@Param("campaignId") UUID campaignId);

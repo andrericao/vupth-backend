@@ -399,4 +399,56 @@ class LateArrivalServiceTest {
         verify(penaltyEventRepository).save(event.capture());
         assertThat(event.getValue().getType()).isEqualTo(PenaltyType.LATE_ARRIVAL);
     }
+
+    // ─────────────── DEC-185: primeiro agendado do dia (tolerancia de 10 min, atraso so apos horario + 10)
+
+    private Attendance scheduledFor(OffsetDateTime desired) {
+        Attendance a = attendance(desired);
+        a.setDesiredTime(desired);
+        a.setStatus(AttendanceStatus.SCHEDULED);
+        professionalAttendances.add(a);
+        return a;
+    }
+
+    @Test
+    @DisplayName("DEC-185: primeiro agendado do dia (9:00) -> so e atrasado a partir das 9:10; o 2o agendado segue a regra de sempre")
+    void firstOfDay_lateFromPlusTen() {
+        OffsetDateTime nine = BusinessClock.at(LocalDate.parse("2026-09-25"), LocalTime.parse("09:00"));
+        Attendance first = scheduledFor(nine);
+        Attendance second = scheduledFor(nine.plusMinutes(40));
+
+        assertThat(service.firstOfDayLateFrom(first, professional)).isEqualTo(nine.plusMinutes(10));
+        assertThat(service.firstOfDayLateFrom(second, professional)).isNull();
+        // 9:07: dentro dos 10 min do primeiro -> nao conta (pela regra antiga, 5 min, contaria)
+        assertThat(service.registerLate(first, professional, nine.plusMinutes(7))).isZero();
+        // 9:10: conta
+        assertThat(service.registerLate(first, professional, nine.plusMinutes(10))).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("DEC-185: cancelado ou removido nao ocupa o horario; de outro dia nao conta; sem horario agendado, nulo")
+    void firstOfDay_ignoresCancelledOtherDaysAndWalkIns() {
+        OffsetDateTime nine = BusinessClock.at(LocalDate.parse("2026-09-25"), LocalTime.parse("09:00"));
+        Attendance cancelled = scheduledFor(nine.minusMinutes(30));
+        cancelled.setStatus(AttendanceStatus.CANCELLED);
+        Attendance removed = scheduledFor(nine.minusMinutes(20));
+        removed.setStatus(AttendanceStatus.REMOVED);
+        scheduledFor(nine.minusDays(1)); // ontem mais cedo: outro dia
+        Attendance first = scheduledFor(nine);
+        assertThat(service.firstOfDayLateFrom(first, professional)).isEqualTo(nine.plusMinutes(10));
+
+        Attendance walkIn = attendance(nine);
+        assertThat(service.firstOfDayLateFrom(walkIn, professional)).isNull();
+        assertThat(service.firstOfDayLateFrom(first, null)).isNull();
+    }
+
+    @Test
+    @DisplayName("DEC-185: o 'nao chegou' do primeiro do dia tambem espera horario + 10")
+    void firstOfDay_noShowWaits() {
+        OffsetDateTime nine = BusinessClock.at(LocalDate.parse("2026-09-25"), LocalTime.parse("09:00"));
+        Attendance first = scheduledFor(nine);
+        first.setPromisedTime(null);
+        first.setScheduledTime(nine.minusMinutes(30));
+        assertThat(service.noShowAvailableAt(first, professional, nine.minusMinutes(20))).isEqualTo(nine.plusMinutes(10));
+    }
 }
