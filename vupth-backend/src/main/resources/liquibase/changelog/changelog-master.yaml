@@ -659,3 +659,6 @@ databaseChangeLog:
   - include:
       file: changesets/97-finance/078-app-feature-article.yaml
       relativeToChangeLogFile: true
+  - include:
+      file: changesets/97-finance/079-professional-fee-notice.yaml
+      relativeToChangeLogFile: true

@@ -36,6 +36,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AppFeatureService {
 
+    public static final String ASAAS_SPLIT = "asaas_split";
+    public static final String PROFESSIONAL_PAYS_FEE = "profissional_paga_taxa";
+
     private final AppFeatureRepository features;
     private final AppFeatureHistoryRepository history;
     private final UserRepository users;

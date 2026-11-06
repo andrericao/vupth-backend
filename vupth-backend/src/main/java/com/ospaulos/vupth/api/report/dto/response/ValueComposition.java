@@ -22,8 +22,19 @@ public record ValueComposition(
         BigDecimal penalty,
         BigDecimal total,
         boolean charged,
-        @JsonProperty("goes_to") GoesTo goesTo
+        @JsonProperty("goes_to") GoesTo goesTo,
+        // chave-profissional-paga-taxa: as taxas em campos separados; fees_active=false = riscadas, o profissional nao paga
+        @JsonProperty("app_percent_fee") BigDecimal appPercentFee,
+        @JsonProperty("rounding_fee") BigDecimal roundingFee,
+        @JsonProperty("gateway_fee_simulated") BigDecimal gatewayFeeSimulated,
+        @JsonProperty("fees_active") Boolean feesActive
 ) {
+
+    /** As taxas separadas do corte; sem elas (servico legado), a composicao fica como esta. */
+    public ValueComposition withFees(com.ospaulos.vupth.domain.feature.ProfessionalFeeService.Fees fees) {
+        return fees == null ? this : new ValueComposition(service, gatewayFee, appFee, penalty, total, charged, goesTo,
+                fees.appPercentFee(), fees.roundingFee(), fees.gatewayFeeSimulated(), fees.active());
+    }
 
     /** Para quem vai cada parte: {@code professional}, {@code gateway} ou {@code app}. */
     public record GoesTo(String service,
@@ -49,13 +60,13 @@ public record ValueComposition(
                 legacy ? null : orZero(a.getIntermediaryFee()),
                 legacy ? null : orZero(a.getPlatformFee()),
                 pen, orZero(a.getTotalValue()).add(pen), charged(a),
-                new GoesTo("professional", "gateway", "app", splitPix ? "app" : "professional"));
+                new GoesTo("professional", "gateway", "app", splitPix ? "app" : "professional"), null, null, null, null);
     }
 
     /** Visao do cliente: servico, multa e total; sem as taxas (o cliente paga o valor cheio). */
     public static ValueComposition forClient(Attendance a, BigDecimal penalty) {
         BigDecimal pen = orZero(penalty);
         return new ValueComposition(a.getTotalValue(), null, null, pen,
-                orZero(a.getTotalValue()).add(pen), charged(a), null);
+                orZero(a.getTotalValue()).add(pen), charged(a), null, null, null, null, null);
     }
 }

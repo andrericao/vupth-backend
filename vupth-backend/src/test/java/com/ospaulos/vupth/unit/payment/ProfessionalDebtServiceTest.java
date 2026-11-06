@@ -46,6 +46,28 @@ class ProfessionalDebtServiceTest {
     }
 
     @Test
+    @DisplayName("chave-profissional-paga-taxa: ligada, o Recebi sem forma vira divida real; pelo gateway nao; desligada, sem forma nao vira")
+    void feeKey() {
+        var features = mock(com.ospaulos.vupth.domain.feature.AppFeatureService.class);
+        ReflectionTestUtils.setField(service, "features", features);
+        Attendance a = attendance("32.90", "30.00", false);
+
+        service.recordOnReceived(a, null);
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+
+        when(features.isEnabled("profissional_paga_taxa", professionalId)).thenReturn(true);
+        a.setAsaasPaymentId("pay_1");
+        service.recordOnReceived(a, null);
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+
+        a.setAsaasPaymentId(null);
+        service.recordOnReceived(a, null);
+        var captor = org.mockito.ArgumentCaptor.forClass(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt.class);
+        org.mockito.Mockito.verify(repository).save(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().isSimulated()).isFalse();
+    }
+
+    @Test
     @DisplayName("por fora grava a divida inteira (R$ 32,90 - R$ 30,00 = R$ 2,90), simulada com a flag desligada e real com ela ligada")
     void recordsWholeDifference() {
         when(settings.flag(AppSettingService.DEBT_REAL, false)).thenReturn(false);

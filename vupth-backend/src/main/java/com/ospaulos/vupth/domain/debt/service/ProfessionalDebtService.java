@@ -41,6 +41,10 @@ public class ProfessionalDebtService {
     private final AppSettingService settings;
     private final AppPix appPix;
 
+    /** chave-profissional-paga-taxa; opcional nos testes de unidade. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.feature.AppFeatureService features;
+
     @Value("${vupth.debt.limit:25.00}")
     private BigDecimal limit = new BigDecimal("25.00");
 
@@ -77,9 +81,14 @@ public class ProfessionalDebtService {
 
     /** No Recebi: grava a divida do corte pago por fora. Pix, teste, servico legado (sem divisao) e corte ja registrado nao geram. */
     public void recordOnReceived(Attendance attendance, PaymentMethod method) {
-        if (attendance.isTest() || method == null || method == PaymentMethod.PIX
-                || attendance.getProReceives() == null || attendance.getProfessional() == null
+        if (attendance.isTest() || attendance.getProReceives() == null || attendance.getProfessional() == null
                 || repository.existsByAttendanceId(attendance.getId())) {
+            return;
+        }
+        // chave-profissional-paga-taxa: ligada, qualquer "Recebi" fora do gateway vira divida, em qualquer forma; desligada, tudo como antes
+        boolean feeKey = features != null
+                && features.isEnabled(com.ospaulos.vupth.domain.feature.AppFeatureService.PROFESSIONAL_PAYS_FEE, attendance.getProfessional().getId());
+        if (feeKey ? attendance.getAsaasPaymentId() != null : method == null || method == PaymentMethod.PIX) {
             return;
         }
         // DEC-127: o profissional recebeu received_amount (padrao: o valor com desconto). O desconto e do app: ele repassa
@@ -91,7 +100,7 @@ public class ProfessionalDebtService {
         if (amount.signum() <= 0) {
             return;
         }
-        boolean simulated = !isReal();
+        boolean simulated = !feeKey && !isReal();
         repository.save(new ProfessionalDebt(attendance.getProfessional().getId(), attendance.getId(), amount,
                 DebtOrigin.PAID_OUTSIDE, simulated, OffsetDateTime.now()));
         log.info("[Debt] corte por fora — professional={} attendance={} R$ {} simulada={}",

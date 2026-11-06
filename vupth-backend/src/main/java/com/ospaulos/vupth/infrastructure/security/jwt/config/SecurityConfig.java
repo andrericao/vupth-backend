@@ -157,6 +157,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/reports").hasRole("PROFESSIONAL")
+                        .requestMatchers("/professional/me/fee-notice/**").hasRole("PROFESSIONAL") // chave-profissional-paga-taxa
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
                         // convite-sem-conta: os convites por e-mail que esperam a conta — so o dono

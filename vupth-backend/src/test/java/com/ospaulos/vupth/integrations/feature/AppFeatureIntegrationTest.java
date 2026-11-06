@@ -8,6 +8,12 @@ import com.ospaulos.vupth.domain.admin.model.AdminPermission;
 import com.ospaulos.vupth.domain.admin.model.AdminPermissionGrant;
 import com.ospaulos.vupth.domain.admin.repository.AdminPermissionRepository;
 import com.ospaulos.vupth.domain.admin.service.AdminTotpService;
+import com.ospaulos.vupth.api.attendance.dto.request.AttendanceRequest;
+import com.ospaulos.vupth.domain.attendance.AttendanceStatus;
+import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
+import com.ospaulos.vupth.domain.establishment.repository.EstablishmentRepository;
+import com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository;
+import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -25,13 +31,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,6 +60,9 @@ class AppFeatureIntegrationTest {
     @Autowired UserRepository userRepository;
     @Autowired AdminPermissionRepository permissions;
     @Autowired JdbcTemplate jdbc;
+    @Autowired AttendanceRepository attendanceRepository;
+    @Autowired EstablishmentRepository establishmentRepository;
+    @Autowired ProfessionalRepository professionalRepository;
 
     private final Faker faker = new Faker();
     private String secret;
@@ -58,6 +70,9 @@ class AppFeatureIntegrationTest {
     @AfterEach
     void clean() {
         jdbc.update("DELETE FROM app_feature_history");
+        jdbc.update("DELETE FROM professional_fee_notice");
+        jdbc.update("DELETE FROM app_setting WHERE setting_key LIKE 'asaas.fee.%'");
+        attendanceRepository.deleteAll();
         jdbc.update("UPDATE app_feature SET enabled = FALSE, percent = 0, profiles = '', regions = '', accounts = '', updated_at = NULL, updated_by = NULL");
     }
 
@@ -142,6 +157,77 @@ class AppFeatureIntegrationTest {
                 .andExpect(jsonPath("$[0].previous.profiles[0]").value("CLIENT"))
                 .andExpect(jsonPath("$[0].current.regions[0]").value("SP"))
                 .andExpect(jsonPath("$[5].previous.enabled").value(false));
+    }
+
+    private void cut(String profId, String establishmentId, String clientId, String clientToken, String profToken, String itemId) throws Exception {
+        AttendanceRequest request = new AttendanceRequest(UUID.fromString(profId), UUID.fromString(establishmentId), UUID.fromString(clientId),
+                java.util.List.of(UUID.fromString(itemId)), AttendanceStatus.SCHEDULED, OffsetDateTime.now().plusMinutes(5), 30, OffsetDateTime.now());
+        String id = mapper.readTree(mvc.perform(post("/attendances").contentType(MediaType.APPLICATION_JSON)
+                        .header("Authorization", clientToken).content(mapper.writeValueAsString(request)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText();
+        mvc.perform(patch("/attendances/{id}/start", id).header("Authorization", profToken)).andExpect(status().isOk());
+        mvc.perform(patch("/attendances/{id}/finish", id).header("Authorization", profToken)).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("modal unico: aparece depois do 1o corte apos ligar, some ao confirmar e volta apos desligar; a tabela do Asaas e editavel; o relatorio traz as taxas")
+    void feeNotice() throws Exception {
+        String admin = adminWithTotp().token();
+        var pro = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        String establishmentId = TestUserUtils.becomeOwner(mvc, mapper, faker, pro.token()).id();
+        TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
+        TestUserUtils.becomeProfessional(mvc, mapper, faker, pro.token(), establishmentId, "Beto");
+        TestUserUtils.startShift(professionalRepository, establishmentId);
+        String item = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, pro.token(),
+                ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30)).id();
+
+        mvc.perform(get("/professional/me/fee-notice").header("Authorization", pro.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.show").value(false))
+                .andExpect(jsonPath("$.fees_active").value(false));
+
+        change(admin, SPLIT, rule(true, 100, "", "", "")).andExpect(status().isOk());
+        change(admin, FEE, rule(true, 100, "", "", "")).andExpect(status().isOk());
+        mvc.perform(get("/professional/me/fee-notice").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.show").value(false))
+                .andExpect(jsonPath("$.fees_active").value(true));
+
+        cut(pro.id(), establishmentId, client.id(), client.token(), pro.token(), item);
+        mvc.perform(get("/professional/me/fee-notice").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.show").value(true));
+        mvc.perform(post("/professional/me/fee-notice/seen").header("Authorization", pro.token()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/professional/me/fee-notice").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.show").value(false));
+
+        // o relatorio traz as taxas separadas
+        mvc.perform(get("/professional/me/reports").header("Authorization", pro.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cuts[0].composition.app_percent_fee").isNumber())
+                .andExpect(jsonPath("$.cuts[0].composition.rounding_fee").isNumber())
+                .andExpect(jsonPath("$.cuts[0].composition.gateway_fee_simulated").isNumber())
+                .andExpect(jsonPath("$.cuts[0].composition.fees_active").value(true));
+
+        // desligou: depois do proximo corte o modal volta
+        change(admin, FEE, rule(false, 100, "", "", "")).andExpect(status().isOk());
+        var second = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        cut(pro.id(), establishmentId, second.id(), second.token(), pro.token(), item);
+        mvc.perform(get("/professional/me/fee-notice").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.show").value(true))
+                .andExpect(jsonPath("$.fees_active").value(false));
+
+        // a tabela do Asaas: padrao, edicao e validacao
+        mvc.perform(get("/admin/settings/asaas-fees").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pix_fee").value(1.99));
+        mvc.perform(put("/admin/settings/asaas-fees").header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pix_fee\":0,\"card_fixed_fee\":0.49,\"card_rate\":0.0299}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pix_fee").value(0));
+        mvc.perform(put("/admin/settings/asaas-fees").header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"pix_fee\":-1,\"card_fixed_fee\":0.49,\"card_rate\":0.0299}"))
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test
