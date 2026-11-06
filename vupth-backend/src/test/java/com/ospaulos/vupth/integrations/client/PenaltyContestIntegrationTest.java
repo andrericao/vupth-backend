@@ -66,7 +66,7 @@ class PenaltyContestIntegrationTest {
 
         mvc.perform(post("/clients/me/penalties/{id}/contest", kept).header("Authorization", client.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body("reason", " ")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity());
         mvc.perform(post("/clients/me/penalties/{id}/contest", old).header("Authorization", client.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body("reason", "nao atrasei")))
                 .andExpect(status().isConflict())
@@ -104,7 +104,7 @@ class PenaltyContestIntegrationTest {
                 .andExpect(jsonPath("$.items[?(@.id=='" + kept + "')].contest_reason").value("O onibus quebrou"));
         mvc.perform(post("/admin/multas-contestadas/{id}/resolve", kept).header("Authorization", admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body("decision", "TALVEZ")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnprocessableEntity());
         mvc.perform(post("/admin/multas-contestadas/{id}/resolve", kept).header("Authorization", admin.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body("decision", "UPHOLD")))
                 .andExpect(status().isOk())
