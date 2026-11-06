@@ -34,6 +34,10 @@ public class AppFeatureHistory {
     @Column(name = "reason", length = 300, nullable = false)
     private String reason;
 
+    /** A mudanca passou pelo segundo fator do painel. */
+    @Column(name = "second_factor", nullable = false)
+    private boolean secondFactor;
+
     @Column(name = "previous_value", nullable = false)
     private String previousValue;
 
@@ -46,6 +50,7 @@ public class AppFeatureHistory {
         this.changedBy = changedBy;
         this.changedAt = changedAt;
         this.reason = reason;
+        this.secondFactor = true;
         this.previousValue = previousValue;
         this.newValue = newValue;
     }

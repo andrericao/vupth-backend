@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ospaulos.vupth.api.feature.dto.AppFeatureHistoryResponse;
 import com.ospaulos.vupth.api.feature.dto.AppFeatureResponse;
 import com.ospaulos.vupth.api.feature.dto.AppFeatureUpdateRequest;
+import com.ospaulos.vupth.domain.admin.exception.AdminTotpException;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -38,6 +39,7 @@ public class AppFeatureService {
     private final AppFeatureHistoryRepository history;
     private final UserRepository users;
     private final ObjectMapper mapper;
+    private final com.ospaulos.vupth.domain.admin.service.AdminTotpService totp;
 
     /** A chave vale para a conta? */
     @Transactional(readOnly = true)
@@ -61,10 +63,18 @@ public class AppFeatureService {
         return features.findAll().stream().sorted(Comparator.comparing(AppFeature::getKey)).map(AppFeatureResponse::of).toList();
     }
 
-    /** Troca a regra da chave e grava quem, quando, o motivo e o valor anterior. */
-    @Transactional
+    /**
+     * Troca a regra da chave e grava quem, quando, o motivo e o valor anterior. Toda mudanca confere o segundo fator no proprio pedido:
+     * sem codigo, 403; codigo errado, 401 e conta para a trava (por isso a falha nao desfaz a transacao).
+     */
+    @Transactional(noRollbackFor = AdminTotpException.class)
     public AppFeatureResponse update(String key, AppFeatureUpdateRequest request, UUID adminId) {
         AppFeature feature = load(key);
+        if (request.totp() == null || request.totp().isBlank()) {
+            throw new AdminTotpException(org.springframework.http.HttpStatus.FORBIDDEN, "ADMIN_TOTP_CODE_REQUIRED",
+                    "Mudar uma chave exige o codigo do segundo fator.");
+        }
+        totp.verify(adminId, request.totp());
         String previous = json(AppFeatureResponse.of(feature));
         OffsetDateTime now = OffsetDateTime.now();
         feature.apply(request.enabled(), request.percent(), request.profiles().stream().distinct().toList(),
@@ -81,7 +91,8 @@ public class AppFeatureService {
     public List<AppFeatureHistoryResponse> history(String key) {
         load(key);
         return history.findByFeatureKeyOrderByChangedAtDesc(key).stream()
-                .map(h -> new AppFeatureHistoryResponse(h.getChangedBy(), h.getChangedAt(), h.getReason(), h.getPreviousValue(), h.getNewValue()))
+                .map(h -> new AppFeatureHistoryResponse(h.getChangedBy(), h.getChangedAt(), h.getReason(), h.isSecondFactor(),
+                        h.getPreviousValue(), h.getNewValue()))
                 .toList();
     }
 

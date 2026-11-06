@@ -11,6 +11,7 @@ public record AppFeatureHistoryResponse(
         @JsonProperty("changed_by") UUID changedBy,
         @JsonProperty("changed_at") OffsetDateTime changedAt,
         @JsonProperty("reason") String reason,
+        @JsonProperty("second_factor") boolean secondFactor,
         @JsonProperty("previous") @JsonRawValue String previous,
         @JsonProperty("current") @JsonRawValue String current) {
 }

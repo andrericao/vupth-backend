@@ -1,11 +1,13 @@
 package com.ospaulos.vupth.integrations.feature;
 
+import com.eatthepath.otp.TimeBasedOneTimePasswordGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
 import com.ospaulos.vupth.domain.admin.model.AdminPermission;
 import com.ospaulos.vupth.domain.admin.model.AdminPermissionGrant;
 import com.ospaulos.vupth.domain.admin.repository.AdminPermissionRepository;
+import com.ospaulos.vupth.domain.admin.service.AdminTotpService;
 import com.ospaulos.vupth.domain.user.model.BaseUser;
 import com.ospaulos.vupth.domain.user.model.valueObject.RoleType;
 import com.ospaulos.vupth.domain.user.repository.UserRepository;
@@ -22,12 +24,15 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import javax.crypto.spec.SecretKeySpec;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,6 +53,7 @@ class AppFeatureIntegrationTest {
     @Autowired JdbcTemplate jdbc;
 
     private final Faker faker = new Faker();
+    private String secret;
 
     @AfterEach
     void clean() {
@@ -63,9 +69,26 @@ class AppFeatureIntegrationTest {
         return user;
     }
 
-    private static String rule(boolean enabled, int percent, String profiles, String regions, String accounts) {
+    /** Cadastra o segundo fator do admin; {@link #secret} gera o codigo de cada mudanca. */
+    private TestUserUtils.UserAuthAndToken adminWithTotp() throws Exception {
+        var user = admin();
+        secret = mapper.readTree(mvc.perform(post("/admin/auth/totp/setup").header("Authorization", user.token()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("secret").asText();
+        mvc.perform(post("/admin/auth/totp/confirm").header("Authorization", user.token())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"" + code() + "\"}"))
+                .andExpect(status().isOk());
+        return user;
+    }
+
+    private String code() throws Exception {
+        var generator = new TimeBasedOneTimePasswordGenerator();
+        return String.format("%06d", generator.generateOneTimePassword(
+                new SecretKeySpec(AdminTotpService.fromBase32(secret), generator.getAlgorithm()), Instant.now()));
+    }
+
+    private String rule(boolean enabled, int percent, String profiles, String regions, String accounts) throws Exception {
         return "{\"enabled\":" + enabled + ",\"percent\":" + percent + ",\"profiles\":[" + profiles + "],\"regions\":[" + regions
-                + "],\"accounts\":[" + accounts + "],\"reason\":\"teste\"}";
+                + "],\"accounts\":[" + accounts + "],\"reason\":\"teste\",\"totp\":\"" + code() + "\"}";
     }
 
     private ResultActions change(String token, String key, String body) throws Exception {
@@ -80,7 +103,7 @@ class AppFeatureIntegrationTest {
     @Test
     @DisplayName("as chaves nascem desligadas; lista de contas, porcentagem, perfil e dependencia decidem por conta; o historico guarda o valor anterior")
     void rules() throws Exception {
-        String admin = admin().token();
+        String admin = adminWithTotp().token();
         var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         String other = TestUserUtils.registerAndLoginUser(mvc, mapper, faker).token();
 
@@ -115,6 +138,7 @@ class AppFeatureIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(6))
                 .andExpect(jsonPath("$[0].reason").value("teste"))
+                .andExpect(jsonPath("$[0].second_factor").value(true))
                 .andExpect(jsonPath("$[0].previous.profiles[0]").value("CLIENT"))
                 .andExpect(jsonPath("$[0].current.regions[0]").value("SP"))
                 .andExpect(jsonPath("$[5].previous.enabled").value(false));
@@ -123,7 +147,17 @@ class AppFeatureIntegrationTest {
     @Test
     @DisplayName("sem motivo ou com regra invalida 422; chave que nao existe 404; convidado com permissao e cliente 403; sem login 401")
     void guards() throws Exception {
-        String admin = admin().token();
+        String admin = adminWithTotp().token();
+        // sem o codigo 403, com o codigo errado 401, e nada muda
+        change(admin, SPLIT, "{\"enabled\":true,\"percent\":100,\"profiles\":[],\"regions\":[],\"accounts\":[],\"reason\":\"x\"}")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ADMIN_TOTP_CODE_REQUIRED"));
+        change(admin, SPLIT, "{\"enabled\":true,\"percent\":100,\"profiles\":[],\"regions\":[],\"accounts\":[],\"reason\":\"x\",\"totp\":\"000000\"}")
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ADMIN_TOTP_INVALID"));
+        mvc.perform(get("/admin/app-features").header("Authorization", admin))
+                .andExpect(jsonPath("$[?(@.key=='" + SPLIT + "')].enabled").value(contains(false)));
+
         change(admin, SPLIT, "{\"enabled\":true,\"percent\":10,\"profiles\":[],\"regions\":[],\"accounts\":[]}")
                 .andExpect(status().isUnprocessableEntity());
         change(admin, SPLIT, rule(true, 101, "", "", "")).andExpect(status().isUnprocessableEntity());

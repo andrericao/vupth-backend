@@ -37,6 +37,7 @@ databaseChangeLog:
               - column: {name: changed_by, type: UUID, constraints: {nullable: false}}
               - column: {name: changed_at, type: "TIMESTAMP WITH TIME ZONE", constraints: {nullable: false}}
               - column: {name: reason, type: "VARCHAR(300)", constraints: {nullable: false}}
+              - column: {name: second_factor, type: BOOLEAN, constraints: {nullable: false}}
               - column: {name: previous_value, type: TEXT, constraints: {nullable: false}}
               - column: {name: new_value, type: TEXT, constraints: {nullable: false}}
         - createIndex:
