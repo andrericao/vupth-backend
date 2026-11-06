@@ -3,10 +3,13 @@ package com.ospaulos.vupth.integrations.professional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.ospaulos.vupth.VupthApplication;
+import com.ospaulos.vupth.domain.attendance.cut.repository.CutRequestRepository;
+import com.ospaulos.vupth.domain.attendance.repository.AttendanceRepository;
 import com.ospaulos.vupth.domain.serviceItem.valueObject.ServiceItemType;
 import com.ospaulos.vupth.domain.shared.BusinessClock;
 import com.ospaulos.vupth.integrations.utils.TestUserUtils;
 import org.json.JSONObject;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,8 +45,17 @@ class OpenDayWithoutWeekIntegrationTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
+    @Autowired CutRequestRepository cutRequestRepository;
+    @Autowired AttendanceRepository attendanceRepository;
 
     private final Faker faker = new Faker();
+
+    /** O pedido aceito e os agendamentos nao ficam no banco: a limpeza das outras classes apaga attendance e service_item. */
+    @AfterEach
+    void clean() {
+        cutRequestRepository.deleteAll();
+        attendanceRepository.deleteAll();
+    }
 
     private static String week() {
         StringBuilder days = new StringBuilder();
