@@ -91,4 +91,13 @@ class SentryScrubberTest {
         assertThat(scrubber.execute(bind, new Hint())).isNull();
         assertThat(scrubber.execute(server, new Hint())).isNotNull();
     }
+
+    @Test
+    @DisplayName("cliente que cancelou antes da resposta (Broken pipe) nao vai ao Sentry")
+    void dropsClientAbort() {
+        SentryEvent abort = new SentryEvent(
+                new org.springframework.web.context.request.async.AsyncRequestNotUsableException("Broken pipe"));
+
+        assertThat(scrubber.execute(abort, new Hint())).isNull();
+    }
 }
