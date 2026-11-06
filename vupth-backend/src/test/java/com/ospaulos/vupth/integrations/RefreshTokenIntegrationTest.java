@@ -165,8 +165,8 @@ class RefreshTokenIntegrationTest {
 
     @Test
     @Order(20)
-    @DisplayName("POST /auth/refresh — 401 com token vencido e a linha dele sai do banco (antes dava erro de query e deslogava)")
-    void refresh_expiredToken_deletesRow() throws Exception {
+    @DisplayName("POST /auth/refresh — 401 com token vencido, sem erro de query (antes dava InvalidDataAccessApiUsageException e deslogava)")
+    void refresh_expiredToken_isUnauthorized() throws Exception {
         var user = TestUserUtils.registerBaseUser(mvc, mapper, faker);
         MvcResult login = mvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -182,8 +182,7 @@ class RefreshTokenIntegrationTest {
                         .content(String.format("{\"refresh_token\": \"%s\"}", expired)))
                 .andExpect(status().isUnauthorized());
 
-        Integer left = jdbc.queryForObject("SELECT count(*) FROM refresh_token WHERE token = ?", Integer.class, expired);
-        assertThat(left).isZero();
+        // A linha vencida fica: a excecao 401 desfaz a transacao; quem limpa e a rotina de vencidos.
     }
 
     @AfterAll
