@@ -34,7 +34,7 @@ public class ReferralController {
     @GetMapping("/me/payments")
     public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.ProfessionalPaymentResponse>> payments(
             @org.springframework.security.core.annotation.AuthenticationPrincipal com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl user) {
-        return ResponseEntity.ok(paymentService.history(user.getUserId(), null, null));
+        return ResponseEntity.ok(paymentService.history(user.getUserId(), null, null, null));
     }
 
     @GetMapping("/me/credits")

@@ -276,5 +276,27 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath(person + ".paid").value(hasItem(0)));
         mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).header("Authorization", admin))
                 .andExpect(jsonPath("$.length()").value(2));
+
+        // pagar tudo da pessoa quita as campanhas dela pelo valor exato; sem nada aberto, 404
+        mvc.perform(post("/admin/referrals/payouts/{u}/paid", pro.id()).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paid_credits").value(1));
+        mvc.perform(post("/admin/referrals/payouts/{u}/paid", pro.id()).header("Authorization", admin))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REFERRAL_NOTHING_TO_PAY"));
+
+        // filtros: por campanha e por periodo
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).param("campaign_id", campaignId)
+                        .header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(3));
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).param("campaign_id", UUID.randomUUID().toString())
+                        .header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id())
+                        .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/payments/summary").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath(person + ".to_pay").value(hasItem(0)))
+                .andExpect(jsonPath(person + ".paid").value(hasItem(5.0)));
     }
 }

@@ -53,6 +53,14 @@ public class AdminReferralController {
                 request == null ? null : request.note()));
     }
 
+    /** pagamento-ao-profissional: paga tudo o que a pessoa tem a pagar, uma linha do historico por campanha. */
+    @PostMapping("/payouts/{userId}/paid")
+    public ResponseEntity<AdminReferralPaidResponse> markAllPaid(@PathVariable UUID userId,
+                                                                 @RequestBody(required = false) @jakarta.validation.Valid MarkPaidRequest request,
+                                                                 @AuthenticationPrincipal UserDetailsImpl principal) {
+        return ResponseEntity.ok(adminReferralService.markAllPaid(principal.getUserId(), userId, request == null ? null : request.note()));
+    }
+
     /** {@code note}: a nota ou o ID do PIX (opcional). */
     public record MarkPaidRequest(@jakarta.validation.constraints.Size(max = 200) String note) {
     }
@@ -63,18 +71,20 @@ public class AdminReferralController {
     /** pagamento-ao-profissional: a pagar agora x pago no periodo, por pessoa. */
     @GetMapping("/payments/summary")
     public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.ProfessionalPaymentSummaryRow>> paymentsSummary(
+            @RequestParam(name = "campaign_id", required = false) UUID campaignId,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime from,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime to) {
-        return ResponseEntity.ok(paymentService.summary(from, to));
+        return ResponseEntity.ok(paymentService.summary(campaignId, from, to));
     }
 
     /** O historico de pagamentos e estornos, com filtro por pessoa e por periodo. */
     @GetMapping("/payments")
     public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.ProfessionalPaymentResponse>> payments(
             @RequestParam(name = "professional_id", required = false) UUID professionalId,
+            @RequestParam(name = "campaign_id", required = false) UUID campaignId,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime from,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime to) {
-        return ResponseEntity.ok(paymentService.history(professionalId, from, to));
+        return ResponseEntity.ok(paymentService.history(professionalId, campaignId, from, to));
     }
 
     /** O estorno e uma linha nova; os premios daquele pagamento voltam ao "a pagar". */

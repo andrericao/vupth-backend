@@ -30,7 +30,8 @@ import java.util.stream.Collectors;
 /**
  * pagamento-ao-profissional (Andre, 06/11): o historico imutavel do que o app pagou de premios e creditos de campanha, o estorno e o a
  * pagar x pago. O que e receita da VUPTH (2%, arredondamento, multas) nao passa aqui. O pagamento nasce em
- * {@link AdminReferralService#markPaid}, que cobre tudo o que esta a pagar da pessoa na campanha.
+ * {@link AdminReferralService#markPaid}, que cobre tudo o que esta a pagar da pessoa numa campanha; pagar tudo da pessoa grava uma linha
+ * por campanha. Nao ha pagamento parcial dentro de uma campanha.
  */
 @Slf4j
 @Service
@@ -59,23 +60,29 @@ public class ProfessionalPaymentService {
         return toResponses(List.of(reversal)).get(0);
     }
 
-    /** O historico, do mais novo ao mais antigo; o periodo vale para a data do pagamento. */
+    /** O historico, do mais novo ao mais antigo, filtrado por pessoa e campanha; o periodo vale para a data do pagamento. */
     @Transactional(readOnly = true)
-    public List<ProfessionalPaymentResponse> history(UUID professionalId, OffsetDateTime from, OffsetDateTime to) {
+    public List<ProfessionalPaymentResponse> history(UUID professionalId, UUID campaignId, OffsetDateTime from, OffsetDateTime to) {
         List<ProfessionalPayment> rows = professionalId == null
                 ? paymentRepository.findAll(org.springframework.data.domain.Sort.by("paidAt").descending())
                 : paymentRepository.findByProfessionalIdOrderByPaidAtDesc(professionalId);
         return toResponses(rows.stream()
+                .filter(p -> campaignId == null || campaignId.equals(p.getCampaignId()))
                 .filter(p -> from == null || !p.getPaidAt().isBefore(from))
                 .filter(p -> to == null || p.getPaidAt().isBefore(to))
                 .toList());
     }
 
-    /** A pagar agora x pago no periodo, por pessoa; quem tem mais a receber vem primeiro. */
+    /** A pagar agora x pago no periodo, por pessoa, de todas as campanhas ou de uma; quem tem mais a receber vem primeiro. */
     @Transactional(readOnly = true)
-    public List<ProfessionalPaymentSummaryRow> summary(OffsetDateTime from, OffsetDateTime to) {
+    public List<ProfessionalPaymentSummaryRow> summary(UUID campaignId, OffsetDateTime from, OffsetDateTime to) {
         List<Object> args = new ArrayList<>();
-        StringBuilder period = new StringBuilder();
+        String campaign = "";
+        if (campaignId != null) {
+            campaign = " AND campaign_id = ?";
+            args.addAll(List.of(campaignId, campaignId, campaignId)); // referral_credit, coupon_credit e professional_payment
+        }
+        StringBuilder period = new StringBuilder(campaign);
         if (from != null) {
             period.append(" AND paid_at >= ?");
             args.add(Timestamp.from(from.toInstant()));
@@ -88,9 +95,11 @@ public class ProfessionalPaymentService {
                 WITH open AS (
                   SELECT beneficiary_id AS id, sum(amount) AS amount FROM (
                     SELECT beneficiary_id, amount FROM referral_credit
-                     WHERE paid_at IS NULL AND released_at IS NOT NULL AND NOT test
+                     WHERE paid_at IS NULL AND released_at IS NOT NULL AND NOT test""" + campaign + """
+
                     UNION ALL
-                    SELECT beneficiary_id, amount FROM coupon_credit WHERE paid_at IS NULL) x
+                    SELECT beneficiary_id, amount FROM coupon_credit WHERE paid_at IS NULL""" + campaign + """
+                    ) x
                   GROUP BY beneficiary_id
                 ), done AS (
                   SELECT professional_id AS id,

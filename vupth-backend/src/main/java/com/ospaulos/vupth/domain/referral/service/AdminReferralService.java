@@ -130,6 +130,26 @@ public class AdminReferralService {
         return new AdminReferralPaidResponse(paid, now);
     }
 
+    /**
+     * pagamento-ao-profissional (Andre, 06/11): paga tudo o que a pessoa tem a pagar, numa linha do historico por campanha; o valor e
+     * sempre o exato de cada campanha. Quem nao quita tudo paga uma campanha escolhida ({@link #markPaid}).
+     */
+    public AdminReferralPaidResponse markAllPaid(UUID adminId, UUID userId, String note) {
+        List<UUID> campaigns = payouts().stream().filter(p -> userId.equals(p.beneficiaryId()))
+                .map(AdminReferralPayoutResponse::campaignId).distinct().toList();
+        if (campaigns.isEmpty()) {
+            throw ReferralException.nothingToPay();
+        }
+        int paid = 0;
+        OffsetDateTime paidAt = null;
+        for (UUID campaignId : campaigns) {
+            AdminReferralPaidResponse one = markPaid(adminId, campaignId, userId, note);
+            paid += one.paidCredits();
+            paidAt = one.paidAt();
+        }
+        return new AdminReferralPaidResponse(paid, paidAt);
+    }
+
     private AdminReferralPayoutResponse toResponse(ReferralPayoutRow row, LocalDate today) {
         Campaign c = campaignRepository.findById(row.campaignId()).orElse(null);
         BaseUser u = userRepository.findById(row.beneficiaryId()).orElse(null);
