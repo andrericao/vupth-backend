@@ -13,7 +13,8 @@ import java.util.UUID;
  * GET /professional/me/agenda?from=&to= (agenda-aberta-semana, DEC-117/130): os dias prontos para o Partner desenhar a agenda,
  * sem juntar tres chamadas. Cada dia traz o horario que vale de fato (loja ∩ agenda dele, semana e data especial ja aplicadas),
  * se foi o profissional que abriu aquele dia ({@code opened_by_me}) e os agendamentos dele naquele dia. Os dias que ele ja abriu
- * aparecem junto com o de hoje; o intervalo vai de hoje a, no maximo, {@value #MAX_DAYS} dias.
+ * aparecem junto com o de hoje; o intervalo vai de hoje a, no maximo, {@value #MAX_DAYS} dias. {@code agenda_released}
+ * (abrir-dia-sem-semana): o cliente agenda direto nesse dia; falso = so chegam solicitacoes, mesmo com o dia aberto.
  */
 public record ProfessionalAgendaResponse(List<Day> days) {
 
@@ -26,6 +27,7 @@ public record ProfessionalAgendaResponse(List<Day> days) {
                       LocalTime closes,
                       @JsonProperty("store_open") boolean storeOpen,
                       @JsonProperty("opened_by_me") boolean openedByMe,
+                      @JsonProperty("agenda_released") boolean agendaReleased,
                       List<Appointment> appointments) {}
 
     public record Appointment(UUID id,

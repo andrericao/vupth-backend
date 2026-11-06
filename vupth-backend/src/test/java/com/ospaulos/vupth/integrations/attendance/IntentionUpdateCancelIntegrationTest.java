@@ -82,6 +82,7 @@ class IntentionUpdateCancelIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerToken, establishmentId, "Owner Professional");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, establishmentId);
         // 20/09: profissional nasce OFF e quem nao esta em expediente nao recebe fila.
         // Aqui o expediente e cenario, nao o objeto do teste — entao ele chega pelo atalho.
         TestUserUtils.startShift(professionalRepository, establishmentId);

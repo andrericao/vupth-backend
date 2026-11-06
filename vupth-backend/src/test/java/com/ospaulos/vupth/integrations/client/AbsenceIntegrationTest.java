@@ -68,6 +68,7 @@ class AbsenceIntegrationTest {
         establishmentId = estab.id();
         professionalId = owner.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), establishmentId, "Dono Profissional");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, establishmentId);
         TestUserUtils.startShift(professionalRepository, establishmentId);
         TestUserUtils.setStatusAndHours(tx, establishmentRepository, establishmentId, OpenStatus.OPEN,
                 LocalTime.of(0, 0), LocalTime.of(23, 59));

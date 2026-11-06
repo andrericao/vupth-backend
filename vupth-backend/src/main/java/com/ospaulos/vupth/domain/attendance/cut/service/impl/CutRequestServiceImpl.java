@@ -351,12 +351,19 @@ public class CutRequestServiceImpl implements CutRequestService {
         }
     }
 
-    /** O dia do horario pedido esta fechado na agenda do profissional (a dele ou a da loja)? Sem horario pedido, nao. */
+    /**
+     * O dia do horario pedido esta fechado na agenda do profissional (a dele ou a da loja)? Sem horario pedido, nao.
+     * abrir-dia-sem-semana: sem a semana montada, todo dia depois de hoje tambem conta como nao liberado.
+     */
     static boolean isAgendaClosedOn(Professional professional, OffsetDateTime desiredTime) {
         if (desiredTime == null) {
             return false;
         }
-        DayHours day = professional.getEffectiveHours().on(BusinessClock.dateAt(desiredTime));
+        java.time.LocalDate date = BusinessClock.dateAt(desiredTime);
+        if (!professional.getWorkingHours().isConfigured() && date.isAfter(BusinessClock.today())) {
+            return true;
+        }
+        DayHours day = professional.getEffectiveHours().on(date);
         return day != null && day.closed();
     }
 

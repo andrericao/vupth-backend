@@ -343,6 +343,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         assertServiceItemsBelongToProfessional(serviceItems, professional);
 
         // Ponto UNICO de entrada: create e edit passam pelo mesmo algoritmo antes de persistir.
+        requireReleasedAgenda(professional, desiredTime);
         OffsetDateTime estimatedStart = runIntentionAlgorithm(
                 professional, establishment, serviceItems, desiredTime, null);
 
@@ -391,6 +392,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
         // Ponto UNICO de entrada: o edit re-executa o algoritmo (excluindo a propria intencao do
         // encaixe) — a cabeca/estimativa se corrigem na hora, inclusive "mudou pra mais cedo".
+        requireReleasedAgenda(professional, desiredTime);
         OffsetDateTime estimatedStart = runIntentionAlgorithm(
                 professional, establishment, serviceItems, desiredTime, attendance.getId());
 
@@ -469,16 +471,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         BusinessHours effective = professional.getEffectiveHours();
         BusinessHours storeHours = professional.getEstablishment() != null
                 ? professional.getEstablishment().getBusinessHours() : BusinessHours.notConfigured();
-        BusinessHours ownHours = professional.getWorkingHours();
         List<PublicAgendaResponse.Day> days = new java.util.ArrayList<>();
         for (int i = 0; i <= INTENTION_HORIZON_DAYS; i++) {
             java.time.LocalDate date = today.plusDays(i);
             DayHours day = effective.on(date);
             // agenda-publica-dias-liberados: por que o dia esta fechado (loja que nao abre x agenda que ele nao liberou)
             DayHours storeDay = storeHours.on(date);
-            DayHours ownDay = ownHours.on(date);
             boolean storeOpen = storeDay == null || !storeDay.closed();
-            boolean released = ownDay == null || !ownDay.closed();
+            boolean released = professional.isAgendaReleasedOn(date);
             days.add(day == null
                     ? new PublicAgendaResponse.Day(date, false, null, null, storeOpen, released)
                     : new PublicAgendaResponse.Day(date, day.closed(), day.opens(), day.closes(), storeOpen, released));
@@ -545,6 +545,16 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("[Intention] promoteIntention — id={} INTENTION->SCHEDULED scheduledTime={} desiredTime={}",
                 saved.getId(), now, saved.getDesiredTime());
         return java.util.Optional.of(new PromotionResult(saved.getId(), establishmentId, clientId));
+    }
+
+    /**
+     * abrir-dia-sem-semana: o cliente so agenda direto com a agenda disponibilizada; sem ela, solicita. O aceite de uma solicitacao
+     * nao passa por aqui: e o proprio profissional autorizando aquele horario.
+     */
+    private void requireReleasedAgenda(Professional professional, OffsetDateTime desiredTime) {
+        if (!professional.getWorkingHours().isConfigured()) {
+            throw new IntentionOutsideProfessionalHoursException(desiredTime);
+        }
     }
 
     /**

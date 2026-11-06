@@ -11497,6 +11497,43 @@
      "response": []
     },
     {
+     "name": "setup: agenda da semana 24h (profissional) - sem ela o cliente so solicita (abrir-dia-sem-semana)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/hours/weekly",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\": [{\"day\": \"MONDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"TUESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"WEDNESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"THURSDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"FRIDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SATURDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SUNDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}]}"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "create intencao (loja pode estar fechada, dentro do expediente) -> 201",
      "event": [
       {

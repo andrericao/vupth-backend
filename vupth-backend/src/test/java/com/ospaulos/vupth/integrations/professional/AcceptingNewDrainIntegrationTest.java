@@ -66,6 +66,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class AcceptingNewDrainIntegrationTest {
 
+    @Autowired com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository professionalRepository;
+    @Autowired org.springframework.transaction.support.TransactionTemplate tx;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired ProfessionalIntervalRepository professionalIntervalRepository;
@@ -89,6 +91,7 @@ class AcceptingNewDrainIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerProfToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerProfToken, establishmentId, "Prof Drain");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, establishmentId);
 
         // Sem refeicoes atravessando — mantem a viabilidade da intencao previsivel.
         professionalIntervalRepository.deleteAll(

@@ -42,6 +42,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class DeactivateAccountIntegrationTest {
 
+    @Autowired com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository professionalRepository;
+    @Autowired org.springframework.transaction.support.TransactionTemplate tx;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -107,6 +109,7 @@ class DeactivateAccountIntegrationTest {
         var owner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
         TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), estab.id(), "Prof Dono");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, estab.id());
         var item = TestUserUtils.createServiceItem(mvc, mapper, estab.id(), owner.token(),
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
 
@@ -143,6 +146,7 @@ class DeactivateAccountIntegrationTest {
         var owner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
         TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), estab.id(), "Prof");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, estab.id());
         var item = TestUserUtils.createServiceItem(mvc, mapper, estab.id(), owner.token(),
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
 
