@@ -26,6 +26,7 @@ public class ClientController {
     private final ClientPenaltyService clientPenaltyService;
     private final PenaltyPaymentService penaltyPaymentService;
     private final com.ospaulos.vupth.domain.client.service.ClientAbsenceService clientAbsenceService;
+    private final com.ospaulos.vupth.domain.client.service.PenaltyContestService penaltyContestService;
 
     @GetMapping("/{id}")
     //@PreAuthorize("hasRole('PROFESSIONAL')")
@@ -75,5 +76,25 @@ public class ClientController {
     public ResponseEntity<PenaltyPaymentResponse> penaltyPayment(@AuthenticationPrincipal UserDetailsImpl user,
                                                                  @PathVariable java.util.UUID paymentId) {
         return ResponseEntity.ok(penaltyPaymentService.get(user.getUserId(), paymentId));
+    }
+
+    public record ContestRequest(
+            @jakarta.validation.constraints.NotBlank @com.fasterxml.jackson.annotation.JsonProperty("reason") String reason) {}
+
+    public record ContestResponse(
+            @com.fasterxml.jackson.annotation.JsonProperty("penalty_id") UUID penaltyId,
+            @com.fasterxml.jackson.annotation.JsonProperty("contested_at") java.time.OffsetDateTime contestedAt,
+            @com.fasterxml.jackson.annotation.JsonProperty("reason") String reason) {}
+
+    /**
+     * multa-contestavel (F5): contesta uma multa pendente em ate 7 dias, com motivo (ate 300). A multa sai do total a pagar ate o ADMIN
+     * decidir. 404 PENALTY_NOT_FOUND; 409 PENALTY_ALREADY_CONTESTED, PENALTY_CONTEST_EXPIRED ou PENALTY_NOT_CONTESTABLE; 422 PENALTY_CONTEST_REASON_INVALID.
+     */
+    @PostMapping("/me/penalties/{penaltyId}/contest")
+    public ResponseEntity<ContestResponse> contestPenalty(@AuthenticationPrincipal UserDetailsImpl user,
+                                                          @PathVariable UUID penaltyId,
+                                                          @RequestBody @jakarta.validation.Valid ContestRequest body) {
+        var e = penaltyContestService.contest(user.getUserId(), penaltyId, body.reason());
+        return ResponseEntity.ok(new ContestResponse(e.getId(), e.getContestedAt(), e.getContestReason()));
     }
 }

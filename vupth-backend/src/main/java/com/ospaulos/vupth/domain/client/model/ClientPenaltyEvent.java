@@ -72,6 +72,20 @@ public class ClientPenaltyEvent implements Serializable {
     @Column(name = "acknowledged_at")
     private OffsetDateTime acknowledgedAt;
 
+    /** multa-contestavel (F5): quando o cliente contestou, com o motivo. Enquanto o ADMIN nao decide, a multa nao e cobrada. */
+    @Column(name = "contested_at")
+    private OffsetDateTime contestedAt;
+
+    @Column(name = "contest_reason", length = 300)
+    private String contestReason;
+
+    /** Quando o ADMIN decidiu e o que decidiu: {@code UPHELD} (a multa volta a valer) ou {@code VOIDED} (anulada). */
+    @Column(name = "resolved_at")
+    private OffsetDateTime resolvedAt;
+
+    @Column(name = "resolution", length = 10)
+    private String resolution;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -85,6 +99,11 @@ public class ClientPenaltyEvent implements Serializable {
     public ClientPenaltyEvent(Client client, PenaltyType type, UUID attendanceId, int etaMinutes, BigDecimal amount) {
         this(client, type, attendanceId, etaMinutes);
         this.amount = amount;
+    }
+
+    /** Contestada e ainda sem decisao, ou anulada: nao entra no total a pagar nem no teto. */
+    public boolean isSuspended() {
+        return contestedAt != null && (resolvedAt == null || "VOIDED".equals(resolution));
     }
 
     @PrePersist

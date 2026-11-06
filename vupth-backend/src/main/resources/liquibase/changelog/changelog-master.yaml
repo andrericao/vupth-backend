@@ -642,3 +642,8 @@ databaseChangeLog:
   - include:
       file: changesets/95-notification/073-create-open_watch.yaml
       relativeToChangeLogFile: true
+
+  # multa-contestavel (F5): contestacao em 7 dias, com motivo; o ADMIN mantem ou anula
+  - include:
+      file: changesets/70-client/074-penalty-contest.yaml
+      relativeToChangeLogFile: true

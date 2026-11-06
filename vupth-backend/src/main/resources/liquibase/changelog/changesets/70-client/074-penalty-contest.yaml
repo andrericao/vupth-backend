@@ -1,0 +1,20 @@
+databaseChangeLog:
+  # multa-contestavel (F5, DEC do Andre 05/11): o cliente contesta uma multa pendente em ate 7 dias, com motivo; a multa sai do
+  # total a pagar ate o ADMIN decidir (UPHELD volta a valer, VOIDED anula). So acrescenta.
+  - changeSet:
+      id: 074-penalty-contest
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: client_penalty_event
+                columnName: contested_at
+      changes:
+        - addColumn:
+            tableName: client_penalty_event
+            columns:
+              - column: {name: contested_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: contest_reason, type: "VARCHAR(300)"}
+              - column: {name: resolved_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: resolution, type: "VARCHAR(10)"}

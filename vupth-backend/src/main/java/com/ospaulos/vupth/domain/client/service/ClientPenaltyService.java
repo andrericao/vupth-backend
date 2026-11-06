@@ -180,6 +180,7 @@ public class ClientPenaltyService {
         return withAmount.stream()
                 .filter(e -> e.getPenaltyPaymentId() == null || !held.contains(e.getPenaltyPaymentId()))
                 .filter(e -> e.getAmount().signum() > 0)
+                .filter(e -> !e.isSuspended())
                 .filter(e -> e.getChargedAttendanceId() == null || released.contains(e.getChargedAttendanceId()))
                 .toList();
     }
