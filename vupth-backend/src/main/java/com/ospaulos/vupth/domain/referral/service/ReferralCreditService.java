@@ -168,7 +168,7 @@ public class ReferralCreditService {
             return;
         }
         creditRepository.save(new ReferralCredit(c.getId(), a.getId(), clientId, beneficiaryId, share, amount,
-                OffsetDateTime.now()));
+                OffsetDateTime.now(), a.isTest()));
         log.info("[Referral] credito — campaign={} attendance={} para={} ({}) R$ {}",
                 c.getId(), a.getId(), beneficiaryId, share, amount);
     }

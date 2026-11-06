@@ -1,0 +1,19 @@
+databaseChangeLog:
+  # premio-de-teste-fora-do-a-pagar (Andre, 06/11): o premio herda a marca de teste do corte (DEC-106). Premio marcado nao entra no
+  # "a pagar" nem no saldo. So acrescenta; o UPDATE marca os premios ja gerados por cortes de teste.
+  - changeSet:
+      id: 075-referral-credit-test
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: referral_credit
+                columnName: test
+      changes:
+        - addColumn:
+            tableName: referral_credit
+            columns:
+              - column: {name: test, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}
+        - sql:
+            sql: UPDATE referral_credit c SET test = TRUE FROM attendance a WHERE a.id = c.attendance_id AND a.test

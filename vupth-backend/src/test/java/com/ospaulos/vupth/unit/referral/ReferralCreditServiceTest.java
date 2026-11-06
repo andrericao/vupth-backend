@@ -155,6 +155,18 @@ class ReferralCreditServiceTest {
         assertThat(saved(1)).hasSize(1); // paga, mesmo com a campanha encerrada depois do inicio
     }
 
+    @Test
+    @DisplayName("premio-de-teste-fora-do-a-pagar: o premio herda a marca do corte de teste; o corte comum nasce sem ela")
+    void creditCarriesTheTestMark() {
+        Referral referral = referredWithoutSlot(otherId);
+        referral.takeSlot(OffsetDateTime.now().minusHours(1));
+
+        attendance.setTest(true);
+        service.onFinished(new AttendanceFinishedEvent(attendance.getId()));
+
+        assertThat(saved(1)).singleElement().matches(ReferralCredit::isTest);
+    }
+
     private List<ReferralCredit> saved(int times) {
         ArgumentCaptor<ReferralCredit> captor = ArgumentCaptor.forClass(ReferralCredit.class);
         verify(creditRepository, times(times)).save(captor.capture());

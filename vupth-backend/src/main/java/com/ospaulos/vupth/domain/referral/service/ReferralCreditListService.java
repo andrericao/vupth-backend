@@ -47,7 +47,7 @@ public class ReferralCreditListService {
             return new ReferralCreditItemResponse(c.getId(), c.getCampaignId(), campaign == null ? null : campaign.getName(),
                     c.getAmount(), c.getShare().name(), ReferralCreditItemResponse.statusOf(c.getReleasedAt(), c.getPaidAt()),
                     c.getAttendanceId(), clientFirstName(attendance), attendance == null ? null : attendance.getEndTime(),
-                    c.getCreatedAt(), c.getReleasedAt(), c.getPaidAt());
+                    c.getCreatedAt(), c.getReleasedAt(), c.getPaidAt(), c.isTest());
         }).toList();
     }
 

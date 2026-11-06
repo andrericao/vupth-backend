@@ -48,8 +48,12 @@ public class ReferralCredit {
     @Column(name = "released_at")
     private OffsetDateTime releasedAt;
 
+    /** premio-de-teste-fora-do-a-pagar: veio de um corte de teste (DEC-106). Aparece na lista com a marca e nunca vira dinheiro. */
+    @Column(name = "test", nullable = false)
+    private boolean test;
+
     public ReferralCredit(UUID campaignId, UUID attendanceId, UUID clientId, UUID beneficiaryId,
-                          ReferralShare share, BigDecimal amount, OffsetDateTime createdAt) {
+                          ReferralShare share, BigDecimal amount, OffsetDateTime createdAt, boolean test) {
         this.id = UUID.randomUUID();
         this.campaignId = campaignId;
         this.attendanceId = attendanceId;
@@ -58,5 +62,6 @@ public class ReferralCredit {
         this.share = share;
         this.amount = amount;
         this.createdAt = createdAt;
+        this.test = test;
     }
 }

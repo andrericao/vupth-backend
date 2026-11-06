@@ -127,7 +127,8 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$[0].share").value("REFERRER"))
                 .andExpect(jsonPath("$[0].status").value("LOCKED"))
                 .andExpect(jsonPath("$[0].client_name").value(clientFirst))
-                .andExpect(jsonPath("$[0].finished_at").isNotEmpty());
+                .andExpect(jsonPath("$[0].finished_at").isNotEmpty())
+                .andExpect(jsonPath("$[0].test").value(false));
         // o cliente nao recebeu premio: a lista dele e vazia
         mvc.perform(get("/referrals/me/credits").header("Authorization", client.token()))
                 .andExpect(status().isOk())
@@ -142,6 +143,22 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.credited_clients").value(1))
                 .andExpect(jsonPath("$.pending_release").value(5.0));
+
+        // premio-de-teste-fora-do-a-pagar: com a marca de teste, aparece na lista e nao soma, nao se libera e nao se paga
+        jdbc.update("UPDATE referral_credit SET test = TRUE WHERE campaign_id = ?", UUID.fromString(campaignId));
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].test").value(true));
+        mvc.perform(post("/admin/referrals/release").header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"campaign_id\":\"" + campaignId + "\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.pending_release").value(0))
+                .andExpect(jsonPath("$.to_receive").value(0));
+        mvc.perform(get("/admin/referrals/payouts").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.campaign_id=='" + campaignId + "')]").isEmpty());
+        jdbc.update("UPDATE referral_credit SET test = FALSE WHERE campaign_id = ?", UUID.fromString(campaignId));
 
         // O premio nasce travado: o Andre libera (so entao entra no "a receber" e no painel de pagamentos)
         mvc.perform(post("/admin/referrals/release").header("Authorization", admin)

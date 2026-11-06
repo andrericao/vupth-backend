@@ -39,7 +39,7 @@ public class AdminCampaignFunnelService {
 
         long accounts = campaign.getType() == CampaignType.REFERRAL_BONUS
                 ? count("SELECT count(*) FROM referral WHERE created_at >= ? AND created_at < ?", start, end) : 0;
-        long firstCut = count("SELECT count(DISTINCT client_id) FROM referral_credit WHERE campaign_id = ?"
+        long firstCut = count("SELECT count(DISTINCT client_id) FROM referral_credit WHERE NOT test AND campaign_id = ?"
                 + " AND created_at >= ? AND created_at < ?", campaignId, start, end);
         long redeemed = count("SELECT count(*) FROM campaign_redemption WHERE campaign_id = ?"
                 + " AND redeemed_at >= ? AND redeemed_at < ?", campaignId, start, end);
