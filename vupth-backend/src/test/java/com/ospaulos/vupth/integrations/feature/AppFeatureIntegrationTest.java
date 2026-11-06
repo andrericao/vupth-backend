@@ -202,7 +202,9 @@ class AppFeatureIntegrationTest {
         mvc.perform(get("/professional/me/fee-notice").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.show").value(false));
 
-        // o relatorio traz as taxas separadas
+        // o relatorio traz as taxas separadas (o servico do teste e legado: da ao corte a divisao congelada)
+        jdbc.update("UPDATE attendance SET pro_receives = 30.00, intermediary_fee = 1.99, platform_fee = 0.91 WHERE professional_id = ?",
+                UUID.fromString(pro.id()));
         mvc.perform(get("/professional/me/reports").header("Authorization", pro.token()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cuts[0].composition.app_percent_fee").isNumber())

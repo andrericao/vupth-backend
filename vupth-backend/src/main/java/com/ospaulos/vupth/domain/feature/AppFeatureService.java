@@ -159,7 +159,8 @@ public class AppFeatureService {
         if (regions.isEmpty()) {
             return true;
         }
-        var main = user.getMainAddress();
+        // getMainAddress lanca excecao quando nao ha endereco
+        var main = user.getAddress().stream().filter(a -> Boolean.TRUE.equals(a.getIsMain())).findFirst().orElse(null);
         if (main == null || main.getAddress() == null) {
             return false;
         }
