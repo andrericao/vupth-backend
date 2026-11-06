@@ -48,6 +48,7 @@ class RefreshTokenIntegrationTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired UserRepository userRepository;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     private final Faker faker = new Faker();
 
@@ -160,6 +161,29 @@ class RefreshTokenIntegrationTest {
                 .andExpect(result ->
                         assertThat(result.getResponse().getStatus()).isIn(401, 404))
                 .andDo(print());
+    }
+
+    @Test
+    @Order(20)
+    @DisplayName("POST /auth/refresh — 401 com token vencido e a linha dele sai do banco (antes dava erro de query e deslogava)")
+    void refresh_expiredToken_deletesRow() throws Exception {
+        var user = TestUserUtils.registerBaseUser(mvc, mapper, faker);
+        MvcResult login = mvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(mapper.writeValueAsString(new LoginRequest(user.email(), user.password()))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String expired = new JSONObject(login.getResponse().getContentAsString())
+                .getJSONObject("tokens").getString("refresh_token");
+        jdbc.update("UPDATE refresh_token SET expiry_date = now() - interval '1 day' WHERE token = ?", expired);
+
+        mvc.perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(String.format("{\"refresh_token\": \"%s\"}", expired)))
+                .andExpect(status().isUnauthorized());
+
+        Integer left = jdbc.queryForObject("SELECT count(*) FROM refresh_token WHERE token = ?", Integer.class, expired);
+        assertThat(left).isZero();
     }
 
     @AfterAll

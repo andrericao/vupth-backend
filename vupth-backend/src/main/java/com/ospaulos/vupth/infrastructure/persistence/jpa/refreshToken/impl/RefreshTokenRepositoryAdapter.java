@@ -28,7 +28,7 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
 
     @Override
     public void deleteByToken(RefreshToken token){
-        jpaRepository.deleteByToken(token);
+        jpaRepository.deleteByToken(token.getToken());
     }
 
     @Override

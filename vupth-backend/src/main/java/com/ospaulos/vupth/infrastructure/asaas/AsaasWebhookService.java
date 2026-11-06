@@ -63,7 +63,9 @@ public class AsaasWebhookService {
         saved.setStatus(payment == null ? null : truncate(text(payment, "status"), 40));
         saved.setBillingType(payment == null ? null : truncate(text(payment, "billingType"), 30));
         saved.setReceivedAt(OffsetDateTime.now());
-        events.save(saved);
+        if (events.insertIgnoringDuplicate(saved) == 0) {
+            return Result.DUPLICATE;
+        }
         log.info("[Asaas] {} payment={} value={} net={}", event, paymentId, saved.getValue(), saved.getNetValue());
         confirmAttendance(event, paymentId, saved);
         return Result.OK;
