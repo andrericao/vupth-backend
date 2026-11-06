@@ -21,6 +21,7 @@ public class AdminReferralController {
 
     private final AdminReferralService adminReferralService;
     private final com.ospaulos.vupth.domain.referral.service.ProfessionalPaymentService paymentService;
+    private final com.ospaulos.vupth.domain.referral.service.AdminReferralCreditListService creditListService;
 
     @GetMapping("/payouts")
     public ResponseEntity<List<AdminReferralPayoutResponse>> payouts() {
@@ -66,6 +67,18 @@ public class AdminReferralController {
     }
 
     public record ReverseRequest(@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 200) String reason) {
+    }
+
+    /** lista-de-premios-no-painel: os premios um a um; {@code person_id} acha quem cortou ou quem recebe; teste fora por padrao. */
+    @GetMapping("/credits")
+    public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.AdminReferralCreditRow>> credits(
+            @RequestParam(name = "campaign_id", required = false) UUID campaignId,
+            @RequestParam(name = "person_id", required = false) UUID personId,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime from,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE_TIME) java.time.OffsetDateTime to,
+            @RequestParam(required = false) com.ospaulos.vupth.domain.referral.service.AdminReferralCreditListService.Status status,
+            @RequestParam(name = "include_test", defaultValue = "false") boolean includeTest) {
+        return ResponseEntity.ok(creditListService.list(campaignId, personId, from, to, status, includeTest));
     }
 
     /** pagamento-ao-profissional: a pagar agora x pago no periodo, por pessoa. */

@@ -161,6 +161,23 @@ class ReferralCreditIntegrationTest {
                         .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
                 .andExpect(jsonPath("$[0].generated").value(0));
 
+        // lista-de-premios-no-painel: premio a premio, com quem cortou, o indicado e o estado
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].professional_id").value(pro.id()))
+                .andExpect(jsonPath("$[0].beneficiary_id").value(pro.id()))
+                .andExpect(jsonPath("$[0].client_name").value("Ana"))
+                .andExpect(jsonPath("$[0].campaign_name").value("Indique e ganhe"))
+                .andExpect(jsonPath("$[0].amount").value(5.0))
+                .andExpect(jsonPath("$[0].status").value("LOCKED"))
+                .andExpect(jsonPath("$[0].test").value(false));
+        mvc.perform(get("/admin/referrals/credits").param("person_id", pro.id()).param("status", "PAID").header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId)
+                        .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+
         // premio-de-teste-fora-do-a-pagar: com a marca de teste, aparece na lista e nao soma, nao se libera e nao se paga
         jdbc.update("UPDATE referral_credit SET test = TRUE WHERE campaign_id = ?", UUID.fromString(campaignId));
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
@@ -175,6 +192,11 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/admin/referrals/payouts").header("Authorization", admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.campaign_id=='" + campaignId + "')]").isEmpty());
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId).param("include_test", "true")
+                        .header("Authorization", admin))
+                .andExpect(jsonPath("$[0].test").value(true));
         mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
                 .andExpect(jsonPath("$[0].credits").value(0))
                 .andExpect(jsonPath("$[0].generated").value(0));
