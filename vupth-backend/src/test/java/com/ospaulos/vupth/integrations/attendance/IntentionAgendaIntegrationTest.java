@@ -229,6 +229,11 @@ class IntentionAgendaIntegrationTest {
         // Almoco recorrente a 5 h de agora (relogio da loja); amanha, no mesmo horario, ele cai a ~29 h —
         // longe das 3 intencoes do setup (2 h, 4 h e 26 h, 30 min cada).
         OffsetDateTime anchor = OffsetDateTime.now().plusHours(5);
+        // CI de 05/11 (rodou as 18:59): a refeicao das 23:59 passava da meia-noite e a de amanha nao empurrava a intencao.
+        // Rodando entre 17:30 e 19:00, ancora mais tarde (00:30-02:00), longe da virada e das intencoes do setup.
+        if (BusinessClock.timeAt(anchor).isAfter(LocalTime.of(22, 30))) {
+            anchor = OffsetDateTime.now().plusHours(7);
+        }
         LocalTime mealTime = BusinessClock.timeAt(anchor).withSecond(0).withNano(0);
         UUID mealId = tx.execute(st -> professionalIntervalRepository.save(ProfessionalInterval.createRecurring(
                 professionalRepository.findById(UUID.fromString(professionalId)).orElseThrow(),
