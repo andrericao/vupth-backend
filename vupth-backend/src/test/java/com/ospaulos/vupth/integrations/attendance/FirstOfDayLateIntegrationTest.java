@@ -91,6 +91,11 @@ class FirstOfDayLateIntegrationTest {
     @Test
     @DisplayName("primeiro agendado: 409 LATE_TOO_EARLY ate horario+10; o 2o agendado e o walk-in (fila vazia) seguem livres; depois de +10, marca")
     void firstOfDayLock() throws Exception {
+        // Perto da meia-noite o 2o agendado (agora + 35 min) cai no dia seguinte e vira o primeiro de outro dia: o teste depende da hora.
+        OffsetDateTime start = OffsetDateTime.now();
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                start.plusMinutes(75).toLocalDate().equals(start.toLocalDate()),
+                "perto da meia-noite: o 2o agendado cairia no dia seguinte");
         String first = walkIn(10);
         String second = walkIn(40);
         String walkIn = walkIn(70);
