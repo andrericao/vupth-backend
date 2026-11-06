@@ -656,3 +656,6 @@ databaseChangeLog:
   - include:
       file: changesets/97-finance/077-app-feature.yaml
       relativeToChangeLogFile: true
+  - include:
+      file: changesets/97-finance/078-app-feature-article.yaml
+      relativeToChangeLogFile: true

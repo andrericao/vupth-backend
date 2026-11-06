@@ -145,6 +145,37 @@ class AppFeatureIntegrationTest {
     }
 
     @Test
+    @DisplayName("artigo: oculto com a chave desligada, PARTIAL ligada para alguem, ALL ligada para todos; publico; a dependencia manda; asaas_split nao tem artigo")
+    void articles() throws Exception {
+        String admin = adminWithTotp().token();
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        mvc.perform(get("/features/articles")).andExpect(status().isOk()).andExpect(jsonPath("$", empty()));
+
+        // a chave ligada sem a dependencia, ou sem ninguem, nao mostra o artigo
+        change(admin, FEE, rule(true, 100, "\"PROFESSIONAL\"", "", "")).andExpect(status().isOk());
+        mvc.perform(get("/features/articles")).andExpect(jsonPath("$", empty()));
+        change(admin, SPLIT, rule(true, 0, "", "", "")).andExpect(status().isOk());
+        mvc.perform(get("/features/articles")).andExpect(jsonPath("$", empty()));
+
+        // ligada para alguem: parcial
+        change(admin, SPLIT, rule(true, 0, "", "", "\"" + client.id() + "\"")).andExpect(status().isOk());
+        mvc.perform(get("/features/articles"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].key").value(FEE))
+                .andExpect(jsonPath("$[0].article_path").value("recursos/profissional-paga-taxa"))
+                .andExpect(jsonPath("$[0].profiles[0]").value("PROFESSIONAL"))
+                .andExpect(jsonPath("$[0].release").value("PARTIAL"));
+
+        // para todos, sem faixa; regiao volta a ser parcial; desligou, some
+        change(admin, SPLIT, rule(true, 100, "", "", "")).andExpect(status().isOk());
+        mvc.perform(get("/features/articles")).andExpect(jsonPath("$[0].release").value("ALL"));
+        change(admin, FEE, rule(true, 100, "", "\"SP\"", "")).andExpect(status().isOk());
+        mvc.perform(get("/features/articles")).andExpect(jsonPath("$[0].release").value("PARTIAL"));
+        change(admin, FEE, rule(false, 100, "", "", "")).andExpect(status().isOk());
+        mvc.perform(get("/features/articles")).andExpect(jsonPath("$", empty()));
+    }
+
+    @Test
     @DisplayName("sem motivo ou com regra invalida 422; chave que nao existe 404; convidado com permissao e cliente 403; sem login 401")
     void guards() throws Exception {
         String admin = adminWithTotp().token();

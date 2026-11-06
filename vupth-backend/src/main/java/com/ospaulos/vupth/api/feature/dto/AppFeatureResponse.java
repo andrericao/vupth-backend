@@ -17,11 +17,12 @@ public record AppFeatureResponse(
         @JsonProperty("regions") List<String> regions,
         @JsonProperty("accounts") List<String> accounts,
         @JsonProperty("depends_on") String dependsOn,
+        @JsonProperty("article_path") String articlePath,
         @JsonProperty("updated_at") OffsetDateTime updatedAt,
         @JsonProperty("updated_by") UUID updatedBy) {
 
     public static AppFeatureResponse of(AppFeature f) {
         return new AppFeatureResponse(f.getKey(), f.getDescription(), f.isEnabled(), f.getPercent(), f.profileList(), f.regionList(),
-                f.accountList(), f.getDependsOn(), f.getUpdatedAt(), f.getUpdatedBy());
+                f.accountList(), f.getDependsOn(), f.getArticlePath(), f.getUpdatedAt(), f.getUpdatedBy());
     }
 }

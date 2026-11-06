@@ -2,6 +2,7 @@ package com.ospaulos.vupth.domain.feature;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ospaulos.vupth.api.feature.dto.AppFeatureArticleResponse;
 import com.ospaulos.vupth.api.feature.dto.AppFeatureHistoryResponse;
 import com.ospaulos.vupth.api.feature.dto.AppFeatureResponse;
 import com.ospaulos.vupth.api.feature.dto.AppFeatureUpdateRequest;
@@ -94,6 +95,35 @@ public class AppFeatureService {
                 .map(h -> new AppFeatureHistoryResponse(h.getChangedBy(), h.getChangedAt(), h.getReason(), h.isSecondFactor(),
                         h.getPreviousValue(), h.getNewValue()))
                 .toList();
+    }
+
+    /**
+     * artigo-do-recurso-no-suporte: os artigos visiveis, para o site e os apps, sem login. A visibilidade sai da regra da chave, entao
+     * muda junto com ela, na mesma transacao: nao ha um segundo registro para ficar para tras.
+     */
+    @Transactional(readOnly = true)
+    public List<AppFeatureArticleResponse> articles() {
+        Map<String, AppFeature> all = features.findAll().stream().collect(Collectors.toMap(AppFeature::getKey, Function.identity()));
+        return all.values().stream()
+                .filter(f -> f.getArticlePath() != null && reachesSomeone(f, all))
+                .sorted(Comparator.comparing(AppFeature::getKey))
+                .map(f -> new AppFeatureArticleResponse(f.getKey(), f.getArticlePath(), f.profileList(),
+                        reachesEveryone(f, all) ? "ALL" : "PARTIAL"))
+                .toList();
+    }
+
+    /** Ligada para alguem: por porcentagem ou lista de contas, com a dependencia valendo tambem. */
+    private static boolean reachesSomeone(AppFeature f, Map<String, AppFeature> all) {
+        AppFeature parent = f.getDependsOn() == null ? null : all.get(f.getDependsOn());
+        return f.isEnabled() && (f.getPercent() > 0 || !f.accountList().isEmpty())
+                && (f.getDependsOn() == null || parent != null && reachesSomeone(parent, all));
+    }
+
+    /** Ligada para todos do perfil dela: 100%, sem regiao, e a dependencia tambem. */
+    private static boolean reachesEveryone(AppFeature f, Map<String, AppFeature> all) {
+        AppFeature parent = f.getDependsOn() == null ? null : all.get(f.getDependsOn());
+        return f.isEnabled() && f.getPercent() == 100 && f.regionList().isEmpty()
+                && (f.getDependsOn() == null || parent != null && reachesEveryone(parent, all));
     }
 
     private static boolean appliesTo(AppFeature f, Map<String, AppFeature> all, BaseUser user) {

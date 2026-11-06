@@ -149,6 +149,7 @@ public class SecurityConfig {
                         // asaas-sandbox-no-fluxo: o estado da conexao (conectado, modo) e publico e sem dado sensivel
                         .requestMatchers(HttpMethod.GET, "/payment-gateway").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/features/articles").permitAll() // artigo-do-recurso-no-suporte
                         .requestMatchers(HttpMethod.GET, "/referrals/me").authenticated() // todo papel tem link (DEC-113)
                         .requestMatchers(HttpMethod.GET, "/referrals/me/credits").authenticated() // premio-em-pendentes
                         .requestMatchers(HttpMethod.GET, "/referrals/me/payments").authenticated() // pagamento-ao-profissional

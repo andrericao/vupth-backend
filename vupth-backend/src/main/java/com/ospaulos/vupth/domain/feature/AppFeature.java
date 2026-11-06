@@ -47,6 +47,10 @@ public class AppFeature {
     @Column(name = "depends_on", length = 60)
     private String dependsOn;
 
+    /** O artigo do recurso no Suporte; nulo = chave interna, sem artigo. */
+    @Column(name = "article_path", length = 200)
+    private String articlePath;
+
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 

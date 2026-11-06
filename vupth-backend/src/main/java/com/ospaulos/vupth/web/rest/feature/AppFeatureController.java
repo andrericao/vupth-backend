@@ -23,6 +23,12 @@ public class AppFeatureController {
     public record MyFeatures(@JsonProperty("enabled") List<String> enabled) {
     }
 
+    /** artigo-do-recurso-no-suporte: publico, sem login. O que nao vem aqui esta oculto. */
+    @GetMapping("/articles")
+    public ResponseEntity<List<com.ospaulos.vupth.api.feature.dto.AppFeatureArticleResponse>> articles() {
+        return ResponseEntity.ok(service.articles());
+    }
+
     @GetMapping("/me")
     public ResponseEntity<MyFeatures> mine(@AuthenticationPrincipal UserDetailsImpl user) {
         return ResponseEntity.ok(new MyFeatures(service.enabledFor(user.getUserId())));
