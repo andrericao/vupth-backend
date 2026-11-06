@@ -273,7 +273,7 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$[0].status").value("TO_PAY"));
         mvc.perform(get("/admin/referrals/payments/summary").header("Authorization", admin))
                 .andExpect(jsonPath(person + ".to_pay").value(hasItem(5.0)))
-                .andExpect(jsonPath(person + ".paid").value(hasItem(0)));
+                .andExpect(jsonPath(person + ".paid").value(hasItem(0.0)));
         mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).header("Authorization", admin))
                 .andExpect(jsonPath("$.length()").value(2));
 
