@@ -27898,6 +27898,73 @@
      "response": []
     },
     {
+     "name": "[ERRO] GET /admin/app-features sem o papel ADMIN → 403 (recursos-infraestrutura)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/app-features",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET /features/me com login → 200, tudo desligado (recursos-infraestrutura)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"nasce tudo desligado\", () => pm.expect(pm.response.json().enabled).to.eql([]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/features/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "[ERRO] GET /admin/referrals/payments sem o papel ADMIN → 403 (pagamento-ao-profissional)",
      "event": [
       {
