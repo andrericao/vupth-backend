@@ -28,6 +28,18 @@ public interface CouponCreditRepository extends JpaRepository<CouponCredit, UUID
         """)
     List<ReferralPayoutRow> findUnpaidPayouts();
 
+    /** O que esta a pagar da pessoa na campanha (pagamento-ao-profissional). */
+    @Query("""
+        SELECT COALESCE(SUM(c.amount), 0) FROM CouponCredit c
+        WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt IS NULL
+        """)
+    java.math.BigDecimal sumToPay(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId);
+
+    /** O estorno devolve ao "a pagar" os creditos daquele pagamento; devolve quantos. */
+    @Modifying
+    @Query("UPDATE CouponCredit c SET c.paidAt = NULL WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt = :paidAt")
+    int reopen(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("paidAt") OffsetDateTime paidAt);
+
     @Modifying
     @Query("""
         UPDATE CouponCredit c SET c.paidAt = :now

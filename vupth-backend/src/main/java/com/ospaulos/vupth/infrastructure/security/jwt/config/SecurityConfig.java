@@ -151,6 +151,7 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.GET, "/referrals/me").authenticated() // todo papel tem link (DEC-113)
                         .requestMatchers(HttpMethod.GET, "/referrals/me/credits").authenticated() // premio-em-pendentes
+                        .requestMatchers(HttpMethod.GET, "/referrals/me/payments").authenticated() // pagamento-ao-profissional
                         .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")

@@ -34,8 +34,10 @@ class AdminReferralServiceTest {
             mock(com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository.class);
     private final CampaignRepository campaignRepository = mock(CampaignRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
+    private final com.ospaulos.vupth.domain.referral.repository.ProfessionalPaymentRepository paymentRepository =
+            mock(com.ospaulos.vupth.domain.referral.repository.ProfessionalPaymentRepository.class);
     private final AdminReferralService service =
-            new AdminReferralService(creditRepository, couponCreditRepository, campaignRepository, userRepository);
+            new AdminReferralService(creditRepository, couponCreditRepository, campaignRepository, userRepository, paymentRepository);
 
     @Test
     @DisplayName("proximo pagamento: semanal no proximo dia (hoje conta); mensal neste mes ou no proximo; sem regra, nulo")
@@ -109,10 +111,12 @@ class AdminReferralServiceTest {
     void markPaid() {
         UUID campaignId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        when(creditRepository.sumToPay(campaignId, userId)).thenReturn(new BigDecimal("12.50"));
+        when(couponCreditRepository.sumToPay(campaignId, userId)).thenReturn(BigDecimal.ZERO);
         when(creditRepository.markPaid(eq(campaignId), eq(userId), any())).thenReturn(2, 0);
 
-        assertThat(service.markPaid(UUID.randomUUID(), campaignId, userId).paidCredits()).isEqualTo(2);
-        assertThatThrownBy(() -> service.markPaid(UUID.randomUUID(), campaignId, userId))
+        assertThat(service.markPaid(UUID.randomUUID(), campaignId, userId, null).paidCredits()).isEqualTo(2);
+        assertThatThrownBy(() -> service.markPaid(UUID.randomUUID(), campaignId, userId, null))
                 .isInstanceOfSatisfying(ReferralException.class,
                         e -> assertThat(e.getCode()).isEqualTo("REFERRAL_NOTHING_TO_PAY"));
     }
@@ -134,6 +138,8 @@ class AdminReferralServiceTest {
         when(creditRepository.findUnpaidPayouts())
                 .thenReturn(List.of(new ReferralPayoutRow(campaignId, beneficiary, new BigDecimal("12.50"), 2)));
         when(couponCreditRepository.findUnpaidPayouts()).thenReturn(List.of());
+        when(creditRepository.sumToPay(campaignId, beneficiary)).thenReturn(new BigDecimal("12.50"));
+        when(couponCreditRepository.sumToPay(campaignId, beneficiary)).thenReturn(BigDecimal.ZERO);
         when(creditRepository.markPaid(eq(campaignId), eq(beneficiary), any())).thenReturn(2);
         when(couponCreditRepository.markPaid(eq(campaignId), eq(beneficiary), any())).thenReturn(0);
         var client = mock(com.ospaulos.vupth.infrastructure.asaas.AsaasClient.class);

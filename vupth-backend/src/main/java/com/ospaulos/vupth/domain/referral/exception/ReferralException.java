@@ -40,6 +40,15 @@ public class ReferralException extends RuntimeException {
         return new ReferralException(HttpStatus.FORBIDDEN, "REFERRAL_NOT_FOR_YOU", "Usuario nao encontrado para o link de indicacao.");
     }
 
+    public static ReferralException paymentNotFound() {
+        return new ReferralException(org.springframework.http.HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "Pagamento nao encontrado.");
+    }
+
+    public static ReferralException alreadyReversed() {
+        return new ReferralException(org.springframework.http.HttpStatus.CONFLICT, "PAYMENT_ALREADY_REVERSED",
+                "Este pagamento ja foi estornado.");
+    }
+
     public static ReferralException nothingToPay() {
         return new ReferralException(HttpStatus.NOT_FOUND, "REFERRAL_NOTHING_TO_PAY", "Nada a pagar a esta pessoa nesta campanha.");
     }

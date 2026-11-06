@@ -97,6 +97,18 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
         """)
     int markPaid(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 
+    /** O que esta a pagar da pessoa na campanha (pagamento-ao-profissional). */
+    @Query("""
+        SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c
+        WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL AND c.test = false
+        """)
+    BigDecimal sumToPay(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId);
+
+    /** O estorno devolve ao "a pagar" os premios daquele pagamento; devolve quantos. */
+    @Modifying
+    @Query("UPDATE ReferralCredit c SET c.paidAt = NULL WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt = :paidAt")
+    int reopen(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("paidAt") OffsetDateTime paidAt);
+
     /** A bonificacao por link que o corte gerou (premio do indicador), liberada ou nao; para o relatorio do Asaas. */
     @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId = :attendanceId AND c.test = false")
     BigDecimal sumByAttendance(@Param("attendanceId") UUID attendanceId);

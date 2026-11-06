@@ -650,3 +650,6 @@ databaseChangeLog:
   - include:
       file: changesets/96-campaign/075-referral-credit-test.yaml
       relativeToChangeLogFile: true
+  - include:
+      file: changesets/97-finance/076-professional-payment.yaml
+      relativeToChangeLogFile: true

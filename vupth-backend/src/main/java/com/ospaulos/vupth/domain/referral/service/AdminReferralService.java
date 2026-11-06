@@ -41,6 +41,7 @@ public class AdminReferralService {
     private final com.ospaulos.vupth.domain.campaign.repository.CouponCreditRepository couponCreditRepository;
     private final CampaignRepository campaignRepository;
     private final UserRepository userRepository;
+    private final com.ospaulos.vupth.domain.referral.repository.ProfessionalPaymentRepository paymentRepository;
 
     /** Repasse automatico (DEC-132): pronto, testado e DESLIGADO. So liga com {@code vupth.asaas.payout-auto=true} e so no sandbox. */
     @org.springframework.beans.factory.annotation.Value("${vupth.asaas.payout-auto:false}")
@@ -74,7 +75,7 @@ public class AdminReferralService {
                 "VUPTH bonificacao");
         log.info("[Referral] admin={} repasse automatico campaign={} user={} valor={} transferencia={}", adminId, campaignId, userId,
                 row.amount(), transferId);
-        return new AutoPaid(markPaid(adminId, campaignId, userId), transferId, row.amount());
+        return new AutoPaid(markPaid(adminId, campaignId, userId, "Asaas " + transferId), transferId, row.amount());
     }
 
     /** O que falta pagar, o pagamento mais proximo primeiro. */
@@ -115,13 +116,17 @@ public class AdminReferralService {
         return new com.ospaulos.vupth.api.referral.dto.AdminReferralReleasedResponse(released, now);
     }
 
-    public AdminReferralPaidResponse markPaid(UUID adminId, UUID campaignId, UUID userId) {
-        OffsetDateTime now = OffsetDateTime.now();
+    /** Marca pago tudo o que esta a pagar da pessoa na campanha e grava a linha do historico ({@code note}: a nota ou o ID do PIX). */
+    public AdminReferralPaidResponse markPaid(UUID adminId, UUID campaignId, UUID userId, String note) {
+        // em microssegundos, como o banco guarda: o estorno acha os premios pagos por esta data exata
+        OffsetDateTime now = OffsetDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        java.math.BigDecimal amount = creditRepository.sumToPay(campaignId, userId).add(couponCreditRepository.sumToPay(campaignId, userId));
         int paid = creditRepository.markPaid(campaignId, userId, now) + couponCreditRepository.markPaid(campaignId, userId, now);
         if (paid == 0) {
             throw ReferralException.nothingToPay();
         }
-        log.info("[Referral] admin={} marcou pago campaign={} user={} creditos={}", adminId, campaignId, userId, paid);
+        paymentRepository.save(com.ospaulos.vupth.domain.referral.model.ProfessionalPayment.payment(userId, campaignId, amount, now, note, adminId));
+        log.info("[Referral] admin={} marcou pago campaign={} user={} creditos={} valor={}", adminId, campaignId, userId, paid, amount);
         return new AdminReferralPaidResponse(paid, now);
     }
 
