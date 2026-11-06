@@ -19,6 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -33,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(classes = VupthApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@TestPropertySource(properties = "vupth.test-seed.enabled=true")
 class PenaltyContestIntegrationTest {
 
     @Autowired MockMvc mvc;
@@ -130,5 +132,23 @@ class PenaltyContestIntegrationTest {
         mvc.perform(post("/clients/me/penalties/{id}/contest", kept).header("Authorization", stranger.token())
                         .contentType(MediaType.APPLICATION_JSON).content(body("reason", "x")))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("semeador de teste: o cliente logado ganha uma multa pendente de agora, contestavel; sem login 401; a rota so existe com a propriedade")
+    void seedPenalty() throws Exception {
+        var client = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
+        mvc.perform(post("/test/penalties")).andExpect(status().isUnauthorized());
+
+        String id = mapper.readTree(mvc.perform(post("/test/penalties").header("Authorization", client.token()))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.amount").value(5.00))
+                        .andReturn().getResponse().getContentAsString())
+                .get("penalty_id").asText();
+        mvc.perform(get("/clients/me/pending-penalties").header("Authorization", client.token()))
+                .andExpect(jsonPath("$.total").value(5.00));
+        mvc.perform(post("/clients/me/penalties/{id}/contest", id).header("Authorization", client.token())
+                        .contentType(MediaType.APPLICATION_JSON).content(body("reason", "teste do Maestro")))
+                .andExpect(status().isOk());
     }
 }
