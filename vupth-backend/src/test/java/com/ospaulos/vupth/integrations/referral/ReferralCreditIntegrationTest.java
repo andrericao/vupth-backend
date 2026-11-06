@@ -168,7 +168,7 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$[0].test").value(true));
         mvc.perform(post("/admin/referrals/release").header("Authorization", admin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"campaign_id\":\"" + campaignId + "\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isNotFound());
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.pending_release").value(0))
                 .andExpect(jsonPath("$.to_receive").value(0));
