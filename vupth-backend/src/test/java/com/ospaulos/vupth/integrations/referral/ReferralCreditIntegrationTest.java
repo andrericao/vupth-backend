@@ -144,6 +144,21 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$.credited_clients").value(1))
                 .andExpect(jsonPath("$.pending_release").value(5.0));
 
+        // balanco-por-campanha: o premio nasce travado
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Indique e ganhe"))
+                .andExpect(jsonPath("$[0].credits").value(1))
+                .andExpect(jsonPath("$[0].generated").value(5.0))
+                .andExpect(jsonPath("$[0].locked").value(5.0))
+                .andExpect(jsonPath("$[0].to_pay").value(0))
+                .andExpect(jsonPath("$[0].paid").value(0));
+        // fora do periodo, a campanha aparece zerada
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId)
+                        .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].generated").value(0));
+
         // premio-de-teste-fora-do-a-pagar: com a marca de teste, aparece na lista e nao soma, nao se libera e nao se paga
         jdbc.update("UPDATE referral_credit SET test = TRUE WHERE campaign_id = ?", UUID.fromString(campaignId));
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
@@ -158,6 +173,9 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/admin/referrals/payouts").header("Authorization", admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.campaign_id=='" + campaignId + "')]").isEmpty());
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].credits").value(0))
+                .andExpect(jsonPath("$[0].generated").value(0));
         jdbc.update("UPDATE referral_credit SET test = FALSE WHERE campaign_id = ?", UUID.fromString(campaignId));
 
         // O premio nasce travado: o Andre libera (so entao entra no "a receber" e no painel de pagamentos)
@@ -167,6 +185,9 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.pending_release").value(0))
                 .andExpect(jsonPath("$.to_receive").value(5.0));
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].locked").value(0))
+                .andExpect(jsonPath("$[0].to_pay").value(5.0));
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].status").value("TO_PAY"))
@@ -188,6 +209,10 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$.code").value("REFERRAL_NOTHING_TO_PAY"));
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.to_receive").value(0));
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].to_pay").value(0))
+                .andExpect(jsonPath("$[0].paid").value(5.0))
+                .andExpect(jsonPath("$[0].generated").value(5.0));
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$[0].status").value("PAID"))
                 .andExpect(jsonPath("$[0].paid_at").isNotEmpty());

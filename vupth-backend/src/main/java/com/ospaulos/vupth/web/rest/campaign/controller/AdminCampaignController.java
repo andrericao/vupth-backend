@@ -2,7 +2,9 @@ package com.ospaulos.vupth.web.rest.campaign.controller;
 
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignRequest;
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignResponse;
+import com.ospaulos.vupth.api.campaign.dto.AdminCampaignBalanceRow;
 import com.ospaulos.vupth.api.campaign.dto.AdminCampaignFunnel;
+import com.ospaulos.vupth.domain.campaign.service.AdminCampaignBalanceService;
 import com.ospaulos.vupth.domain.campaign.service.AdminCampaignFunnelService;
 import com.ospaulos.vupth.domain.campaign.service.AdminCampaignService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,6 +31,7 @@ public class AdminCampaignController {
 
     private final AdminCampaignService adminCampaignService;
     private final AdminCampaignFunnelService funnelService;
+    private final AdminCampaignBalanceService balanceService;
 
     @GetMapping
     public ResponseEntity<List<AdminCampaignResponse>> list() {
@@ -39,6 +42,15 @@ public class AdminCampaignController {
     public ResponseEntity<AdminCampaignResponse> create(@RequestBody @Valid AdminCampaignRequest request,
                                                         @AuthenticationPrincipal UserDetailsImpl principal) {
         return ResponseEntity.status(HttpStatus.CREATED).body(adminCampaignService.create(principal.getUserId(), request));
+    }
+
+    /** balanco-por-campanha: premios gerados, travados, a pagar e pagos, sem os de teste; filtra por campanha e por periodo. */
+    @GetMapping("/balance")
+    public ResponseEntity<List<AdminCampaignBalanceRow>> balance(
+            @RequestParam(name = "campaign_id", required = false) UUID campaignId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
+        return ResponseEntity.ok(balanceService.balance(campaignId, from, to));
     }
 
     /** admin-funil-da-campanha: link aberto (nao medido ainda), conta criada, corte concluido e quem resgatou o cupom. */
