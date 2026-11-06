@@ -89,10 +89,11 @@ class AppFeatureIntegrationTest {
         var user = admin();
         secret = mapper.readTree(mvc.perform(post("/admin/auth/totp/setup").header("Authorization", user.token()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("secret").asText();
-        mvc.perform(post("/admin/auth/totp/confirm").header("Authorization", user.token())
+        // com o 2FA cadastrado o /admin/** so aceita o token do painel, que vem no confirm
+        String panelToken = mapper.readTree(mvc.perform(post("/admin/auth/totp/confirm").header("Authorization", user.token())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"code\":\"" + code() + "\"}"))
-                .andExpect(status().isOk());
-        return user;
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("access_token").asText();
+        return new TestUserUtils.UserAuthAndToken(user.id(), "Bearer " + panelToken, user.email(), user.password());
     }
 
     private String code() throws Exception {
