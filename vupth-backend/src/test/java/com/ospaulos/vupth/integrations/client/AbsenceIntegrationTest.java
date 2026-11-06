@@ -87,9 +87,14 @@ class AbsenceIntegrationTest {
         return UUID.fromString(mapper.readTree(created).get("id").asText());
     }
 
+    /** Amanha ao meio-dia: "agora + 1 dia" perto da meia-noite estoura o fim do expediente (PROFESSIONAL_AGENDA_FULL). */
+    private static OffsetDateTime tomorrowNoon() {
+        return OffsetDateTime.now().plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0);
+    }
+
     private ResultActions schedule(TestUserUtils.UserAuthAndToken client) throws Exception {
         String body = "{\"professionalId\":\"" + professionalId + "\",\"serviceItemIds\":[\"" + service
-                + "\"],\"desiredTime\":\"" + OffsetDateTime.now().plusDays(1) + "\"}";
+                + "\"],\"desiredTime\":\"" + tomorrowNoon() + "\"}";
         return mvc.perform(post("/attendances/intentions").contentType(MediaType.APPLICATION_JSON)
                 .header("Authorization", client.token()).content(body));
     }
