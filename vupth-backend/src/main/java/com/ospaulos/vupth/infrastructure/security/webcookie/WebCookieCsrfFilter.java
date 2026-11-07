@@ -38,7 +38,8 @@ public class WebCookieCsrfFilter extends OncePerRequestFilter {
         return !webCookie.enabled() || SAFE.contains(request.getMethod())
                 || request.getHeader("Authorization") != null
                 || (WebCookieAuth.read(request, WebCookieAuth.ACCESS).isEmpty()
-                    && WebCookieAuth.read(request, WebCookieAuth.REFRESH).isEmpty());
+                    && WebCookieAuth.read(request, WebCookieAuth.REFRESH).isEmpty()
+                    && WebCookieAuth.read(request, WebCookieAuth.ADMIN_REFRESH).isEmpty());
     }
 
     @Override

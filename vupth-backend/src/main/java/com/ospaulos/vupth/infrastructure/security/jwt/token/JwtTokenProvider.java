@@ -44,7 +44,7 @@ public class JwtTokenProvider {
 
     /**
      * O token do painel (painel-de-monitoramento, fatia 3): curto ({@code jwt.admin-token.expiration}, 15 min) e com
-     * o segundo fator cumprido no {@code amr} ({@code pwd}, {@code totp}). Sem refresh: acabou, entra de novo.
+     * o segundo fator cumprido no {@code amr} ({@code pwd}, {@code totp}). Renova pelo {@code /admin/auth/refresh} (DEC-187).
      */
     public String createAdminToken(UserDetailsImpl userDetails){
         return buildToken(userDetails, adminExpirationTime, java.util.List.of("pwd", "totp"));

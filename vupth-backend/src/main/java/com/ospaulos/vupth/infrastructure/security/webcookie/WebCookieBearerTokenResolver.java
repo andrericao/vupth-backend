@@ -19,6 +19,11 @@ public class WebCookieBearerTokenResolver implements BearerTokenResolver {
 
     @Override
     public String resolve(HttpServletRequest request) {
+        // DEC-187: renovar e sair do painel provam a sessao pelo refresh; um token de acesso vencido junto nao pode virar 401
+        String path = request.getRequestURI();
+        if ("/admin/auth/refresh".equals(path) || "/admin/auth/logout".equals(path)) {
+            return null;
+        }
         String fromHeader = header.resolve(request);
         if (fromHeader != null || !webCookie.enabled()) {
             return fromHeader;

@@ -1,9 +1,11 @@
 package com.ospaulos.vupth.web.rest.admin;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.api.admin.dto.AdminTotpRequest;
 import com.ospaulos.vupth.domain.admin.model.AdminPermission;
 import com.ospaulos.vupth.domain.admin.repository.AdminPermissionRepository;
+import com.ospaulos.vupth.domain.admin.service.AdminSessionService;
 import com.ospaulos.vupth.domain.admin.service.AdminTotpService;
 import com.ospaulos.vupth.infrastructure.mail.EmailSender;
 import com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl;
@@ -12,6 +14,7 @@ import com.ospaulos.vupth.infrastructure.security.webcookie.WebCookieAuth;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -30,10 +33,13 @@ import java.util.Set;
 
 /**
  * O login seguro do painel (painel-de-monitoramento, fatia 3). O {@code /auth/login} segue igual; para abrir o
- * {@code /admin/**} a conta ADMIN troca o token do login por um token do painel (15 min, sem refresh) provando o
+ * {@code /admin/**} a conta ADMIN troca o token do login por um token do painel (15 min) provando o
  * segundo fator: {@code GET status}, {@code POST totp/setup} + {@code totp/confirm} na primeira vez (devolve os 8
  * codigos de recuperacao), {@code POST totp/verify} nas seguintes (codigo do app ou de recuperacao). A cada token
- * entregue o admin recebe um e-mail de aviso.
+ * entregue pelo segundo fator o admin recebe um e-mail de aviso.
+ *
+ * <p>sessao-configuravel-do-painel (DEC-187): quem entra tambem recebe um refresh, e {@code POST refresh} troca o token sem senha
+ * nem codigo enquanto a sessao viver. A duracao fica em {@link AdminSessionSettingsController}.</p>
  */
 @Slf4j
 @RestController
@@ -41,7 +47,10 @@ import java.util.Set;
 @RequestMapping("/admin/auth")
 public class AdminAuthController {
 
+    private static final long TOKEN_SECONDS = 15 * 60;
+
     private final AdminTotpService totp;
+    private final AdminSessionService sessions;
     private final JwtTokenProvider tokens;
     private final EmailSender emailSender;
     private final AdminPermissionRepository permissionRepository;
@@ -60,7 +69,11 @@ public class AdminAuthController {
     public record TokenResponse(
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("expires_in") long expiresIn,
-            @JsonProperty("recovery_codes") List<String> recoveryCodes) {}
+            @JsonProperty("recovery_codes") List<String> recoveryCodes,
+            @JsonProperty("refresh_token") @JsonInclude(JsonInclude.Include.NON_NULL) String refreshToken,
+            @JsonProperty("session_expires_in") @JsonInclude(JsonInclude.Include.NON_NULL) Long sessionExpiresIn) {}
+
+    public record RefreshRequest(@JsonProperty("refresh_token") @Size(max = 100) String refreshToken) {}
 
     @GetMapping("/status")
     public ResponseEntity<Status> status(@AuthenticationPrincipal UserDetailsImpl user, Authentication auth) {
@@ -97,9 +110,38 @@ public class AdminAuthController {
         return ResponseEntity.ok(toWeb(issue(user, null), http, httpResponse));
     }
 
+    /** Publico: quem prova a sessao e o refresh (no corpo, ou no cookie no modo cookie). Falhou: 401 e o painel pede o codigo. */
+    @PostMapping("/refresh")
+    public ResponseEntity<TokenResponse> refresh(@RequestBody(required = false) @Valid RefreshRequest request,
+                                                 HttpServletRequest http,
+                                                 HttpServletResponse httpResponse) {
+        var renewed = sessions.refresh(presented(request, http));
+        return ResponseEntity.ok(toWeb(new TokenResponse(renewed.accessToken(), TOKEN_SECONDS, null,
+                renewed.refreshToken(), renewed.expiresIn()), http, httpResponse));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@RequestBody(required = false) @Valid RefreshRequest request,
+                                       HttpServletRequest http,
+                                       HttpServletResponse httpResponse) {
+        sessions.close(presented(request, http));
+        if (webCookieAuth.wants(http)) {
+            webCookieAuth.clearAdmin(httpResponse);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    private String presented(RefreshRequest request, HttpServletRequest http) {
+        if (request != null && request.refreshToken() != null) {
+            return request.refreshToken();
+        }
+        return webCookieAuth.enabled() ? WebCookieAuth.read(http, WebCookieAuth.ADMIN_REFRESH).orElse(null) : null;
+    }
+
     /**
      * token-web-httponly (DEC-179, pedido do Painel): no modo cookie o token do painel vai so no cookie HttpOnly de acesso e sai do
-     * corpo (os codigos de recuperacao continuam no corpo, mostrados uma vez). Chave desligada ou sem pedir: igual a antes.
+     * corpo, e o refresh vai no cookie dele (os codigos de recuperacao continuam no corpo, mostrados uma vez). Chave desligada
+     * ou sem pedir: igual a antes.
      */
     private TokenResponse toWeb(TokenResponse issued, HttpServletRequest http,
                                 HttpServletResponse httpResponse) {
@@ -107,7 +149,10 @@ public class AdminAuthController {
             return issued;
         }
         webCookieAuth.writeAccess(httpResponse, issued.accessToken(), issued.expiresIn());
-        return new TokenResponse(null, issued.expiresIn(), issued.recoveryCodes());
+        if (issued.refreshToken() != null) {
+            webCookieAuth.writeAdminRefresh(http, httpResponse, issued.refreshToken(), issued.sessionExpiresIn());
+        }
+        return new TokenResponse(null, issued.expiresIn(), issued.recoveryCodes(), null, issued.sessionExpiresIn());
     }
 
     private TokenResponse issue(UserDetailsImpl user, List<String> recovery) {
@@ -119,6 +164,7 @@ public class AdminAuthController {
         } catch (RuntimeException e) {
             log.error("[AdminAuth] falha ao avisar o acesso por e-mail user={}: {}", user.getUserId(), e.getMessage());
         }
-        return new TokenResponse(token, 15 * 60, recovery);
+        var session = sessions.open(user.getUserId());
+        return new TokenResponse(token, TOKEN_SECONDS, recovery, session.refreshToken(), session.expiresIn());
     }
 }

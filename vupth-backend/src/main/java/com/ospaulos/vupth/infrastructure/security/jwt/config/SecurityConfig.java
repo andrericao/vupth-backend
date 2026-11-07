@@ -143,6 +143,8 @@ public class SecurityConfig {
                         // formulario-do-suporte (DEC-59): o site de suporte nao tem login
                         .requestMatchers(HttpMethod.POST, "/support/contact").permitAll()
                         .requestMatchers(HttpMethod.POST, "/admin/invitations/accept").permitAll()
+                        // DEC-187: o token do painel pode ja ter vencido; quem prova a sessao e o refresh
+                        .requestMatchers(HttpMethod.POST, "/admin/auth/refresh", "/admin/auth/logout").permitAll()
                         .requestMatchers(HttpMethod.POST, "/support/articles/*/vote").permitAll()
                         // testes-asaas-sandbox: o aviso do Asaas nao tem login; o controller confere o asaas-access-token
                         .requestMatchers(HttpMethod.POST, "/webhooks/asaas").permitAll()

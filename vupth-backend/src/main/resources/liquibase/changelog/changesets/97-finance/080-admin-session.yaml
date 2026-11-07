@@ -1,0 +1,34 @@
+databaseChangeLog:
+  # sessao-configuravel-do-painel (DEC-187): a sessao de quem entrou no painel. So o hash do refresh fica no banco; previous_hash guarda o
+  # anterior por alguns segundos (duas abas renovando juntas) e denuncia reuso depois disso.
+  - changeSet:
+      id: 080-admin-session
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: admin_session
+      changes:
+        - createTable:
+            tableName: admin_session
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: user_id, type: UUID, constraints: {nullable: false}}
+              - column: {name: token_hash, type: VARCHAR(64), constraints: {nullable: false, unique: true}}
+              - column: {name: previous_hash, type: VARCHAR(64)}
+              - column: {name: rotated_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: idle_minutes, type: INT, constraints: {nullable: false}}
+              - column: {name: started_at, type: "TIMESTAMP WITH TIME ZONE", constraints: {nullable: false}}
+              - column: {name: last_used_at, type: "TIMESTAMP WITH TIME ZONE", constraints: {nullable: false}}
+              - column: {name: revoked_at, type: "TIMESTAMP WITH TIME ZONE"}
+        - createIndex:
+            tableName: admin_session
+            indexName: idx_admin_session_user
+            columns:
+              - column: {name: user_id}
+        - createIndex:
+            tableName: admin_session
+            indexName: idx_admin_session_previous_hash
+            columns:
+              - column: {name: previous_hash}

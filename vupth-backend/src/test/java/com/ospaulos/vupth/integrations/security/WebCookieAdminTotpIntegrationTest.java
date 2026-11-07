@@ -82,8 +82,44 @@ class WebCookieAdminTotpIntegrationTest {
                 .andReturn();
         String panel = WebCookieTestSupport.cookies(confirmed).get("vupth_at");
         assertThat(panel).isNotBlank().isNotEqualTo(c.get("vupth_at"));
-        assertThat(confirmed.getResponse().getHeaders("Set-Cookie")).singleElement().asString().contains("HttpOnly", "Max-Age=900");
+        assertThat(confirmed.getResponse().getHeaders("Set-Cookie")).filteredOn(h -> h.startsWith("vupth_at="))
+                .singleElement().asString().contains("HttpOnly", "Max-Age=900");
 
         mvc.perform(get("/admin/users").cookie(new Cookie("vupth_at", panel))).andExpect(status().isOk());
+
+        // DEC-187: o refresh fica so no cookie, em /admin/auth; o token vencido junto nao atrapalha
+        assertThat(confirmed.getResponse().getContentAsString()).doesNotContain("refresh_token");
+        assertThat(confirmed.getResponse().getHeaders("Set-Cookie")).filteredOn(h -> h.startsWith("vupth_art="))
+                .singleElement().asString().contains("HttpOnly", "Path=/admin/auth");
+        Map<String, String> issued = WebCookieTestSupport.cookies(confirmed);
+        Cookie art = new Cookie("vupth_art", issued.get("vupth_art"));
+        Cookie csrf2 = new Cookie("vupth_csrf", issued.get("vupth_csrf"));
+        assertThat(csrf2.getValue()).isEqualTo(csrf.getValue());
+
+        // sem o CSRF, o cookie do refresh nao renova
+        mvc.perform(post("/admin/auth/refresh").cookie(art, csrf2)).andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_INVALID"));
+
+        MvcResult renewed = mvc.perform(post("/admin/auth/refresh").cookie(art, csrf2, new Cookie("vupth_at", "vencido"))
+                        .header("X-CSRF-Token", csrf2.getValue()).header("Origin", WebCookieTestSupport.WEB).header("X-Auth-Mode", "cookie"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.access_token").doesNotExist())
+                .andExpect(jsonPath("$.refresh_token").doesNotExist())
+                .andExpect(jsonPath("$.session_expires_in").isNumber())
+                .andReturn();
+        Map<String, String> next = WebCookieTestSupport.cookies(renewed);
+        assertThat(next.get("vupth_art")).isNotBlank().isNotEqualTo(art.getValue());
+        mvc.perform(get("/admin/users").cookie(new Cookie("vupth_at", next.get("vupth_at")))).andExpect(status().isOk());
+
+        // sair apaga os cookies do painel e encerra a sessao
+        Cookie current = new Cookie("vupth_art", next.get("vupth_art"));
+        MvcResult out = mvc.perform(post("/admin/auth/logout").cookie(current, csrf2)
+                        .header("X-CSRF-Token", csrf2.getValue()).header("Origin", WebCookieTestSupport.WEB).header("X-Auth-Mode", "cookie"))
+                .andExpect(status().isNoContent()).andReturn();
+        assertThat(out.getResponse().getHeaders("Set-Cookie")).anyMatch(h -> h.startsWith("vupth_art=") && h.contains("Max-Age=0"));
+        mvc.perform(post("/admin/auth/refresh").cookie(current, csrf2)
+                        .header("X-CSRF-Token", csrf2.getValue()).header("Origin", WebCookieTestSupport.WEB))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ADMIN_SESSION_EXPIRED"));
     }
 }

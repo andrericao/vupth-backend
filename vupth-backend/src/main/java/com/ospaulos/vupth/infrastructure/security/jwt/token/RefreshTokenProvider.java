@@ -24,6 +24,10 @@ public class RefreshTokenProvider {
 
     private final RefreshTokenRepository refreshTokenRepository;
 
+    /** DEC-187: trocar a senha ou o e-mail derruba tambem a sessao do painel. Opcional nos testes de unidade. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.admin.service.AdminSessionService adminSessions;
+
     @Value("${jwt.refresh-token.expiration:P7D}")
     private Duration expirationTime;
 
@@ -131,6 +135,9 @@ public class RefreshTokenProvider {
     @Transactional
     public void revokeAllUserTokens(UUID userId) {
         refreshTokenRepository.deleteByUserId(userId);
+        if (adminSessions != null) {
+            adminSessions.closeAll(userId);
+        }
     }
 
     @Transactional

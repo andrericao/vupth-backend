@@ -21,6 +21,7 @@ import java.util.Optional;
  * <ul>
  *   <li>{@value #ACCESS} — o token de acesso (HttpOnly, Secure, Path=/).</li>
  *   <li>{@value #REFRESH} — o refresh (HttpOnly, Secure, so em {@value #REFRESH_PATH}).</li>
+ *   <li>{@value #ADMIN_REFRESH} — o refresh da sessao do painel (HttpOnly, Secure, so em {@value #ADMIN_REFRESH_PATH}; DEC-187).</li>
  *   <li>{@value #CSRF} — o token duplo de CSRF, legivel pela pagina; toda escrita repete o valor em {@value #CSRF_HEADER}.</li>
  * </ul>
  */
@@ -34,6 +35,9 @@ public class WebCookieAuth {
     public static final String CSRF = "vupth_csrf";
     public static final String CSRF_HEADER = "X-CSRF-Token";
     public static final String REFRESH_PATH = "/auth/web";
+    public static final String ADMIN_REFRESH = "vupth_art";
+    public static final String ADMIN_REFRESH_PATH = "/admin/auth";
+    private static final long ADMIN_CSRF_SECONDS = Duration.ofDays(30).getSeconds();
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -80,11 +84,26 @@ public class WebCookieAuth {
     }
 
     /**
-     * Troca so o cookie de acesso (o token do painel, depois do 2o fator, 15 min e sem refresh). O refresh e o CSRF da sessao
-     * seguem os do login: renovar pelo {@code /auth/web/refresh} devolve um token comum, sem o fator, e o painel pede o codigo de novo.
+     * Troca so o cookie de acesso (o token do painel, depois do 2o fator, 15 min). O refresh e o CSRF da sessao seguem os do login:
+     * renovar pelo {@code /auth/web/refresh} devolve um token comum, sem o fator. O painel renova pelo {@code /admin/auth/refresh}.
      */
     public void writeAccess(HttpServletResponse response, String accessToken, long maxAgeSeconds) {
         add(response, cookie(ACCESS, accessToken, "/", maxAgeSeconds, true));
+    }
+
+    /**
+     * O refresh da sessao do painel (DEC-187). O CSRF mantem o valor e passa a durar o teto da sessao: a do painel vai alem dos 7 dias
+     * do login, e sem ele a renovacao seria recusada.
+     */
+    public void writeAdminRefresh(HttpServletRequest request, HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
+        add(response, cookie(ADMIN_REFRESH, refreshToken, ADMIN_REFRESH_PATH, maxAgeSeconds, true));
+        add(response, cookie(CSRF, read(request, CSRF).orElseGet(WebCookieAuth::newCsrf), "/", ADMIN_CSRF_SECONDS, false, csrfDomain));
+    }
+
+    /** Sair do painel: apaga o token do painel e o refresh dele; o login comum segue. */
+    public void clearAdmin(HttpServletResponse response) {
+        add(response, cookie(ACCESS, "", "/", 0, true));
+        add(response, cookie(ADMIN_REFRESH, "", ADMIN_REFRESH_PATH, 0, true));
     }
 
     /** Apaga os tres (Max-Age=0), no logout. */
