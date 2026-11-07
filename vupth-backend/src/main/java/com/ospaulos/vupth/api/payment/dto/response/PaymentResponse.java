@@ -1,5 +1,6 @@
 package com.ospaulos.vupth.api.payment.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.ospaulos.vupth.domain.payment.PaymentStatus;
 import com.ospaulos.vupth.domain.payment.PixKeyType;
@@ -41,7 +42,13 @@ public record PaymentResponse(
         // pagamento-declarado-contestavel (F4): declared = o profissional marcou "Recebi" e o cliente ainda nao confirmou; contested =
         // o cliente contestou (pendencia visivel ao ADMIN e ao relatorio). Ambos false no quitado pelo gateway
         @JsonProperty("declared") boolean declared,
-        @JsonProperty("contested") boolean contested
+        @JsonProperty("contested") boolean contested,
+        // taxas-na-rota-do-recebi: as mesmas do relatorio; so o profissional e o dono as recebem, o cliente nunca. Fora do JSON em servico
+        // legado. fees_active=false = riscadas, o profissional nao paga
+        @JsonProperty("app_percent_fee") @JsonInclude(JsonInclude.Include.NON_NULL) BigDecimal appPercentFee,
+        @JsonProperty("rounding_fee") @JsonInclude(JsonInclude.Include.NON_NULL) BigDecimal roundingFee,
+        @JsonProperty("gateway_fee_simulated") @JsonInclude(JsonInclude.Include.NON_NULL) BigDecimal gatewayFeeSimulated,
+        @JsonProperty("fees_active") @JsonInclude(JsonInclude.Include.NON_NULL) Boolean feesActive
 ) {
 
     /** A cobranca do Asaas: {@code mode} SANDBOX (pagamento de teste, sem dinheiro real) ou REAL; o webhook atualiza o status. */

@@ -10663,7 +10663,8 @@
          "pm.test(\"PENDING\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
          "pm.test(\"valor = servicos + multas\", () => pm.expect(Number(b.amount)).to.eql(Number(b.services_value) + Number(b.penalties_value)));",
          "pm.test(\"BR Code\", () => pm.expect(b.pix_copy_paste).to.match(/^000201/));",
-         "pm.test(\"pix_key em texto (pix-key-no-pagamento)\", () => pm.expect(b.pix_key).to.be.a(\"string\").and.not.empty);"
+         "pm.test(\"pix_key em texto (pix-key-no-pagamento)\", () => pm.expect(b.pix_key).to.be.a(\"string\").and.not.empty);",
+         "pm.test(\"cliente nao ve as taxas (taxas-na-rota-do-recebi)\", () => [\"app_percent_fee\", \"rounding_fee\", \"gateway_fee_simulated\", \"fees_active\"].forEach(k => pm.expect(b).to.not.have.property(k)));"
         ]
        }
       }

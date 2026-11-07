@@ -212,6 +212,21 @@ class AppFeatureIntegrationTest {
                 .andExpect(jsonPath("$.cuts[0].composition.gateway_fee_simulated").isNumber())
                 .andExpect(jsonPath("$.cuts[0].composition.fees_active").value(true));
 
+        // taxas-na-rota-do-recebi: a tela do "Recebi" le as mesmas taxas; o cliente, na mesma rota, nao ve nenhuma
+        UUID attendanceId = jdbc.queryForObject("SELECT id FROM attendance WHERE professional_id = ? LIMIT 1", UUID.class, UUID.fromString(pro.id()));
+        mvc.perform(get("/attendances/{id}/payment", attendanceId).header("Authorization", pro.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.app_percent_fee").isNumber())
+                .andExpect(jsonPath("$.rounding_fee").isNumber())
+                .andExpect(jsonPath("$.gateway_fee_simulated").isNumber())
+                .andExpect(jsonPath("$.fees_active").value(true));
+        mvc.perform(get("/attendances/{id}/payment", attendanceId).header("Authorization", client.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.app_percent_fee").doesNotExist())
+                .andExpect(jsonPath("$.rounding_fee").doesNotExist())
+                .andExpect(jsonPath("$.gateway_fee_simulated").doesNotExist())
+                .andExpect(jsonPath("$.fees_active").doesNotExist());
+
         // desligou: depois do proximo corte o modal volta
         change(admin, FEE, rule(false, 100, "", "", "")).andExpect(status().isOk());
         var second = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
