@@ -10663,7 +10663,8 @@
          "pm.test(\"PENDING\", () => pm.expect(b.status).to.eql(\"PENDING\"));",
          "pm.test(\"valor = servicos + multas\", () => pm.expect(Number(b.amount)).to.eql(Number(b.services_value) + Number(b.penalties_value)));",
          "pm.test(\"BR Code\", () => pm.expect(b.pix_copy_paste).to.match(/^000201/));",
-         "pm.test(\"pix_key em texto (pix-key-no-pagamento)\", () => pm.expect(b.pix_key).to.be.a(\"string\").and.not.empty);"
+         "pm.test(\"pix_key em texto (pix-key-no-pagamento)\", () => pm.expect(b.pix_key).to.be.a(\"string\").and.not.empty);",
+         "pm.test(\"cliente nao ve as taxas (taxas-na-rota-do-recebi)\", () => [\"app_percent_fee\", \"rounding_fee\", \"gateway_fee_simulated\", \"fees_active\"].forEach(k => pm.expect(b).to.not.have.property(k)));"
         ]
        }
       }
@@ -11492,6 +11493,43 @@
       "body": {
        "mode": "raw",
        "raw": "{\"opening_time\": \"00:00:00Z\", \"closing_time\": \"00:00:00Z\"}"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "setup: agenda da semana 24h (profissional) - sem ela o cliente so solicita (abrir-dia-sem-semana)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{prof_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/professional/me/hours/weekly",
+      "auth": {
+       "type": "noauth"
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\"days\": [{\"day\": \"MONDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"TUESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"WEDNESDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"THURSDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"FRIDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SATURDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}, {\"day\": \"SUNDAY\", \"closed\": false, \"opens\": \"00:00\", \"closes\": \"00:00\"}]}"
       }
      },
      "response": []
@@ -27728,6 +27766,35 @@
      "response": []
     },
     {
+     "name": "GET /features/articles sem login → 200 lista vazia (artigo-do-recurso-no-suporte)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"nasce tudo oculto\", () => pm.expect(pm.response.json()).to.eql([]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": "{{base_url}}/features/articles",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
      "name": "GET /campaigns/active com login de cliente → 200 so do publico dele (campanhas-ativas-para-o-client)",
      "event": [
       {
@@ -27821,6 +27888,239 @@
        }
       ],
       "url": "{{base_url}}/admin/campaigns",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/campaigns/balance sem o papel ADMIN → 403 (balanco-por-campanha)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/campaigns/balance",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/app-features sem o papel ADMIN → 403 (recursos-infraestrutura)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/app-features",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET /features/me com login → 200, tudo desligado (recursos-infraestrutura)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"nasce tudo desligado\", () => pm.expect(pm.response.json().enabled).to.eql([]));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/features/me",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/referrals/payments sem o papel ADMIN → 403 (pagamento-ao-profissional)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/referrals/payments",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/referrals/credits sem o papel ADMIN → 403 (lista-de-premios-no-painel)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/referrals/credits",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "[ERRO] GET /admin/referrals/payments/summary sem o papel ADMIN → 403 (pagamento-ao-profissional)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test(\"Status 403\", () => pm.response.to.have.status(403));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/admin/referrals/payments/summary",
+      "auth": {
+       "type": "noauth"
+      }
+     },
+     "response": []
+    },
+    {
+     "name": "GET /referrals/me/payments com login → 200 lista (pagamento-ao-profissional)",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "exec": [
+         "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+         "pm.test(\"lista\", () => pm.expect(pm.response.json()).to.be.an(\"array\"));"
+        ],
+        "type": "text/javascript"
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{client_token}}",
+        "type": "text"
+       }
+      ],
+      "url": "{{base_url}}/referrals/me/payments",
       "auth": {
        "type": "noauth"
       }

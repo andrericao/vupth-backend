@@ -55,6 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class IntentionCreateIntegrationTest {
 
+    @Autowired com.ospaulos.vupth.domain.professional.repository.ProfessionalRepository professionalRepository;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -76,6 +77,7 @@ class IntentionCreateIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerToken, establishmentId, "Owner Professional");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, establishmentId);
 
         // Sem intervalos (refeição) atravessando — mantém a projeção previsível.
         professionalIntervalRepository.deleteAll(

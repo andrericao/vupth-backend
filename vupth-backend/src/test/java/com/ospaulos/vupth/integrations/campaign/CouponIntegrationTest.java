@@ -279,7 +279,7 @@ class CouponIntegrationTest {
         assertThat(adminReferralService.payouts())
                 .anyMatch(p -> p.beneficiaryId().equals(UUID.fromString(shop.professionalId()))
                         && p.amount().compareTo(new BigDecimal("5.00")) == 0);
-        adminReferralService.markPaid(UUID.randomUUID(), c.getId(), UUID.fromString(shop.professionalId()));
+        adminReferralService.markPaid(UUID.randomUUID(), c.getId(), UUID.fromString(shop.professionalId()), null);
         mvc.perform(get("/professional/me/credits").header("Authorization", shop.ownerToken()))
                 .andExpect(jsonPath("$.open_amount").value(0.0))
                 .andExpect(jsonPath("$.items[0].paid_at").isNotEmpty());

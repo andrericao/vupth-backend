@@ -36,8 +36,8 @@ public record PublicAgendaResponse(AgendaFrameResponse frame, List<Block> blocks
 
     /*
      * agenda-publica-dias-liberados (24/10): por que o dia esta fechado. {@code store_open}: a loja abre naquele dia (ou nao
-     * configurou o horario). {@code agenda_released}: a agenda do PROPRIO profissional nao fecha o dia (ou ele nao configurou
-     * a agenda). O Client: loja nao abre = esconde o dia; loja abre e agenda nao liberada = mostra "Solicitar agendamento";
+     * configurou o horario). {@code agenda_released}: o PROPRIO profissional disponibilizou a agenda no dia: semana montada e dia
+     * aberto nela (abrir-dia-sem-semana: sem a semana e falso, mesmo com o dia aberto). O Client: loja nao abre = esconde o dia; loja abre e agenda nao liberada = mostra "Solicitar agendamento";
      * os dois verdadeiros = agenda direto (closed=false).
      */
 }

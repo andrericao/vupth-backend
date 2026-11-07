@@ -149,12 +149,15 @@ public class SecurityConfig {
                         // asaas-sandbox-no-fluxo: o estado da conexao (conectado, modo) e publico e sem dado sensivel
                         .requestMatchers(HttpMethod.GET, "/payment-gateway").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/features/articles").permitAll() // artigo-do-recurso-no-suporte
                         .requestMatchers(HttpMethod.GET, "/referrals/me").authenticated() // todo papel tem link (DEC-113)
                         .requestMatchers(HttpMethod.GET, "/referrals/me/credits").authenticated() // premio-em-pendentes
+                        .requestMatchers(HttpMethod.GET, "/referrals/me/payments").authenticated() // pagamento-ao-profissional
                         .requestMatchers(HttpMethod.POST, "/referrals/claim").hasRole("CLIENT")
                         .requestMatchers(HttpMethod.GET, "/establishment/mine").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/professional/me/reports").hasRole("PROFESSIONAL")
+                        .requestMatchers("/professional/me/fee-notice/**").hasRole("PROFESSIONAL") // chave-profissional-paga-taxa
                         .requestMatchers(HttpMethod.GET, "/professional/me").hasRole("PROFESSIONAL")
                         .requestMatchers(HttpMethod.GET, "/establishment/*/affiliations").hasRole("OWNER")
                         // convite-sem-conta: os convites por e-mail que esperam a conta — so o dono

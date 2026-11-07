@@ -1,0 +1,18 @@
+databaseChangeLog:
+  # chave-profissional-paga-taxa (Andre, 06/11): o ultimo estado da cobranca que o profissional viu no modal unico. Sem linha = viu
+  # "nao paga", o estado de hoje.
+  - changeSet:
+      id: 079-professional-fee-notice
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: professional_fee_notice
+      changes:
+        - createTable:
+            tableName: professional_fee_notice
+            columns:
+              - column: {name: professional_id, type: UUID, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: fees_active, type: BOOLEAN, constraints: {nullable: false}}
+              - column: {name: seen_at, type: "TIMESTAMP WITH TIME ZONE", constraints: {nullable: false}}

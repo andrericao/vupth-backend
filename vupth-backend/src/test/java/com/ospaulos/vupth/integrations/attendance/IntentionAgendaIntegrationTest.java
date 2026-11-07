@@ -79,6 +79,7 @@ class IntentionAgendaIntegrationTest {
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, ownerToken);
         this.establishmentId = estab.id();
         TestUserUtils.becomeProfessional(mvc, mapper, faker, ownerToken, establishmentId, "Owner Professional");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, establishmentId);
 
         // Sem intervalos atravessando — projecao previsivel.
         professionalIntervalRepository.deleteAll(

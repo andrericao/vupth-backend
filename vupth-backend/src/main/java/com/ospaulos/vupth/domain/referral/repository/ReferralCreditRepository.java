@@ -43,26 +43,26 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
     /** O que a pessoa tem a receber: premios ja liberados pelo Andre e ainda nao pagos. */
     @Query("""
         SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c
-        WHERE c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL
+        WHERE c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL AND c.test = false
         """)
     BigDecimal sumUnpaidByBeneficiary(@Param("userId") UUID userId);
 
     /** Premios ganhos que esperam o Andre liberar. */
     @Query("""
         SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c
-        WHERE c.beneficiaryId = :userId AND c.releasedAt IS NULL
+        WHERE c.beneficiaryId = :userId AND c.releasedAt IS NULL AND c.test = false
         """)
     BigDecimal sumPendingReleaseByBeneficiary(@Param("userId") UUID userId);
 
     /** Tudo o que a campanha ja premiou (liberado ou nao), para o teto de gasto. */
-    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.campaignId = :campaignId")
+    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.campaignId = :campaignId AND c.test = false")
     BigDecimal sumByCampaign(@Param("campaignId") UUID campaignId);
 
     /** O que falta pagar, por campanha e por pessoa. */
     @Query("""
         SELECT new com.ospaulos.vupth.domain.referral.repository.ReferralPayoutRow(
             c.campaignId, c.beneficiaryId, SUM(c.amount), COUNT(c))
-        FROM ReferralCredit c WHERE c.paidAt IS NULL AND c.releasedAt IS NOT NULL
+        FROM ReferralCredit c WHERE c.paidAt IS NULL AND c.releasedAt IS NOT NULL AND c.test = false
         GROUP BY c.campaignId, c.beneficiaryId
         """)
     List<ReferralPayoutRow> findUnpaidPayouts();
@@ -71,21 +71,21 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
     @Query("""
         SELECT new com.ospaulos.vupth.domain.referral.repository.ReferralPayoutRow(
             c.campaignId, c.beneficiaryId, SUM(c.amount), COUNT(c))
-        FROM ReferralCredit c WHERE c.releasedAt IS NULL
+        FROM ReferralCredit c WHERE c.releasedAt IS NULL AND c.test = false
         GROUP BY c.campaignId, c.beneficiaryId
         """)
     List<ReferralPayoutRow> findPendingRelease();
 
     /** Libera os premios travados da campanha, de todos; devolve quantos. */
     @Modifying
-    @Query("UPDATE ReferralCredit c SET c.releasedAt = :now WHERE c.campaignId = :campaignId AND c.releasedAt IS NULL")
+    @Query("UPDATE ReferralCredit c SET c.releasedAt = :now WHERE c.campaignId = :campaignId AND c.releasedAt IS NULL AND c.test = false")
     int releaseAll(@Param("campaignId") UUID campaignId, @Param("now") OffsetDateTime now);
 
     /** Libera os premios travados da campanha de uma pessoa; devolve quantos. */
     @Modifying
     @Query("""
         UPDATE ReferralCredit c SET c.releasedAt = :now
-        WHERE c.campaignId = :campaignId AND c.releasedAt IS NULL AND c.beneficiaryId = :userId
+        WHERE c.campaignId = :campaignId AND c.releasedAt IS NULL AND c.beneficiaryId = :userId AND c.test = false
         """)
     int releaseFor(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 
@@ -93,15 +93,27 @@ public interface ReferralCreditRepository extends JpaRepository<ReferralCredit, 
     @Modifying
     @Query("""
         UPDATE ReferralCredit c SET c.paidAt = :now
-        WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL
+        WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL AND c.test = false
         """)
     int markPaid(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("now") OffsetDateTime now);
 
+    /** O que esta a pagar da pessoa na campanha (pagamento-ao-profissional). */
+    @Query("""
+        SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c
+        WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt IS NULL AND c.releasedAt IS NOT NULL AND c.test = false
+        """)
+    BigDecimal sumToPay(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId);
+
+    /** O estorno devolve ao "a pagar" os premios daquele pagamento; devolve quantos. */
+    @Modifying
+    @Query("UPDATE ReferralCredit c SET c.paidAt = NULL WHERE c.campaignId = :campaignId AND c.beneficiaryId = :userId AND c.paidAt = :paidAt")
+    int reopen(@Param("campaignId") UUID campaignId, @Param("userId") UUID userId, @Param("paidAt") OffsetDateTime paidAt);
+
     /** A bonificacao por link que o corte gerou (premio do indicador), liberada ou nao; para o relatorio do Asaas. */
-    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId = :attendanceId")
+    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId = :attendanceId AND c.test = false")
     BigDecimal sumByAttendance(@Param("attendanceId") UUID attendanceId);
 
     /** A bonificacao por link gerada por estes atendimentos (para os totais por conta); a lista nao pode ser vazia. */
-    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId IN :attendanceIds")
+    @Query("SELECT COALESCE(SUM(c.amount), 0) FROM ReferralCredit c WHERE c.attendanceId IN :attendanceIds AND c.test = false")
     BigDecimal sumByAttendances(@Param("attendanceIds") java.util.Collection<UUID> attendanceIds);
 }

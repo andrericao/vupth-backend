@@ -27,6 +27,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -127,7 +129,8 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$[0].share").value("REFERRER"))
                 .andExpect(jsonPath("$[0].status").value("LOCKED"))
                 .andExpect(jsonPath("$[0].client_name").value(clientFirst))
-                .andExpect(jsonPath("$[0].finished_at").isNotEmpty());
+                .andExpect(jsonPath("$[0].finished_at").isNotEmpty())
+                .andExpect(jsonPath("$[0].test").value(false));
         // o cliente nao recebeu premio: a lista dele e vazia
         mvc.perform(get("/referrals/me/credits").header("Authorization", client.token()))
                 .andExpect(status().isOk())
@@ -143,6 +146,62 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$.credited_clients").value(1))
                 .andExpect(jsonPath("$.pending_release").value(5.0));
 
+        // balanco-por-campanha: o premio nasce travado
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Indique e ganhe"))
+                .andExpect(jsonPath("$[0].credits").value(1))
+                .andExpect(jsonPath("$[0].generated").value(5.0))
+                .andExpect(jsonPath("$[0].locked").value(5.0))
+                .andExpect(jsonPath("$[0].to_pay").value(0))
+                .andExpect(jsonPath("$[0].paid").value(0));
+        // fora do periodo, a campanha aparece zerada
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId)
+                        .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].generated").value(0));
+
+        // lista-de-premios-no-painel: premio a premio, com quem cortou, o indicado e o estado
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].professional_id").value(pro.id()))
+                .andExpect(jsonPath("$[0].beneficiary_id").value(pro.id()))
+                .andExpect(jsonPath("$[0].client_name").value("Ana"))
+                .andExpect(jsonPath("$[0].campaign_name").value("Indique e ganhe"))
+                .andExpect(jsonPath("$[0].amount").value(5.0))
+                .andExpect(jsonPath("$[0].status").value("LOCKED"))
+                .andExpect(jsonPath("$[0].test").value(false));
+        mvc.perform(get("/admin/referrals/credits").param("person_id", pro.id()).param("status", "PAID").header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId)
+                        .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // premio-de-teste-fora-do-a-pagar: com a marca de teste, aparece na lista e nao soma, nao se libera e nao se paga
+        jdbc.update("UPDATE referral_credit SET test = TRUE WHERE campaign_id = ?", UUID.fromString(campaignId));
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].test").value(true));
+        mvc.perform(post("/admin/referrals/release").header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"campaign_id\":\"" + campaignId + "\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.pending_release").value(0))
+                .andExpect(jsonPath("$.to_receive").value(0));
+        mvc.perform(get("/admin/referrals/payouts").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.campaign_id=='" + campaignId + "')]").isEmpty());
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/credits").param("campaign_id", campaignId).param("include_test", "true")
+                        .header("Authorization", admin))
+                .andExpect(jsonPath("$[0].test").value(true));
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].credits").value(0))
+                .andExpect(jsonPath("$[0].generated").value(0));
+        jdbc.update("UPDATE referral_credit SET test = FALSE WHERE campaign_id = ?", UUID.fromString(campaignId));
+
         // O premio nasce travado: o Andre libera (so entao entra no "a receber" e no painel de pagamentos)
         mvc.perform(post("/admin/referrals/release").header("Authorization", admin)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"campaign_id\":\"" + campaignId + "\"}"))
@@ -150,6 +209,9 @@ class ReferralCreditIntegrationTest {
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.pending_release").value(0))
                 .andExpect(jsonPath("$.to_receive").value(5.0));
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].locked").value(0))
+                .andExpect(jsonPath("$[0].to_pay").value(5.0));
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].status").value("TO_PAY"))
@@ -163,7 +225,8 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath(row + ".payout_period").value("MONTHLY"))
                 .andReturn().getResponse().getContentAsString();
         String payoutCampaignId = com.jayway.jsonpath.JsonPath.<List<String>>read(payouts, row + ".campaign_id").get(0);
-        mvc.perform(post("/admin/referrals/payouts/{c}/{u}/paid", payoutCampaignId, pro.id()).header("Authorization", admin))
+        mvc.perform(post("/admin/referrals/payouts/{c}/{u}/paid", payoutCampaignId, pro.id()).header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"note\":\"PIX E123\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paid_credits").value(1));
         mvc.perform(post("/admin/referrals/payouts/{c}/{u}/paid", payoutCampaignId, pro.id()).header("Authorization", admin))
@@ -171,11 +234,91 @@ class ReferralCreditIntegrationTest {
                 .andExpect(jsonPath("$.code").value("REFERRAL_NOTHING_TO_PAY"));
         mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$.to_receive").value(0));
+        mvc.perform(get("/admin/campaigns/balance").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath("$[0].to_pay").value(0))
+                .andExpect(jsonPath("$[0].paid").value(5.0))
+                .andExpect(jsonPath("$[0].generated").value(5.0));
         mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
                 .andExpect(jsonPath("$[0].status").value("PAID"))
                 .andExpect(jsonPath("$[0].paid_at").isNotEmpty());
         mvc.perform(get("/referrals/me/credits")).andExpect(status().isUnauthorized());
         mvc.perform(get("/admin/referrals/payouts").header("Authorization", pro.token()))
                 .andExpect(status().isForbidden());
+
+        // pagamento-ao-profissional: o historico guarda valor e nota, e o profissional ve o "pago em"
+        String history = mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].type").value("PAYMENT"))
+                .andExpect(jsonPath("$[0].amount").value(5.0))
+                .andExpect(jsonPath("$[0].note").value("PIX E123"))
+                .andExpect(jsonPath("$[0].campaign_name").value("Indique e ganhe"))
+                .andExpect(jsonPath("$[0].reversed").value(false))
+                .andReturn().getResponse().getContentAsString();
+        String paymentId = new org.json.JSONArray(history).getJSONObject(0).getString("id");
+        mvc.perform(get("/referrals/me/payments").header("Authorization", pro.token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].paid_at").isNotEmpty())
+                .andExpect(jsonPath("$[0].note").value("PIX E123"));
+        String person = "$[?(@.professional_id == '" + pro.id() + "')]";
+        mvc.perform(get("/admin/referrals/payments/summary").header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(person + ".to_pay").value(hasItem(0)))
+                .andExpect(jsonPath(person + ".paid").value(hasItem(5.0)));
+
+        // historico imutavel: o banco recusa alterar ou apagar a linha
+        assertThatThrownBy(() -> jdbc.update("UPDATE professional_payment SET amount = 1 WHERE id = ?", UUID.fromString(paymentId)))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.update("DELETE FROM professional_payment WHERE id = ?", UUID.fromString(paymentId)))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
+
+        // o estorno e outra linha, sem motivo nao vale, e o premio volta ao "a pagar"; estornar de novo e 409
+        mvc.perform(post("/admin/referrals/payments/{id}/reverse", paymentId).header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnprocessableEntity());
+        mvc.perform(post("/admin/referrals/payments/{id}/reverse", paymentId).header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"PIX devolvido\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("REVERSAL"))
+                .andExpect(jsonPath("$.reversal_of").value(paymentId))
+                .andExpect(jsonPath("$.note").value("PIX devolvido"));
+        mvc.perform(post("/admin/referrals/payments/{id}/reverse", paymentId).header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"de novo\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PAYMENT_ALREADY_REVERSED"));
+        mvc.perform(post("/admin/referrals/payments/{id}/reverse", UUID.randomUUID()).header("Authorization", admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"x\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/referrals/me").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$.to_receive").value(5.0));
+        mvc.perform(get("/referrals/me/credits").header("Authorization", pro.token()))
+                .andExpect(jsonPath("$[0].status").value("TO_PAY"));
+        mvc.perform(get("/admin/referrals/payments/summary").header("Authorization", admin))
+                .andExpect(jsonPath(person + ".to_pay").value(hasItem(5.0)))
+                .andExpect(jsonPath(person + ".paid").value(hasItem(0.0)));
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(2));
+
+        // pagar tudo da pessoa quita as campanhas dela pelo valor exato; sem nada aberto, 404
+        mvc.perform(post("/admin/referrals/payouts/{u}/paid", pro.id()).header("Authorization", admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paid_credits").value(1));
+        mvc.perform(post("/admin/referrals/payouts/{u}/paid", pro.id()).header("Authorization", admin))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REFERRAL_NOTHING_TO_PAY"));
+
+        // filtros: por campanha e por periodo
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).param("campaign_id", campaignId)
+                        .header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(3));
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id()).param("campaign_id", UUID.randomUUID().toString())
+                        .header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/payments").param("professional_id", pro.id())
+                        .param("to", OffsetDateTime.now().minusDays(1).toString()).header("Authorization", admin))
+                .andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/admin/referrals/payments/summary").param("campaign_id", campaignId).header("Authorization", admin))
+                .andExpect(jsonPath(person + ".to_pay").value(hasItem(0)))
+                .andExpect(jsonPath(person + ".paid").value(hasItem(5.0)));
     }
 }

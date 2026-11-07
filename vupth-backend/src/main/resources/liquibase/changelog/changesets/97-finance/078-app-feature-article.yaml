@@ -1,0 +1,22 @@
+databaseChangeLog:
+  # artigo-do-recurso-no-suporte (Andre, 06/11): cada chave aponta o artigo dela no Suporte; a visibilidade sai da propria regra da
+  # chave. asaas_split e dependencia interna, sem artigo.
+  - changeSet:
+      id: 078-app-feature-article
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - columnExists:
+                tableName: app_feature
+                columnName: article_path
+      changes:
+        - addColumn:
+            tableName: app_feature
+            columns:
+              - column: {name: article_path, type: "VARCHAR(200)"}
+        - update:
+            tableName: app_feature
+            columns:
+              - column: {name: article_path, value: recursos/profissional-paga-taxa}
+            where: feature_key = 'profissional_paga_taxa'

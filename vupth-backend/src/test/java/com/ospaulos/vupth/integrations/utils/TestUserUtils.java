@@ -231,6 +231,20 @@ public class TestUserUtils {
     }
 
     /**
+     * Disponibiliza a agenda dos profissionais da loja: semana 24 h, que nao recorta nada do horario da loja. Sem a semana o
+     * cliente nao agenda direto, so solicita (abrir-dia-sem-semana). Numa transacao: a agenda mora em colecoes lazy.
+     */
+    public static void releaseAgenda(TransactionTemplate tx, ProfessionalRepository repository, String establishmentId) {
+        tx.executeWithoutResult(ignored -> repository.findByEstablishmentId(UUID.fromString(establishmentId)).forEach(p -> {
+            p.applyWorkingHours(p.getWorkingHours().withWeek(java.util.Arrays.stream(java.time.DayOfWeek.values())
+                    .map(d -> new com.ospaulos.vupth.domain.establishment.valueObject.WeekdayHours(d,
+                            com.ospaulos.vupth.domain.establishment.valueObject.DayHours.open(LocalTime.MIDNIGHT, LocalTime.MIDNIGHT)))
+                    .toList()));
+            repository.save(p);
+        }));
+    }
+
+    /**
      * Grava status + horario unico (vale para os 7 dias — #2) direto no banco, numa transacao: o
      * horario por dia mora em colecoes lazy, e fora de transacao elas nao carregam.
      * {@code opening}/{@code closing} nulos = loja volta a "nao configurada".

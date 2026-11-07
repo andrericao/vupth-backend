@@ -1014,6 +1014,13 @@ public class GlobalExceptionHandler {
         return build(ex.getStatus(), ex.getMessage(), ex.getCode());
     }
 
+    @ExceptionHandler(com.ospaulos.vupth.domain.feature.AppFeatureNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleAppFeatureNotFound(
+            com.ospaulos.vupth.domain.feature.AppFeatureNotFoundException ex, HttpServletRequest req) {
+        log.warn("[404] AppFeatureNotFound | {} {} | {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), "APP_FEATURE_NOT_FOUND");
+    }
+
     @ExceptionHandler(com.ospaulos.vupth.domain.referral.exception.ReferralException.class)
     public ResponseEntity<ErrorResponse> handleReferral(
             com.ospaulos.vupth.domain.referral.exception.ReferralException ex, HttpServletRequest req) {

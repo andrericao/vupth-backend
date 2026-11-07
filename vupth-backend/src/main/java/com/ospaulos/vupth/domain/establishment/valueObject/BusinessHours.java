@@ -82,6 +82,20 @@ public final class BusinessHours {
         return new BusinessHours(week, next);
     }
 
+    /**
+     * abrir-dia-sem-semana: abre uma data mesmo sem a semana montada. A semana continua vazia ({@link #isConfigured()} falso), entao
+     * abrir o dia nao disponibiliza a agenda; o dia aberto passa a valer quando a semana for montada.
+     */
+    public BusinessHours withOpenDay(LocalDate date, DayHours hours, LocalDate today) {
+        requireNotPast(date, today);
+        if (hours == null) {
+            throw new InvalidBusinessHoursException("O dia aberto precisa de horario");
+        }
+        Map<LocalDate, DayHours> next = new TreeMap<>(exceptions);
+        next.put(date, hours);
+        return new BusinessHours(week, next);
+    }
+
     public BusinessHours withoutException(LocalDate date, LocalDate today) {
         requireNotPast(date, today);
         Map<LocalDate, DayHours> next = new TreeMap<>(exceptions);
@@ -93,11 +107,8 @@ public final class BusinessHours {
         return !week.isEmpty();
     }
 
-    /** O horario da data (excecao, senao o dia da semana), ou {@code null} se a loja nao configurou. */
+    /** O horario da data (excecao, senao o dia da semana), ou {@code null} se nao ha nem uma nem outro. */
     public DayHours on(LocalDate date) {
-        if (!isConfigured()) {
-            return null;
-        }
         DayHours exception = exceptions.get(date);
         return exception != null ? exception : week.get(date.getDayOfWeek());
     }

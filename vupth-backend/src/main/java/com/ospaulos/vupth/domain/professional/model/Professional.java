@@ -288,6 +288,15 @@ public class Professional extends AbstractAggregateRoot<Professional> {
         hours.allExceptions().forEach((date, h) -> dateHours.put(date, DayHoursColumns.from(h)));
     }
 
+    /**
+     * abrir-dia-sem-semana (Andre, 06/11): o cliente agenda direto nesta data? So com a semana montada e o dia aberto na agenda
+     * dele. Abrir o dia nao e disponibilizar a agenda: sem semana, o cliente so solicita.
+     */
+    public boolean isAgendaReleasedOn(java.time.LocalDate date) {
+        BusinessHours own = getWorkingHours();
+        return own.isConfigured() && !own.on(date).closed();
+    }
+
     /** O horario que vale de fato: a intersecao do da loja com o dele (agenda-do-profissional). */
     public BusinessHours getEffectiveHours() {
         return BusinessHours.effective(

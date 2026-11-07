@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 public class ReferralController {
 
     private final ReferralService referralService;
+    private final com.ospaulos.vupth.domain.referral.service.ProfessionalPaymentService paymentService;
     private final com.ospaulos.vupth.domain.referral.service.ReferralCreditListService referralCreditListService;
 
     @GetMapping("/me")
@@ -29,6 +30,13 @@ public class ReferralController {
     }
 
     /** premio-em-pendentes: os premios de quem chama, um por linha, com o atendimento que os gerou; sem premio, {@code []}. */
+    /** pagamento-ao-profissional: o que o app ja pagou a quem chama ("pago em"), com a nota e os estornos. */
+    @GetMapping("/me/payments")
+    public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.ProfessionalPaymentResponse>> payments(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal com.ospaulos.vupth.infrastructure.security.jwt.filter.UserDetailsImpl user) {
+        return ResponseEntity.ok(paymentService.history(user.getUserId(), null, null, null));
+    }
+
     @GetMapping("/me/credits")
     public ResponseEntity<java.util.List<com.ospaulos.vupth.api.referral.dto.ReferralCreditItemResponse>> credits(
             @AuthenticationPrincipal UserDetailsImpl principal) {

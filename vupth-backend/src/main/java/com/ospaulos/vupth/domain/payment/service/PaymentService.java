@@ -82,6 +82,10 @@ public class PaymentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private com.ospaulos.vupth.domain.client.service.LateArrivalService lateArrival;
 
+    /** As taxas do corte na tela do "Recebi" (taxas-na-rota-do-recebi). Opcional (testes de unidade). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.feature.ProfessionalFeeService feeService;
+
     private boolean splitPix() {
         return paymentMode != null && paymentMode.splitPix();
     }
@@ -606,6 +610,7 @@ public class PaymentService {
         }
         boolean hasKey = copyPaste != null;
         boolean penaltyPix = split && forClient && realPenalties.signum() > 0 && appPix != null;
+        var fees = forClient ? null : feesOf(attendance);
         return new PaymentResponse(
                 attendance.getEffectivePaymentStatus(),
                 shownServices,
@@ -624,7 +629,20 @@ public class PaymentService {
                 gatewayOf(attendance, forClient),
                 breakdownOf(attendance, realPenalties),
                 attendance.isPaymentDeclared(),
-                attendance.getPaymentContestedAt() != null);
+                attendance.getPaymentContestedAt() != null,
+                fees == null ? null : fees.appPercentFee(),
+                fees == null ? null : fees.roundingFee(),
+                fees == null ? null : fees.gatewayFeeSimulated(),
+                fees == null ? null : fees.active());
+    }
+
+    /** As taxas do corte, as mesmas do relatorio; nulo em servico legado, sem divisao congelada. */
+    private com.ospaulos.vupth.domain.feature.ProfessionalFeeService.Fees feesOf(Attendance attendance) {
+        if (feeService == null || attendance.getProfessional() == null || attendance.getProReceives() == null) {
+            return null;
+        }
+        return com.ospaulos.vupth.domain.feature.ProfessionalFeeService.fees(attendance, feeService.gatewayTable(),
+                feeService.active(attendance.getProfessional().getId()));
     }
 
     /** DEC-127: a conta do desconto; pelo Asaas o profissional recebe o split e o app repassa o resto (fatia 2 do gateway). */

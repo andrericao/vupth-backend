@@ -24,6 +24,11 @@ public class AppSettingService {
     public static final String SERVICE_MIN_PRICE = "service.min_price";
     public static final BigDecimal SERVICE_MIN_PRICE_DEFAULT = new BigDecimal("5.00");
 
+    /** chave-profissional-paga-taxa: a tabela da simulacao das taxas do gateway; sem valor gravado, os de {@code PriceSplit}. */
+    public static final String ASAAS_FEE_PIX = "asaas.fee.pix";
+    public static final String ASAAS_FEE_CARD_FIXED = "asaas.fee.card_fixed";
+    public static final String ASAAS_FEE_CARD_RATE = "asaas.fee.card_rate";
+
     private final AppSettingRepository repository;
 
     @Transactional(readOnly = true)

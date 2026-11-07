@@ -44,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class PaymentIntegrationTest {
 
+    @Autowired org.springframework.transaction.support.TransactionTemplate tx;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -67,6 +68,7 @@ class PaymentIntegrationTest {
         establishmentId = TestUserUtils.becomeOwner(mvc, mapper, faker, profToken).id();
         TestUserUtils.openEstablishment(establishmentRepository, establishmentId);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, profToken, establishmentId, "Beto");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, establishmentId);
         TestUserUtils.startShift(professionalRepository, establishmentId);
         var item = TestUserUtils.createServiceItem(mvc, mapper, establishmentId, profToken,
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));

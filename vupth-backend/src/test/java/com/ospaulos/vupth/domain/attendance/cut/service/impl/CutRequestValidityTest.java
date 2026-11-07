@@ -383,13 +383,13 @@ class CutRequestValidityTest {
         }
 
         @Test
-        @DisplayName("isAgendaClosedOn: dia fechado para ele sim; dia aberto, sem horario pedido e profissional sem agenda, nao")
+        @DisplayName("isAgendaClosedOn: dia fechado para ele e profissional sem a semana, sim; dia aberto e sem horario pedido, nao")
         void closedDayDetection() {
             assertThat(CutRequestServiceImpl.isAgendaClosedOn(professional, desired)).isTrue();
             assertThat(CutRequestServiceImpl.isAgendaClosedOn(professional, desired.plusDays(1))).isFalse();
             assertThat(CutRequestServiceImpl.isAgendaClosedOn(professional, null)).isFalse();
             Professional free = new Professional(new com.ospaulos.vupth.domain.user.model.BaseUser("f@x.com"));
-            assertThat(CutRequestServiceImpl.isAgendaClosedOn(free, desired)).isFalse();
+            assertThat(CutRequestServiceImpl.isAgendaClosedOn(free, desired)).isTrue();
         }
 
         @Test

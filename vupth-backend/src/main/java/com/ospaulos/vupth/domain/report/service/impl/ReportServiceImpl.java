@@ -57,6 +57,10 @@ public class ReportServiceImpl implements ReportService {
     private final com.ospaulos.vupth.domain.client.service.ClientPenaltyService clientPenaltyService;
     private final com.ospaulos.vupth.infrastructure.config.PaymentMode paymentMode;
 
+    /** chave-profissional-paga-taxa; opcional nos testes de unidade. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.ospaulos.vupth.domain.feature.ProfessionalFeeService feeService;
+
     @Override
     public EstablishmentReportResponse getEstablishmentReport(
             UUID userId, UUID establishmentId, LocalDate dateFrom, LocalDate dateTo) {
@@ -161,6 +165,8 @@ public class ReportServiceImpl implements ReportService {
                 .collect(Collectors.groupingBy(com.ospaulos.vupth.domain.debt.model.ProfessionalDebt::getAttendanceId));
         Map<UUID, List<com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse>> penalties = finished.isEmpty() ? Map.of()
                 : clientPenaltyService.chargedTo(finished.stream().map(Attendance::getId).toList());
+        var feeTable = feeService == null ? null : feeService.gatewayTable();
+        Map<UUID, Boolean> feesActive = new java.util.HashMap<>();
         List<ProfessionalReportResponse.Cut> cuts = finished.stream().map(a -> {
             BigDecimal penalty = penalties.getOrDefault(a.getId(), List.of()).stream()
                     .map(com.ospaulos.vupth.api.client.dto.response.PenaltyChargeResponse::amount)
@@ -176,7 +182,10 @@ public class ReportServiceImpl implements ReportService {
             return new ProfessionalReportResponse.Cut(a.getId(), a.getEndTime(), a.getTotalValue(), a.getProReceives(), fees, real, simulated,
                     com.ospaulos.vupth.domain.payment.DiscountBreakdown.of(a.getTotalValue(), a.getProReceives(), a.getDiscount(),
                             BigDecimal.ZERO, a.getReceivedAmount()),
-                    com.ospaulos.vupth.api.report.dto.response.ValueComposition.forProfessional(a, penalty, paymentMode.splitPix()),
+                    com.ospaulos.vupth.api.report.dto.response.ValueComposition.forProfessional(a, penalty, paymentMode.splitPix())
+                            .withFees(feeService == null || a.getProfessional() == null ? null
+                                    : com.ospaulos.vupth.domain.feature.ProfessionalFeeService.fees(a, feeTable,
+                                    feesActive.computeIfAbsent(a.getProfessional().getId(), feeService::active))),
                     a.isPaymentDeclared(), a.getPaymentContestedAt() != null);
         }).toList();
         // DEC-127: "a receber" = o repasse do app ainda nao pago (coupon_credit aberto); "a pagar" = a divida real aberta

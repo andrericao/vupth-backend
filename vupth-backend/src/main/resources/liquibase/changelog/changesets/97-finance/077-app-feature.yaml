@@ -1,0 +1,59 @@
+databaseChangeLog:
+  # recursos-infraestrutura (Andre, 06/11): as chaves do app. Toda chave nasce desligada; so o dono do painel muda, com motivo, e cada
+  # mudanca fica no historico com o valor anterior. asaas_split e profissional_paga_taxa nascem cadastradas, sem efeito ainda.
+  - changeSet:
+      id: 077-app-feature
+      author: andrericao
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: app_feature
+      changes:
+        - createTable:
+            tableName: app_feature
+            columns:
+              - column: {name: feature_key, type: "VARCHAR(60)", constraints: {primaryKey: true, nullable: false}}
+              - column: {name: description, type: "VARCHAR(200)", constraints: {nullable: false}}
+              - column: {name: enabled, type: BOOLEAN, defaultValueBoolean: false, constraints: {nullable: false}}
+              - column: {name: percent, type: INT, defaultValueNumeric: 0, constraints: {nullable: false}}
+              - column: {name: profiles, type: "VARCHAR(60)", defaultValue: "", constraints: {nullable: false}}
+              - column: {name: regions, type: TEXT, defaultValue: "", constraints: {nullable: false}}
+              - column: {name: accounts, type: TEXT, defaultValue: "", constraints: {nullable: false}}
+              - column: {name: depends_on, type: "VARCHAR(60)"}
+              - column: {name: updated_at, type: "TIMESTAMP WITH TIME ZONE"}
+              - column: {name: updated_by, type: UUID}
+        - addForeignKeyConstraint:
+            constraintName: fk_app_feature_depends_on
+            baseTableName: app_feature
+            baseColumnNames: depends_on
+            referencedTableName: app_feature
+            referencedColumnNames: feature_key
+        - createTable:
+            tableName: app_feature_history
+            columns:
+              - column: {name: id, type: UUID, constraints: {primaryKey: true, nullable: false}}
+              - column: {name: feature_key, type: "VARCHAR(60)", constraints: {nullable: false, foreignKeyName: fk_app_feature_history_key, references: app_feature(feature_key)}}
+              - column: {name: changed_by, type: UUID, constraints: {nullable: false}}
+              - column: {name: changed_at, type: "TIMESTAMP WITH TIME ZONE", constraints: {nullable: false}}
+              - column: {name: reason, type: "VARCHAR(300)", constraints: {nullable: false}}
+              - column: {name: second_factor, type: BOOLEAN, constraints: {nullable: false}}
+              - column: {name: previous_value, type: TEXT, constraints: {nullable: false}}
+              - column: {name: new_value, type: TEXT, constraints: {nullable: false}}
+        - createIndex:
+            indexName: idx_app_feature_history_key
+            tableName: app_feature_history
+            columns:
+              - column: {name: feature_key}
+              - column: {name: changed_at}
+        - insert:
+            tableName: app_feature
+            columns:
+              - column: {name: feature_key, value: asaas_split}
+              - column: {name: description, value: "Divisao do pagamento pelo Asaas"}
+        - insert:
+            tableName: app_feature
+            columns:
+              - column: {name: feature_key, value: profissional_paga_taxa}
+              - column: {name: description, value: "O profissional paga as taxas do corte"}
+              - column: {name: depends_on, value: asaas_split}

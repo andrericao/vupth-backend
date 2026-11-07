@@ -191,7 +191,7 @@ public class AdminMetricsService {
         Referral referral = jdbc.queryForObject("""
                 SELECT coalesce(sum(amount),0), coalesce(sum(amount) FILTER (WHERE paid_at IS NOT NULL),0),
                        coalesce(sum(amount) FILTER (WHERE paid_at IS NULL),0)
-                  FROM referral_credit WHERE created_at >= ? AND created_at < ?
+                  FROM referral_credit WHERE NOT test AND created_at >= ? AND created_at < ?
                 """, (rs, i) -> new Referral(rs.getBigDecimal(1), rs.getBigDecimal(2), rs.getBigDecimal(3)), f, t);
         // DEC-106: os atendimentos de teste ficam fora do dinheiro real e aparecem a parte, como simbolicos
         Pilot pilot = jdbc.queryForObject("""
@@ -218,8 +218,8 @@ public class AdminMetricsService {
         long stuckCount = count("SELECT count(*) FROM attendance WHERE status = 'FINISHED' AND NOT test "
                 + "AND payment_status = 'PENDING' AND end_time < ?", limit);
         Timestamp old = ts(OffsetDateTime.now(clock).minusDays(35));
-        long unpaid = count("SELECT count(*) FROM referral_credit WHERE paid_at IS NULL AND created_at < ?", old);
-        BigDecimal unpaidAmount = sum("SELECT coalesce(sum(amount),0) FROM referral_credit WHERE paid_at IS NULL "
+        long unpaid = count("SELECT count(*) FROM referral_credit WHERE NOT test AND paid_at IS NULL AND created_at < ?", old);
+        BigDecimal unpaidAmount = sum("SELECT coalesce(sum(amount),0) FROM referral_credit WHERE NOT test AND paid_at IS NULL "
                 + "AND created_at < ?", old);
         return new Alerts(h, stuckCount, stuckAmount, stuck, unpaid, unpaidAmount,
                 List.of(), counter("PUSH_REFUSED"), counter("HTTP_5XX"));

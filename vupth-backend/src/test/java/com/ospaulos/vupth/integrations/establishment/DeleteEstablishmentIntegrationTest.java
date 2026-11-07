@@ -48,6 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DeleteEstablishmentIntegrationTest {
 
+    @Autowired org.springframework.transaction.support.TransactionTemplate tx;
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired EstablishmentRepository establishmentRepository;
@@ -64,6 +65,7 @@ class DeleteEstablishmentIntegrationTest {
         var owner = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         var estab = TestUserUtils.becomeOwner(mvc, mapper, faker, owner.token());
         TestUserUtils.becomeProfessional(mvc, mapper, faker, owner.token(), estab.id(), "Prof");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, estab.id());
         var item = TestUserUtils.createServiceItem(mvc, mapper, estab.id(), owner.token(),
                 ServiceItemType.CORTE_MAQUINA, "Corte", BigDecimal.valueOf(30));
         return new Store(owner, estab.id(), item.id());
@@ -126,6 +128,7 @@ class DeleteEstablishmentIntegrationTest {
         Store s = store();
         var employee = TestUserUtils.registerAndLoginUser(mvc, mapper, faker);
         TestUserUtils.becomeProfessional(mvc, mapper, faker, employee.token(), s.id(), "Funcionario");
+        TestUserUtils.releaseAgenda(tx, professionalRepository, s.id());
 
         deleteStore(s.id(), s.owner().token(), s.owner().password())
                 .andExpect(status().isConflict())
